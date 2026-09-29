@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import type { Project, ProjectNavigationSettings, RuntimeParameters, Screen, Template } from "./types";
+import type { Project, ProjectNavigationSettings, RuntimeParameters, Screen, StateScope, Template } from "./types";
 import { defaultNavigationLabel, navigationLabelError, projectNavigationSettings } from "./runtimeNavigation";
 import { TemplateParametersEditor } from "./TemplateParametersEditor";
 import { StateDefinitionsEditor } from "./StateDefinitionsEditor";
@@ -14,6 +14,7 @@ interface DocumentPropertiesProps {
   parentParameters?: RuntimeParameters;
   notify: Notify;
   canChangeToPopup?: boolean;
+  templates?: Template[];
 }
 interface ProjectPropertiesProps {
   canRename?: boolean;
@@ -106,17 +107,36 @@ function ParametersSheet({ scope, parameters, onChange, notify, project = false 
   </section>;
 }
 
-/** Saved document properties use the caller's normal history/save pipeline. */
-export function DocumentProperties({ document, isTemplate, onChange, notify, canChangeToPopup = true, parentParameters = {} }: DocumentPropertiesProps) {
-  const scope = isTemplate ? "Template" : "Screen";
-  const instanceReferences: Record<string, string[]> = Object.create(null);
-  if (isTemplate) for (const component of document.components) {
-    const add = (key: string, property: string) => { (instanceReferences[key] ??= []).push(`${component.props.text || component.id} · ${property}`); };
-    for (const [target, binding] of Object.entries(component.props.bindings || {}))
-      for (const reference of Object.values(binding?.references || {}))
-        if (reference.kind === "instanceState") add(reference.key, target);
-    if (component.props.stateBinding?.scope === "instance") add(component.props.stateBinding.key, "Value");
+/** Follow only the scope's structured references; scripts remain authored code. */
+export function stateDefinitionReferences(documents: (Screen | Template)[], scope: StateScope, templates: Template[] = []): Record<string, string[]> {
+  const references: Record<string, string[]> = Object.create(null), visited = new Set<Screen | Template>();
+  const templateById = new Map(templates.map(template => [template.id, template]));
+  function visit(document: Screen | Template) {
+    if (visited.has(document)) return;
+    visited.add(document);
+    for (const component of document.components) {
+      const add = (key: string, property: string) => { const label = `${document.name} / ${component.props.text || component.id} · ${property}`; if (!(references[key] ??= []).includes(label)) references[key].push(label); };
+      const bindings = [...Object.entries(component.props.bindings || {}), ...Object.entries(component.props.parameterBindings || {}).map(([target, binding]) => [`parameter ${target}`, binding] as const)];
+      for (const [target, binding] of bindings)
+        for (const reference of Object.values(binding?.references || {}))
+          if (reference.kind !== "tag" && reference.kind === `${scope}State`) add(reference.key, target);
+      if (component.props.stateBinding?.scope === scope) add(component.props.stateBinding.key, "Value");
+      // Every nested placement shares its containing screen; private instance
+      // state is replaced at each template boundary and must not be traversed.
+      if (scope === "screen" && (component.type === "template" || component.type === "repeater")) {
+        const child = templateById.get(component.props.templateId || "");
+        if (child) visit(child);
+      }
+    }
   }
+  documents.forEach(visit);
+  return references;
+}
+
+/** Saved document properties use the caller's normal history/save pipeline. */
+export function DocumentProperties({ document, isTemplate, onChange, notify, canChangeToPopup = true, parentParameters = {}, templates = [] }: DocumentPropertiesProps) {
+  const scope = isTemplate ? "Template" : "Screen";
+  const stateReferences = stateDefinitionReferences([document], isTemplate ? "instance" : "screen", templates);
   return <div className="document-properties" aria-label={`${scope} properties`}>
     <div className="document-property-columns" aria-hidden="true"><span>Property</span><span>Value</span></div>
     <section className="document-property-group" aria-label={`${scope} general properties`}>
@@ -142,8 +162,8 @@ export function DocumentProperties({ document, isTemplate, onChange, notify, can
       ? <TemplateParametersEditor key={document.id} template={document as Template} parentParameters={parentParameters} notify={notify} onChange={onChange} />
       : <ParametersSheet key={document.id} scope={scope} parameters={document.parameters || {}} notify={notify} onChange={parameters => onChange({ parameters })} />}
     {isTemplate
-      ? <StateDefinitionsEditor key={`instance-state:${document.id}`} scope="instance" definitions={(document as Template).instanceState} references={instanceReferences} onChange={instanceState => onChange({ instanceState })} />
-      : <StateDefinitionsEditor key={`state:${document.id}`} scope="screen" definitions={document.state} onChange={state => onChange({ state })} />}
+      ? <StateDefinitionsEditor key={`instance-state:${document.id}`} scope="instance" definitions={(document as Template).instanceState} references={stateReferences} onChange={instanceState => onChange({ instanceState })} />
+      : <StateDefinitionsEditor key={`state:${document.id}`} scope="screen" definitions={document.state} references={stateReferences} onChange={state => onChange({ state })} />}
   </div>;
 }
 
@@ -245,6 +265,6 @@ export function ProjectProperties({ project, onChange, notify, canRename = true 
       <PropertyRow label="Revision">{id => <input id={id} aria-label="Project revision" readOnly value={project.revision} />}</PropertyRow>
     </section>
     <ParametersSheet key={project.id} scope="Project" project parameters={project.parameters} notify={notify} onChange={parameters => onChange({ parameters })} />
-    <StateDefinitionsEditor key={`session:${project.id}`} scope="session" definitions={project.sessionState} onChange={sessionState => onChange({ sessionState })} />
+    <StateDefinitionsEditor key={`session:${project.id}`} scope="session" definitions={project.sessionState} references={stateDefinitionReferences([...project.screens, ...(project.templates || [])], "session")} onChange={sessionState => onChange({ sessionState })} />
   </div>;
 }

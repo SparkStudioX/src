@@ -145,7 +145,7 @@ try {
     await reject(project => { project.screens[0].components.push(component('bad', 'label', { bindings: { text: reference('count') } })); });
     await reject(project => { project.screens[2].components.push(input('bad', 'numberInput', 'count')); });
     await reject(project => { project.screens[0].components[0].props.bindings = { text: reference('count') }; });
-    await reject(project => { form(project).components.find(item => item.id === 'child').props.parameterBindings.count.references.parent = { kind: 'instanceState', key: 'count' }; });
+    await reject(project => { form(project).components.find(item => item.id === 'child').props.parameterBindings.count.references.parent = { kind: 'instanceState', key: 'unknown' }; });
   });
   await test('bound input types and state defaults obey range, option and date constraints', async () => {
     for (const [key, value] of [['count', scalar('string', '2')], ['text', scalar('number', 2)], ['flag', scalar('number', 1)], ['choice', scalar('boolean', true)],

@@ -14,7 +14,7 @@ The current source includes **local accounts, separate engineering/operator sess
 - Thirty-five component types, including fourteen inputs, state controls, numeric LED, progress, tank, level and thermometer displays, plus editable lines/shapes/pipes and pump/valve/motor symbols.
 - Published Python button actions with typed form inputs, isolated template/row context and persisted local memory-tag writes.
 - Reusable templates and saved-row repeaters nested through four template levels, with independent inputs for every complete instance/row path, typed parameters, inherited wrapper properties and validated popup provenance. Query-backed repeaters stay at the screen or popup root.
-- Template-parameter fx bindings from the containing form's parameters, non-password inputs and custom properties, with typed previews, dependent-form reset and gateway reconstruction of published action contexts.
+- Template-parameter fx bindings from the containing form's parameters, non-password inputs, custom properties and typed session/screen/private state, with typed previews, dependent-form reset and gateway reconstruction of published action contexts.
 - A name/value property sheet with direct fx controls for common presentation/layout properties and type-specific value, scale, formatting, state and tag sources. Sources include form inputs, typed template parameters, sibling custom properties and tags.
 - Optional browser JavaScript input change/commit events with validated same-form assignments, separate from gateway Python button actions.
 - Component Mounted, Property changed and Unmounted JavaScript handlers, with a staged property-sheet editor, ordered observation, bounded queues, async deadlines, shared feedback-loop protection and cleanup that cannot write into a disposed context.
@@ -73,6 +73,7 @@ node tools/load-example.mjs property-bindings
 node tools/load-example.mjs component-workshop
 node tools/load-example.mjs template-properties
 node tools/load-example.mjs template-parameter-bindings
+node tools/load-example.mjs template-parameter-state
 node tools/load-example.mjs instance-state
 node tools/load-example.mjs component-events
 node tools/load-example.mjs nested-forms
@@ -94,6 +95,8 @@ The [template parameter workshop](examples/template-parameter-bindings.json) add
 The [private instance-state workshop](examples/instance-state.json) places independent machine panels side by side, nests a private note, repeats the same panels by row, and opens a fresh inspection popup. It demonstrates mirrored private inputs, explicit resets, shared session choices and read-only Python submissions. Import the generated local-only `artifacts/examples/instance-state.sparkproj`, or use the authenticated loader above. The [instance-state guide](docs/architecture/INSTANCE_STATE.md) defines scope, initialization and disposal.
 
 The [component-event workshop](examples/component-events.json) separates automatic property changes from user edits, demonstrates independent template lifetimes and popup cleanup, and includes deliberate timeout/feedback-loop tests using browser state only. Import `artifacts/examples/component-events.sparkproj` or use the authenticated loader. The [lifecycle guide](docs/architecture/COMPONENT_LIFECYCLE.md) defines payloads, helpers, ordering and execution limits.
+
+The [state-parameter workshop](examples/template-parameter-state.json) passes session station, screen batch and each panel's private extra quantity directly into reusable forms. Its popup preserves the opening context while using a fresh screen batch. Read-only Python buttons report the reconstructed values; no database or tag connection is required. Import `artifacts/examples/template-parameter-state.sparkproj` or use the authenticated loader. See the [state-source guide](docs/architecture/TEMPLATE_PARAMETER_STATE.md).
 
 For an application backed by an actual local database, use the separate SQLite example loader:
 

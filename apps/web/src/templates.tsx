@@ -7,7 +7,7 @@ import { ApplicationStateProvider, useApplicationStateContext, useInstanceApplic
 import { resolvePath } from "./api";
 import { useFormInputs } from "./inputStateBindings";
 import { queryRowFormKey } from "./queryRepeater";
-import { parameterBindingInputs, resolveParameterBindings } from "./templateParameterBindings";
+import { parameterBindingInputs, parameterBindingState, resolveParameterBindings } from "./templateParameterBindings";
 import { useComponentEvents } from "./ComponentEvents";
 import { useQueryRepeater } from "./useQueryRepeater";
 import Icon from "./Icon";
@@ -15,6 +15,7 @@ import type {
   CanvasComponent,
   InputValue,
   InputValues,
+  ParameterBindingState,
   InstanceAction,
   InstancePathStep,
   Tag,
@@ -84,6 +85,7 @@ type TemplateInstanceProps = ProjectComponentProps & {
   dynamicAncestor?: boolean;
   querySourceParameters?: RuntimeParameters;
   parentBindingInputs?: InputValues[];
+  parentBindingState?: ParameterBindingState[];
 };
 
 export function ProjectComponentView(props: ProjectComponentProps) {
@@ -167,6 +169,7 @@ function BoundTemplateInstance(props: TemplateInstanceProps) {
 }
 
 function TemplateInstances(props: TemplateInstanceProps) {
+  const applicationState = useApplicationStateContext();
   const {
     component, templates = [], parameters, preview, queryScope, publishedAt, communicationLost = false,
   } = props;
@@ -178,13 +181,14 @@ function TemplateInstances(props: TemplateInstanceProps) {
   const repeating = component.type === "repeater";
   const queryBacked = repeating && Boolean(component.props.rowsSource);
   const expansionError = templateExpansion(props.parentPath?.length ? [component] : props.components ?? [component], templates, props.templateAncestors).error;
-  let boundParameters: RuntimeParameters = {}, bindingError = "", bindingInputs: InputValues = {};
+  let boundParameters: RuntimeParameters = {}, bindingError = "", bindingInputs: InputValues = {}, bindingState: ParameterBindingState = {};
   try {
     if (template) {
       boundParameters = resolveParameterBindings(component, template, {
-        components: props.components ?? [component], tags: props.tags, parameters, inputs: props.inputs ?? {},
+        components: props.components ?? [component], tags: props.tags, parameters, inputs: props.inputs ?? {}, state: applicationState?.values,
       });
       bindingInputs = parameterBindingInputs(component, props.inputs ?? {});
+      bindingState = parameterBindingState(component, applicationState?.values);
     }
   } catch (reason) { bindingError = reason instanceof Error ? reason.message : String(reason); }
   const hasBindings = Object.keys(component.props.parameterBindings ?? {}).length > 0;
@@ -192,6 +196,8 @@ function TemplateInstances(props: TemplateInstanceProps) {
   // Snapshot only inputs actually used at each path step; never capture an
   // unrelated password field or confuse the caller form with the child form.
   const parentBindingInputs = [...(props.parentBindingInputs ?? (props.parentPath ?? []).map(() => ({}))), bindingInputs];
+  const hasStateSource = Object.keys(bindingState).length > 0 || Boolean(props.parentBindingState);
+  const parentBindingState = [...(props.parentBindingState ?? (props.parentPath ?? []).map(() => ({}))), bindingState];
   const queryRows = useQueryRepeater(repeating && !expansionError && !bindingError ? component.props.rowsSource : undefined, template,
     queryScope ?? "designer", parameters, communicationLost, publishedAt);
   useEffect(() => {
@@ -270,12 +276,13 @@ function TemplateInstances(props: TemplateInstanceProps) {
       >
         {resolvedRows.map(({ row, context }) => {
           const queryContext = JSON.stringify([props.screenId, component.id, component.type, props.parentPath, preview, publishedAt, queryRows.key,
-            component.props.parameterBindings, boundAncestor ? parentBindingInputs : undefined, template.instanceState]);
+            component.props.parameterBindings, boundAncestor ? parentBindingInputs : undefined, hasStateSource ? parentBindingState : undefined, template.instanceState]);
           // Every descendant of a query row owns local edits too. Reusing those
           // edits after its template or effective form context changes is unsafe.
           const key = queryRowFormKey(queryContext, row ?? { id: "single", parameters: {} }, template, context);
           return <TemplateInstanceCell {...props} key={key}
             parentBindingInputs={boundAncestor ? parentBindingInputs : undefined}
+            parentBindingState={hasStateSource ? parentBindingState : undefined}
             template={template} row={row} context={context} dynamic={queryBacked} scale={scale} cellHeight={cellHeight} />;
         })}
       </div>
@@ -288,7 +295,7 @@ function TemplateInstanceCell({ component, templates, template, row, context, dy
   scopedInputs = {}, onScopedInputChange, onAutomaticScopedInputChange, communicationLost = false, preview, queryScope, publishedAt,
   onNavigate, onAction, onTableEdit, onOpenPopup, onClosePopup, actionBusyId, interactionLocked, inheritedAppearance, readOnly,
   parentPath = [], templateAncestors = [], dynamicAncestor = false,
-  querySourceParameters, parentBindingInputs,
+  querySourceParameters, parentBindingInputs, parentBindingState,
 }: TemplateInstanceProps & { template: Template; row?: TemplateRow | ResolvedTemplateRow; context: RuntimeParameters; dynamic: boolean; scale: number; cellHeight: number }) {
   const parentApplicationState = useApplicationStateContext();
   const [localInputs, setLocalInputs] = useState<InputValues>({});
@@ -314,6 +321,7 @@ function TemplateInstanceCell({ component, templates, template, row, context, dy
     ...path[0], ...(path.length > 1 ? { instancePath: path } : {}), template, parameters: context, inputs,
     ...(queryParameters ? { querySourceParameters: queryParameters } : {}),
     ...(parentBindingInputs ? { bindingInputs: parentBindingInputs.map(values => ({ ...values })) } : {}),
+    ...(parentBindingState ? { bindingState: structuredClone(parentBindingState) } : {}),
     isCurrent: () => lifetime.current,
   };
   return <ApplicationStateProvider value={applicationState}><div className="template-instance-cell" data-instance-id={component.id} data-row-id={row?.id} data-instance-path={JSON.stringify(path)} style={{ height: cellHeight }}>
@@ -347,6 +355,7 @@ function TemplateInstanceCell({ component, templates, template, row, context, dy
                         parentPath={path} templateAncestors={[...templateAncestors, template.id]} dynamicAncestor={local}
                         querySourceParameters={queryParameters}
                         parentBindingInputs={parentBindingInputs}
+                        parentBindingState={parentBindingState}
                         inheritedAppearance={inheritedAppearance} interactionLocked={interactionLocked} readOnly={readOnly}
                         queryScope={queryScope} publishedAt={publishedAt} communicationLost={communicationLost}
                         onScopedInputChange={onScopedInputChange} onNavigate={onNavigate} onAction={onAction}

@@ -143,12 +143,13 @@ await check('StrictMode replay expires captured instance and shared helpers but 
     h.leaves('count')[0].props.onInputChange('count',5);h.render();assert.equal(h.leaves('count')[0].props.inputs.count,5);
   }finally{h.stop();}
 });
-await check('instance fx uses local typed values while direct instance-state parameter sources stay rejected',()=>{
+await check('instance fx and child parameter bindings use only the immediately containing typed values',()=>{
   const {store,screen}=own(),instance=store.createScope('card',defs),context=store.context(screen,instance);context.api.set('instance','count',7);
   const result=evaluateComponentBindings(label,{components:[label],parameters:{},inputs:{},tags:[],communicationLost:true,state:store.context(screen,instance).values});assert.equal(result.component.props.text,'7');assert.deepEqual(result.errors,{});
   const missing=evaluateComponentBindings(label,{components:[label],parameters:{},inputs:{},tags:[],state:store.context(screen).values});assert.match(missing.errors.text,/Instance state/);
   const bound=c('bound','template',{templateId:'card',parameterBindings:{machine:{expression:'n',references:{n:{kind:'instanceState',key:'count'}}}}});
-  assert.throws(()=>resolveParameterBindings(bound,template,{components:[bound],parameters:{},inputs:{},tags:[],state:context.values}),/parent parameters/);
+  assert.equal(resolveParameterBindings(bound,template,{components:[bound],parameters:{},inputs:{},tags:[],state:context.values}).machine,'2');
+  assert.throws(()=>resolveParameterBindings(bound,template,{components:[bound],parameters:{},inputs:{},tags:[],state:store.context(screen).values}),/unavailable/);
 });
 await check('asynchronous input scripts cannot mutate their disposed private or shared scopes',async()=>{
   const {store,screen}=own(),instance=store.createScope('card',defs),context=store.context(screen,instance);let captured,finish;

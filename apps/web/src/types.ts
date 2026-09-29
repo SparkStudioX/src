@@ -52,6 +52,8 @@ export type StateScope = "session" | "screen" | "instance";
 export interface InputStateBinding { scope: StateScope; key: string }
 export type StateDefinitions = Record<string, CustomProperty>;
 export interface RuntimeStateValues { session: RuntimeParameters; screen: RuntimeParameters; instance?: RuntimeParameters }
+/** Only explicitly referenced values from a template's containing scopes. */
+export type ParameterBindingState = Partial<RuntimeStateValues>;
 export interface RuntimeStateApi {
   get: (scope: StateScope, key: string) => InputValue | undefined;
   set: (scope: StateScope, key: string, value: unknown) => void;
@@ -254,6 +256,7 @@ export interface InstanceAction {
   instancePath?: InstancePathStep[];
   /** Referenced parent input snapshots, one per instance boundary. */
   bindingInputs?: InputValues[];
+  bindingState?: ParameterBindingState[];
   /** Local lifecycle guard; never serialized in action requests. */
   isCurrent?: () => boolean;
   querySourceParameters?: RuntimeParameters;
@@ -268,6 +271,7 @@ export interface PopupOrigin {
   rowId?: string;
   instancePath?: InstancePathStep[];
   bindingInputs?: InputValues[];
+  bindingState?: ParameterBindingState[];
 }
 export interface PopupState {
   id: string;

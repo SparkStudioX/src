@@ -82,7 +82,7 @@ Input handlers retain their existing gates: disabled, hidden, read-only or inter
 
 The older browser-resource `session` object remains a separate untyped script memory bag. Assigning `session.selectedStation` does not update declared session state or its bindings. Use `app.state` for typed reactive state. Browser scripts remain trusted same-origin JavaScript, and these helpers do not sandbox arbitrary authored code.
 
-Gateway Python receives only its existing declared parameters and form inputs. State maps and live state values are not implicitly sent to Python, named queries, device writes or permission checks. A bound input submits its current value as an ordinary validated field. A workflow that submits user data must still use the appropriate form and gateway action contracts.
+Gateway Python receives only its declared parameters and form inputs. State maps and live state values are not implicitly sent to Python, named queries, device writes or permission checks. A bound input submits its current value as an ordinary validated field. An explicit [state-driven template parameter](TEMPLATE_PARAMETER_STATE.md) submits only its referenced values in a sparse typed snapshot so the gateway can reconstruct the parameter. The snapshot is untrusted form context, never an authenticated identity or permission source.
 
 ## Example and verification
 

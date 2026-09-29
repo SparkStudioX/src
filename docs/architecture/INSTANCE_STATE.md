@@ -35,7 +35,7 @@ Declarations follow the existing state limits: 64 keys, case-sensitive ASCII ide
 | Popup | Its templates start fresh on each opening. Closing disposes their private state and leaves the underlying screen's instances intact. |
 | Publication change, user change, reload or Preview restart | A new application run starts from defaults. |
 
-Session and containing-screen state remain accessible from templates. Resetting one template's private values does not reset those shared scopes, a sibling or a nested template. Direct private-state reads across a template boundary are not supported. Passing a value to a child must use an explicit public parameter contract; a private-state-bound input may supply a parent-input parameter expression.
+Session and containing-screen state remain accessible from templates. Resetting one template's private values does not reset those shared scopes, a sibling or a nested template. A child cannot read another template's private map. Its caller can explicitly pass a value through a public parameter fx binding that reads the immediately containing template's private state. See [state-driven parameters](TEMPLATE_PARAMETER_STATE.md).
 
 ## Browser scripts and gateway actions
 
@@ -50,7 +50,7 @@ app.state.reset('instance');         // This template's own defaults.
 
 Assignments must match declared types and bounds. A live call to an unavailable scope or undeclared key fails through the existing script diagnostic path. Helpers captured from a removed instance cannot later write its replacement or shared screen/session state. Browser startup and screen-open resource scripts do not acquire a template instance scope. Browser JavaScript remains trusted application code; private scope is an application-state boundary, not a JavaScript sandbox or an authorization mechanism.
 
-Gateway actions still receive only the existing validated form inputs and published parameter context. Private maps are not implicit Python variables, query parameters or permission inputs. A state-bound field submits its current value as ordinary user input; the gateway validates its published field definition. Parameter expressions continue to accept containing-form parameters, inputs and custom properties, with server-side reconstruction. Direct instance-state parameter references are outside this increment.
+Gateway actions receive validated form inputs and reconstructed published parameter context. Private maps are not implicit Python variables, query parameters or permission inputs. A state-bound field submits its current value as ordinary user input; the gateway validates its published field definition. A parameter expression can explicitly read containing-form parameters, inputs, custom properties or typed state. Only referenced state values are submitted in a separate sparse snapshot; the gateway checks their published types and reconstructs parameters. These values remain untrusted user data and grant no permission.
 
 Individual components display their live binding diagnostics. The saved-graph health summary does not evaluate private-state-owned forms from defaults, just as it does not summarize live query rows; those defaults cannot establish the health of their current values.
 

@@ -34,7 +34,7 @@ export function runtimeBindingHealth(
         const template = templates.find(item => item.id === component.props.templateId);
         let boundValues: RuntimeParameters = {}, parameterError = false;
         try {
-          if (template) boundValues = resolveParameterBindings(component, template, { components: document.components, tags, parameters: context, inputs });
+          if (template) boundValues = resolveParameterBindings(component, template, { components: document.components, tags, parameters: context, inputs, state: localState });
         } catch { parameterError = true; }
         if (errors || parameterError || graphError || limitError && !limitReported) health.badCount++;
         if (limitError) limitReported = true;

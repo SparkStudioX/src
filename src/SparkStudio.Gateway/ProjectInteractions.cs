@@ -9,7 +9,8 @@ public sealed record InstancePathStep(string InstanceId, string? RowId = null);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PopupOrigin(string ScreenId, string ComponentId, string? InstanceId = null, string? RowId = null,
-    IReadOnlyList<InstancePathStep>? InstancePath = null, IReadOnlyList<Dictionary<string, JsonElement>>? BindingInputs = null);
+    IReadOnlyList<InstancePathStep>? InstancePath = null, IReadOnlyList<Dictionary<string, JsonElement>>? BindingInputs = null,
+    IReadOnlyList<ParameterBindingState>? BindingState = null);
 
 internal static class ProjectInteractions
 {
@@ -119,7 +120,7 @@ internal static class ProjectInteractions
                 ["rowsSource"] = rowsSource,
                 ["rowId"] = rowsSource is null ? null : step.RowId
             };
-            TemplateParameterBindings.Capture(captured, parent, instance);
+            TemplateParameterBindings.Capture(captured, project, screen, parent, instance);
             scopes.Add(captured);
         }
         var leaf = scope["components"]!.AsArray().OfType<JsonObject>().FirstOrDefault(component => ProjectStore.Optional(component, "id") == componentId)

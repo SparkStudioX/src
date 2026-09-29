@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace SparkStudio.Gateway;
 
-/// <summary>Typed defaults for browser-local state. These declarations are never gateway action inputs.</summary>
+/// <summary>Typed browser-local state declarations and validation of explicit referenced scalar data.</summary>
 internal static class ProjectStateValidator
 {
     private const double MaximumSafeInteger = 9007199254740991;
@@ -63,6 +63,19 @@ internal static class ProjectStateValidator
                 }))
                 throw new ArgumentException($"{description} declarations need identifier keys, a number, string or Boolean type, and a matching bounded value.");
         }
+    }
+
+    internal static void ValidateSuppliedValue(string type, JsonElement value)
+    {
+        var valid = type switch
+        {
+            "string" => value.ValueKind == JsonValueKind.String && value.GetString()!.Length <= 4096,
+            "boolean" => value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+            "number" => value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) && double.IsFinite(number) &&
+                (number != Math.Truncate(number) || Math.Abs(number) <= MaximumSafeInteger),
+            _ => false
+        };
+        if (!valid) throw new ArgumentException("Binding state values must match their published type: bounded text, Boolean, or an exact finite number.");
     }
 
     public static void ValidateReference(string kind, string key, JsonObject? sessionState, JsonObject document, bool template)
@@ -145,7 +158,8 @@ internal static class ProjectStateValidator
                 var (scope, key, expectedType) = InputBinding(component);
                 if (scope == "screen") ValidateBoundDeclaration(component, declarations, key, expectedType, "Screen");
             }
-            if (component["props"]?["bindings"] is JsonObject bindings)
+            foreach (var field in new[] { "bindings", "parameterBindings" })
+            if (component["props"]?[field] is JsonObject bindings)
                 foreach (var binding in bindings.Select(pair => pair.Value).OfType<JsonObject>())
                     if (binding["references"] is JsonObject references)
                         foreach (var reference in references.Select(pair => pair.Value).OfType<JsonObject>())

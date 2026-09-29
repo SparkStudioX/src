@@ -9,14 +9,15 @@ public sealed class RuntimeActions(PublicationStore publications, PythonRunner p
     public async Task<JsonObject> ExecuteAsync(string screenId, string componentId,
         Dictionary<string, JsonElement>? parameters, Dictionary<string, JsonElement>? inputs,
         string? publishedAt, CancellationToken cancellation, string? instanceId = null, string? rowId = null, PopupOrigin? popupOrigin = null,
-        IReadOnlyList<InstancePathStep>? instancePath = null, IReadOnlyList<Dictionary<string, JsonElement>>? bindingInputs = null)
+        IReadOnlyList<InstancePathStep>? instancePath = null, IReadOnlyList<Dictionary<string, JsonElement>>? bindingInputs = null,
+        IReadOnlyList<ParameterBindingState>? bindingState = null)
     {
         if (string.IsNullOrWhiteSpace(publishedAt))
             throw new ArgumentException("Reload the published screen before executing an action.");
         // GetAction returns a detached snapshot so a concurrent publication cannot mix
         // an action's source with another publication's input definitions.
         var action = publications.GetAction(screenId, componentId, publishedAt, instanceId, rowId, popupOrigin, instancePath);
-        var resolvedParameters = await ResolveContextAsync(action, parameters, bindingInputs, popupOrigin?.BindingInputs, cancellation);
+        var resolvedParameters = await ResolveContextAsync(action, parameters, bindingInputs, popupOrigin?.BindingInputs, bindingState, popupOrigin?.BindingState, cancellation);
         var capturedQueries = action["queries"]!.AsArray().OfType<JsonObject>().ToArray();
 
         var definitions = action["inputs"]!.AsArray().OfType<JsonObject>().ToArray();
@@ -66,7 +67,7 @@ public sealed class RuntimeActions(PublicationStore publications, PythonRunner p
         if (string.IsNullOrWhiteSpace(request.PublishedAt))
             throw new ArgumentException("Reload the published screen before editing a table.");
         var action = publications.GetTableEdit(screenId, componentId, request.PublishedAt, request.InstanceId, request.RowId, request.PopupOrigin, request.InstancePath);
-        var context = await ResolveContextAsync(action, request.Parameters, request.BindingInputs, request.PopupOrigin?.BindingInputs, cancellation);
+        var context = await ResolveContextAsync(action, request.Parameters, request.BindingInputs, request.PopupOrigin?.BindingInputs, request.BindingState, request.PopupOrigin?.BindingState, cancellation);
         var query = action["query"]!.AsObject();
         var queryParameters = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var parameter in (query["parameters"] as JsonArray ?? []).OfType<JsonObject>())
@@ -82,7 +83,8 @@ public sealed class RuntimeActions(PublicationStore publications, PythonRunner p
     }
 
     private async Task<Dictionary<string, JsonElement>> ResolveContextAsync(JsonObject action, Dictionary<string, JsonElement>? parameters,
-        IReadOnlyList<Dictionary<string, JsonElement>>? bindingInputs, IReadOnlyList<Dictionary<string, JsonElement>>? popupBindingInputs, CancellationToken cancellation)
+        IReadOnlyList<Dictionary<string, JsonElement>>? bindingInputs, IReadOnlyList<Dictionary<string, JsonElement>>? popupBindingInputs,
+        IReadOnlyList<ParameterBindingState>? bindingState, IReadOnlyList<ParameterBindingState>? popupBindingState, CancellationToken cancellation)
     {
         var declaredParameters = action["projectParameters"]!.AsObject();
         RejectUnknownKeys(parameters, declaredParameters.Select(pair => pair.Key), "context parameter");
@@ -103,15 +105,15 @@ public sealed class RuntimeActions(PublicationStore publications, PythonRunner p
             Overlay(caller, opener["screenParameters"] as JsonObject, rootParameters);
             // Re-query and validate the published opener before resolving popup
             // mappings. Database strings remain literal after one substitution.
-            await OverlayTemplatesAsync(caller, opener, capturedQueries, popupBindingInputs, cancellation);
+            await OverlayTemplatesAsync(caller, opener, capturedQueries, popupBindingInputs, popupBindingState, cancellation);
             Overlay(context, opener["parameters"] as JsonObject, caller);
         }
-        await OverlayTemplatesAsync(context, action, capturedQueries, bindingInputs, cancellation);
+        await OverlayTemplatesAsync(context, action, capturedQueries, bindingInputs, bindingState, cancellation);
         return context;
     }
 
     private async Task OverlayTemplatesAsync(Dictionary<string, JsonElement> context, JsonObject owner, JsonObject[] capturedQueries,
-        IReadOnlyList<Dictionary<string, JsonElement>>? bindingInputs, CancellationToken cancellation)
+        IReadOnlyList<Dictionary<string, JsonElement>>? bindingInputs, IReadOnlyList<ParameterBindingState>? bindingState, CancellationToken cancellation)
     {
         // Every scope was captured by walking the same immutable published graph.
         // Resolve from outer to inner so a child sees its parent's typed values,
@@ -119,18 +121,19 @@ public sealed class RuntimeActions(PublicationStore publications, PythonRunner p
         var scopes = owner["templateScopes"]!.AsArray().OfType<JsonObject>().ToArray();
         if (bindingInputs is not null && (bindingInputs.Count != scopes.Length || bindingInputs.Count > ProjectTemplates.MaximumInstanceDepth || bindingInputs.Any(input => input is null)))
             throw new ArgumentException("Binding inputs must contain one input map per outer-to-inner template instance.");
+        TemplateParameterBindings.ValidateState(scopes, bindingState);
         for (var index = 0; index < scopes.Length; index++)
-            await OverlayTemplateAsync(context, scopes[index], capturedQueries, bindingInputs?[index], cancellation);
+            await OverlayTemplateAsync(context, scopes[index], capturedQueries, bindingInputs?[index], bindingState?[index], cancellation);
     }
 
     private async Task OverlayTemplateAsync(Dictionary<string, JsonElement> context, JsonObject scope, JsonObject[] capturedQueries,
-        Dictionary<string, JsonElement>? bindingInputs, CancellationToken cancellation)
+        Dictionary<string, JsonElement>? bindingInputs, ParameterBindingState? bindingState, CancellationToken cancellation)
     {
         var parameterTypes = scope["templateParameterTypes"] as JsonObject;
         await ValidateBindingInputsAsync(scope, bindingInputs, context, capturedQueries, cancellation);
         // Every result is validated even when a saved/query row later overrides
         // that key. An invalid expression must never leave an actionable row.
-        var boundParameters = TemplateParameterBindings.Evaluate(scope, context, bindingInputs)
+        var boundParameters = TemplateParameterBindings.Evaluate(scope, context, bindingInputs, bindingState)
             .ToDictionary(pair => pair.Key, pair => TemplateParameterTypes.Coerce(pair.Key, pair.Value, parameterTypes), StringComparer.Ordinal);
         Dictionary<string, JsonElement>? rowParameters = null;
         if (scope["rowsSource"] is JsonObject rowsSource)

@@ -86,7 +86,7 @@ export function instanceInputKey(
     : JSON.stringify([screenId, path.map(step => [step.instanceId, step.rowId ?? null])]);
 }
 
-type InstanceIdentity = Pick<InstanceAction, "instanceId" | "rowId" | "instancePath" | "bindingInputs">;
+type InstanceIdentity = Pick<InstanceAction, "instanceId" | "rowId" | "instancePath" | "bindingInputs" | "bindingState">;
 
 /** Legacy identities remain the first step, while nested requests carry the complete path. */
 export function instancePath(instance?: InstanceIdentity): InstancePathStep[] {
@@ -94,11 +94,12 @@ export function instancePath(instance?: InstanceIdentity): InstancePathStep[] {
   return instance.instancePath ?? [{ instanceId: instance.instanceId, ...(instance.rowId === undefined ? {} : { rowId: instance.rowId }) }];
 }
 
-export function instanceRequestScope(instance?: InstanceIdentity): { instancePath?: InstancePathStep[]; instanceId?: string; rowId?: string; bindingInputs?: InstanceAction["bindingInputs"] } {
+export function instanceRequestScope(instance?: InstanceIdentity): { instancePath?: InstancePathStep[]; instanceId?: string; rowId?: string; bindingInputs?: InstanceAction["bindingInputs"]; bindingState?: InstanceAction["bindingState"] } {
   if (!instance) return {};
   const path = instancePath(instance);
   return { ...(path.length > 1 ? { instancePath: path } : { ...path[0] }),
-    ...(instance.bindingInputs ? { bindingInputs: instance.bindingInputs } : {}) };
+    ...(instance.bindingInputs ? { bindingInputs: instance.bindingInputs } : {}),
+    ...(instance.bindingState ? { bindingState: instance.bindingState } : {}) };
 }
 
 /** Database row parameters overlay resolved saved defaults without a second substitution pass. */

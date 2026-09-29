@@ -208,7 +208,7 @@ check('template and repeater parameters reuse the fx dialog with parent sources 
     const ui = bindUi(makeInstance(type));
     ui.label('Add parameter threshold binding').props.onClick(); ui.refresh();
     ui.button('Add reference').props.onClick(); ui.refresh();
-    assert.deepEqual(nodes(ui.label('Reference 1 source')).filter(node => node.type === 'option').map(node => node.props.value), ['custom', 'input', 'parameter']);
+    assert.deepEqual(nodes(ui.label('Reference 1 source')).filter(node => node.type === 'option').map(node => node.props.value), ['custom', 'input', 'parameter', 'sessionState', 'screenState']);
     assert.equal(ui.label('Reference 1 input key').props.value, 'quantity');
     assert.ok(!ui.all().some(node => node.type === 'option' && node.props.value === 'secret'));
     ui.expression('value * 2'); assert.equal(ui.output(), '12');

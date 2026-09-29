@@ -2,14 +2,26 @@ import { constantPropertyBinding, evaluatePropertyBinding, validatePropertyBindi
 import type { BindingContext } from "./propertyBindings";
 import { coerceTemplateParameter } from "./templateModel";
 import { isInput, validateInputs } from "./inputs";
-import type { CanvasComponent, InputValues, PropertyBinding, RuntimeParameters, Template, TemplateParameterType } from "./types";
+import type { CanvasComponent, InputValues, ParameterBindingState, PropertyBinding, RuntimeParameters, RuntimeStateValues, StateDefinitions, Template, TemplateParameterType } from "./types";
 
 const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
 const own = (value: object, name: string) => Object.hasOwn(value, name);
+const stateScopes = { sessionState: "session", screenState: "screen", instanceState: "instance" } as const;
+const boundedScalar = (value: unknown): value is string | number | boolean => typeof value === "boolean"
+  || typeof value === "string" && value.length <= 4096
+  || typeof value === "number" && Number.isFinite(value) && (!Number.isInteger(value) || Number.isSafeInteger(value));
+const sourceStateValue = (state: Partial<RuntimeStateValues> | undefined, scope: keyof RuntimeStateValues, key: string) => {
+  const values = state?.[scope];
+  if (!object(values) || !own(values, key)) throw new Error(`Parent ${scope} state '${key}' is unavailable.`);
+  const value = values[key];
+  if (!boundedScalar(value)) throw new Error(`Parent ${scope} state '${key}' requires text up to 4096 characters, a Boolean, or an exact finite number.`);
+  return value;
+};
 
 /** References always read the containing form, before the child shadows parameters. */
 export function validateTemplateParameterBinding(binding: PropertyBinding, component: CanvasComponent,
-  components: CanvasComponent[], parentParameters: RuntimeParameters, targetName: string, type: TemplateParameterType): string | undefined {
+  components: CanvasComponent[], parentParameters: RuntimeParameters, targetName: string, type: TemplateParameterType,
+  state?: RuntimeStateValues, allowUnresolvedScreenState = false): string | undefined {
   try {
     const error = validatePropertyBinding(binding);
     if (error) throw new Error(error);
@@ -22,7 +34,11 @@ export function validateTemplateParameterBinding(binding: PropertyBinding, compo
       } else if (reference.kind === "custom") {
         const owner = reference.componentId === undefined || reference.componentId === component.id ? component : components.find(item => item.id === reference.componentId);
         if (!owner?.props.customProperties || !own(owner.props.customProperties, reference.key)) throw new Error(`Custom property '${reference.key}' was not found in the containing form.`);
-      } else throw new Error("Template parameter bindings support parent parameters, form inputs and custom properties.");
+      } else if (reference.kind === "sessionState" || reference.kind === "screenState" || reference.kind === "instanceState") {
+        const scope = stateScopes[reference.kind];
+        if (!(scope === "screen" && allowUnresolvedScreenState && !own(state?.screen ?? {}, reference.key)))
+          sourceStateValue(state, scope, reference.key);
+      } else throw new Error("Template parameter bindings support parent parameters, form inputs, custom properties and containing state scopes. Tags are unavailable.");
     }
     const result = constantPropertyBinding(binding);
     if (result.constant) {
@@ -44,6 +60,40 @@ export function parameterBindingInputs(component: CanvasComponent, inputs: Input
   return values;
 }
 
+/** Capture the containing scopes before a child introduces its own private state. */
+export function parameterBindingState(component: CanvasComponent, state?: Partial<RuntimeStateValues>): ParameterBindingState {
+  const result: ParameterBindingState = {};
+  for (const binding of Object.values(component.props.parameterBindings ?? {})) {
+    const error = validatePropertyBinding(binding); if (error) throw new Error(error);
+    for (const reference of Object.values(binding.references)) {
+      if (reference.kind !== "sessionState" && reference.kind !== "screenState" && reference.kind !== "instanceState") continue;
+      const scope = stateScopes[reference.kind];
+      (result[scope] ??= {})[reference.key] = sourceStateValue(state, scope, reference.key);
+    }
+  }
+  return result;
+}
+
+/** Validate a frozen source snapshot without filling absent keys from defaults. */
+export function parameterBindingStateContext(component: CanvasComponent, snapshot: ParameterBindingState | undefined,
+  definitions?: Partial<Record<keyof RuntimeStateValues, StateDefinitions>>): RuntimeStateValues {
+  if (snapshot !== undefined && !object(snapshot)) throw new Error("The source state binding context must be an object.");
+  const expected = parameterBindingState(component, snapshot);
+  if (Object.keys(snapshot ?? {}).length !== Object.keys(expected).length)
+    throw new Error("The source state binding context contains an unreferenced scope.");
+  for (const [scope, values] of Object.entries(snapshot ?? {})) {
+    const referenced = expected[scope as keyof RuntimeStateValues];
+    if (!object(values) || !referenced || Object.keys(values).length !== Object.keys(referenced).length)
+      throw new Error("The source state binding context contains an unreferenced value.");
+    if (definitions) for (const [key, value] of Object.entries(referenced)) {
+      const declared = definitions[scope as keyof RuntimeStateValues];
+      if (!declared || !own(declared, key) || declared[key].type !== typeof value)
+        throw new Error(`Parent ${scope} state '${key}' no longer matches its declared type.`);
+    }
+  }
+  return { session: expected.session ?? {}, screen: expected.screen ?? {}, ...(expected.instance ? { instance: expected.instance } : {}) };
+}
+
 /** Bound values are literal scalars. A failed binding blocks the complete instance. */
 export function resolveParameterBindings(component: CanvasComponent, template: Template, context: BindingContext): RuntimeParameters {
   const bindings = component.props.parameterBindings;
@@ -54,7 +104,7 @@ export function resolveParameterBindings(component: CanvasComponent, template: T
   for (const [name, binding] of Object.entries(bindings)) {
     if (!own(template.parameters, name)) throw new Error(`Template parameter '${name}' is not declared.`);
     const type = own(template.parameterTypes ?? {}, name) ? template.parameterTypes![name] : "string";
-    const error = validateTemplateParameterBinding(binding, component, context.components, context.parameters, name, type);
+    const error = validateTemplateParameterBinding(binding, component, context.components, context.parameters, name, type, context.state);
     if (error) throw new Error(`${name}: ${error}`);
     // Reject invalid intermediate edits even when an expression would mask them.
     // Other, unrelated parent inputs need not be valid to operate this child.

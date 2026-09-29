@@ -2376,6 +2376,7 @@ export default function App() {
                     {screen && <DocumentProperties
                       key={`${editingTemplate ? "template" : "screen"}:${screen.id}`}
                       document={screen}
+                      templates={project.templates}
                       isTemplate={Boolean(editingTemplate)}
                       parentParameters={project.parameters}
                       canChangeToPopup={screen.kind === "popup" || project.screens.filter(item => item.kind !== "popup").length > 1}

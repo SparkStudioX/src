@@ -173,7 +173,7 @@ try {
   });
   await test('invalid schema, source scopes, password sources and bounded constant types reject on save', async () => {
     for (const value of [null, [], { unknown: binding('1') }, { count: null }, { count: binding('1 / 0') }, { count: binding("'not a number'") }, { ready: binding('1') },
-      { count: binding('1', { bad: reference('tag', 'anything') }) }, { count: binding('1', { bad: reference('sessionState', 'amount') }) }, { count: binding('1', { bad: reference('screenState', 'amount') }) },
+      { count: binding('1', { bad: reference('tag', 'anything') }) }, { count: binding('1', { bad: reference('sessionState', 'missing') }) }, { count: binding('1', { bad: reference('screenState', 'amount') }) },
       { count: binding('bad', { bad: reference('input', 'secret') }) }, { count: binding('bad', { bad: reference('input', 'delta') }) },
       { count: binding('bad', { bad: reference('parameter', 'count') }) }, { count: binding('bad', { bad: reference('custom', 'limit', 'absent') }) },
       { count: binding('bad.x', { bad: reference('input', 'amount') }) }, { count: binding('bad()', { bad: reference('input', 'amount') }) },

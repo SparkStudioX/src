@@ -1,6 +1,6 @@
 import { id, resolvePath } from "./api";
 import { instanceRequestScope, queryTemplateParameters, templateParameters } from "./templateModel";
-import { resolveParameterBindings } from "./templateParameterBindings";
+import { parameterBindingStateContext, resolveParameterBindings } from "./templateParameterBindings";
 import type {
   CanvasComponent,
   InstanceAction,
@@ -14,6 +14,9 @@ import type {
   InstancePathStep,
   TemplateRow,
   InputValues,
+  ParameterBindingState,
+  StateDefinitions,
+  RuntimeStateValues,
 } from "./types";
 
 export function screenParameters(
@@ -74,6 +77,7 @@ export function createPopup(
       componentId: button.id,
       ...instanceRequestScope(instance),
       ...(instance?.bindingInputs ? { bindingInputs: instance.bindingInputs.map(values => ({ ...values })) } : {}),
+      ...(instance?.bindingState ? { bindingState: structuredClone(instance.bindingState) } : {}),
     },
   };
 }
@@ -87,10 +91,14 @@ export interface PopupQuerySource {
   descendants?: SourceStep[];
   root?: SourceStep;
   bindingInputs?: InputValues[];
+  bindingState?: ParameterBindingState[];
   error: string;
 }
 
-interface SourceStep { instance: CanvasComponent; template: Template; row?: TemplateRow; parentComponents: CanvasComponent[]; parentParameters: Record<string, string> }
+interface SourceStep {
+  instance: CanvasComponent; template: Template; row?: TemplateRow; parentComponents: CanvasComponent[]; parentParameters: Record<string, string>;
+  stateDefinitions: Partial<Record<keyof RuntimeStateValues, StateDefinitions>>;
+}
 function traceSource(project: Project, screen: Screen, path: InstancePathStep[]): SourceStep[] {
   if (!path.length || path.length > 4) throw new Error("The source template path is no longer available. Close this popup and open it again.");
   let scope = screen;
@@ -112,18 +120,40 @@ function traceSource(project: Project, screen: Screen, path: InstancePathStep[])
     } else if (step.rowId !== undefined) throw new Error("The source instance no longer uses this row. Close this popup and open it again.");
     const parentComponents = scope.components;
     const parentParameters = scope.parameters ?? {};
+    const stateDefinitions = { session: project.sessionState ?? {}, screen: screen.state ?? {},
+      ...(project.templates?.includes(scope as Template) ? { instance: (scope as Template).instanceState ?? {} } : {}) };
     scope = template;
-    return { instance, template, row, parentComponents, parentParameters };
+    return { instance, template, row, parentComponents, parentParameters, stateDefinitions };
   });
 }
-const sourceSignature = (steps: SourceStep[]) => JSON.stringify(steps.map(({ instance, template, row, parentComponents, parentParameters }) => {
+const sourceSignature = (steps: SourceStep[]) => JSON.stringify(steps.map(({ instance, template, row, parentComponents, parentParameters, stateDefinitions }) => {
   const references = Object.values(instance.props.parameterBindings ?? {}).flatMap(binding => Object.values(binding.references ?? {}));
   const sources = parentComponents.filter(component => references.some(reference => reference.kind === "custom"
     ? component.id === (reference.componentId ?? instance.id) : reference.kind === "input" && (component.props.fieldKey || component.id) === reference.key));
+  const stateSources = references.flatMap(reference => {
+    if (reference.kind !== "sessionState" && reference.kind !== "screenState" && reference.kind !== "instanceState") return [];
+    const scope = reference.kind === "sessionState" ? "session" : reference.kind === "screenState" ? "screen" : "instance";
+    return [[scope, reference.key, stateDefinitions[scope]?.[reference.key] ?? null]];
+  });
   return [instance.id, instance.type, instance.props.templateId, instance.props.parameters ?? {}, instance.props.rowsSource ?? null,
     instance.props.parameterBindings ?? {}, sources.map(component => [component.id, component.type, component.props]),
-    parentParameters, template.parameters, template.parameterTypes ?? {}, template.instanceState ?? {}, row ?? null];
+    parentParameters, template.parameters, template.parameterTypes ?? {}, template.instanceState ?? {}, row ?? null, stateSources];
 }));
+
+function validateSourceState(trace: SourceStep[], snapshots?: ParameterBindingState[]): void {
+  if (snapshots != null && (!Array.isArray(snapshots) || snapshots.length !== trace.length || snapshots.length > 4))
+    throw new Error("The source state binding context is no longer available. Close this popup and open it again.");
+  const shared: ParameterBindingState = {};
+  trace.forEach((step, index) => {
+    const state = parameterBindingStateContext(step.instance, snapshots?.[index], step.stateDefinitions);
+    for (const scope of ["session", "screen"] as const) for (const [key, value] of Object.entries(state[scope])) {
+      const values = shared[scope] ??= {};
+      if (Object.hasOwn(values, key) && values[key] !== value)
+        throw new Error(`The source ${scope} state '${key}' has conflicting captured values.`);
+      values[key] = value;
+    }
+  });
+}
 
 /** Recover the authored source using identity; captured query values remain display-only. */
 export function popupQuerySource(project: Project, popup: PopupState): PopupQuerySource {
@@ -136,13 +166,14 @@ export function popupQuerySource(project: Project, popup: PopupState): PopupQuer
       if (popup.templateSourceSignature !== undefined && sourceSignature(trace) !== popup.templateSourceSignature) throw new Error("The source template parameters have changed. Close this popup and open it again.");
       if (popup.origin.bindingInputs && popup.origin.bindingInputs.length !== path.length)
         throw new Error("The source binding context is no longer available. Close this popup and open it again.");
+      validateSourceState(trace, popup.origin.bindingState);
       const opener = trace.at(-1)!.template.components.find(item => item.id === popup.origin.componentId);
       if (opener?.props.action !== "openPopup" || opener.props.targetScreenId !== popup.screenId) throw new Error("The source no longer opens this popup. Close it and open a current record.");
       if (!popup.querySourceParameters) {
         let context: RuntimeParameters = project.templates?.some(item => item === screen)
           ? templateParameters(screen as Template, popup.rootParameters) : screenParameters(screen, popup.rootParameters);
         for (const [index, step] of trace.entries()) {
-          const bound = sourceBindings(step, context, popup.origin.bindingInputs?.[index]);
+          const bound = sourceBindings(step, context, popup.origin.bindingInputs?.[index], popup.origin.bindingState?.[index]);
           context = templateParameters(step.template, context, step.instance.props.parameters, step.row?.parameters, bound);
         }
         return { parameters: {}, error: "" };
@@ -150,7 +181,7 @@ export function popupQuerySource(project: Project, popup: PopupState): PopupQuer
       const first = trace[0];
       if (!first.instance.props.rowsSource || !path[0].rowId) throw new Error("The source query is no longer available. Close this popup and open a current record.");
       return { source: first.instance.props.rowsSource, template: first.template, parameters: screenParameters(screen, popup.rootParameters),
-        overrides: first.instance.props.parameters, rowId: path[0].rowId, root: first, bindingInputs: popup.origin.bindingInputs,
+        overrides: first.instance.props.parameters, rowId: path[0].rowId, root: first, bindingInputs: popup.origin.bindingInputs, bindingState: popup.origin.bindingState,
         descendants: trace.slice(1), error: "" };
     } catch (error) { return { parameters: {}, error: error instanceof Error ? error.message : "The popup source is unavailable." }; }
   }
@@ -163,8 +194,9 @@ export function popupQuerySource(project: Project, popup: PopupState): PopupQuer
   return { source: instance.props.rowsSource, template, parameters: screenParameters(screen, popup.rootParameters), overrides: instance.props.parameters, rowId: popup.origin.rowId, error: "" };
 }
 
-function sourceBindings(step: SourceStep, parameters: RuntimeParameters, inputs: InputValues = {}): RuntimeParameters {
-  return resolveParameterBindings(step.instance, step.template, { components: step.parentComponents, tags: [], parameters, inputs });
+function sourceBindings(step: SourceStep, parameters: RuntimeParameters, inputs: InputValues = {}, snapshot?: ParameterBindingState): RuntimeParameters {
+  const state = parameterBindingStateContext(step.instance, snapshot, step.stateDefinitions);
+  return resolveParameterBindings(step.instance, step.template, { components: step.parentComponents, tags: [], parameters, inputs, state });
 }
 
 export interface PopupSourceStatus { ready: boolean; stale: boolean; message: string }
@@ -183,11 +215,11 @@ export function popupSourceStatus(
   let current: RuntimeParameters;
   try {
     current = queryTemplateParameters(definition.template, definition.parameters, definition.overrides, row.parameters,
-      definition.root ? sourceBindings(definition.root, definition.parameters, definition.bindingInputs?.[0]) : undefined);
+      definition.root ? sourceBindings(definition.root, definition.parameters, definition.bindingInputs?.[0], definition.bindingState?.[0]) : undefined);
     if (popup.queryRootParameters && !sameParameters(current, popup.queryRootParameters))
       return { ready: false, stale: true, message: "The source record has changed. Close this popup and open it again before continuing." };
     for (const [index, step] of (definition.descendants ?? []).entries()) current = templateParameters(step.template, current, step.instance.props.parameters, step.row?.parameters,
-      sourceBindings(step, current, definition.bindingInputs?.[index + 1]));
+      sourceBindings(step, current, definition.bindingInputs?.[index + 1], definition.bindingState?.[index + 1]));
   }
   catch (reason) { return { ready: false, stale: true, message: `The source parameters are no longer valid. ${reason instanceof Error ? reason.message : String(reason)}` }; }
   const captured = popup.querySourceParameters;

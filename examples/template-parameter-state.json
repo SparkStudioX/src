@@ -1,0 +1,121 @@
+{
+  "name": "State-driven template parameters",
+  "sessionState": { "station": { "type": "string", "value": "Assembly" } },
+  "templates": [
+    {
+      "id": "state-parameter-form", "name": "State parameters · inner form", "width": 490, "height": 190,
+      "parameters": { "machine": "Assembly", "count": "1", "permit": "true" },
+      "parameterTypes": { "count": "number", "permit": "boolean" },
+      "components": [
+        { "id": "context", "type": "label", "x": 12, "y": 8, "width": 466, "height": 34,
+          "props": { "text": "{machine} · Requested quantity {count}", "fontSize": 18 } },
+        { "id": "note", "type": "textInput", "x": 12, "y": 50, "width": 466, "height": 62,
+          "props": { "text": "Local note", "fieldKey": "note", "defaultValue": "" } },
+        { "id": "preview", "type": "button", "x": 12, "y": 130, "width": 224, "height": 44,
+          "props": { "text": "Preview resolved form", "action": "script",
+            "bindings": { "enabled": { "expression": "permit", "references": { "permit": { "kind": "parameter", "key": "permit" } } } },
+            "script": "assert isinstance(parameters['count'], (int, float))\nassert isinstance(parameters['permit'], bool)\nassert set(inputs) == {'note'}\nresult = {'message': parameters['machine'] + ' / quantity ' + str(parameters['count']) + ' / note: ' + inputs['note'], 'parameters': parameters, 'inputs': inputs}" } },
+        { "id": "inspect", "type": "button", "x": 254, "y": 130, "width": 224, "height": 44,
+          "props": { "text": "Open state inspection", "action": "openPopup", "targetScreenId": "state-parameter-inspection", "parameters": { "machine": "{machine}", "capturedCount": "{count}" } } }
+      ]
+    },
+    {
+      "id": "state-parameter-card", "name": "State parameters · machine panel", "width": 530, "height": 360,
+      "parameters": { "machine": "Assembly", "batch": "4", "permit": "true" },
+      "parameterTypes": { "batch": "number", "permit": "boolean" },
+      "instanceState": { "offset": { "type": "number", "value": 1 } },
+      "components": [
+        { "id": "title", "type": "label", "x": 20, "y": 12, "width": 490, "height": 40,
+          "props": { "text": "{machine}", "fontSize": 24 } },
+        { "id": "offset", "type": "spinner", "x": 20, "y": 60, "width": 230, "height": 64,
+          "props": { "text": "Private extra quantity", "fieldKey": "offset", "defaultValue": 1, "min": 0, "max": 10, "stateBinding": { "scope": "instance", "key": "offset" } } },
+        { "id": "hint", "type": "label", "x": 276, "y": 67, "width": 234, "height": 56,
+          "props": { "text": "The child reads this panel's private state directly.", "fontSize": 14 } },
+        { "id": "details", "type": "template", "x": 20, "y": 150, "width": 490, "height": 190,
+          "props": { "templateId": "state-parameter-form", "parameters": { "machine": "{machine}" },
+            "parameterBindings": {
+              "count": { "expression": "batch + extra", "references": { "batch": { "kind": "parameter", "key": "batch" }, "extra": { "kind": "instanceState", "key": "offset" } } },
+              "permit": { "expression": "permission", "references": { "permission": { "kind": "screenState", "key": "permit" } } }
+            } } }
+      ]
+    },
+    {
+      "id": "state-parameter-popup-form", "name": "State parameters · popup form", "width": 490, "height": 190,
+      "parameters": { "machine": "Assembly", "count": "1", "permit": "true" },
+      "parameterTypes": { "count": "number", "permit": "boolean" },
+      "components": [
+        { "id": "context", "type": "label", "x": 12, "y": 8, "width": 466, "height": 34,
+          "props": { "text": "{machine} · Popup quantity {count}", "fontSize": 18 } },
+        { "id": "note", "type": "textInput", "x": 12, "y": 50, "width": 466, "height": 62,
+          "props": { "text": "Popup note", "fieldKey": "note", "defaultValue": "" } },
+        { "id": "preview", "type": "button", "x": 12, "y": 130, "width": 466, "height": 44,
+          "props": { "text": "Preview popup context", "action": "script",
+            "script": "assert isinstance(parameters['count'], (int, float))\nassert set(inputs) == {'note'}\nresult = {'message': parameters['machine'] + ' / opened quantity ' + parameters['capturedCount'] + ' / popup quantity ' + str(parameters['count']) + ' / note: ' + inputs['note'], 'parameters': parameters, 'inputs': inputs}" } }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "id": "state-parameter-workshop", "name": "State-driven panels", "width": 1160, "height": 1120,
+      "state": { "batch": { "type": "number", "value": 4 }, "permit": { "type": "boolean", "value": true } },
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 16, "width": 1112, "height": 42,
+          "props": { "text": "Reusable forms. Direct state context.", "fontSize": 28 } },
+        { "id": "subtitle", "type": "label", "x": 24, "y": 62, "width": 1112, "height": 45,
+          "props": { "text": "Session station + screen batch + each panel's private extra quantity. No intermediary fields in the parameter bindings.", "fontSize": 16 } },
+        { "id": "station", "type": "select", "x": 24, "y": 120, "width": 260, "height": 70,
+          "props": { "text": "Session station", "fieldKey": "station", "defaultValue": "Assembly", "stateBinding": { "scope": "session", "key": "station" }, "options": [ { "value": "Assembly", "label": "Assembly" }, { "value": "Packaging", "label": "Packaging" } ] } },
+        { "id": "batch", "type": "spinner", "x": 310, "y": 120, "width": 230, "height": 70,
+          "props": { "text": "Screen batch", "fieldKey": "batch", "defaultValue": 4, "min": 1, "max": 20, "stateBinding": { "scope": "screen", "key": "batch" } } },
+        { "id": "permit", "type": "checkbox", "x": 580, "y": 134, "width": 280, "height": 48,
+          "props": { "text": "Enable form previews", "fieldKey": "permit", "defaultValue": true, "stateBinding": { "scope": "screen", "key": "permit" } } },
+        { "id": "left", "type": "template", "x": 24, "y": 220, "width": 530, "height": 360,
+          "props": { "text": "Left state panel", "templateId": "state-parameter-card", "backgroundColor": "#f5f7ff", "foregroundColor": "#253044",
+            "parameterBindings": {
+              "machine": { "expression": "station", "references": { "station": { "kind": "sessionState", "key": "station" } } },
+              "batch": { "expression": "batch", "references": { "batch": { "kind": "screenState", "key": "batch" } } },
+              "permit": { "expression": "permission", "references": { "permission": { "kind": "screenState", "key": "permit" } } }
+            } } },
+        { "id": "right", "type": "template", "x": 600, "y": 220, "width": 530, "height": 360,
+          "props": { "text": "Right state panel", "templateId": "state-parameter-card", "backgroundColor": "#f5f7ff", "foregroundColor": "#253044",
+            "parameterBindings": {
+              "machine": { "expression": "station", "references": { "station": { "kind": "sessionState", "key": "station" } } },
+              "batch": { "expression": "batch", "references": { "batch": { "kind": "screenState", "key": "batch" } } },
+              "permit": { "expression": "permission", "references": { "permission": { "kind": "screenState", "key": "permit" } } }
+            } } },
+        { "id": "row-help", "type": "label", "x": 24, "y": 614, "width": 1112, "height": 56,
+          "props": { "text": "Rows keep their explicit machine names. Each row owns its private extra quantity; shared screen and session sources remain reactive.", "fontSize": 18 } },
+        { "id": "rows", "type": "repeater", "x": 24, "y": 696, "width": 1106, "height": 368,
+          "props": { "text": "Saved state rows", "templateId": "state-parameter-card", "columns": 2, "gap": 24, "backgroundColor": "#f5f7ff", "foregroundColor": "#253044", "rows": [ { "id": "line-a", "parameters": { "machine": "Line A" } }, { "id": "line-b", "parameters": { "machine": "Line B" } } ],
+            "parameterBindings": {
+              "machine": { "expression": "station", "references": { "station": { "kind": "sessionState", "key": "station" } } },
+              "batch": { "expression": "batch", "references": { "batch": { "kind": "screenState", "key": "batch" } } },
+              "permit": { "expression": "permission", "references": { "permission": { "kind": "screenState", "key": "permit" } } }
+            } } },
+        { "id": "footer", "type": "label", "x": 24, "y": 1080, "width": 1112, "height": 26,
+          "props": { "text": "Synthetic workshop · Read-only Python inspection · No tags, queries or equipment writes", "fontSize": 13 } }
+      ]
+    },
+    {
+      "id": "state-parameter-inspection", "name": "State snapshot inspection", "kind": "popup", "width": 600, "height": 530,
+      "parameters": { "machine": "Assembly", "capturedCount": "1" },
+      "state": { "batch": { "type": "number", "value": 2 }, "permit": { "type": "boolean", "value": true } },
+      "components": [
+        { "id": "heading", "type": "label", "x": 24, "y": 18, "width": 552, "height": 40,
+          "props": { "text": "Opened for {machine} · Quantity {capturedCount}", "fontSize": 20 } },
+        { "id": "help", "type": "label", "x": 24, "y": 70, "width": 552, "height": 64,
+          "props": { "text": "The opening context is frozen. This popup has a fresh screen batch and an independent form; its edits leave the main panels alone.", "fontSize": 15 } },
+        { "id": "batch", "type": "spinner", "x": 24, "y": 146, "width": 240, "height": 64,
+          "props": { "text": "Popup batch", "fieldKey": "batch", "defaultValue": 2, "min": 1, "max": 20, "stateBinding": { "scope": "screen", "key": "batch" } } },
+        { "id": "panel", "type": "template", "x": 24, "y": 230, "width": 552, "height": 215,
+          "props": { "text": "Popup state panel", "templateId": "state-parameter-popup-form", "parameters": { "machine": "{machine}" }, "backgroundColor": "#f5f7ff", "foregroundColor": "#253044",
+            "parameterBindings": {
+              "count": { "expression": "batch", "references": { "batch": { "kind": "screenState", "key": "batch" } } },
+              "permit": { "expression": "permission", "references": { "permission": { "kind": "screenState", "key": "permit" } } }
+            } } },
+        { "id": "close", "type": "button", "x": 24, "y": 466, "width": 552, "height": 44,
+          "props": { "text": "Close state inspection", "action": "closePopup" } }
+      ]
+    }
+  ]
+}
