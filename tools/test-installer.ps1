@@ -122,7 +122,9 @@ try {
     if ($modules.Count -ne 2 -or @($modules | Where-Object { !$_.FileName.StartsWith($program + '\', [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) { throw 'The gateway did not load its .NET runtime entirely from the extracted package.' }
     NodeCheck 'installer-auth-python' @((Join-Path $PSScriptRoot 'test-installer-auth.mjs'), $testRoot)
     $env:SPARKSTUDIO_TEST_AUTH_FILE = $authFile
-    $preloader = Join-Path $PSScriptRoot 'test-auth-session.mjs'
+    # Node's --import treats a Windows drive-qualified path as a URL scheme.
+    # The verifier runs from $root, so use a portable relative module specifier.
+    $preloader = './tools/test-auth-session.mjs'
     NodeCheck 'gateway-smoke' @('--import', $preloader, (Join-Path $PSScriptRoot 'test-gateway.mjs'), "http://127.0.0.1:$Port", '--sse')
     NodeCheck 'assets-popups' @('--import', $preloader, (Join-Path $PSScriptRoot 'test-assets-popups.mjs'), "http://127.0.0.1:$Port")
     NodeCheck 'deployment-settings' @((Join-Path $PSScriptRoot 'test-deployment-settings.mjs'))

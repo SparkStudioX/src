@@ -81,7 +81,9 @@ await test('gateway health', async () => {
 
 await test('seed project contains the overview and indirect bindings', async () => {
   const project = requireObject(await request('/api/project'), 'Project');
-  assert.equal(project.id, 'factory-overview');
+  const catalog = requireObject(await request('/api/projects'), 'Project catalog');
+  assert.equal(project.id, catalog.defaultProjectId);
+  assert.ok(catalog.projects.some(item => item.id === project.id && item.isDefault), 'Seed project is not the catalog default.');
   assert.ok(Number.isInteger(project.revision) && project.revision >= 0);
   assert.equal(project.parameters.line, 'Line1');
   const screen = project.screens.find(item => item.id === 'overview');
