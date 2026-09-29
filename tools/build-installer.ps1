@@ -175,7 +175,9 @@ try {
     if ((Get-CleanSourceCommit) -ne $sourceCommit) { throw 'Source changed during installer compilation; this output cannot be released.' }
     $installer = Join-Path $output "SparkStudio-Setup-$version-windows-x64-unsigned.exe"
     $installerVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($installer)
-    if ($installerVersion.FileVersion -ne $version -and $installerVersion.FileVersion -ne $fileVersion) { throw 'Compiled installer version does not match the release version.' }
+    # Inno Setup pads the textual version resource; the numeric parts below remain exact.
+    $installerTextVersion = $installerVersion.FileVersion.Trim()
+    if ($installerTextVersion -ne $version -and $installerTextVersion -ne $fileVersion) { throw 'Compiled installer version does not match the release version.' }
     if ((@($installerVersion.FileMajorPart, $installerVersion.FileMinorPart, $installerVersion.FileBuildPart, $installerVersion.FilePrivatePart) -join '.') -ne $fileVersion) { throw 'Compiled installer numeric file version does not match the release version.' }
     $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
     "$hash  $([IO.Path]::GetFileName($installer))" | Set-Content -LiteralPath "$installer.sha256" -Encoding ascii
