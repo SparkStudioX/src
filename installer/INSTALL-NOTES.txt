@@ -1,4 +1,4 @@
-SparkStudio 0.2.0-preview.4 - unsigned Windows preview
+SparkStudio 0.2.0-preview.5 - unsigned Windows preview
 
 This package includes the gateway, .NET runtime, browser Designer and operator application, and CPython. No separate SDK, Node.js or Python installation is required to run it.
 
@@ -14,7 +14,9 @@ Normal installation requests elevation and is designed to create a LocalService 
 
 This release retains preview.2's fix for preview.1's erroneous 45-second startup timeout caused by anonymously checking the protected /api/health endpoint. The installer uses a direct-loopback-only /api/ready check for product, startup status, bundled Python and process ID. Health details and gateway diagnostics remain protected. Portable extraction and readiness tests do not establish actual elevated service installation acceptance.
 
-Preview.4 also waits for the actual owned gateway process to exit before copying application files. Preview.3 could encounter Access denied for clrjit.dll while the old process was still exiting, even after Windows reported the service stopped, and could require Retry after that process exited. A smooth preview.3 upgrade was not verified.
+Preview.5 retains the wait for the actual owned gateway process to exit before copying application files. Preview.3 could encounter Access denied for clrjit.dll while the old process was still exiting, even after Windows reported the service stopped, and could require Retry. Preview.4 was held after elevated upgrade preparation failed with Windows error 5 before copying files.
+
+Preview.5 fixes that process-access failure by briefly enabling an existing administrator debug privilege only to acquire a minimal process handle, then restoring the original privilege state. An elevated read-only check against the installed LocalService process verified this fallback and restoration without stopping the service or changing data. The preview.5 upgrade itself remains pending; this check is not full upgrade acceptance.
 
 After a preview.1 startup timeout, back up C:\ProgramData\SparkStudio and retry this installer in the same program directory. Existing data is retained; do not delete it to retry. Use the installer to start the service, or supply an explicit writable --DataDirectory when starting the executable directly.
 

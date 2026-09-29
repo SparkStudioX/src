@@ -6,10 +6,10 @@
   #error OutputFolder is required.
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.2.0-preview.4"
+  #define AppVersion "0.2.0-preview.5"
 #endif
 #ifndef NumericVersion
-  #define NumericVersion "0.2.0.4"
+  #define NumericVersion "0.2.0.5"
 #endif
 
 [Setup]

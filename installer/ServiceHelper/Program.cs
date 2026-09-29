@@ -44,12 +44,13 @@ internal static class Program
                 WriteReport(report, "PASS the expected gateway process and its bundled Python readiness endpoint responded without authentication; no service or registration was changed.");
                 return 0;
             }
-            if (action is not ("preflight" or "prepare" or "install" or "resume" or "remove"))
+            if (action is not ("preflight" or "inspect-shutdown" or "prepare" or "install" or "resume" or "remove"))
                 throw new ArgumentException("Unknown lifecycle action.");
             if (action != "preflight") RequireAdministrator();
-            if (action is not ("remove" or "resume")) CheckMachineEnvironment();
-            using var manager = Native.OpenManager();
-            using var service = Native.OpenServiceIfPresent(manager, action == "preflight" ? Native.ReadAccess : Native.FullAccess);
+            if (action is not ("remove" or "resume" or "inspect-shutdown")) CheckMachineEnvironment();
+            var readOnly = action is "preflight" or "inspect-shutdown";
+            using var manager = Native.OpenManager(readOnly);
+            using var service = Native.OpenServiceIfPresent(manager, readOnly ? Native.ReadAccess : Native.FullAccess);
             var registration = ReadRegistration();
             var existing = service is null ? null : Native.ReadService(service);
             ValidateOwnership(directory, registration, existing);
@@ -59,6 +60,23 @@ internal static class Program
                 case "preflight":
                     ProbePort(port, existing, registration);
                     result = "Preflight passed. The service and selected loopback port are available.";
+                    break;
+                case "inspect-shutdown":
+                    if (service is null || existing?.State != Native.Running)
+                        throw new InvalidOperationException("The read-only shutdown diagnostic requires the owned SparkStudio service to be running.");
+                    var processId = Native.RunningProcessId(service);
+                    var previousPrivilege = Native.ReadDebugPrivilegeAttributes();
+                    using (var pinned = Native.PinProcess(processId, Path.Combine(directory, "SparkStudio.Gateway.exe"), out var debugFallback))
+                    {
+                        if (Native.RunningProcessId(service) != processId)
+                            throw new InvalidOperationException("The service process changed during the read-only shutdown diagnostic; retry once it is stable.");
+                        var restoredPrivilege = Native.ReadDebugPrivilegeAttributes();
+                        if (restoredPrivilege != previousPrivilege)
+                            throw new InvalidOperationException("The temporary diagnostic privilege did not return to its original state.");
+                        result = $"PASS read-only shutdown diagnostic for owned gateway PID {processId}: minimal query/synchronize handle and executable identity verified. " +
+                            (debugFallback ? "Direct OpenProcess was denied; temporary SeDebugPrivilege allowed the handle, and its original token state was verified restored. " : "Direct OpenProcess succeeded; no debug privilege was enabled. ") +
+                            "No service, process memory, registration or gateway data was changed; the service was not stopped.";
+                    }
                     break;
                 case "prepare":
                     ProbePort(port, existing, registration);
@@ -345,6 +363,7 @@ internal static class Program
         Console.WriteLine($"PASS {checks} installer ownership, path, argument and occupied-port checks; no service or registration was changed.");
         await ReadinessSelfTestAsync();
         await ShutdownSelfTestAsync();
+        Native.DebugPrivilegeSelfTest();
     }
 
     // A disposable diagnostic child maps an ordinary copied DLL so the self-test
@@ -489,9 +508,9 @@ internal static class Native
     internal const uint ReadAccess = 0x0001 | 0x0004, FullAccess = 0xF01FF;
     private const int ServiceDoesNotExist = 1060, ServiceNotActive = 1062, AlreadyRunning = 1056;
 
-    internal static ServiceHandle OpenManager()
+    internal static ServiceHandle OpenManager(bool readOnly = false)
     {
-        var result = OpenSCManager(null, null, 0x0001 | 0x0002);
+        var result = OpenSCManager(null, null, readOnly ? 0x0001u : 0x0001u | 0x0002u);
         if (result.IsInvalid)
         {
             result.Dispose();
@@ -571,21 +590,130 @@ internal static class Native
             throw new InvalidOperationException("The SparkStudio service restarted during shutdown. Setup has not continued; check the service before retrying.");
     }
 
-    internal static SafeProcessHandle PinProcess(uint processId, string expectedExecutable)
+    internal static SafeProcessHandle PinProcess(uint processId, string expectedExecutable) => PinProcess(processId, expectedExecutable, out _);
+
+    internal static SafeProcessHandle PinProcess(uint processId, string expectedExecutable, out bool debugFallback)
     {
         const uint synchronizeAndQuery = 0x00100000 | 0x1000;
+        debugFallback = false;
         var process = OpenProcess(synchronizeAndQuery, false, processId);
-        if (process.IsInvalid) { var error = Marshal.GetLastWin32Error(); process.Dispose(); throw new Win32Exception(error); }
         try
         {
+            if (process.IsInvalid)
+            {
+                var error = Marshal.GetLastWin32Error();
+                process.Dispose();
+                if (error != 5) throw new Win32Exception(error, "OpenProcess could not acquire a read-only query/synchronize handle for the owned gateway.");
+                // An elevated administrator can still be denied by a LocalService
+                // process DACL. Enable only our existing debug privilege, only for
+                // acquiring these two rights, and restore it before doing anything else.
+                int fallbackError;
+                using (DebugPrivilegeScope.Enable())
+                {
+                    process = OpenProcess(synchronizeAndQuery, false, processId);
+                    fallbackError = Marshal.GetLastWin32Error();
+                }
+                debugFallback = true;
+                if (process.IsInvalid)
+                    throw new Win32Exception(fallbackError, "OpenProcess remained denied for the owned gateway after temporarily enabling SeDebugPrivilege.");
+            }
             var path = new System.Text.StringBuilder(32768);
             var length = path.Capacity;
-            if (!QueryFullProcessImageName(process, 0, path, ref length)) throw new Win32Exception();
+            if (!QueryFullProcessImageName(process, 0, path, ref length))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "QueryFullProcessImageName could not verify the owned gateway executable.");
             if (!Path.GetFullPath(path.ToString()).Equals(Path.GetFullPath(expectedExecutable), StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException("The service process does not match the owned gateway executable. No process was stopped or terminated.");
             return process;
         }
         catch { process.Dispose(); throw; }
+    }
+
+    internal static uint? ReadDebugPrivilegeAttributes()
+    {
+        if (!OpenProcessToken(GetCurrentProcess(), 0x0008, out var token))
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "OpenProcessToken could not inspect the helper's own privilege state.");
+        using (token)
+        {
+            if (!LookupPrivilegeValue(null, "SeDebugPrivilege", out var luid))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "LookupPrivilegeValue could not identify SeDebugPrivilege.");
+            GetTokenInformation(token, 3, IntPtr.Zero, 0, out var required);
+            if (required <= 0 || required > 65536)
+                throw new InvalidOperationException("The helper token returned an invalid privilege-information size.");
+            var buffer = Marshal.AllocHGlobal(required);
+            try
+            {
+                if (!GetTokenInformation(token, 3, buffer, required, out _))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "GetTokenInformation could not inspect the helper's own privileges.");
+                var count = Marshal.ReadInt32(buffer);
+                if (count < 0 || count > (required - 4) / 12) throw new InvalidOperationException("The helper token returned malformed privilege information.");
+                for (var index = 0; index < count; index++)
+                {
+                    var value = Marshal.PtrToStructure<LuidAndAttributes>(buffer + 4 + index * 12);
+                    if (value.Luid.LowPart == luid.LowPart && value.Luid.HighPart == luid.HighPart) return value.Attributes;
+                }
+                return null;
+            }
+            finally { Marshal.FreeHGlobal(buffer); }
+        }
+    }
+
+    internal static void DebugPrivilegeSelfTest()
+    {
+        var before = ReadDebugPrivilegeAttributes();
+        var outcome = "";
+        try
+        {
+            using (DebugPrivilegeScope.Enable())
+            {
+                if ((ReadDebugPrivilegeAttributes() & 2) != 2)
+                    throw new InvalidOperationException("The diagnostic privilege was not enabled within its scope.");
+            }
+            if (before is null) throw new InvalidOperationException("A missing token privilege was unexpectedly added.");
+            outcome = "temporary enable and exact restoration";
+        }
+        catch (Win32Exception error) when (error.NativeErrorCode == 1300 && before is null)
+        {
+            outcome = "missing privilege rejected (ERROR_NOT_ALL_ASSIGNED) without token mutation";
+        }
+        if (ReadDebugPrivilegeAttributes() != before)
+            throw new InvalidOperationException("The privilege self-test changed the helper's original token privilege state.");
+        Console.WriteLine($"PASS installer debug privilege scope: {outcome}; no service or registration was changed.");
+    }
+
+    private sealed class DebugPrivilegeScope(SafeAccessTokenHandle token, TokenPrivileges previous) : IDisposable
+    {
+        public static DebugPrivilegeScope Enable()
+        {
+            if (!OpenProcessToken(GetCurrentProcess(), 0x0020 | 0x0008, out var token))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "OpenProcessToken could not open the elevated helper's own token for temporary privilege adjustment.");
+            try
+            {
+                if (!LookupPrivilegeValue(null, "SeDebugPrivilege", out var luid))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "LookupPrivilegeValue could not identify SeDebugPrivilege.");
+                var desired = new TokenPrivileges { Count = 1, Privilege = new LuidAndAttributes { Luid = luid, Attributes = 2 } };
+                var adjusted = AdjustTokenPrivileges(token, false, ref desired, Marshal.SizeOf<TokenPrivileges>(), out var previous, out _);
+                var error = Marshal.GetLastWin32Error();
+                if (!adjusted || error != 0)
+                    throw new Win32Exception(error, error == 1300
+                        ? "This installer token does not contain SeDebugPrivilege, so setup cannot safely acquire the gateway shutdown handle. The service has not been stopped; no program files have been replaced by this step."
+                        : "AdjustTokenPrivileges could not temporarily enable the helper's existing SeDebugPrivilege.");
+                return new DebugPrivilegeScope(token, previous);
+            }
+            catch { token.Dispose(); throw; }
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                if (previous.Count == 0) return;
+                var restored = AdjustTokenPrivileges(token, false, ref previous, 0, IntPtr.Zero, IntPtr.Zero);
+                var error = Marshal.GetLastWin32Error();
+                if (!restored || error != 0)
+                    throw new Win32Exception(error, "AdjustTokenPrivileges could not restore the helper's original debug privilege state; setup has not continued.");
+            }
+            finally { token.Dispose(); }
+        }
     }
 
     internal static void WaitForStoppedAndExited(Func<uint> serviceState, SafeProcessHandle process, Stopwatch deadline)
@@ -656,6 +784,9 @@ internal static class Native
     {
         public uint Type, State, AcceptedControls, Win32ExitCode, SpecificExitCode, CheckPoint, WaitHint, ProcessId, ServiceFlags;
     }
+    [StructLayout(LayoutKind.Sequential)] private struct Luid { public uint LowPart; public int HighPart; }
+    [StructLayout(LayoutKind.Sequential)] private struct LuidAndAttributes { public Luid Luid; public uint Attributes; }
+    [StructLayout(LayoutKind.Sequential)] private struct TokenPrivileges { public uint Count; public LuidAndAttributes Privilege; }
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] private static extern ServiceHandle OpenSCManager(string? machine, string? database, uint access);
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] private static extern ServiceHandle OpenService(ServiceHandle manager, string name, uint access);
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] private static extern bool QueryServiceConfig(ServiceHandle service, IntPtr buffer, uint size, out uint required);
@@ -671,4 +802,10 @@ internal static class Native
     [DllImport("kernel32.dll", SetLastError = true)] private static extern SafeProcessHandle OpenProcess(uint access, bool inheritHandle, uint processId);
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] private static extern bool QueryFullProcessImageName(SafeProcessHandle process, uint flags, System.Text.StringBuilder path, ref int length);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern uint WaitForSingleObject(SafeProcessHandle process, uint milliseconds);
+    [DllImport("kernel32.dll")] private static extern IntPtr GetCurrentProcess();
+    [DllImport("advapi32.dll", SetLastError = true)] private static extern bool OpenProcessToken(IntPtr process, uint access, out SafeAccessTokenHandle token);
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] private static extern bool LookupPrivilegeValue(string? system, string name, out Luid luid);
+    [DllImport("advapi32.dll", SetLastError = true)] private static extern bool GetTokenInformation(SafeAccessTokenHandle token, int informationClass, IntPtr buffer, int length, out int required);
+    [DllImport("advapi32.dll", SetLastError = true)] private static extern bool AdjustTokenPrivileges(SafeAccessTokenHandle token, bool disableAll, ref TokenPrivileges desired, int length, out TokenPrivileges previous, out int required);
+    [DllImport("advapi32.dll", SetLastError = true)] private static extern bool AdjustTokenPrivileges(SafeAccessTokenHandle token, bool disableAll, ref TokenPrivileges desired, int length, IntPtr previous, IntPtr required);
 }
