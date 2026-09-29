@@ -1,0 +1,16 @@
+{
+  "name": "Gateway network workshop",
+  "navigation": { "mode": "none", "startupScreenId": "network-home", "items": [] },
+  "queries": [], "templates": [],
+  "screens": [{
+    "id": "network-home", "name": "Network access", "width": 1080, "height": 700,
+    "components": [
+      { "id": "network-title", "type": "label", "x": 32, "y": 24, "width": 1016, "height": 68, "props": { "text": "Your operator application, over HTTPS", "fontSize": 30 } },
+      { "id": "network-subtitle", "type": "label", "x": 32, "y": 112, "width": 1016, "height": 84, "props": { "text": "This published screen is a synthetic connectivity check. It has no equipment connections, scripts, credentials, database, or process commands.", "fontSize": 20 } },
+      { "id": "network-local", "type": "label", "x": 32, "y": 226, "width": 490, "height": 174, "props": { "text": "LOCAL MANAGEMENT\nOn the gateway computer, use the loopback management address for initial administrator setup and recovery. The installer keeps it separate from network HTTPS.", "fontSize": 20 } },
+      { "id": "network-remote", "type": "label", "x": 558, "y": 226, "width": 490, "height": 174, "props": { "text": "OPERATOR ACCESS\nOn another computer, open the published project URL using your gateway's DNS hostname and HTTPS port. Sign in with an account granted View for this project.", "fontSize": 20 } },
+      { "id": "network-check", "type": "checkbox", "x": 32, "y": 440, "width": 1016, "height": 72, "props": { "text": "I checked the hostname, certificate trust, HTTPS address and published project", "fieldKey": "connectionChecked", "defaultValue": false } },
+      { "id": "network-note", "type": "label", "x": 32, "y": 546, "width": 1016, "height": 100, "props": { "text": "The checkbox is a local browser value only. Seeing this page does not verify equipment safety, certificate renewal, remote write permissions or production readiness. Follow the Network access workshop guide.", "fontSize": 18 } }
+    ]
+  }]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Gateway recovery lab",
+  "parameters": {},
+  "screens": [{
+    "id": "recovery-lab", "name": "Recovery lab", "width": 1080, "height": 820,
+    "components": [
+      { "id": "title", "type": "label", "x": 32, "y": 24, "width": 1016, "height": 60, "props": { "text": "Gateway recovery lab", "fontSize": 30 } },
+      { "id": "scope", "type": "label", "x": 32, "y": 100, "width": 1016, "height": 110, "props": { "text": "Use a disposable gateway and synthetic data. Publish this screen, then save a visibly different draft. A complete gateway backup should retain both states, along with its local accounts and gateway resources.", "fontSize": 20 } },
+      { "id": "checkpoint", "type": "label", "x": 32, "y": 244, "width": 1016, "height": 70, "props": { "text": "Published checkpoint: RECOVERY-LAB-A", "fontSize": 26 } },
+      { "id": "offline", "type": "label", "x": 32, "y": 346, "width": 1016, "height": 100, "props": { "text": "Stop the disposable gateway. Create a passphrase-encrypted .sparkbak and inspect it. Restore to a new directory; keep the original directory unchanged.", "fontSize": 20 } },
+      { "id": "review", "type": "label", "x": 32, "y": 486, "width": 1016, "height": 120, "props": { "text": "Start the restored copy on a separate localhost port. Sign in with its restored administrator account and open Settings → Recovery. Connections and Python remain blocked until reviewed and restarted.", "fontSize": 20 } },
+      { "id": "compare", "type": "label", "x": 32, "y": 648, "width": 1016, "height": 120, "props": { "text": "After the isolated review and restart, compare the operator checkpoint with the unpublished Designer draft. Confirm your synthetic local database and account grants survived. Record backup, restore and ready times.", "fontSize": 20 } }
+    ]
+  }]
+}

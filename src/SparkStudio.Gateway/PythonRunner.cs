@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 
 namespace SparkStudio.Gateway;
 
-public sealed class PythonRunner(TagEngine tags, QueryExecutor queries, ScriptResourceStore scripts, IConfiguration configuration)
+public sealed class PythonRunner(TagEngine tags, QueryExecutor queries, ScriptResourceStore scripts, IConfiguration configuration, RecoveryQuarantine? recovery = null)
 {
     private static readonly JsonSerializerOptions ProtocolJson = new(JsonSerializerDefaults.Web);
     public string? Executable { get; } = FindPython(configuration);
@@ -33,6 +33,7 @@ public sealed class PythonRunner(TagEngine tags, QueryExecutor queries, ScriptRe
     public async Task<JsonObject> RunWithLibrariesAsync(string code, Dictionary<string, JsonElement>? parameters, Dictionary<string, JsonElement>? inputs,
         IReadOnlyDictionary<string, string> libraries, CancellationToken cancellation, JsonArray? queryDefinitions = null)
     {
+        recovery?.EnsureOperationsAllowed();
         if (code.Length > 65536) throw new ArgumentException("Scripts are limited to 64 KB.");
         if (Executable is null) throw new InvalidOperationException("Python runtime is not installed. Run tools/bootstrap.ps1.");
         var worker = Path.Combine(AppContext.BaseDirectory, "python", "worker.py");

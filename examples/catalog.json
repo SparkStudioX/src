@@ -10,6 +10,88 @@
   },
   "workshops": [
     {
+      "id": "gateway-network",
+      "title": "Network HTTPS access",
+      "summary": "A read-only published application for checking local management, network HTTPS, DNS names and trusted operator access.",
+      "source": "examples/gateway-network.json",
+      "distribution": "setup-required",
+      "features": [
+        "installer local/network access selection",
+        "separate local management and network HTTPS ports",
+        "PEM certificate and DNS identity validation",
+        "protected private key import",
+        "restart-only managed listener configuration"
+      ],
+      "prerequisites": [
+        "Use the companion network-listener build on a disposable gateway; preview.5 predates these installer choices.",
+        "Provide a DNS hostname, matching server certificate and PEM key, client CA trust and the intended firewall rule. No certificate material is included.",
+        "Publish the supplied synthetic screen and grant a separate operator account View. No equipment, database, Python actions or external internet is required.",
+        "Run tools/load-network-example.mjs on a disposable local gateway with explicit administrator credentials to create its unpublished draft; the loader does not configure listeners."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "network-home",
+      "guide": "docs/architecture/NETWORK_ACCESS.md",
+      "walkthrough": [
+        "Install Local only first or choose Network HTTPS with a distinct port, DNS hostname and matching PEM pair.",
+        "Create the first administrator through local management, then import/review/publish this project and grant operator View.",
+        "Open the operator project from another computer using the trusted HTTPS hostname and inspect the local-only checkbox.",
+        "Inspect both actual listeners, then verify a managed upgrade keeps the selected network settings."
+      ]
+    },
+    {
+      "id": "tag-engineering",
+      "title": "Gateway expressions and reviewed tag imports",
+      "summary": "Synthetic counts and elapsed time drive a gateway-calculated rate and Boolean limit, with import preview and bad-quality exercises.",
+      "source": "examples/tag-engineering.json",
+      "distribution": "setup-required",
+      "features": [
+        "gateway expression tags",
+        "dependency validation and quality",
+        "atomic reviewed tag import/export",
+        "source timestamps"
+      ],
+      "prerequisites": [
+        "Use the companion build with expression tags and an engineering administrator account; public preview 5 predates this example.",
+        "The bundled Python runtime and operator Operate permission are needed for the synthetic Save action.",
+        "Use tools/load-tag-engineering-example.mjs with SPARKSTUDIO_ADMIN_AUTH_FILE, an unused project name and an unused [default]TagWorkshop namespace on a disposable gateway."
+      ],
+      "gatewayWrites": "memory-tags",
+      "entryScreenId": "tag-engineering",
+      "guide": "docs/architecture/TAG_ENGINEERING.md",
+      "walkthrough": [
+        "Load into an isolated gateway, inspect the tags, then publish and open the operator application.",
+        "Save 20 counts and 30 seconds: observe 40 per minute and a false limit; zero seconds propagates Bad_ExpressionError.",
+        "Disable Count and re-enable it. Preview an import, alter a tag, then observe stale-review rejection."
+      ]
+    },
+    {
+      "id": "gateway-recovery",
+      "title": "Gateway recovery lab",
+      "summary": "Verify an offline encrypted full-gateway backup, isolated restore and explicit restart after review using synthetic data.",
+      "source": "examples/gateway-recovery.json",
+      "distribution": "setup-required",
+      "features": [
+        "encrypted gateway backups",
+        "authenticated inspection",
+        "isolated restore",
+        "review before restarting"
+      ],
+      "prerequisites": [
+        "Use the companion gateway build with the --recovery CLI on a disposable data directory.",
+        "Stop all gateway and external file writers before backup. Keep the original directory and archive passphrase separately.",
+        "The lab screen makes no writes; the administrative walkthrough creates backup and restored files. Production gateways and live equipment are excluded."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "recovery-lab",
+      "guide": "docs/architecture/GATEWAY_RECOVERY.md",
+      "walkthrough": [
+        "Publish checkpoint A, then save an unpublished draft B and record synthetic gateway resources.",
+        "Stop, back up and inspect the archive. Restore into a new location and verify corrupted copies fail safely.",
+        "Start the restored copy on a separate local recovery port and verify connectors, Python and operator APIs are blocked.",
+        "Review synthetic destinations, approve and restart; compare the published and draft checkpoints and retained local resources."
+      ]
+    },
+    {
       "id": "designer-diagnostics",
       "title": "Designer diagnostics",
       "summary": "Capture a bounded local snapshot of property failures, resource references, tag quality and retained browser-event messages.",

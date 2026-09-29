@@ -1,0 +1,28 @@
+{
+  "name": "Tag engineering workshop",
+  "tags": [
+    { "path": "[default]TagWorkshop/Count", "kind": "memory", "dataType": "Int32", "value": 12, "enabled": true },
+    { "path": "[default]TagWorkshop/Seconds", "kind": "memory", "dataType": "Double", "value": 30, "enabled": true },
+    { "path": "[default]TagWorkshop/Rate", "kind": "expression", "dataType": "Double", "expression": "count * 60 / seconds", "inputs": { "count": "[default]TagWorkshop/Count", "seconds": "[default]TagWorkshop/Seconds" }, "enabled": true, "publishingIntervalMs": 500 },
+    { "path": "[default]TagWorkshop/WithinLimit", "kind": "expression", "dataType": "Boolean", "expression": "rate >= 0 && rate <= 25", "inputs": { "rate": "[default]TagWorkshop/Rate" }, "enabled": true, "publishingIntervalMs": 500 }
+  ],
+  "navigation": { "startupScreenId": "tag-engineering", "mode": "none", "items": [] },
+  "screens": [
+    {
+      "id": "tag-engineering", "name": "Production rate", "width": 1120, "height": 640,
+      "components": [
+        { "id": "heading", "type": "label", "x": 32, "y": 28, "width": 1040, "height": 54, "props": { "text": "A shared production model", "fontSize": 30 } },
+        { "id": "help", "type": "label", "x": 32, "y": 94, "width": 1040, "height": 48, "props": { "text": "Edit synthetic counts and elapsed seconds. Gateway expressions calculate rate and its limit condition for every session.", "fontSize": 16 } },
+        { "id": "count", "type": "spinner", "x": 32, "y": 170, "width": 300, "height": 90, "props": { "text": "Completed count", "fieldKey": "count", "tagPath": "[default]TagWorkshop/Count", "defaultValue": 12, "min": 0, "max": 1000, "step": 1 } },
+        { "id": "seconds", "type": "numberInput", "x": 360, "y": 170, "width": 300, "height": 90, "props": { "text": "Elapsed seconds", "fieldKey": "seconds", "tagPath": "[default]TagWorkshop/Seconds", "defaultValue": 30, "min": 0, "max": 3600 } },
+        { "id": "save", "type": "button", "x": 700, "y": 186, "width": 360, "height": 56, "props": { "text": "Save synthetic readings", "action": "script", "script": "count = inputs['count']\nseconds = inputs['seconds']\nif not isinstance(count, (int, float)) or int(count) != count or count < 0 or count > 1000:\n    raise ValueError('Count must be a whole number from 0 to 1000.')\nif not isinstance(seconds, (int, float)) or seconds < 0 or seconds > 3600:\n    raise ValueError('Seconds must be from 0 to 3600.')\nquality = system.tag.writeBlocking(['[default]TagWorkshop/Count', '[default]TagWorkshop/Seconds'], [int(count), seconds])\nif not all(item.isGood() for item in quality):\n    raise RuntimeError('The synthetic readings were not both saved. Check tag status.')\nresult = {'message': 'Synthetic readings saved. The gateway will evaluate the dependent tags.'}" } },
+        { "id": "saved-count", "type": "value", "x": 32, "y": 306, "width": 238, "height": 154, "props": { "text": "Saved count", "tagPath": "[default]TagWorkshop/Count" } },
+        { "id": "saved-seconds", "type": "value", "x": 298, "y": 306, "width": 238, "height": 154, "props": { "text": "Saved seconds", "tagPath": "[default]TagWorkshop/Seconds", "unit": "s" } },
+        { "id": "rate", "type": "value", "x": 564, "y": 306, "width": 238, "height": 154, "props": { "text": "Calculated rate", "tagPath": "[default]TagWorkshop/Rate", "unit": "/ min" } },
+        { "id": "permit", "type": "value", "x": 830, "y": 306, "width": 238, "height": 154, "props": { "text": "Within 25 / min", "tagPath": "[default]TagWorkshop/WithinLimit" } },
+        { "id": "exercise", "type": "label", "x": 32, "y": 496, "width": 1038, "height": 68, "props": { "text": "Try 20 counts / 30 seconds: 40 per minute, outside the limit. Try 0 seconds: the derived tags become unavailable. Restore 30 seconds to recover.", "fontSize": 17 } },
+        { "id": "scope", "type": "label", "x": 32, "y": 590, "width": 1038, "height": 28, "props": { "text": "Synthetic memory tags only · No equipment connection · Gateway tag configuration requires an administrator", "fontSize": 13 } }
+      ]
+    }
+  ]
+}

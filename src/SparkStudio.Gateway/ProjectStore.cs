@@ -5,7 +5,7 @@ using SparkStudio.Connectors;
 
 namespace SparkStudio.Gateway;
 
-public sealed class ProjectStore
+public sealed partial class ProjectStore
 {
     private readonly object gate = new();
     private readonly string directory;
@@ -224,37 +224,14 @@ public sealed class ProjectStore
         if (gatewayStore is not null) return gatewayStore.SaveTag(value);
         lock (gate)
         {
-            var tagPath = TagDefinitionValidator.Path(TagDefinitionValidator.Text(value, "path"));
-            var kind = TagDefinitionValidator.Kind(value);
-            if (kind is not ("opcua" or "memory")) throw new ArgumentException("kind must be opcua or memory.");
-            var node = new JsonObject
-            {
-                ["path"] = tagPath, ["kind"] = kind,
-                ["enabled"] = TagDefinitionValidator.Enabled(value),
-                ["publishingIntervalMs"] = TagDefinitionValidator.PublishingInterval(value)
-            };
-            if (kind == "opcua")
-            {
-                var connectionId = TagDefinitionValidator.Text(value, "connectionId");
-                ConnectionDefinition connection;
-                try { connection = GetConnection(connectionId, allowDisabled: true); }
-                catch (KeyNotFoundException error) { throw new ArgumentException("An existing OPC UA connection is required.", error); }
-                if (connection.Type != "opcua") throw new ArgumentException("Tag bindings require an OPC UA connection.");
-                node["connectionId"] = connectionId;
-                node["nodeId"] = TagDefinitionValidator.NodeIdentifier(value);
-                if (value.ContainsKey("dataType")) node["dataType"] = TagDefinitionValidator.DataType(value);
-            }
-            else
-            {
-                var type = TagDefinitionValidator.DataType(value);
-                node["dataType"] = type;
-                node["value"] = TagDefinitionValidator.MemoryValue(type, value["value"]);
-            }
+            var node = NormalizeTag(value);
+            var tagPath = Required(node, "path");
             var next = (JsonArray)definitions.DeepClone();
             var old = next.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "path") == tagPath);
             if (old is null && next.Count >= 1000) throw new ArgumentException("A gateway supports at most 1000 configured tags in this version.");
             if (old is not null) next.Remove(old);
             next.Add(node);
+            TagExpressions.Order(next.OfType<JsonObject>().ToArray());
             Persist("tags.json", next);
             definitions = next;
             return (JsonObject)node.DeepClone();
@@ -270,6 +247,7 @@ public sealed class ProjectStore
             var old = next.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "path") == path);
             if (old is null) return false;
             next.Remove(old);
+            TagExpressions.Order(next.OfType<JsonObject>().ToArray());
             Persist("tags.json", next);
             definitions = next;
             return true;

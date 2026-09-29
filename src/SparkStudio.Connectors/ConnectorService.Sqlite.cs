@@ -178,6 +178,7 @@ public sealed partial class ConnectorService
 
     public Task<ConnectionTestResult> CreateSqliteDatabaseAsync(ConnectionDefinition connection, bool initializeSampleData, CancellationToken ct)
     {
+        _ensureOperationsAllowed?.Invoke();
         var path = SqlitePath(connection, false);
         return RunSqliteAsync(ct, cancellation =>
         {
@@ -222,6 +223,7 @@ public sealed partial class ConnectorService
 
     public Task<IReadOnlyList<DatabaseTable>> BrowseSqliteSchemaAsync(ConnectionDefinition connection, CancellationToken ct)
     {
+        _ensureOperationsAllowed?.Invoke();
         var path = SqlitePath(connection, true);
         return RunSqliteAsync<IReadOnlyList<DatabaseTable>>(ct, cancellation =>
         {

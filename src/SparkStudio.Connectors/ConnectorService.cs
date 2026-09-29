@@ -19,6 +19,7 @@ public sealed partial class ConnectorService : IDisposable
     public const int MaximumBrowseNodes = 10000;
     public const int MaximumReadNodes = 1000;
     private readonly string _dataDirectory;
+    private readonly Action? _ensureOperationsAllowed;
     private readonly SemaphoreSlim _configurationLock = new(1, 1);
     private readonly ITelemetryContext _telemetry = DefaultTelemetry.Create(_ => { });
     private ApplicationConfiguration? _configuration;
@@ -27,10 +28,11 @@ public sealed partial class ConnectorService : IDisposable
     private readonly CancellationToken _watchStopping;
     private int _disposed;
 
-    public ConnectorService(string dataDirectory)
+    public ConnectorService(string dataDirectory, Action? ensureOperationsAllowed = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
         _dataDirectory = Path.GetFullPath(dataDirectory);
+        _ensureOperationsAllowed = ensureOperationsAllowed;
         _watchStopping = _watchShutdown.Token;
         _sessions = new ConnectionResourcePool<ISession>(32, CreateSessionAsync, session => session.Connected,
             async session =>
@@ -42,6 +44,7 @@ public sealed partial class ConnectorService : IDisposable
 
     public async Task<ConnectionTestResult> TestAsync(ConnectionDefinition connection, CancellationToken cancellationToken)
     {
+        _ensureOperationsAllowed?.Invoke();
         try
         {
             if (IsOpc(connection))
@@ -77,6 +80,7 @@ public sealed partial class ConnectorService : IDisposable
 
     public async Task<IReadOnlyList<OpcEndpoint>> DiscoverEndpointsAsync(string endpoint, CancellationToken cancellationToken)
     {
+        _ensureOperationsAllowed?.Invoke();
         if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) || uri.Scheme != "opc.tcp" || !string.IsNullOrEmpty(uri.UserInfo))
             throw new ArgumentException("Supply an opc.tcp endpoint URL without embedded credentials.");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -95,6 +99,7 @@ public sealed partial class ConnectorService : IDisposable
 
     public Task<IReadOnlyList<BrowseNode>> BrowseAsync(ConnectionDefinition connection, string? nodeId, CancellationToken cancellationToken)
     {
+        _ensureOperationsAllowed?.Invoke();
         var root = string.IsNullOrWhiteSpace(nodeId) ? ObjectIds.ObjectsFolder : NodeId.Parse(nodeId);
         return WithSessionAsync<IReadOnlyList<BrowseNode>>(connection, async (session, ct) =>
         {
@@ -131,6 +136,7 @@ public sealed partial class ConnectorService : IDisposable
 
     public Task<IReadOnlyList<ConnectorValue>> ReadAsync(ConnectionDefinition connection, IReadOnlyList<string> nodeIds, CancellationToken cancellationToken)
     {
+        _ensureOperationsAllowed?.Invoke();
         ArgumentNullException.ThrowIfNull(nodeIds);
         if (nodeIds.Count > MaximumReadNodes) throw new ArgumentException($"Read at most {MaximumReadNodes} nodes at a time.");
         if (nodeIds.Count == 0) return Task.FromResult<IReadOnlyList<ConnectorValue>>([]);
@@ -145,6 +151,7 @@ public sealed partial class ConnectorService : IDisposable
 
     public async Task<QueryResult> QueryAsync(ConnectionDefinition connection, string sql, IReadOnlyList<QueryParameter> parameters, CancellationToken cancellationToken)
     {
+        _ensureOperationsAllowed?.Invoke();
         cancellationToken.ThrowIfCancellationRequested();
         ValidateReadParameters(parameters);
         if (IsSqlite(connection)) return await QuerySqliteAsync(connection, sql, parameters, cancellationToken);

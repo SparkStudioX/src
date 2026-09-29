@@ -4,6 +4,10 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
+using System.Security.Authentication;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using System.Net.Security;
 using System.Security.Principal;
 using System.Text.Json;
 using Microsoft.Win32;
@@ -11,7 +15,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace SparkStudio.Installer;
 
-internal static class Program
+internal static partial class Program
 {
     internal const string ProductId = "{C85DA4EA-0382-4B12-943A-CE73A1772FD8}";
     private const string RegistryPath = @"SOFTWARE\SparkStudio\Installer";
@@ -32,6 +36,7 @@ internal static class Program
             var directory = ValidateDirectory(options.GetValueOrDefault("install-dir") ?? throw new ArgumentException("Missing --install-dir."));
             if (!int.TryParse(options.GetValueOrDefault("port", "5090"), out var port) || port is < 1 or > 65535)
                 throw new ArgumentException("Port must be an integer between 1 and 65535.");
+            var network = ParseNetwork(options, port);
             if (action == "probe")
             {
                 if (!int.TryParse(options.GetValueOrDefault("process-id"), out var processId) || processId <= 0)
@@ -54,12 +59,14 @@ internal static class Program
             var registration = ReadRegistration();
             var existing = service is null ? null : Native.ReadService(service);
             ValidateOwnership(directory, registration, existing);
+            if (action is "preflight" or "prepare" or "install") ValidateNetwork(network, registration);
             string result;
             switch (action)
             {
                 case "preflight":
                     ProbePort(port, existing, registration);
-                    result = "Preflight passed. The service and selected loopback port are available.";
+                    ProbeNetworkPort(network, existing, registration);
+                    result = "Preflight passed. The owned service, selected ports and certificate settings are valid. Browser certificate trust and firewall rules are not changed.";
                     break;
                 case "inspect-shutdown":
                     if (service is null || existing?.State != Native.Running)
@@ -80,9 +87,10 @@ internal static class Program
                     break;
                 case "prepare":
                     ProbePort(port, existing, registration);
+                    ProbeNetworkPort(network, existing, registration);
                     var running = existing is not null && existing.State != Native.Stopped;
                     if (service is not null) Native.StopAndWait(service, directory);
-                    try { ProbePort(port, null, null); }
+                    try { ProbePort(port, null, null); ProbeNetworkPort(network, null, null); }
                     catch { if (running && service is not null) Native.StartAndWait(service); throw; }
                     result = running ? "stopped" : "ready";
                     break;
@@ -93,7 +101,7 @@ internal static class Program
                     ProbePort(port, null, null);
                     RejectReparsePoints(DataDirectory);
                     Directory.CreateDirectory(DataDirectory);
-                    await InstallAsync(manager, service, registration, directory, port);
+                    await InstallAsync(manager, service, registration, directory, port, network);
                     result = $"SparkStudio is running at http://127.0.0.1:{port}. Data is retained in {DataDirectory}.";
                     break;
                 case "resume":
@@ -127,7 +135,7 @@ internal static class Program
     {
         if (args.Length % 2 != 0) throw new ArgumentException("Arguments must be --name value pairs.");
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        var allowed = new HashSet<string>(["action", "install-dir", "port", "report", "process-id"]);
+        var allowed = new HashSet<string>(["action", "install-dir", "port", "report", "process-id", "access", "https-port", "hostname", "certificate", "private-key"]);
         for (var index = 0; index < args.Length; index += 2)
         {
             var key = args[index].StartsWith("--", StringComparison.Ordinal) ? args[index][2..] : "";
@@ -151,7 +159,10 @@ internal static class Program
 
     private static void CheckMachineEnvironment()
     {
-        foreach (var key in new[] { "SPARKSTUDIO_DATA_DIR", "SPARKSTUDIO_PYTHON" })
+        foreach (System.Collections.DictionaryEntry setting in Environment.GetEnvironmentVariables(EnvironmentVariableTarget.Machine))
+            if (setting.Key is string name && !string.IsNullOrWhiteSpace(setting.Value?.ToString()) && (name.StartsWith("Kestrel__", StringComparison.OrdinalIgnoreCase) || name.StartsWith("ASPNETCORE_Kestrel__", StringComparison.OrdinalIgnoreCase) || name.StartsWith("DOTNET_Kestrel__", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Machine Kestrel endpoint overrides must be removed before using installer-managed listeners.");
+        foreach (var key in new[] { "SPARKSTUDIO_DATA_DIR", "SPARKSTUDIO_PYTHON", "SPARKSTUDIO_DEPLOYMENT_DISABLE", "ASPNETCORE_URLS", "DOTNET_URLS", "ASPNETCORE_HTTP_PORTS", "ASPNETCORE_HTTPS_PORTS", "DOTNET_HTTP_PORTS", "DOTNET_HTTPS_PORTS" })
             if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.Machine)))
                 throw new InvalidOperationException($"The machine environment variable {key} overrides installer configuration. Remove that override before installing this service.");
     }
@@ -171,18 +182,25 @@ internal static class Program
 
     private static void RejectReparsePoints(string directory)
     {
-        for (var current = new DirectoryInfo(directory); current is not null; current = current.Parent)
-            if (current.Exists && (current.Attributes & FileAttributes.ReparsePoint) != 0)
-                throw new ArgumentException("Service installation/data directories cannot contain symbolic links or junctions.");
+        for (string? current = Path.GetFullPath(directory); current is not null; current = Path.GetDirectoryName(current))
+        {
+            try
+            {
+                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                    throw new ArgumentException("Service installation/data paths cannot contain symbolic links or junctions.");
+            }
+            catch (FileNotFoundException) { }
+            catch (DirectoryNotFoundException) { }
+        }
     }
 
-    internal static string Command(string directory, int port) => $"\"{Path.Combine(directory, "SparkStudio.Gateway.exe")}\" --contentRoot \"{directory}\" --DataDirectory \"{DataDirectory}\" --urls http://127.0.0.1:{port}";
+    internal static string Command(string directory, int port, int commandVersion = 1) => $"\"{Path.Combine(directory, "SparkStudio.Gateway.exe")}\" --contentRoot \"{directory}\" --DataDirectory \"{DataDirectory}\" {(commandVersion == 2 ? $"--InstallerManagementPort {port}" : $"--urls http://127.0.0.1:{port}")}";
 
     private static Registration? ReadRegistration()
     {
         using var key = Registry.LocalMachine.OpenSubKey(RegistryPath);
         if (key is null) return null;
-        return new Registration(key.GetValue("ProductId") as string ?? "", key.GetValue("InstallDirectory") as string ?? "", key.GetValue("DataDirectory") as string ?? "", key.GetValue("Port") is int port ? port : 0);
+        return new Registration(key.GetValue("ProductId") as string ?? "", key.GetValue("InstallDirectory") as string ?? "", key.GetValue("DataDirectory") as string ?? "", key.GetValue("Port") is int port ? port : 0, key.GetValue("CommandVersion") is int commandVersion ? commandVersion : 1);
     }
 
     private static void SaveRegistration(Registration value)
@@ -192,16 +210,17 @@ internal static class Program
         key.SetValue("InstallDirectory", value.InstallDirectory);
         key.SetValue("DataDirectory", value.DataDirectory);
         key.SetValue("Port", value.Port, RegistryValueKind.DWord);
+        key.SetValue("CommandVersion", value.CommandVersion, RegistryValueKind.DWord);
     }
 
     internal static void ValidateOwnership(string directory, Registration? registration, ServiceInfo? service)
     {
         if (registration is not null && (registration.ProductId != ProductId ||
             !registration.InstallDirectory.Equals(directory, StringComparison.OrdinalIgnoreCase) ||
-            !registration.DataDirectory.Equals(DataDirectory, StringComparison.OrdinalIgnoreCase) || registration.Port is < 1 or > 65535))
+            !registration.DataDirectory.Equals(DataDirectory, StringComparison.OrdinalIgnoreCase) || registration.Port is < 1 or > 65535 || registration.CommandVersion is not (1 or 2)))
             throw new InvalidOperationException("An incompatible SparkStudio installation registration exists. Use its original installer/location; this installer will not replace it.");
         if (service is not null && (registration is null ||
-            !service.BinaryPath.Equals(Command(directory, registration.Port), StringComparison.OrdinalIgnoreCase) ||
+            !service.BinaryPath.Equals(Command(directory, registration.Port, registration.CommandVersion), StringComparison.OrdinalIgnoreCase) ||
             !service.Account.Equals(@"NT AUTHORITY\LocalService", StringComparison.OrdinalIgnoreCase) || service.ServiceType != Native.OwnProcess))
             throw new InvalidOperationException("The existing SparkStudio service is not owned by this installer or its configuration was changed. It has not been stopped or modified. Use its original management procedure.");
     }
@@ -210,7 +229,7 @@ internal static class Program
     {
         // An owned running service may currently occupy its recorded port. Prepare stops only
         // that verified service and repeats the bind before any payload files are overwritten.
-        if (service is not null && service.State != Native.Stopped && registration?.Port == port) return;
+        if (service is not null && service.State != Native.Stopped && (registration?.Port == port || (registration?.CommandVersion == 2 && ReadNetworkIntent(DataDirectory)?.HttpsPort == port))) return;
         var listener = new TcpListener(IPAddress.Loopback, port);
         listener.Server.ExclusiveAddressUse = true;
         try { listener.Start(); }
@@ -218,13 +237,14 @@ internal static class Program
         finally { listener.Stop(); }
     }
 
-    private static async Task InstallAsync(ServiceHandle manager, ServiceHandle? existing, Registration? previous, string directory, int port)
+    private static async Task InstallAsync(ServiceHandle manager, ServiceHandle? existing, Registration? previous, string directory, int port, NetworkOptions network)
     {
         ServiceHandle? created = null;
+        DeploymentChange? deployment = null;
         try
         {
-            var service = existing ?? (created = Native.CreateChecked(manager, Command(directory, port)));
-            if (existing is not null) Native.Configure(existing, Command(directory, port));
+            var service = existing ?? (created = Native.CreateChecked(manager, Command(directory, port, 2)));
+            if (existing is not null) Native.Configure(existing, Command(directory, port, 2));
             Native.ConfigureIdentity(service);
             // The gateway stores credentials and project code here. Do not inherit the
             // broad Users read access of ProgramData on a fresh installation.
@@ -237,9 +257,12 @@ internal static class Program
             acl.SetAccessRule(new FileSystemAccessRule(serviceIdentity, FileSystemRights.Modify | FileSystemRights.Synchronize,
                 InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
             new DirectoryInfo(DataDirectory).SetAccessControl(acl);
-            SaveRegistration(new Registration(ProductId, directory, DataDirectory, port));
+            deployment = InstallDeployment(DataDirectory, port, network);
+            SaveRegistration(new Registration(ProductId, directory, DataDirectory, port, 2));
             Native.StartAndWait(service);
             await WaitForReadinessAsync(port, () => Native.RunningProcessId(service));
+            if (ReadNetworkIntent(DataDirectory) is { } installedNetwork)
+                await VerifyNetworkReadinessAsync(installedNetwork, () => Native.RunningProcessId(service));
         }
         catch (Exception failure)
         {
@@ -254,9 +277,10 @@ internal static class Program
                 else if (existing is not null && previous is not null)
                 {
                     Native.StopAndWait(existing, directory);
-                    Native.Configure(existing, Command(previous.InstallDirectory, previous.Port));
+                    Native.Configure(existing, Command(previous.InstallDirectory, previous.Port, previous.CommandVersion));
                     SaveRegistration(previous);
                 }
+                deployment?.Rollback();
             }
             catch (Exception cleanup)
             {
@@ -289,12 +313,12 @@ internal static class Program
         throw new InvalidOperationException($"The gateway did not become ready with bundled Python within 45 seconds. {lastObservation} Inspect Windows Event Viewer before retrying. Existing data has been retained.");
     }
 
-    internal static async Task<ReadinessProbe> ProbeReadinessAsync(HttpClient client, int port, uint expectedProcessId, CancellationToken cancellation)
+    internal static async Task<ReadinessProbe> ProbeReadinessAsync(HttpClient client, int port, uint expectedProcessId, CancellationToken cancellation, Uri? endpoint = null)
     {
         if (port is < 1 or > 65535 || expectedProcessId == 0) throw new ArgumentException("Readiness requires a local port and a running service process ID.");
         try
         {
-            using var response = await client.GetAsync($"http://127.0.0.1:{port}/api/ready", HttpCompletionOption.ResponseHeadersRead, cancellation);
+            using var response = await client.GetAsync(new Uri(endpoint ?? new Uri($"http://127.0.0.1:{port}"), "/api/ready"), HttpCompletionOption.ResponseHeadersRead, cancellation);
             if (response.StatusCode != HttpStatusCode.OK)
                 return new(false, response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
                     ? $"The local readiness endpoint returned HTTP {(int)response.StatusCode}; it must not require an administrator login. Verify that installer and gateway versions match."
@@ -339,6 +363,9 @@ internal static class Program
         Accepted(() => ValidateOwnership(dir, registration, null)); // A retained registration can be retried after owned-service cleanup.
         Accepted(() => ValidateOwnership(dir, registration, good));
         Accepted(() => ValidateOwnership(dir.ToUpperInvariant(), registration, good));
+        Accepted(() => ValidateOwnership(dir, registration with { CommandVersion = 2 }, good with { BinaryPath = Command(dir, 5090, 2) }));
+        Rejected(() => ValidateOwnership(dir, registration with { CommandVersion = 2 }, good));
+        Rejected(() => ValidateOwnership(dir, registration with { CommandVersion = 3 }, good));
         Rejected(() => ValidateOwnership(dir, null, good));
         Rejected(() => ValidateOwnership(dir, registration with { ProductId = "other" }, good));
         Rejected(() => ValidateOwnership(dir, registration with { InstallDirectory = @"C:\Other" }, good));
@@ -361,6 +388,7 @@ internal static class Program
         try { Rejected(() => ProbePort(((IPEndPoint)listener.LocalEndpoint).Port, null, null)); }
         finally { listener.Stop(); }
         Console.WriteLine($"PASS {checks} installer ownership, path, argument and occupied-port checks; no service or registration was changed.");
+        await NetworkSelfTestAsync();
         await ReadinessSelfTestAsync();
         await ShutdownSelfTestAsync();
         Native.DebugPrivilegeSelfTest();
@@ -493,7 +521,7 @@ internal sealed class ReadinessFixtureHandler(Func<HttpRequestMessage, HttpRespo
     { cancellationToken.ThrowIfCancellationRequested(); return Task.FromResult(respond(request)); }
 }
 
-internal sealed record Registration(string ProductId, string InstallDirectory, string DataDirectory, int Port);
+internal sealed record Registration(string ProductId, string InstallDirectory, string DataDirectory, int Port, int CommandVersion = 1);
 internal sealed record ServiceInfo(string BinaryPath, string Account, uint ServiceType, uint State);
 
 internal sealed class ServiceHandle : SafeHandleZeroOrMinusOneIsInvalid

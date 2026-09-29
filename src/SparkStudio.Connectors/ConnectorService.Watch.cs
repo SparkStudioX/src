@@ -16,6 +16,7 @@ public sealed partial class ConnectorService
         int publishingIntervalMs, Action<IReadOnlyList<ConnectorValue>> onValues,
         Action<string> onStatus, CancellationToken ct)
     {
+        _ensureOperationsAllowed?.Invoke();
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         ArgumentNullException.ThrowIfNull(onValues);
         ArgumentNullException.ThrowIfNull(onStatus);

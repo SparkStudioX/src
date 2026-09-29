@@ -22,3 +22,16 @@
 .gateway-confirm button { margin-right:12px; }
 @media(max-width:850px) { .gateway-cards { grid-template-columns:repeat(2,minmax(0,1fr)); } .gateway-console > main { padding:20px; } }
 @media(max-width:500px) { .gateway-cards { grid-template-columns:1fr; } .gateway-heading { align-items:flex-start; flex-direction:column; } }
+.gateway-recovery { line-height: 1.6; }
+.gateway-recovery h2 { font-size: 22px; margin: 0 0 12px; }
+.gateway-recovery h3 { font-size: 18px; margin: 20px 0 10px; }
+.gateway-recovery p { margin-block: 12px; }
+.gateway-recovery-guide, .gateway-recovery-review { padding: 22px; margin-top: 20px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
+.gateway-recovery-guide summary { cursor: pointer; font-weight: 600; }
+.gateway-recovery-guide ol { padding-left: 24px; }
+.gateway-recovery-guide li { margin-block: 10px; }
+.gateway-recovery-review h3:first-child { margin-top: 0; }
+.gateway-recovery-review > label { display: flex; align-items: flex-start; gap: .6rem; margin-block: 1rem; }
+.gateway-recovery-review > label > input[type="checkbox"] { flex: 0 0 auto; margin-top: .35rem; }
+.gateway-recovery .gateway-filter { display: grid; max-width: 35rem; }
+.gateway-recovery code { overflow-wrap: anywhere; }

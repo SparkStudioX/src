@@ -66,6 +66,10 @@ Portable workshops use synthetic data and need no OPC UA server, SQL Server or i
 
 The installer and workshop collection contain no development projects, accounts, connection credentials or databases. A `.sparkproj` carries project resources; it is not a full gateway backup.
 
+## New network-listener work after preview.5
+
+The development source now includes installer **Local only**, **Network HTTPS**, and managed-upgrade **Keep existing listener settings** choices. The published preview.5 installer does not yet include them. See [Network access workshop](NETWORK_ACCESS.md) for the separate management/HTTPS ports, DNS certificate requirements, protected PEM import and acceptance limits. These changes require a new tested installer release before using them on a working gateway.
+
 ## Connections and deployment settings
 
 OPC UA client, Microsoft SQL Server and SQLite connectors are available. Configure your own endpoints and credentials in the target deployment. SQL Server still requires live-server acceptance; SQLite tests do not establish SQL Server acceptance.

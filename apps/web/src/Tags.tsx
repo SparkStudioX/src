@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, displayValue } from "./api";
 import { Field } from "./App";
 import Icon from "./Icon";
+import TagTransfer from "./TagTransfer";
 import type { Connection, Tag, TagDefinition } from "./types";
 
 const dataTypes = [
@@ -38,6 +39,8 @@ export default function Tags({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [transfer, setTransfer] = useState(false);
+  const [inputsText, setInputsText] = useState("{}");
   const selected = definitions.find(
     (definition) => definition.path === selectedPath,
   );
@@ -94,11 +97,13 @@ export default function Tags({
       ),
     );
     setDeleteConfirm(false);
+    setInputsText(JSON.stringify(definition.inputs ?? {}, null, 2));
   };
-  const add = (kind: "memory" | "opcua") => {
+  const add = (kind: "memory" | "opcua" | "expression") => {
     setSelectedPath("");
     setDeleteConfirm(false);
     setValueText("0");
+    setInputsText('{"speed": "[default]Line/Line1/Speed"}');
     setDraft({
       path: `[default]${folder ? folder + "/" : ""}NewTag`,
       kind,
@@ -107,6 +112,7 @@ export default function Tags({
       publishingIntervalMs: 1000,
       ...(kind === "memory"
         ? { value: 0 }
+        : kind === "expression" ? { expression: "speed * 0.5", inputs: { speed: "[default]Line/Line1/Speed" } }
         : { connectionId: opcConnections[0]?.id || "", nodeId: "" }),
     });
   };
@@ -156,6 +162,11 @@ export default function Tags({
         next.value = value;
         delete next.connectionId;
         delete next.nodeId;
+      } else if (next.kind === "expression") {
+        next.inputs = JSON.parse(inputsText) as Record<string, string>;
+        if (!next.inputs || typeof next.inputs !== "object" || Array.isArray(next.inputs)) throw new Error("Inputs must be an object mapping names to tag paths.");
+        if (!next.expression?.trim()) throw new Error("Enter an expression using your input names.");
+        delete next.value; delete next.connectionId; delete next.nodeId;
       } else {
         if (!next.connectionId || !next.nodeId?.trim())
           throw new Error(
@@ -218,6 +229,8 @@ export default function Tags({
           </p>
         </div>
         <div className="page-heading-actions">
+          <button className="button" onClick={() => setTransfer(true)}>Import / export</button>
+          <button className="button" onClick={() => add("expression")}><Icon name="plus" size={16} />Expression tag</button>
           <button className="button" onClick={() => add("memory")}>
             <Icon name="plus" size={16} />
             Memory tag
@@ -334,7 +347,7 @@ export default function Tags({
                       <td>
                         <span>{definition.dataType}</span>
                         <small>
-                          {definition.kind === "memory" ? "Memory" : "OPC UA"}
+                          {definition.kind === "memory" ? "Memory" : definition.kind === "expression" ? "Expression" : "OPC UA"}
                         </small>
                       </td>
                       <td className="tag-current-value">
@@ -426,18 +439,19 @@ export default function Tags({
                     value={current.kind || "opcua"}
                     onChange={(event) =>
                       edit({
-                        kind: event.target.value as "opcua" | "memory",
+                        kind: event.target.value as "opcua" | "memory" | "expression",
                         ...(event.target.value === "opcua"
                           ? {
                               connectionId: opcConnections[0]?.id || "",
                               nodeId: "",
                             }
-                          : { value: 0 }),
+                          : event.target.value === "expression" ? { expression: current.expression || "0", inputs: current.inputs || {} } : { value: 0 }),
                       })
                     }
                   >
                     <option value="opcua">OPC UA variable</option>
                     <option value="memory">Memory value</option>
+                    <option value="expression">Gateway expression</option>
                   </select>
                 </Field>
                 <Field label="Data type">
@@ -479,6 +493,15 @@ export default function Tags({
                       }}
                     />
                   </Field>
+                ) : current.kind === "expression" ? (
+                  <>
+                    <Field label="Expression" hint="Named inputs, numbers, quoted text, true/false, + − * / %, comparisons, &&, ||, ! and parentheses. No scripts or functions.">
+                      <textarea rows={3} spellCheck={false} value={current.expression || ""} onChange={event => edit({ expression: event.target.value })} />
+                    </Field>
+                    <Field label="Input tag paths (JSON)" hint={'Example: {"speed":"[default]Production/Speed"}. All inputs must exist and have good quality.'}>
+                      <textarea rows={5} spellCheck={false} value={inputsText} onChange={event => { setInputsText(event.target.value); edit({}); }} />
+                    </Field>
+                  </>
                 ) : (
                   <>
                     <Field label="OPC UA connection">
@@ -512,7 +535,7 @@ export default function Tags({
                 )}
                 <Field
                   label="Publishing interval"
-                  hint="100–60,000 ms. OPC UA values use the requested subscription interval."
+                  hint="100–60,000 ms. OPC UA requests this subscription interval. Expressions run on the gateway at this interval with a 100 ms scheduler resolution."
                 >
                   <div className="input-suffix">
                     <input
@@ -615,6 +638,7 @@ export default function Tags({
           )}
         </aside>
       </div>
+      {transfer && <TagTransfer onClose={() => setTransfer(false)} onApplied={() => { void reload(); setDraft(null); setSelectedPath(""); onTagsChanged(); }} />}
     </div>
   );
 }

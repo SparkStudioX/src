@@ -4,6 +4,11 @@ using Microsoft.AspNetCore.DataProtection;
 using SparkStudio.Connectors;
 using SparkStudio.Gateway;
 
+if (GatewayRecoveryCli.IsRequested(args))
+{
+    Environment.ExitCode = await GatewayRecoveryCli.RunAsync(args);
+    return;
+}
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddWindowsService(options => options.ServiceName = "SparkStudio");
 builder.Logging.ClearProviders().AddConsole();
@@ -15,7 +20,11 @@ builder.WebHost.ConfigureKestrel(options =>
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
 var dataDir = Path.GetFullPath(Environment.GetEnvironmentVariable("SPARKSTUDIO_DATA_DIR") ?? builder.Configuration["DataDirectory"] ?? Path.Combine(AppContext.BaseDirectory, "data"));
 Directory.CreateDirectory(dataDir);
-DeploymentSettings.Configure(builder, dataDir);
+using var dataLease = DataDirectoryLease.Acquire(dataDir);
+var recovery = new RecoveryQuarantine(dataDir);
+builder.Services.AddSingleton(recovery);
+DeploymentSettings.Configure(builder, dataDir, recovery.Active ? "Gateway recovery quarantine" : null);
+recovery.ConfigureIsolation(builder);
 var protection = builder.Services.AddDataProtection().SetApplicationName("SparkStudio").PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir, "keys")));
 if (OperatingSystem.IsWindows()) protection.ProtectKeysWithDpapi();
 builder.Services.AddGatewaySecurity(dataDir);
@@ -25,9 +34,9 @@ builder.Services.AddSingleton(new GatewayDeployment(builder.Configuration, build
 builder.Services.AddSingleton(new GatewayObservations(dataDir));
 builder.Services.AddSingleton<PreviewSessions>();
 builder.Services.AddSingleton(sp => new ProjectCatalog(dataDir, sp.GetRequiredService<IDataProtectionProvider>()));
-builder.Services.AddSingleton(_ => new ConnectorService(dataDir));
+builder.Services.AddSingleton(_ => new ConnectorService(dataDir, recovery.EnsureOperationsAllowed));
 builder.Services.AddSingleton(sp => new TagEngine(sp.GetRequiredService<ProjectCatalog>().GatewayStore,
-    sp.GetRequiredService<ConnectorService>(), sp.GetRequiredService<ILogger<TagEngine>>()));
+    sp.GetRequiredService<ConnectorService>(), sp.GetRequiredService<ILogger<TagEngine>>(), recovery));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TagEngine>());
 builder.Services.AddSingleton<ProjectRuntimeRegistry>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ProjectRuntimeRegistry>());
@@ -65,11 +74,22 @@ app.Use(async (context, next) =>
 app.UseRouting();
 app.UseGatewayObservations();
 app.UseApplicationAccess();
+app.Use(async (context, next) =>
+{
+    if (recovery.Active && GatewayAccess.IsOperator(context))
+    {
+        context.Response.StatusCode = 503;
+        await context.Response.WriteAsJsonAsync(new { error = "This restored gateway is in recovery mode. An administrator must review it before operator applications can run." });
+        return;
+    }
+    await next();
+});
 app.UsePreviewCommunication();
 app.MapGatewaySecurityEndpoints();
 app.MapGatewayConsoleEndpoints();
 app.MapGatewayDeploymentEndpoints();
 app.MapDeploymentSettingsEndpoints();
+app.MapGatewayRecoveryEndpoints();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapGet("/api/ready", GatewayReadiness.Respond);
@@ -111,6 +131,7 @@ app.Run();
 
 static void MapProjectEndpoints(RouteGroupBuilder routes)
 {
+routes.MapTagEngineeringEndpoints();
 routes.MapPreviewEndpoints();
 routes.MapGet("/health", (PythonRunner python) => new { status = "ok", version = typeof(PythonRunner).Assembly
     .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)

@@ -337,13 +337,15 @@ export interface Tag {
 }
 export interface TagDefinition {
   path: string;
-  kind?: "opcua" | "memory";
+  kind?: "opcua" | "memory" | "expression";
   dataType: string;
   value?: unknown;
   connectionId?: string;
   nodeId?: string;
   publishingIntervalMs?: number;
   enabled?: boolean;
+  expression?: string;
+  inputs?: Record<string, string>;
 }
 export interface Publication {
   warnings?: string[];

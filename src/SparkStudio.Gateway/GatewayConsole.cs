@@ -73,7 +73,7 @@ public static class GatewayConsole
 
     public static void MapGatewayConsoleEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/gateway/overview", (HttpContext context, ProjectCatalog catalog, TagEngine tags, SecurityStore security, GatewayObservations observations) =>
+        app.MapGet("/api/gateway/overview", (HttpContext context, ProjectCatalog catalog, TagEngine tags, SecurityStore security, GatewayObservations observations, RecoveryQuarantine recovery) =>
         {
             var projects = catalog.List(includeArchived: true);
             var values = tags.Snapshot();
@@ -81,7 +81,7 @@ public static class GatewayConsole
                 id = ProjectStore.Required(item, "id"), name = ProjectStore.Required(item, "name"), type = ProjectStore.Required(item, "type"),
                 status = ProjectStore.Optional(item, "status") ?? "unknown"
             }).ToArray();
-            return new { observedAt = DateTimeOffset.UtcNow, identity = Environment.MachineName,
+            return new { observedAt = DateTimeOffset.UtcNow, identity = Environment.MachineName, recoveryMode = recovery.Active,
                 version = typeof(GatewayConsole).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown",
                 framework = RuntimeInformation.FrameworkDescription, platform = RuntimeInformation.OSDescription,
                 projects, connections, tags = new { total = values.Length, good = values.Count(item => item.Quality == "Good"),

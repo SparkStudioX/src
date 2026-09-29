@@ -24,6 +24,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.HostFiltering;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.Configuration;
@@ -64,7 +65,15 @@ Environment.SetEnvironmentVariable("SPARKSTUDIO_DEPLOYMENT_DISABLE", null);
 var external = new DeploymentSettings(directory, "External override fixture");
 var ignoredBuilder = Builder(); external.ApplyStartup(ignoredBuilder);
 Assert(external.Snapshot().StartupState == "overridden" && external.Snapshot().State == "overridden", "Override not reported.");
-Console.WriteLine("PASS external URL, explicit Kestrel and recovery overrides prevent managed listener activation");
+var conflictingInstaller = Builder(); conflictingInstaller.Configuration["InstallerManagementPort"] = "15090"; conflictingInstaller.Configuration["Urls"] = "http://0.0.0.0:15090";
+Throws<InvalidOperationException>(() => DeploymentSettings.Configure(conflictingInstaller, directory));
+File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "appsettings.Production.json"), "{\"Kestrel\":{\"Endpoints\":{\"Lan\":{\"Url\":\"http://0.0.0.0:15090\"}}}}");
+var profileOverride = Builder(); profileOverride.Configuration.AddJsonFile("appsettings.Production.json", optional: false); profileOverride.Configuration["InstallerManagementPort"] = "15090";
+Throws<InvalidOperationException>(() => DeploymentSettings.Configure(profileOverride, directory));
+var quarantinedInstaller = Builder(); quarantinedInstaller.Configuration["InstallerManagementPort"] = "15090"; quarantinedInstaller.Configuration["Urls"] = "http://0.0.0.0:15090";
+var quarantineSnapshot = DeploymentSettings.Configure(quarantinedInstaller, directory, "Gateway recovery quarantine").Snapshot();
+Assert(quarantineSnapshot.OverrideReason == "Gateway recovery quarantine", "Quarantine did not supersede conflicting installer overrides.");
+Console.WriteLine("PASS external overrides bypass ordinary managed settings; installer-managed conflicting overrides fail closed and recovery isolation takes precedence");
 
 var filename = Path.Combine(directory, "deployment.json");
 var bytes = File.ReadAllBytes(filename);
@@ -89,7 +98,7 @@ Console.WriteLine("PASS external file edits reject saves; malformed persisted fi
 var certificateDirectory = Path.Combine(directory, "certificates", "deployment"); Directory.CreateDirectory(certificateDirectory);
 using var rsa = RSA.Create(2048);
 var certificateRequest = new CertificateRequest("CN=SparkStudio isolated loopback fixture", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-var san = new SubjectAlternativeNameBuilder(); san.AddIpAddress(IPAddress.Loopback); certificateRequest.CertificateExtensions.Add(san.Build());
+var san = new SubjectAlternativeNameBuilder(); san.AddIpAddress(IPAddress.Loopback); san.AddDnsName("gateway.fixture.test"); certificateRequest.CertificateExtensions.Add(san.Build());
 certificateRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, true));
 certificateRequest.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") }, false));
 using var certificate = certificateRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(2));
@@ -141,7 +150,56 @@ await using (var app = fallbackBuilder.Build())
   await app.StopAsync();
 }
 Console.WriteLine("PASS missing certificate at restart preserves the existing host recovery listener");
-Console.WriteLine("7 deployment settings model/TLS groups passed.");
+// Installer-managed LAN TLS is additional to local recovery; certificate identity is the DNS name, never 0.0.0.0.
+File.WriteAllText(Path.Combine(certificateDirectory, "fixture-key.pem"), rsa.ExportPkcs8PrivateKeyPem());
+var localPort = Port(); var networkPort = Port();
+var networkIntent = new DeploymentIntent(true, $"https://0.0.0.0:{networkPort}", "fixture-cert.pem", "fixture-key.pem", "gateway.fixture.test");
+var networkStore = new DeploymentSettings(directory, installerManagementPort: localPort);
+Throws<ArgumentException>(() => networkStore.Validate(networkIntent with { PublicHostname = null }));
+Throws<ArgumentException>(() => networkStore.Validate(networkIntent with { PublicHostname = "different.fixture.test" }));
+Throws<ArgumentException>(() => networkStore.Validate(networkIntent with { PublicHostname = "*.fixture.test" }));
+Throws<ArgumentException>(() => networkStore.Validate(networkIntent with { Url = $"https://0.0.0.0:{localPort}" }));
+networkStore.Save(new(networkStore.Snapshot().Revision, networkIntent));
+var networkStartup = new DeploymentSettings(directory, installerManagementPort: localPort);
+var networkBuilder = Builder();
+File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "appsettings.json"), "{\"AllowedHosts\":\"localhost;127.0.0.1;[::1]\"}");
+networkBuilder.Configuration.AddJsonFile("appsettings.json", optional: false);
+networkStartup.ApplyStartup(networkBuilder);
+networkBuilder.Services.AddHostFiltering(options => options.AllowedHosts = networkBuilder.Configuration["AllowedHosts"]!.Split(';'));
+Assert(networkBuilder.Configuration["AllowedHosts"]!.Contains("gateway.fixture.test"), "Public hostname not added to bundled host policy.");
+await using (var app = networkBuilder.Build())
+{
+  app.UseHostFiltering();
+  app.MapGet("/fixture", () => "dual listener fixture"); await app.StartAsync();
+  using var handler = new HttpClientHandler { UseProxy = false, ServerCertificateCustomValidationCallback = (_, presented, _, _) => presented?.Thumbprint == certificate.Thumbprint };
+  using var client = new HttpClient(handler);
+  Assert(await client.GetStringAsync($"http://127.0.0.1:{localPort}/fixture") == "dual listener fixture", "Local management listener missing.");
+  Assert(await client.GetStringAsync($"https://127.0.0.1:{networkPort}/fixture") == "dual listener fixture", "Network HTTPS listener missing.");
+  using var namedRequest = new HttpRequestMessage(HttpMethod.Get, $"https://127.0.0.1:{networkPort}/fixture"); namedRequest.Headers.Host = $"gateway.fixture.test:{networkPort}";
+  using var namedResponse = await client.SendAsync(namedRequest); Assert(namedResponse.IsSuccessStatusCode, "DNS Host header was rejected after successful TLS.");
+  using var hostileRequest = new HttpRequestMessage(HttpMethod.Get, $"https://127.0.0.1:{networkPort}/fixture"); hostileRequest.Headers.Host = "unrelated.fixture.test";
+  using var hostileResponse = await client.SendAsync(hostileRequest); Assert(hostileResponse.StatusCode == HttpStatusCode.BadRequest, "Unrelated Host header was accepted.");
+  var addresses = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses;
+  Assert(addresses.Count == 2 && addresses.Contains(networkIntent.Url), "Unexpected listener set.");
+  Assert(networkStartup.Snapshot().InstallerManagementPort == localPort && networkStartup.Snapshot().Saved.PublicHostname == "gateway.fixture.test", "Managed network identity not observed.");
+  await app.StopAsync();
+}
+var restricted = new DeploymentSettings(directory, installerManagementPort: localPort);
+var restrictedBuilder = Builder(); restrictedBuilder.Configuration["AllowedHosts"] = "another.factory.test"; restricted.ApplyStartup(restrictedBuilder);
+Assert(restricted.Snapshot().StartupState == "recovery" && restrictedBuilder.Configuration["AllowedHosts"] == "another.factory.test", "Explicit host policy was weakened.");
+File.Delete(Path.Combine(certificateDirectory, "fixture-key.pem"));
+var networkFallback = new DeploymentSettings(directory, installerManagementPort: localPort);
+var networkFallbackBuilder = Builder(); networkFallback.ApplyStartup(networkFallbackBuilder);
+await using (var app = networkFallbackBuilder.Build())
+{
+  app.MapGet("/fixture", () => "local recovery only"); await app.StartAsync();
+  var addresses = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses;
+  Assert(addresses.Count == 1 && addresses.Single() == $"http://127.0.0.1:{localPort}", "Missing certificate exposed a fallback network listener.");
+  Assert(networkFallback.Snapshot().StartupState == "recovery", "Network certificate failure not reported.");
+  await app.StopAsync();
+}
+Console.WriteLine("PASS network HTTPS validates separate DNS identity and port; dual listeners start and invalid certificates retain only local recovery");
+Console.WriteLine("8 deployment settings model/TLS groups passed.");
 
 static WebApplicationBuilder Builder() { var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = [], ContentRootPath = AppContext.BaseDirectory }); builder.Configuration.Sources.Clear(); builder.Configuration.AddInMemoryCollection(); builder.Logging.ClearProviders(); return builder; }
 static int Port() { var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start(); var port = ((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop(); return port; }

@@ -7,6 +7,7 @@ public sealed partial class ConnectorService
 {
     public async Task<ExecuteResult> ExecuteAsync(ConnectionDefinition connection, string sql, IReadOnlyList<QueryParameter> parameters, CancellationToken cancellationToken)
     {
+        _ensureOperationsAllowed?.Invoke();
         SqlQueryGuard.ValidateUpdate(sql);
         ArgumentNullException.ThrowIfNull(parameters);
         if (parameters.Count > 128) throw new ArgumentException("At most 128 query parameters are supported.");

@@ -75,6 +75,9 @@ const toolFiles = new Set([
   'test-publication-history.mjs', 'test-publication-history-store.mjs',
   'test-gateway-console.mjs', 'test-gateway-deployment.mjs',
   'test-deployment-settings.mjs', 'test-gateway-connections.mjs', 'test-query-cancellation.mjs', 'load-query-testing-example.mjs',
+  'test-gateway-recovery.mjs', 'test-recovery-quarantine.mjs', 'test-recovery-integration.mjs',
+  'test-tag-engineering.mjs', 'load-tag-engineering-example.mjs',
+  'load-network-example.mjs',
   'test-visual-styles.mjs', 'test-visual-styles-rendering.mjs', 'test-visual-styles-api.mjs',
   'test-localization.mjs', 'test-localization-rendering.mjs', 'test-localization-api.mjs',
   'test-runtime.mjs', 'test-tag-definitions.mjs', 'test-template-runtime.mjs',
@@ -133,6 +136,8 @@ const architectureDocs = new Set([
   'QUERY_CONTROLS.md', 'DRAWING.md',
   'SECURITY.md',
   'DEPLOYMENT_SETTINGS.md', 'CONNECTION_OPERATIONS.md', 'QUERY_TESTING.md',
+  'GATEWAY_RECOVERY.md',
+  'TAG_ENGINEERING.md', 'NETWORK_ACCESS.md',
 ]);
 const explicitFiles = new Set([
   '.githooks/pre-commit', '.githooks/pre-push', '.github/workflows/source-boundary.yml',
@@ -155,6 +160,8 @@ const explicitFiles = new Set([
   'examples/process-displays.json', 'examples/process-graphics.json',
   'examples/data-controls.json',
   'examples/query-testing.json',
+  'examples/gateway-recovery.json',
+  'examples/tag-engineering.json', 'examples/gateway-network.json',
   'examples/application-state.json',
   'examples/nested-forms.json',
   'examples/input-state-bindings.json',

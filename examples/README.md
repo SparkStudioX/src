@@ -49,10 +49,13 @@ The catalog records a common verified feature baseline by source commit rather t
 
 ## Examples that require gateway setup
 
-These remain useful authored source fixtures, but are excluded from the standalone portable collection. A raw example JSON file is not a `.sparkproj` import file. The eight examples below require deliberate setup because their gateway resources or chosen image files are not supplied by these source fixtures.
+These remain useful authored source fixtures, but are excluded from the standalone portable collection. A raw example JSON file is not a `.sparkproj` import file. The examples below require deliberate setup because their gateway resources, administrative exercises or chosen image files are not supplied by these source fixtures.
 
 | Source example | Additional setup | Runtime writes |
 | --- | --- | --- |
+| [Gateway recovery](gateway-recovery.json) | Disposable gateway, offline CLI backup/restore and explicit review; see the [recovery guide](../docs/architecture/GATEWAY_RECOVERY.md). | None from the screen; the administrative exercise creates archive/restored files. |
+| [Gateway network access](gateway-network.json) | Disposable installation, matching DNS certificate and client trust; see the [network guide](../docs/architecture/NETWORK_ACCESS.md). | None from the screen; deployment changes are deliberate administrator actions. |
+| [Gateway tag engineering](tag-engineering.json) | Synthetic memory/expression tags initialized by its dedicated loader; see the [tag guide](../docs/architecture/TAG_ENGINEERING.md). | Explicit Save actions update synthetic memory tags. |
 | [Asset library and replacements](asset-library.json) | Bring/upload two local images and assign all three authored image references before publishing. | No equipment/data writes; Designer uploads assets and changes selected image references. |
 | [Operator form](application-form.json) | Four synthetic `Application` memory tags. | Explicit Python save writes those tags. |
 | [Operator inputs](operator-inputs.json) | Six synthetic `InputWorkshop` memory tags. | Explicit Python save writes those tags. |

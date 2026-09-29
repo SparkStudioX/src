@@ -4,7 +4,7 @@ namespace SparkStudio.Gateway;
 
 /// <summary>Each project owns its execution context; gateway tags and connections are shared.</summary>
 public sealed class ProjectRuntimeRegistry(ProjectCatalog catalog, TagEngine tags, ConnectorService connectors,
-    IConfiguration configuration, ILoggerFactory loggers, IHostApplicationLifetime lifetime) : IHostedService, IDisposable
+    IConfiguration configuration, ILoggerFactory loggers, IHostApplicationLifetime lifetime, RecoveryQuarantine? recovery = null) : IHostedService, IDisposable
 {
     private readonly object gate = new();
     private readonly Dictionary<string, ProjectRuntime> runtimes = new(StringComparer.Ordinal);
@@ -17,10 +17,10 @@ public sealed class ProjectRuntimeRegistry(ProjectCatalog catalog, TagEngine tag
             var workspace = catalog.Get(id);
             if (runtimes.TryGetValue(id, out var existing)) return existing;
             var queries = new QueryExecutor(workspace.Store, connectors);
-            var python = new PythonRunner(tags, queries, workspace.Scripts, configuration);
+            var python = new PythonRunner(tags, queries, workspace.Scripts, configuration, recovery);
             var events = new ScriptEventService(workspace.Scripts, python, loggers.CreateLogger<ScriptEventService>());
             var runtime = new ProjectRuntime(workspace, queries, python, events, new RuntimeActions(workspace.Publication, python, queries));
-            events.StartAsync(lifetime.ApplicationStopping).GetAwaiter().GetResult();
+            if (recovery?.Active != true) events.StartAsync(lifetime.ApplicationStopping).GetAwaiter().GetResult();
             runtimes.Add(id, runtime);
             return runtime;
         }

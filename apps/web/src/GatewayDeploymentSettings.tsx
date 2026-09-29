@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 
-interface ListenerIntent { enabled: boolean; url: string; certificateFile: string | null; privateKeyFile: string | null }
+interface ListenerIntent { enabled: boolean; url: string; certificateFile: string | null; privateKeyFile: string | null; publicHostname?: string | null }
 interface ListenerSettings {
   revision: string; saved: ListenerIntent; startupIntent: ListenerIntent | null;
   startupState: string; state: string; restartRequired: boolean; overrideReason: string | null;
-  recovery: string | null; previousAvailable: boolean; certificateDirectory: string; restartNote: string;
+  recovery: string | null; previousAvailable: boolean; certificateDirectory: string; installerManagementPort: number | null; restartNote: string;
 }
 interface Validation { settings: ListenerIntent; certificateExpiresAt: string | null; overrideReason: string | null; message: string }
 const states: Record<string, string> = { unmanaged: "Host configuration", overridden: "External override", "restart-required": "Restart required", "applied-at-startup": "Applied at startup", recovery: "Recovery needed", managed: "Managed listener" };
@@ -44,7 +44,7 @@ export default function GatewayDeploymentSettings() {
   const dirty = settings !== null && JSON.stringify(settings.saved) !== JSON.stringify(draft);
   const tls = /^https:/i.test(draft.url);
   return <section className="gateway-deployment-panel gateway-listener-settings" aria-labelledby="listener-settings-title">
-    <div className="gateway-deployment-heading"><div><h3 id="listener-settings-title">Listener settings</h3><p>Stage a loopback listener for the next gateway start. Use external host configuration for remote listeners and proxies.</p></div><button className="button" type="button" disabled={busy} onClick={() => void reload()}>{busy ? "Working…" : dirty ? "Discard draft and reload" : "Reload saved settings"}</button></div>
+    <div className="gateway-deployment-heading"><div><h3 id="listener-settings-title">Listener settings</h3><p>Stage local access or a network HTTPS listener for the next gateway start. Network users connect with your certificate’s DNS hostname.</p></div><button className="button" type="button" disabled={busy} onClick={() => void reload()}>{busy ? "Working…" : dirty ? "Discard draft and reload" : "Reload saved settings"}</button></div>
     {error && <p className="gateway-error" role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
     {!settings ? <p role="status">{busy ? "Loading listener settings…" : "Listener settings are unavailable."}</p> : <>
@@ -54,13 +54,14 @@ export default function GatewayDeploymentSettings() {
       </dl>
       {settings.overrideReason && <p className="gateway-stale">{settings.overrideReason} Saving remains available, but does not remove this override.</p>}
       {settings.recovery && <p className="gateway-error" role="alert">{settings.recovery}</p>}
+      {settings.installerManagementPort && <p>Local setup and recovery remain available at <code>http://127.0.0.1:{settings.installerManagementPort}</code>. Network HTTPS uses a different port.</p>}
       <form onSubmit={event => { event.preventDefault(); void run("validate"); }}>
         <fieldset disabled={busy}>
           <label className="gateway-listener-enabled"><input type="checkbox" checked={draft.enabled} onChange={event => change({ enabled: event.target.checked })} />Use the saved listener at startup</label>
-          <label>Listener URL<input value={draft.url} autoComplete="off" spellCheck={false} placeholder="http://127.0.0.1:5090" onChange={event => change({ url: event.target.value, ...(!/^https:/i.test(event.target.value) ? { certificateFile: null, privateKeyFile: null } : {}) })} /></label>
-          <p>HTTP or HTTPS, 127.0.0.1 or [::1], and a port from 1024 to 65535. Saving does not open a listener or test whether the port is available.</p>
-          {tls && <><div className="gateway-listener-certificate-fields"><label>PEM certificate filename<input value={draft.certificateFile ?? ""} autoComplete="off" onChange={event => change({ certificateFile: event.target.value || null })} placeholder="gateway-cert.pem" /></label><label>PEM private key filename<input value={draft.privateKeyFile ?? ""} autoComplete="off" onChange={event => change({ privateKeyFile: event.target.value || null })} placeholder="gateway-key.pem" /></label></div>
-            <p>Install these files offline in <code>{settings.certificateDirectory}</code>. The gateway account must be able to read them. Use a currently valid certificate with this IP address in its subject alternative names and its matching unencrypted PEM private key. Protect key-file access at the operating system level.</p><p>Only filenames are saved here. Private keys, passwords, certificate uploads and browser trust installation are not managed by this form.</p></>}
+          <label>Listener URL<input value={draft.url} autoComplete="off" spellCheck={false} placeholder="http://127.0.0.1:5090" onChange={event => change({ url: event.target.value, ...(!/^https:\/\/0\.0\.0\.0(?::|\/|$)/i.test(event.target.value) ? { publicHostname: null } : {}), ...(!/^https:/i.test(event.target.value) ? { certificateFile: null, privateKeyFile: null, publicHostname: null } : {}) })} /></label>
+          <p>Use HTTP or HTTPS on 127.0.0.1 or [::1] for local access. For network access use https://0.0.0.0:5443 (all IPv4 interfaces) and enter the public hostname below. Ports must be 1024–65535.</p>
+          {tls && <>{/^https:\/\/0\.0\.0\.0(?::|\/|$)/i.test(draft.url) && <label>Public DNS hostname<input value={draft.publicHostname ?? ""} autoComplete="off" spellCheck={false} placeholder="sparkstudio.factory.local" onChange={event => change({ publicHostname: event.target.value || null })} /></label>}<div className="gateway-listener-certificate-fields"><label>PEM certificate filename<input value={draft.certificateFile ?? ""} autoComplete="off" onChange={event => change({ certificateFile: event.target.value || null })} placeholder="gateway-cert.pem" /></label><label>PEM private key filename<input value={draft.privateKeyFile ?? ""} autoComplete="off" onChange={event => change({ privateKeyFile: event.target.value || null })} placeholder="gateway-key.pem" /></label></div>
+            <p>Install these files offline in <code>{settings.certificateDirectory}</code>. The gateway account must be able to read them. Use a currently valid certificate with the public DNS hostname (network) or IP address (loopback) in its subject alternative names and its matching unencrypted PEM private key. Include intermediate certificates after the leaf in the certificate file. Protect key-file access at the operating system level.</p><p>Only filenames and the public hostname are saved here. Operator computers must trust the issuing CA and resolve the hostname to this gateway. Configure the HTTPS firewall rule separately. This form does not upload private keys or install browser trust.</p></>}
           {validation && <div className="gateway-listener-validation" role="status"><strong>Validation passed</strong><p>{validation.message}</p>{validation.certificateExpiresAt && <p>Certificate expires {new Date(validation.certificateExpiresAt).toLocaleString()}. Browser trust is not verified.</p>}{validation.overrideReason && <p>{validation.overrideReason}</p>}</div>}
           <div className="gateway-listener-actions"><button type="submit" className="button">Validate draft</button><button type="button" className="button primary" disabled={!validation || !dirty} onClick={() => void run("save")}>Save for next start</button></div>
         </fieldset>

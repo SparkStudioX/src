@@ -18,7 +18,7 @@ AppName=SparkStudio
 AppVersion={#AppVersion}
 AppVerName=SparkStudio {#AppVersion}
 AppPublisher=SparkStudio
-AppComments=Unsigned internal preview. Loopback gateway with an offline Python runtime.
+AppComments=Unsigned internal preview. Local or network HTTPS gateway with an offline Python runtime.
 VersionInfoDescription=SparkStudio offline Windows installer (unsigned preview)
 VersionInfoVersion={#NumericVersion}
 VersionInfoProductVersion={#NumericVersion}
@@ -68,7 +68,10 @@ Filename: "{code:DesignerUrl}"; Description: "Open SparkStudio Designer"; Flags:
 
 [Code]
 var
-  PortPage: TInputQueryWizardPage;
+  AccessPage: TInputOptionWizardPage;
+  PortPage, NetworkPage: TInputQueryWizardPage;
+  CertificatePage: TInputFileWizardPage;
+  HasManagedInstallation: Boolean;
   HelperPath: String;
   ServiceStopped, ServiceInstalled: Boolean;
 
@@ -88,6 +91,20 @@ begin
   Result := Trim(PortPage.Values[0]);
 end;
 
+function SelectedAccess: String;
+begin
+  if AccessPage.SelectedValueIndex = 1 then Result := 'network'
+  else if AccessPage.SelectedValueIndex = 2 then Result := 'keep'
+  else Result := 'local';
+end;
+
+function QuotedArgument(Value: String): String;
+begin
+  if (Pos('"', Value) > 0) or (Pos(#13, Value) > 0) or (Pos(#10, Value) > 0) then
+    RaiseException('Configuration values cannot contain quotes or new lines.');
+  Result := '"' + Value + '"';
+end;
+
 function DesignerUrl(Param: String): String;
 begin
   Result := 'http://127.0.0.1:' + SelectedPort + '/';
@@ -102,7 +119,7 @@ function ValidPort: Boolean;
 var Port: Integer;
 begin
   Port := StrToIntDef(SelectedPort, 0);
-  Result := (Port >= 1) and (Port <= 65535) and (IntToStr(Port) = SelectedPort);
+  Result := (Port >= 1024) and (Port <= 65535) and (IntToStr(Port) = SelectedPort);
 end;
 
 function RunHelper(Action, DirectoryName, Executable: String; var MessageText: String): Boolean;
@@ -112,6 +129,14 @@ begin
   DeleteFile(ReportPath);
   Arguments := '--action ' + Action + ' --install-dir "' + DirectoryName +
     '" --port ' + SelectedPort + ' --report "' + ReportPath + '"';
+  if (Action = 'preflight') or (Action = 'prepare') or (Action = 'install') then begin
+    Arguments := Arguments + ' --access ' + SelectedAccess;
+    if SelectedAccess = 'network' then
+      Arguments := Arguments + ' --https-port ' + QuotedArgument(Trim(NetworkPage.Values[0])) +
+        ' --hostname ' + QuotedArgument(Trim(NetworkPage.Values[1])) +
+        ' --certificate ' + QuotedArgument(CertificatePage.Values[0]) +
+        ' --private-key ' + QuotedArgument(CertificatePage.Values[1]);
+  end;
   Result := Exec(Executable, Arguments, '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
   if LoadStringFromFile(ReportPath, Contents) then MessageText := String(Contents)
   else MessageText := 'The service helper could not run. Inspect the setup log and Windows application policy.';
@@ -126,18 +151,46 @@ begin
 end;
 
 procedure InitializeWizard;
-var ExistingPort: Cardinal; DefaultPort: String;
+var ExistingPort, CommandVersion: Cardinal; DefaultPort, AccessParameter: String;
 begin
   ServiceStopped := False;
   ServiceInstalled := False;
   DefaultPort := '5090';
   if not PortableMode and RegQueryDWordValue(HKLM64, 'SOFTWARE\SparkStudio\Installer', 'Port', ExistingPort) then
     DefaultPort := IntToStr(ExistingPort);
-  PortPage := CreateInputQueryPage(wpSelectDir, 'Gateway connection', 'Choose the local gateway port',
-    'The service listens only on 127.0.0.1. If a development gateway already uses 5090, choose another port such as 5092. Existing applications will not be stopped.' + #13#10 + #13#10 +
-    'Gateway data is kept in ' + ExpandConstant('{commonappdata}\SparkStudio') + ' and retained during upgrades and uninstall.');
-  PortPage.Add('Local port:', False);
+  HasManagedInstallation := not PortableMode and RegQueryDWordValue(HKLM64, 'SOFTWARE\SparkStudio\Installer', 'CommandVersion', CommandVersion) and (CommandVersion = 2);
+  AccessPage := CreateInputOptionPage(wpSelectDir, 'Gateway access', 'Choose who can connect to this gateway',
+    'Local access is always retained for setup, recovery and service health checks. Network access adds a separate encrypted listener. No firewall rule or certificate trust is installed automatically.', True, False);
+  AccessPage.Add('Local only — HTTP on 127.0.0.1');
+  AccessPage.Add('Network access — HTTPS on all IPv4 interfaces (0.0.0.0)');
+  if HasManagedInstallation then AccessPage.Add('Keep existing listener settings (recommended for upgrades)');
+  AccessPage.SelectedValueIndex := 0;
+  if HasManagedInstallation then AccessPage.SelectedValueIndex := 2;
+  AccessParameter := Lowercase(Trim(ExpandConstant('{param:ACCESS|}')));
+  if (AccessParameter <> '') and (AccessParameter <> 'local') and (AccessParameter <> 'network') and (AccessParameter <> 'keep') then
+    RaiseException('Invalid /ACCESS value. Use local, network or keep.');
+  if (AccessParameter = 'keep') and not HasManagedInstallation then
+    RaiseException('/ACCESS=keep requires an existing managed-listener installation. Choose local or network explicitly for a legacy installation.');
+  if AccessParameter = 'network' then AccessPage.SelectedValueIndex := 1
+  else if AccessParameter = 'local' then AccessPage.SelectedValueIndex := 0
+  else if (AccessParameter = 'keep') and HasManagedInstallation then AccessPage.SelectedValueIndex := 2;
+  PortPage := CreateInputQueryPage(AccessPage.ID, 'Local management connection', 'Choose the local management port',
+    'HTTP listens only on 127.0.0.1. Use this address on the gateway computer for initial administrator setup and recovery. The security code is in ' + ExpandConstant('{commonappdata}\SparkStudio\security\setup-code.txt') + '.' + #13#10 + #13#10 +
+    'Gateway data is retained in ' + ExpandConstant('{commonappdata}\SparkStudio') + ' during upgrades and uninstall.');
+  PortPage.Add('Local management port:', False);
   PortPage.Values[0] := ExpandConstant('{param:PORT|' + DefaultPort + '}');
+  NetworkPage := CreateInputQueryPage(PortPage.ID, 'Network HTTPS connection', 'Choose the HTTPS port and public hostname',
+    'Operators connect using https://hostname:port. The hostname must resolve to this gateway and match the certificate DNS subject alternative name. Use your factory CA for air-gapped installations.');
+  NetworkPage.Add('HTTPS port (different from the local management port):', False);
+  NetworkPage.Add('Public DNS hostname (for example sparkstudio.factory.local):', False);
+  NetworkPage.Values[0] := ExpandConstant('{param:HTTPSPORT|5443}');
+  NetworkPage.Values[1] := ExpandConstant('{param:HOSTNAME|}');
+  CertificatePage := CreateInputFilePage(NetworkPage.ID, 'HTTPS certificate', 'Select the certificate and its matching private key',
+    'Select a currently valid PEM server certificate (include intermediate certificates after the leaf) and its unencrypted PEM private key. Setup copies them into a protected gateway folder. Operator computers must trust the issuing CA. Configure an inbound Windows firewall rule for the HTTPS port on the intended network profile separately.');
+  CertificatePage.Add('PEM certificate / certificate chain:', 'PEM certificate|*.pem;*.crt;*.cer|All files|*.*', '.pem');
+  CertificatePage.Add('Matching unencrypted PEM private key:', 'PEM private key|*.pem;*.key|All files|*.*', '.pem');
+  CertificatePage.Values[0] := ExpandConstant('{param:CERTIFICATE|}');
+  CertificatePage.Values[1] := ExpandConstant('{param:PRIVATEKEY|}');
   if PortableMode then begin
     WizardForm.WelcomeLabel2.Caption := 'This mode only extracts the offline application. No service, registry registration, shortcuts or automatic application launch will be created.';
   end else begin
@@ -148,7 +201,8 @@ end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
-  Result := PortableMode and ((PageID = PortPage.ID) or (PageID = wpSelectTasks));
+  Result := (PortableMode and ((PageID = AccessPage.ID) or (PageID = PortPage.ID) or (PageID = NetworkPage.ID) or (PageID = CertificatePage.ID) or (PageID = wpSelectTasks)))
+    or ((SelectedAccess <> 'network') and ((PageID = NetworkPage.ID) or (PageID = CertificatePage.ID)));
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -157,13 +211,19 @@ begin
   Result := True;
   if (CurPageID = PortPage.ID) and not PortableMode then begin
     if not ValidPort then begin
-      MsgBox('Enter a port between 1 and 65535, without spaces or leading zeros.', mbError, MB_OK);
+      MsgBox('Enter a port between 1024 and 65535, without spaces or leading zeros.', mbError, MB_OK);
       Result := False;
-    end else if not RunHelper('preflight', ExpandConstant('{app}'), HelperPath, MessageText) then begin
-      MsgBox(MessageText, mbError, MB_OK);
-      Result := False;
+    end else if SelectedAccess <> 'network' then begin
+      if not RunHelper('preflight', ExpandConstant('{app}'), HelperPath, MessageText) then begin
+        MsgBox(MessageText, mbError, MB_OK);
+        Result := False;
+      end;
     end;
   end;
+  if (CurPageID = CertificatePage.ID) and not PortableMode then
+    if not RunHelper('preflight', ExpandConstant('{app}'), HelperPath, MessageText) then begin
+      MsgBox(MessageText, mbError, MB_OK); Result := False;
+    end;
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -171,7 +231,7 @@ var MessageText: String;
 begin
   Result := '';
   if PortableMode then Exit;
-  if not ValidPort then begin Result := 'The requested port must be an integer from 1 to 65535.'; Exit; end;
+  if not ValidPort then begin Result := 'The requested port must be an integer from 1024 to 65535.'; Exit; end;
   if not RunHelper('prepare', ExpandConstant('{app}'), HelperPath, MessageText) then begin Result := MessageText; Exit; end;
   ServiceStopped := ServiceStopped or (Trim(MessageText) = 'stopped');
 end;

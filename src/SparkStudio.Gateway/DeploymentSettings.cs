@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Https;
 
 namespace SparkStudio.Gateway;
 
-/// <summary>Explicit, restart-only loopback listener intent. Secrets remain in offline files.</summary>
+/// <summary>Explicit, restart-only listener intent. Secrets remain in offline files.</summary>
 public sealed class DeploymentSettings : IDisposable
 {
     private const int MaximumFileBytes = 65_536;
@@ -19,18 +19,22 @@ public sealed class DeploymentSettings : IDisposable
     private readonly string filename;
     private readonly string certificateDirectory;
     private readonly string? overrideReason;
+    private readonly int? installerManagementPort;
     private string fingerprint;
     private DeploymentDocument document;
     private readonly DeploymentIntent? startupIntent;
     private string? recovery;
     private string startupState = "unmanaged";
     private X509Certificate2? startupCertificate;
+    private readonly X509Certificate2Collection startupCertificateChain = new();
 
-    public DeploymentSettings(string dataDirectory, string? externalOverride = null)
+    public DeploymentSettings(string dataDirectory, string? externalOverride = null, int? installerManagementPort = null)
     {
         filename = Path.Combine(dataDirectory, "deployment.json");
         certificateDirectory = Path.Combine(dataDirectory, "certificates", "deployment");
         overrideReason = externalOverride;
+        if (installerManagementPort is < 1024 or > 65535) throw new ArgumentException("Installer management port must be between 1024 and 65535.");
+        this.installerManagementPort = installerManagementPort;
         fingerprint = Fingerprint(filename);
         try { document = Read(filename) ?? new(1, "0", Default); startupIntent = document.Settings; }
         catch (Exception error) when (IsFileFailure(error))
@@ -40,34 +44,54 @@ public sealed class DeploymentSettings : IDisposable
     public static DeploymentIntent Default => new(false, "http://127.0.0.1:5090", null, null);
 
     /// <summary>Call after resolving the data directory, before registering startup observations or building the host.</summary>
-    public static DeploymentSettings Configure(WebApplicationBuilder builder, string dataDirectory)
+    public static DeploymentSettings Configure(WebApplicationBuilder builder, string dataDirectory, string? recoveryReason = null)
     {
-        var store = new DeploymentSettings(dataDirectory, ExternalOverride(builder.Configuration));
-        store.ApplyStartup(builder);
+        int? managementPort = null;
+        if (builder.Configuration["InstallerManagementPort"] is { } configured)
+        {
+            if (!int.TryParse(configured, out var parsed) || parsed is < 1024 or > 65535) throw new ArgumentException("Invalid installer management port.");
+            managementPort = parsed;
+        }
+        var externalOverride = ExternalOverride(builder.Configuration);
+        if (recoveryReason is null && managementPort is not null && externalOverride is not null)
+            throw new InvalidOperationException("Installer-managed listeners have a conflicting external override. Remove URL/Kestrel/environment overrides before starting the service. For manual recovery, omit InstallerManagementPort and supply an explicit loopback --urls value.");
+        var store = new DeploymentSettings(dataDirectory, recoveryReason ?? externalOverride, managementPort);
+        if (recoveryReason is null) store.ApplyStartup(builder);
+        else { store.startupState = "overridden"; store.recovery = recoveryReason; }
         builder.Services.AddSingleton<DeploymentSettings>(_ => store);
         return store;
     }
 
     public void ApplyStartup(WebApplicationBuilder builder)
     {
-        if (recovery is not null) { startupState = "recovery"; return; }
         if (overrideReason is not null) { startupState = "overridden"; return; }
+        // Retain local bootstrap/recovery access independently of the optional LAN listener.
+        if (installerManagementPort is { } managementPort)
+            builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, managementPort));
+        if (recovery is not null) { startupState = "recovery"; return; }
         if (startupIntent?.Enabled != true) return;
         try
         {
             var validated = Validate(startupIntent);
             var uri = new Uri(validated.Settings.Url);
+            if (validated.Settings.PublicHostname is { } publicHostname) AllowPublicHostname(builder.Configuration, publicHostname);
             var address = IPAddress.Parse(uri.Host.Trim('[', ']'));
-            if (uri.Scheme == "https") startupCertificate = LoadCertificate(validated.Settings, uri, forTls: true);
+            if (uri.Scheme == "https")
+            {
+                startupCertificate = LoadCertificate(validated.Settings, uri, forTls: true);
+                startupCertificateChain.ImportFromPemFile(Path.Combine(certificateDirectory, validated.Settings.CertificateFile!));
+            }
+            if (!(installerManagementPort == uri.Port && address.Equals(IPAddress.Loopback) && uri.Scheme == "http"))
             builder.WebHost.ConfigureKestrel(options => options.Listen(address, uri.Port, listener =>
             {
-                if (startupCertificate is not null) listener.UseHttps(new HttpsConnectionAdapterOptions { ServerCertificate = startupCertificate });
+                if (startupCertificate is not null) listener.UseHttps(new HttpsConnectionAdapterOptions { ServerCertificate = startupCertificate, ServerCertificateChain = startupCertificateChain });
             }));
             startupState = "managed";
         }
         catch (Exception error) when (error is ArgumentException || IsFileFailure(error))
         {
             startupCertificate?.Dispose(); startupCertificate = null;
+            foreach (var certificate in startupCertificateChain) certificate.Dispose(); startupCertificateChain.Clear();
             startupState = "recovery";
             recovery = "Saved listener or certificate validation failed at startup. Existing host configuration was retained. Review the offline certificate files, restore previous settings, or save a replacement.";
         }
@@ -81,8 +105,8 @@ public sealed class DeploymentSettings : IDisposable
             return new(document.Revision, document.Settings, startupIntent, startupState,
                 document.Settings.Enabled && overrideReason is not null ? "overridden"
                     : !same ? "restart-required" : startupState == "managed" ? "applied-at-startup" : startupState,
-                !same, overrideReason, recovery, PreviousAvailable(), certificateDirectory,
-                "Saving never restarts the gateway. Stop and start it deliberately, then verify the actual listeners. If the address is unavailable, start with --urls http://127.0.0.1:5090 or SPARKSTUDIO_DEPLOYMENT_DISABLE=1 to bypass these settings.");
+                !same, overrideReason, recovery, PreviousAvailable(), certificateDirectory, installerManagementPort,
+                "Saving never restarts the gateway. Stop and start it deliberately, then verify the actual listeners. If the address is unavailable, stop the service and launch manually without --InstallerManagementPort, using --urls http://127.0.0.1:5090 (or an unused local port). This bypasses saved settings without changing gateway data.");
         }
     }
 
@@ -93,9 +117,19 @@ public sealed class DeploymentSettings : IDisposable
             || !Uri.TryCreate(input.Url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")
             || uri.Port is < 1024 or > 65535 || uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0
             || uri.AbsolutePath != "/" || !IPAddress.TryParse(uri.Host.Trim('[', ']'), out var address)
-            || !(address.Equals(IPAddress.Loopback) || address.Equals(IPAddress.IPv6Loopback)))
-            throw new ArgumentException("Use HTTP or HTTPS with 127.0.0.1 or [::1] and a port from 1024 to 65535, for example http://127.0.0.1:5090 or https://[::1]:5443. Paths, credentials, hostnames and wildcard addresses are not supported.");
-        var normalized = new DeploymentIntent(input.Enabled, uri.GetLeftPart(UriPartial.Authority), input.CertificateFile, input.PrivateKeyFile);
+            || !(address.Equals(IPAddress.Loopback) || address.Equals(IPAddress.IPv6Loopback) || address.Equals(IPAddress.Any)))
+            throw new ArgumentException("Use 127.0.0.1, [::1], or 0.0.0.0 with a port from 1024 to 65535. Network listeners require HTTPS and a public hostname.");
+        var network = address.Equals(IPAddress.Any);
+        if (network && uri.Scheme != "https") throw new ArgumentException("Network access requires HTTPS. HTTP is supported only on loopback.");
+        var hostname = string.IsNullOrWhiteSpace(input.PublicHostname) ? null : input.PublicHostname.Trim().ToLowerInvariant();
+        if (hostname is not null && (hostname.Length > 253 || Uri.CheckHostName(hostname) != UriHostNameType.Dns || hostname.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '.' or '-'))
+            || hostname.StartsWith('.') || hostname.EndsWith('.') || hostname.Split('.').Any(label => label.Length is < 1 or > 63 || label.StartsWith('-') || label.EndsWith('-'))))
+            throw new ArgumentException("The public hostname must be a DNS hostname without a scheme, port, path or wildcard.");
+        if (network && hostname is null) throw new ArgumentException("A DNS hostname matching the certificate is required for network access.");
+        if (!network && hostname is not null) throw new ArgumentException("A public hostname is used only for the 0.0.0.0 network listener.");
+        if (installerManagementPort == uri.Port && (network || uri.Scheme == "https" || !address.Equals(IPAddress.Loopback)))
+            throw new ArgumentException("The HTTPS port must differ from the installer's local management port.");
+        var normalized = new DeploymentIntent(input.Enabled, uri.GetLeftPart(UriPartial.Authority), input.CertificateFile, input.PrivateKeyFile, hostname);
         DateTimeOffset? expires = null;
         if (uri.Scheme == "https")
         {
@@ -109,7 +143,7 @@ public sealed class DeploymentSettings : IDisposable
         else if (input.CertificateFile is not null || input.PrivateKeyFile is not null)
             throw new ArgumentException("HTTP settings cannot include certificate or private key references.");
         return new(normalized, expires, overrideReason,
-            input.Enabled ? "Valid for a loopback listener. This does not test whether the port is free, establish browser certificate trust, or restart the gateway."
+            input.Enabled ? "Listener settings are valid. This does not test whether the port is free, establish browser certificate trust, open the firewall, or restart the gateway."
                 : "Managed listener disabled. After restart, the gateway uses its normal host configuration.");
     }
 
@@ -194,8 +228,8 @@ public sealed class DeploymentSettings : IDisposable
             try
             {
                 if (!cert.HasPrivateKey || cert.NotBefore.ToUniversalTime() > DateTime.UtcNow || cert.NotAfter.ToUniversalTime() <= DateTime.UtcNow
-                    || !cert.MatchesHostname(uri.Host.Trim('[', ']'), allowWildcards: false, allowCommonName: false))
-                    throw new ArgumentException("The certificate must have its matching private key, be currently valid, and contain the listener IP address in its subject alternative names.");
+                    || !cert.MatchesHostname(intent.PublicHostname ?? uri.Host.Trim('[', ']'), allowWildcards: false, allowCommonName: false))
+                    throw new ArgumentException("The certificate must have its matching private key, be currently valid, and contain the public hostname (network) or listener IP address (loopback) in its subject alternative names.");
                 foreach (var usage in cert.Extensions.OfType<X509EnhancedKeyUsageExtension>())
                     if (!usage.EnhancedKeyUsages.Cast<Oid>().Any(oid => oid.Value == "1.3.6.1.5.5.7.3.1"))
                         throw new ArgumentException("The certificate's extended key usage must allow TLS server authentication.");
@@ -253,6 +287,19 @@ public sealed class DeploymentSettings : IDisposable
         finally { if (File.Exists(temp)) File.Delete(temp); }
     }
 
+    private static void AllowPublicHostname(ConfigurationManager configuration, string hostname)
+    {
+        var allowed = configuration["AllowedHosts"];
+        var values = (allowed ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (values.Any(value => value == "*" || value.Equals(hostname, StringComparison.OrdinalIgnoreCase))) return;
+        var defaultHosts = "localhost;127.0.0.1;[::1]";
+        var source = ((IConfigurationRoot)configuration).Providers.Reverse().FirstOrDefault(provider => provider.TryGet("AllowedHosts", out var value) && !string.IsNullOrWhiteSpace(value));
+        if (source is not null && !(source is Microsoft.Extensions.Configuration.Json.JsonConfigurationProvider json && json.Source.Path == "appsettings.json" && allowed == defaultHosts))
+            throw new ArgumentException("The explicit AllowedHosts configuration must include the public hostname before network HTTPS can start.");
+        // Expand only the bundled default. An explicit operator policy remains authoritative.
+        configuration["AllowedHosts"] = defaultHosts + ";" + hostname;
+    }
+
     public static string? ExternalOverride(IConfiguration config)
     {
         if (Environment.GetEnvironmentVariable("SPARKSTUDIO_DEPLOYMENT_DISABLE") is "1" or "true") return "SPARKSTUDIO_DEPLOYMENT_DISABLE bypasses saved listener settings.";
@@ -267,16 +314,17 @@ public sealed class DeploymentSettings : IDisposable
         return null;
     }
 
-    public void Dispose() { startupCertificate?.Dispose(); startupCertificate = null; }
+    public void Dispose() { startupCertificate?.Dispose(); startupCertificate = null; foreach (var certificate in startupCertificateChain) certificate.Dispose(); startupCertificateChain.Clear(); }
 }
 
-public sealed record DeploymentIntent(bool Enabled, string Url, string? CertificateFile, string? PrivateKeyFile);
+public sealed record DeploymentIntent(bool Enabled, string Url, string? CertificateFile, string? PrivateKeyFile,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PublicHostname = null);
 public sealed record DeploymentDocument(int Version, string Revision, DeploymentIntent Settings);
 public sealed record DeploymentSaveRequest(string Revision, DeploymentIntent Settings);
 public sealed record DeploymentRevisionRequest(string Revision);
 public sealed record DeploymentValidation(DeploymentIntent Settings, DateTimeOffset? CertificateExpiresAt, string? OverrideReason, string Message);
 public sealed record DeploymentSettingsSnapshot(string Revision, DeploymentIntent Saved, DeploymentIntent? StartupIntent, string StartupState,
-    string State, bool RestartRequired, string? OverrideReason, string? Recovery, bool PreviousAvailable, string CertificateDirectory, string RestartNote);
+    string State, bool RestartRequired, string? OverrideReason, string? Recovery, bool PreviousAvailable, string CertificateDirectory, int? InstallerManagementPort, string RestartNote);
 
 public static class DeploymentSettingsEndpoints
 {
