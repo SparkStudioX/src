@@ -4,7 +4,7 @@
     "packageFormat": 1,
     "baseline": {
       "kind": "source-commit",
-      "value": "05fc17612e21b3d4323d55eabbbc23cb00f0c2db"
+      "value": "4e58e436ef3817458427e23a81d14a65ff1d190a"
     },
     "note": "Use the SparkStudio build identified by the workshop bundle or a newer compatible build with the listed features. The original v0.1.0-preview.1 installer predates this catalog's baseline; its version number alone does not establish compatibility."
   },

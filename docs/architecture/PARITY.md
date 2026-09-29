@@ -22,6 +22,10 @@ Browser checks on isolated port 5091 covered invalid/valid listener validation, 
 
 The catalog now contains 32 authored sources: 24 portable projects and eight setup-required examples. Gateway operations adds validation without saving; SQLite data controls adds the connection lifecycle exercise; the separate Read query workshop has its own explicit isolated setup loader and database. None contains credentials or gateway backups.
 
+All 24 portable packages passed import, explicit publication, operator snapshots/read queries and re-export against the committed self-contained Windows build; fixtures were archived with gateway tags/connections unchanged. The setup-required Read query workshop separately passed export/import, explicit publication, three-row operator execution and re-export without running its slow query. Source policy passed 448 staged entries; the implementation and workshop feature baseline are `4e58e436ef3817458427e23a81d14a65ff1d190a`.
+
+Port 5090 serves that committed build and browser bundle `index-Bk39a3Cg.js`. A protected pre-upgrade backup covered all 50 existing gateway data files; all 50 remained byte-identical after restart, with all seven projects and accounts preserved. Deployment and browser evidence remain local under `.data/test-evidence/gateway-operations-*`.
+
 These are bounded increments, not completion of G04–G06. Remote TLS/proxy and renewal, supported Windows service/container recovery, safe connection deletion and certificate administration, actual OPC outage/replacement recovery, live SQL Server acceptance, transaction/pool diagnostics and additional providers remain open. Next is **G07 finer operation permissions and consistent audit attribution**, followed by **G08 external identity/machine access** and **G09 secret lifecycle/durable audit**. Full gateway backup/restore under G03 remains a pilot requirement. Public installer and Docker/macOS acceptance have not been refreshed by this increment.
 
 ## Previous G04 deployment observations: local verification, 2026-09-29
