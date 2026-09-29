@@ -32,7 +32,7 @@ The current source includes **local accounts, separate engineering/operator sess
 
 These are bounded implementations, not complete Ignition feature or file-format compatibility. Real SQL Server validation, external OPC writes, expression tags, UDTs, historian, alarms, reporting and migration tooling remain outstanding. See the [component matrix](docs/architecture/COMPONENTS.md).
 
-The current source includes query-backed forms and scalar properties, single-selection lists/trees, loaded-result table paging and inline editing, typed nested templates with parameter fx bindings and private instance state, two-way input/state bindings, automatic property/lifecycle events, state controls, five process displays and six drawing/symbol types. Further binding sources, responsive containers, conditional styles, deeper diagnostics, unified action authoring and complete gateway recovery remain planned. Supplied-data charts are the next palette family; historian, alarms and reporting still need their backing subsystems. The [component guide](docs/architecture/COMPONENTS.md) defines behavior and remaining work; the [verification ledger](docs/architecture/PARITY.md) separates each implemented increment from its remaining acceptance gates. SQLite has real disposable-database and gateway/Python integration checks; SQL Server reads and DML still need a live test server. Final browser/package verification of the newest ten roadmap increments is in progress, and the linked public preview installer records an earlier baseline.
+The current source includes query-backed forms and scalar properties, single-selection lists/trees, loaded-result table paging and inline editing, typed nested templates with parameter fx bindings and private instance state, two-way input/state bindings, automatic property/lifecycle events, state controls, five process displays and six drawing/symbol types. Further binding sources, responsive containers, conditional styles, deeper diagnostics, unified action authoring and complete gateway recovery remain planned. Supplied-data charts are the next palette family; historian, alarms and reporting still need their backing subsystems. The [component guide](docs/architecture/COMPONENTS.md) defines behavior and remaining work; the [verification ledger](docs/architecture/PARITY.md) separates each implemented increment from its remaining acceptance gates. SQLite has real disposable-database and gateway/Python integration checks; SQL Server reads and DML still need a live test server. The newest ten roadmap increments passed the focused checks recorded in the ledger; port 5090 runs that Windows build. The linked public preview installer records an earlier baseline.
 
 ## Run on Windows
 
@@ -206,13 +206,13 @@ The newest workshops cover the following authoring and gateway increments:
 - [Gateway console and diagnostics](docs/architecture/GATEWAY_CONSOLE.md): administration, session inventory and bounded process/API observations.
 - [Publication history](docs/architecture/PUBLICATION_HISTORY.md): checked revisions, reviewed restore, retention limits and preserved drafts.
 
-Focused automated checks and the offline build of all 24 portable entries have passed. Final batch browser, package round-trip and deployment evidence is still pending in the [verification ledger](docs/architecture/PARITY.md); use a matching current gateway build for these workshops.
+Focused automated checks, all 24 portable package round trips and the documented browser workflows passed. Port 5090 runs the updated Windows package; see the [verification ledger](docs/architecture/PARITY.md) for tested scope and remaining acceptance gates. Use a matching current gateway build for these workshops.
 
 ```powershell
-node tools/build-workshops.mjs --version 2026.09.29
+node tools/build-workshops.mjs --version 2026.09.29.4
 ```
 
-The fresh `artifacts/workshops/2026.09.29/` folder contains individual projects and guides, checksums, compatibility metadata and `SparkStudio-Workshops-2026.09.29.zip`. Distribute the ZIP alongside a compatible installer release or as a separate workshop release; individual projects can be shared with their guides. End users import through **Projects → Import .sparkproj** without build tools. The original public preview installer predates the required feature baseline. See [building and verifying workshop releases](examples/README.md#building-and-verifying-a-distribution).
+The fresh `artifacts/workshops/2026.09.29.4/` folder contains individual projects and guides, checksums, compatibility metadata and `SparkStudio-Workshops-2026.09.29.4.zip`. Distribute the ZIP alongside a compatible installer release or as a separate workshop release; individual projects can be shared with their guides. End users import through **Projects → Import .sparkproj** without build tools. The original public preview installer predates the required feature baseline. See [building and verifying workshop releases](examples/README.md#building-and-verifying-a-distribution).
 
 ## Source layout and verification
 
