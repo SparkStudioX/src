@@ -2,7 +2,6 @@
 
 This checkout contains independently authored SparkStudio application source only.
 
-- NEVER commit Ignition artifacts: backups, project exports, downloaded manuals, Java archives/classes, decompiled source, extraction output, reference-project analyses, manifests, or tools used to obtain those artifacts.
 - NEVER copy private reference material into this checkout, even temporarily or under an ignored directory.
 - Do not commit runtime data, connection credentials, certificates, private keys, downloaded runtimes, package caches, installers, or generated output.
 - The marketing website and downloadable releases have separate repositories. Do not embed either repository here.
