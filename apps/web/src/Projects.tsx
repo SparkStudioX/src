@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, projectPage } from "./api";
 import Icon from "./Icon";
-import { ThemePicker } from "./Theme";
 import { useAuth } from "./Auth";
 import { SessionIdentity } from "./OperatorAccess";
 import { exportProjectPackage, importProjectPackage } from "./projectManagement";
@@ -89,7 +88,7 @@ export default function Projects() {
     finally { setExporting(""); }
   }
   return <div className="projects-shell">
-    <header className="projects-header"><a className="projects-brand" href={engineering ? "/" : "/?audience=operator"}><span className="brand-mark"><Icon name="spark" size={24} /></span><strong>spark<span>studio</span></strong></a><div>{manage && <a className="button" href="/gateway"><Icon name="settings" size={15} />Gateway Settings</a>}<SessionIdentity operator={!engineering} iconOnlySignOut={engineering} /><ThemePicker /></div></header>
+    <header className="projects-header"><a className="projects-brand" href={engineering ? "/" : "/?audience=operator"}><span className="brand-mark"><Icon name="spark" size={24} /></span><strong>spark<span>studio</span></strong></a><div>{manage && <a className="button" href="/gateway"><Icon name="settings" size={15} />Settings</a>}<SessionIdentity operator={!engineering} iconOnlySignOut /></div></header>
     <main className="projects-main"><div className="projects-heading"><div><div className="eyebrow">{engineering ? "APPLICATION WORKSPACE" : "OPERATIONS"}</div><h1>Your projects</h1><p>{engineering ? "Design and publish the applications assigned to your account." : "Open an operator application available to your account."}</p></div>{manage && <div className="projects-heading-actions"><button className="button" onClick={() => setImporting(true)}><Icon name="upload" size={16} />Import .sparkproj</button><button className="button primary" onClick={() => setAction({ kind: "create" })}><Icon name="plus" size={16} />New project</button></div>}</div>
       {engineering && <div className="projects-gateway-note"><Icon name="plug" size={19} /><div><strong>Separate applications. Shared gateway.</strong><span>Each project has its own screens, queries, scripts, assets and publication. Gateway administrators manage connections and tags.</span></div></div>}
       <div className="projects-tools"><label className="project-search"><Icon name="search" size={16} /><input aria-label="Find projects" placeholder="Find a project…" value={filter} onChange={event => setFilter(event.target.value)} /></label>{manage && <label className="project-archived-toggle"><input type="checkbox" checked={showArchived} onChange={event => setShowArchived(event.target.checked)} />Show archived</label>}<button className="button" disabled={loading} onClick={() => void load()}><Icon name="refresh" size={15} />Refresh</button></div>

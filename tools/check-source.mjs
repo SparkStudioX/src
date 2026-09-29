@@ -73,7 +73,7 @@ const toolFiles = new Set([
   'test-authoring-assets.mjs',
   'test-preview-communication.mjs', 'test-preview-session-store.mjs',
   'test-publication-history.mjs', 'test-publication-history-store.mjs',
-  'test-gateway-console.mjs',
+  'test-gateway-console.mjs', 'test-gateway-deployment.mjs',
   'test-visual-styles.mjs', 'test-visual-styles-rendering.mjs', 'test-visual-styles-api.mjs',
   'test-localization.mjs', 'test-localization-rendering.mjs', 'test-localization-api.mjs',
   'test-runtime.mjs', 'test-tag-definitions.mjs', 'test-template-runtime.mjs',

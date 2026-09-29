@@ -3,6 +3,7 @@ import { api, apiUrl, authenticatedFetch, assertAuthResponseCurrent } from "./ap
 import { SessionIdentity } from "./OperatorAccess";
 import Icon from "./Icon";
 import Security from "./Security";
+import GatewayDeployment from "./GatewayDeployment";
 import "./gatewayConsole.css";
 
 interface Session { id: string; username: string; displayName: string; audience: string; createdAt: string; lastActivityAt: string; expiresAt: string }
@@ -10,7 +11,7 @@ interface Metrics { observedAt: string; uptimeSeconds: number; cpuPercent: numbe
 interface Overview { currentSessionId: string; observedAt: string; identity: string; version: string; framework: string; platform: string; sessions: Session[]; metrics: Metrics; projects: { id: string; name: string; archived: boolean; published: boolean }[]; connections: { id: string; name: string; type: string; status: string }[]; tags: { total: number; configured: number; good: number; unavailable: number } }
 const bytes = (value: number | null) => value === null ? "Unavailable" : `${(value / 1024 / 1024).toLocaleString(undefined, { maximumFractionDigits: 0 })} MiB`;
 const time = (value: string) => new Date(value).toLocaleString();
-const sections = [{ id: "overview", name: "Overview" }, { id: "sessions", name: "Sessions" }, { id: "diagnostics", name: "Diagnostics" }, { id: "security", name: "Security" }, { id: "audit", name: "Audit" }] as const;
+const sections = [{ id: "overview", name: "Overview" }, { id: "deployment", name: "Deployment" }, { id: "sessions", name: "Sessions" }, { id: "diagnostics", name: "Diagnostics" }, { id: "security", name: "Security" }, { id: "audit", name: "Audit" }] as const;
 type Section = typeof sections[number]["id"];
 const sectionFromHash = (): Section => sections.find(item => `#${item.id}` === window.location.hash)?.id ?? "overview";
 
@@ -49,9 +50,9 @@ export default function GatewayConsole() {
   const securitySection = section === "security" || section === "audit";
   return <div className="gateway-console">
     <header><a href="/" className="projects-brand"><span className="brand-mark"><Icon name="spark" size={24} /></span><strong>SparkStudio</strong></a><strong>Gateway Settings</strong><a href="/">Projects</a><SessionIdentity iconOnlySignOut /></header>
-    <main><div className="gateway-heading"><div><div className="eyebrow">GATEWAY ADMINISTRATION</div><h1>{data?.identity || "Gateway Settings"}</h1><p>Shared resources, active sessions, security and diagnostics.</p></div>{!securitySection && <button className="button" disabled={busy} onClick={() => void refresh()}>{busy ? "Refreshing…" : "Refresh status"}</button>}</div>
+    <main><div className="gateway-heading"><div><div className="eyebrow">GATEWAY ADMINISTRATION</div><h1>{data?.identity || "Gateway Settings"}</h1><p>Shared resources, deployment, active sessions, security and diagnostics.</p></div>{!securitySection && section !== "deployment" && <button className="button" disabled={busy} onClick={() => void refresh()}>{busy ? "Refreshing…" : "Refresh status"}</button>}</div>
       <nav aria-label="Gateway sections">{sections.map(item => <a key={item.id} href={`#${item.id}`} aria-current={section === item.id ? "page" : undefined}>{item.name}</a>)}</nav>
-      {securitySection ? <Security key={section} section={section} /> : <>
+      {securitySection ? <Security key={section} section={section} /> : section === "deployment" ? <GatewayDeployment /> : <>
       {error && <p className="gateway-error" role="alert">{error}</p>}
       {data && <p className={stale ? "gateway-stale" : "gateway-observation"} role="status">{stale ? "Stale observation — refresh before relying on this status." : "Snapshot"} · Observed {time(data.observedAt)}</p>}
       {!data ? <p>{busy ? "Loading gateway status…" : "Status unavailable. Use Refresh status to retry."}</p> : <>

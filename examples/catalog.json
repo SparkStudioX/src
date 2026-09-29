@@ -222,10 +222,11 @@
         "engineering/operator session inventory",
         "reviewed session revocation",
         "timestamped diagnostic snapshots",
-        "local allowlisted support export"
+        "local allowlisted support export",
+        "deployment configuration provenance and observed transport"
       ],
       "prerequisites": [
-        "Use the companion build and a gateway administrator for Gateway Settings in Designer or Projects.",
+        "Use the companion build and a gateway administrator for Gateway Settings in Designer or Settings in Projects.",
         "The project itself needs no tags, assets, database, scripts or external network.",
         "Use only a disposable sign-in for the optional session revocation exercise; it changes that session’s authentication state."
       ],
@@ -233,10 +234,11 @@
       "entryScreenId": "gateway-lab",
       "guide": "docs/architecture/GATEWAY_CONSOLE.md",
       "walkthrough": [
-        "Import and publish the named workshop. Open Projects → Gateway and locate its Designer/operator links.",
+        "Import and publish the named workshop. Open Gateway Settings and locate its Designer/operator links.",
         "Compare engineering and operator sessions. If testing revocation, identify and revoke only a disposable session, leaving the current and other sessions active.",
         "Open Diagnostics and refresh twice at least one second apart. Inspect CPU, memory, disk and bounded route observations.",
         "Wait over 30 seconds to verify the stale snapshot indicator, then refresh.",
+        "Open Deployment. Compare actual listeners with startup settings and their sources, inspect the current transport and saved operator URL, and distinguish unavailable certificate details from valid TLS.",
         "Download and inspect the local support snapshot; it excludes credentials, identities, authored project content and tag values. Ordinary Designer/operator users cannot open the console."
       ]
     },

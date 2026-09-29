@@ -2,12 +2,13 @@
   "name": "Gateway operations",
   "parameters": {},
   "screens": [{
-    "id": "gateway-lab", "name": "Gateway lab", "width": 1000, "height": 600,
+    "id": "gateway-lab", "name": "Gateway lab", "width": 1000, "height": 760,
     "components": [
       { "id": "title", "type": "label", "x": 32, "y": 24, "width": 936, "height": 60, "props": { "text": "Gateway operations lab", "fontSize": 30 } },
-      { "id": "catalog", "type": "label", "x": 32, "y": 112, "width": 936, "height": 110, "props": { "text": "Import this project, then open Gateway Settings from Designer or Projects as an administrator. Search for Gateway operations in the application inventory and reopen this Designer from its resource link.", "fontSize": 20 } },
+      { "id": "catalog", "type": "label", "x": 32, "y": 112, "width": 936, "height": 110, "props": { "text": "Import this project, then open Gateway Settings in Designer or Settings in Projects as an administrator. Search for Gateway operations in the application inventory and reopen this Designer from its resource link.", "fontSize": 20 } },
       { "id": "sessions", "type": "label", "x": 32, "y": 254, "width": 936, "height": 110, "props": { "text": "Publish the project and open its operator link. Engineering and operator sign-ins appear as separate sessions. Use only a disposable session for the revocation exercise in the guide.", "fontSize": 20 } },
-      { "id": "metrics", "type": "label", "x": 32, "y": 402, "width": 936, "height": 110, "props": { "text": "Open Diagnostics, refresh the snapshot and inspect process memory, available disk and bounded API observations. Download the support JSON and verify that project contents and credentials are absent.", "fontSize": 20 } }
+      { "id": "metrics", "type": "label", "x": 32, "y": 402, "width": 936, "height": 110, "props": { "text": "Open Diagnostics, refresh the snapshot and inspect process memory, available disk and bounded API observations. Download the support JSON and verify that project contents and credentials are absent.", "fontSize": 20 } },
+      { "id": "deployment", "type": "label", "x": 32, "y": 548, "width": 936, "height": 150, "props": { "text": "Open Deployment in Gateway Settings. Compare observed listeners with configured values and their sources. Check the current transport and saved operator address. Refresh after 30 seconds. This exercise inspects configuration; it does not change listeners or certificates.", "fontSize": 20 } }
     ]
   }]
 }
