@@ -25,6 +25,6 @@ export default defineConfig(({ mode }) => {
       // Vite serves /designer and /runtime through its SPA fallback and owns its HMR socket.
       proxy: { "/api": gatewayProxy, "/hubs": gatewayProxy },
     },
-    build: { outDir: "dist", sourcemap: true },
+    build: { outDir: "dist", sourcemap: mode === "development" },
   };
 });
