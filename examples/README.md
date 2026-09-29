@@ -2,7 +2,7 @@
 
 Each major user-facing feature should ship with an independently authored workshop project, a short exercise guide, compatibility information and a verified import/publish/runtime check. Workshops serve as both learning material and reproducible acceptance examples. Use synthetic data and make any gateway setup or writes explicit.
 
-[catalog.json](catalog.json) is the machine-readable inventory of all 20 source examples. Fourteen are portable project workshops; six require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
+[catalog.json](catalog.json) is the machine-readable inventory of all 21 source examples. Fifteen are portable project workshops; six require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
 
 ## Use a downloaded workshop
 
@@ -20,6 +20,7 @@ Project packages carry saved screens, templates, queries, script drafts and refe
 
 | Workshop | What to try | Python actions |
 | --- | --- | --- |
+| [Resource changes](resource-changes.json) | Preview renames and deletion impact, inspect blockers and undo changes. | Read-only message button |
 | [Project resource search](project-search.json) | Find resources, follow structured references and distinguish script-text matches. | Read-only message button |
 | [Component properties and form events](component-workshop.json) | Calculate an order total, commit an order code and inspect bound geometry. | None |
 | [Process displays](process-displays.json) | Compare five numeric displays and unavailable signal states. | None |

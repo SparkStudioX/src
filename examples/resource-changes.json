@@ -1,0 +1,61 @@
+{
+  "name": "Resource changes workshop",
+  "navigation": { "mode": "none", "startupScreenId": "changes-home", "items": [] },
+  "templates": [
+    {
+      "id": "changes-card", "name": "Station card", "width": 460, "height": 156,
+      "parameters": { "station": "Assembly" },
+      "components": [
+        { "id": "station", "type": "label", "x": 18, "y": 14, "width": 424, "height": 42, "props": { "text": "{station}", "fontSize": 25 } },
+        { "id": "status", "type": "label", "x": 18, "y": 70, "width": 424, "height": 66, "props": { "text": "Shared station card. Rename the template in Designer; both placements keep their connection.", "fontSize": 17 } }
+      ]
+    },
+    {
+      "id": "changes-spare", "name": "Spare card", "width": 460, "height": 156,
+      "parameters": {},
+      "components": [
+        { "id": "caption", "type": "label", "x": 18, "y": 20, "width": 424, "height": 112, "props": { "text": "This template has no placements. Preview its deletion, apply it, then restore it with one Undo.", "fontSize": 20 } }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "id": "changes-home", "name": "Change workshop", "width": 1040, "height": 740,
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 18, "width": 992, "height": 52, "props": { "text": "Inspect the impact before a change", "fontSize": 29 } },
+        { "id": "intro", "type": "label", "x": 24, "y": 82, "width": 992, "height": 62, "props": { "text": "Use Designer to preview resource changes. In this application, edit the note and open Station details to see the shared card in use.", "fontSize": 18 } },
+        { "id": "station-card", "type": "template", "x": 24, "y": 166, "width": 460, "height": 156, "props": { "text": "Assembly card", "templateId": "changes-card", "parameters": { "station": "Assembly" }, "borderColor": "#697aac", "borderWidth": 1 } },
+        { "id": "note-input", "type": "textInput", "x": 536, "y": 166, "width": 480, "height": 86, "props": { "text": "Station note", "fieldKey": "stationNote", "defaultValue": "Ready for change" } },
+        { "id": "note-caption", "type": "label", "x": 536, "y": 272, "width": 480, "height": 58, "props": { "text": "Draft note: Ready for change", "fontSize": 20, "bindings": { "text": { "expression": "'Draft note: ' + note", "references": { "note": { "kind": "input", "key": "stationNote" } } } } } },
+        { "id": "scratch-label", "type": "label", "x": 24, "y": 364, "width": 460, "height": 64, "props": { "text": "Scratch label · delete and undo", "fontSize": 22, "borderColor": "#697aac", "borderWidth": 1 } },
+        { "id": "binding-help", "type": "label", "x": 536, "y": 362, "width": 480, "height": 74, "props": { "text": "Station note feeds the caption above. Deleting its input is blocked until that binding is changed or removed.", "fontSize": 17 } },
+        { "id": "pair-heading", "groupId": "scratch-pair", "type": "label", "x": 24, "y": 462, "width": 460, "height": 40, "props": { "text": "A two-part scratch group", "fontSize": 22, "customProperties": { "note": { "type": "string", "value": "Both group members travel together." } } } },
+        { "id": "pair-caption", "groupId": "scratch-pair", "type": "label", "x": 24, "y": 514, "width": 460, "height": 44, "props": { "text": "Both group members travel together.", "fontSize": 17, "bindings": { "text": { "expression": "note", "references": { "note": { "kind": "custom", "componentId": "pair-heading", "key": "note" } } } } } },
+        { "id": "group-help", "type": "label", "x": 536, "y": 462, "width": 480, "height": 94, "props": { "text": "The group caption reads a custom property from its heading. Both are deleted together, so this internal reference does not block deletion.", "fontSize": 17 } },
+        { "id": "details", "type": "button", "x": 24, "y": 608, "width": 460, "height": 50, "props": { "text": "Open station details", "action": "navigate", "targetScreenId": "changes-details" } },
+        { "id": "text-warning", "type": "button", "x": 536, "y": 608, "width": 480, "height": 50, "props": { "text": "Read-only script example", "action": "script", "script": "# changes-scratch is only a text mention for the deletion preview.\nresult = {'message': 'This button returns a message. It does not navigate, query or write data.'}" } },
+        { "id": "footer", "type": "label", "x": 24, "y": 686, "width": 992, "height": 30, "props": { "text": "Synthetic workshop · No tags, external databases or equipment writes · Draft changes need explicit Save and Publish", "fontSize": 14 } }
+      ]
+    },
+    {
+      "id": "changes-details", "name": "Station details", "width": 1040, "height": 620,
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 24, "width": 992, "height": 52, "props": { "text": "Same template. Another station.", "fontSize": 29 } },
+        { "id": "intro", "type": "label", "x": 24, "y": 96, "width": 992, "height": 72, "props": { "text": "This screen contains the second Station card placement. Its Back button is an explicit reference to the Change workshop screen.", "fontSize": 18 } },
+        { "id": "station-card", "type": "template", "x": 24, "y": 196, "width": 460, "height": 156, "props": { "text": "Packing card", "templateId": "changes-card", "parameters": { "station": "Packing" }, "borderColor": "#697aac", "borderWidth": 1 } },
+        { "id": "reference-help", "type": "label", "x": 536, "y": 196, "width": 480, "height": 156, "props": { "text": "Rename Station details in Designer, then try both navigation buttons. The screen ID stays the same, so navigation still works. Deleting either connected screen is blocked by the surviving button that points to it.", "fontSize": 18 } },
+        { "id": "back", "type": "button", "x": 24, "y": 406, "width": 460, "height": 50, "props": { "text": "Back to change workshop", "action": "navigate", "targetScreenId": "changes-home" } },
+        { "id": "draft-help", "type": "label", "x": 24, "y": 506, "width": 992, "height": 74, "props": { "text": "Preview changes in Designer first. Undo restores the whole applied change. The operator application keeps its published revision until you explicitly publish again.", "fontSize": 18 } }
+      ]
+    },
+    {
+      "id": "changes-scratch", "name": "Scratch screen", "width": 1040, "height": 500,
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 24, "width": 992, "height": 52, "props": { "text": "A screen with only a text mention", "fontSize": 29 } },
+        { "id": "intro", "type": "label", "x": 24, "y": 106, "width": 992, "height": 114, "props": { "text": "No navigation button points to this screen. The workshop's read-only Python example mentions its stable ID in a comment. Its deletion preview asks you to review and acknowledge that text match; it does not rewrite the comment.", "fontSize": 20 } },
+        { "id": "instruction", "type": "label", "x": 24, "y": 254, "width": 992, "height": 70, "props": { "text": "Open this screen from Designer's Screens list. Preview deletion, acknowledge the reviewed comment, apply, and use one Undo to restore it.", "fontSize": 18 } },
+        { "id": "back", "type": "button", "x": 24, "y": 386, "width": 460, "height": 50, "props": { "text": "Back to change workshop", "action": "navigate", "targetScreenId": "changes-home" } }
+      ]
+    }
+  ]
+}

@@ -4,11 +4,32 @@
     "packageFormat": 1,
     "baseline": {
       "kind": "source-commit",
-      "value": "9e9a096c44ad5f73f64e668b0d8c2ccc41e37f12"
+      "value": "8bbfa8cd7e70ca2a831d1316de14ac42b4a53efc"
     },
     "note": "Use the SparkStudio build identified by the workshop bundle or a newer compatible build with the listed features. The original v0.1.0-preview.1 installer predates this catalog's baseline; its version number alone does not establish compatibility."
   },
   "workshops": [
+    {
+      "id": "resource-changes",
+      "title": "Resource changes",
+      "summary": "Preview screen and template renames, inspect deletion blockers, review code-text warnings and undo grouped changes.",
+      "source": "examples/resource-changes.json",
+      "distribution": "portable",
+      "features": ["resource rename and deletion previews", "structured dependency blockers", "grouped component deletion", "code-text warning acknowledgment", "atomic project undo", "draft and publication separation"],
+      "prerequisites": ["Use the companion gateway build with resource change previews.", "No configured tags, external database, assets or network access are required.", "The optional read-only Python button requires the bundled Python runtime and operator permission."],
+      "gatewayWrites": "none",
+      "entryScreenId": "changes-home",
+      "guide": "docs/architecture/RESOURCE_CHANGES.md",
+      "walkthrough": [
+        "Edit Station note in Preview and navigate to Station details and back.",
+        "Rename Station details and Station card; verify stable IDs preserve navigation and both template placements.",
+        "Preview deletion of the connected screen, shared template and Station note input; inspect blockers and cancel.",
+        "Delete the scratch label, two-part group and unused Spare card separately, using one Undo after each.",
+        "Preview Scratch screen deletion, review and acknowledge the Python comment match, then apply and Undo.",
+        "Temporarily configure Scratch screen as startup and a menu item; inspect deletion cleanup, cancel and restore navigation.",
+        "Publish the intact workshop, then verify an unpublished draft deletion does not change the operator application."
+      ]
+    },
     {
       "id": "project-search",
       "title": "Project resource search",
