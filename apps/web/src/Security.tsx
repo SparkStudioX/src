@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { useAuth } from "./Auth";
-import { ThemePicker } from "./Theme";
 import { noPermissions } from "./authSession";
 import type { ProjectPermissions } from "./authSession";
 import type { ProjectCatalog, ProjectSummary } from "./projectManagement";
@@ -17,9 +16,9 @@ const message = (error: unknown) => error instanceof Error ? error.message : Str
 const permissionKeys = ["view", "operate", "design", "publish"] as const;
 const permissionLabels: Record<keyof ProjectPermissions, string> = { view: "View", operate: "Operate", design: "Design", publish: "Publish" };
 
-export default function Security() {
+export default function Security({ section }: { section: "security" | "audit" }) {
   const auth = useAuth();
-  const [tab, setTab] = useState<"users" | "gateway" | "audit">("users");
+  const [tab, setTab] = useState<"users" | "gateway">("users");
   const [users, setUsers] = useState<ManagedUser[]>([]), [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [settings, setSettings] = useState<GatewaySettings | null>(null), [audit, setAudit] = useState<AuditEntry[]>([]);
   const [editing, setEditing] = useState<ManagedUser | "new" | null>(null);
@@ -28,29 +27,40 @@ export default function Security() {
   const load = useCallback(async () => {
     const run = ++serial.current; setLoading(true); setError("");
     try {
-      const [userResult, catalog, gateway, history] = await Promise.all([
-        api<{ users: ManagedUser[] }>("/security/users"), api<ProjectCatalog>("/projects"),
-        api<GatewaySettings>("/security/settings"), api<{ entries: AuditEntry[] }>("/security/audit?limit=100"),
-      ]);
-      if (run !== serial.current) return;
-      setUsers(userResult.users); setProjects(catalog.projects); setSettings(gateway); setAudit(history.entries);
+      if (section === "audit") {
+        const history = await api<{ entries: AuditEntry[] }>("/security/audit?limit=100");
+        if (run === serial.current) setAudit(history.entries);
+      } else if (tab === "users") {
+        const [userResult, catalog] = await Promise.all([
+          api<{ users: ManagedUser[] }>("/security/users"), api<ProjectCatalog>("/projects"),
+        ]);
+        if (run !== serial.current) return;
+        setUsers(userResult.users); setProjects(catalog.projects);
+      } else {
+        const [gateway, catalog] = await Promise.all([
+          api<GatewaySettings>("/security/settings"), api<ProjectCatalog>("/projects"),
+        ]);
+        if (run !== serial.current) return;
+        setSettings(gateway); setProjects(catalog.projects);
+      }
     } catch (reason) { if (run === serial.current) setError(message(reason)); }
     finally { if (run === serial.current) setLoading(false); }
-  }, []);
+  }, [section, tab]);
   useEffect(() => { void load(); return () => { serial.current++; }; }, [load]);
+  useEffect(() => { setNotice(""); setEditing(null); }, [section, tab]);
   async function saved(text: string) { setNotice(text); await load(); await auth.refresh(); }
-  return <main className="security-page">
-    <header className="security-header"><div><a className="security-back" href="/">← Projects</a><h1>Gateway security</h1><p>Manage accounts, project access and operator publishing.</p></div><div className="security-header-actions"><ThemePicker /><span>{auth.user?.displayName}</span><button className="button" onClick={() => { void auth.signOut(); }}>Sign out</button></div></header>
-    <nav className="security-tabs" aria-label="Security sections">{(["users", "gateway", "audit"] as const).map(name => <button key={name} type="button" className={tab === name ? "is-active" : ""} aria-current={tab === name ? "page" : undefined} onClick={() => setTab(name)}>{name === "users" ? "Users & access" : name === "gateway" ? "Operator settings" : "Audit history"}</button>)}<button className="button" disabled={loading} onClick={() => { void load(); }}>{loading ? "Refreshing…" : "Refresh"}</button></nav>
+  const refresh = <button type="button" className="button" aria-label={section === "audit" ? "Refresh audit history" : tab === "users" ? "Refresh accounts" : "Refresh operator settings"} disabled={loading} onClick={() => { void load(); }}>{loading ? "Refreshing…" : "Refresh"}</button>;
+  return <div className="security-embedded">
+    {section === "security" && <nav className="security-tabs" aria-label="Security sections">{(["users", "gateway"] as const).map(name => <button key={name} type="button" className={tab === name ? "is-active" : ""} aria-current={tab === name ? "page" : undefined} onClick={() => setTab(name)}>{name === "users" ? "Users & access" : "Operator settings"}</button>)}{refresh}</nav>}
     {error && <p className="security-error" role="alert">{error}</p>}{notice && <p className="security-notice" role="status">{notice}</p>}
-    {tab === "users" && <section className="security-panel"><div className="security-section-heading"><div><h2>Gateway accounts</h2><p>Accounts can sign in separately to engineering and operator applications.</p></div><button className="button primary" disabled={loading} onClick={() => setEditing("new")}>New user</button></div>
-      <div className="security-table-scroll"><table className="security-table"><thead><tr><th>User</th><th>Status</th><th>Access</th><th>Updated</th><th><span className="security-sr-only">Manage user</span></th></tr></thead><tbody>{users.map(user => <tr key={user.id}><td><strong>{user.displayName}</strong><small>{user.username}</small></td><td><span className={`security-badge ${user.disabled ? "is-disabled" : ""}`}>{user.disabled ? "Disabled" : "Active"}</span></td><td>{user.gatewayAdmin ? "Gateway administrator" : `${Object.values(user.projectGrants).filter(grant => permissionKeys.some(key => grant[key])).length} project grants`}</td><td>{new Date(user.updatedAt).toLocaleString()}</td><td><button className="button small" aria-label={`Edit ${user.username}`} disabled={loading} onClick={() => setEditing(user)}>Edit</button></td></tr>)}</tbody></table></div>
+    {section === "security" && tab === "users" && <section className="security-panel"><div className="security-section-heading"><div><h2>Gateway accounts</h2><p>Accounts can sign in separately to engineering and operator applications.</p></div><button className="button primary" disabled={loading || Boolean(error)} onClick={() => setEditing("new")}>New user</button></div>
+      <div className="security-table-scroll"><table className="security-table"><thead><tr><th>User</th><th>Status</th><th>Access</th><th>Updated</th><th><span className="security-sr-only">Manage user</span></th></tr></thead><tbody>{users.map(user => <tr key={user.id}><td><strong>{user.displayName}</strong><small>{user.username}</small></td><td><span className={`security-badge ${user.disabled ? "is-disabled" : ""}`}>{user.disabled ? "Disabled" : "Active"}</span></td><td>{user.gatewayAdmin ? "Gateway administrator" : `${Object.values(user.projectGrants).filter(grant => permissionKeys.some(key => grant[key])).length} project grants`}</td><td>{new Date(user.updatedAt).toLocaleString()}</td><td><button className="button small" aria-label={`Edit ${user.username}`} disabled={loading || Boolean(error)} onClick={() => setEditing(user)}>Edit</button></td></tr>)}</tbody></table></div>
       {!users.length && <p className="muted" role="status">{loading ? "Loading accounts…" : "No accounts returned."}</p>}
     </section>}
-    {tab === "gateway" && settings && <GatewaySettingsEditor key={settings.revision} settings={settings} projects={projects} onSaved={() => saved("Operator settings saved.")} />}
-    {tab === "audit" && <section className="security-panel"><h2>Recent security activity</h2><p>The latest 100 recorded events. Passwords and session tokens are not displayed.</p><div className="security-table-scroll"><table className="security-table"><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Project / user</th><th>Outcome</th></tr></thead><tbody>{audit.map(entry => <tr key={entry.id}><td>{new Date(entry.recordedAt).toLocaleString()}</td><td>{entry.actor}</td><td>{entry.action}{entry.resource && <small>{entry.resource}</small>}</td><td>{entry.projectId || entry.targetUserId || "—"}</td><td>{entry.outcome}</td></tr>)}</tbody></table></div>{!audit.length && <p className="muted">{loading ? "Loading audit history…" : "No recorded events."}</p>}</section>}
+    {section === "security" && tab === "gateway" && !loading && !error && settings && <GatewaySettingsEditor key={settings.revision} settings={settings} projects={projects} onSaved={() => saved("Operator settings saved.")} />}
+    {section === "audit" && <section className="security-panel"><div className="security-section-heading"><div><h2>Recent security activity</h2><p>The latest 100 recorded events. Passwords and session tokens are not displayed.</p></div>{refresh}</div><div className="security-table-scroll"><table className="security-table"><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Project / user</th><th>Outcome</th></tr></thead><tbody>{audit.map(entry => <tr key={entry.id}><td>{new Date(entry.recordedAt).toLocaleString()}</td><td>{entry.actor}</td><td>{entry.action}{entry.resource && <small>{entry.resource}</small>}</td><td>{entry.projectId || entry.targetUserId || "—"}</td><td>{entry.outcome}</td></tr>)}</tbody></table></div>{!audit.length && <p className="muted">{loading ? "Loading audit history…" : "No recorded events."}</p>}</section>}
     {editing && <UserEditor user={editing === "new" ? null : editing} projects={projects} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await saved("Account saved. Changed access applies to new requests and existing sessions are rechecked."); }} />}
-  </main>;
+  </div>;
 }
 
 function UserEditor({ user, projects, onClose, onSaved }: { user: ManagedUser | null; projects: ProjectSummary[]; onClose: () => void; onSaved: () => Promise<void> }) {

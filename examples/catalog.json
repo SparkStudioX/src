@@ -225,7 +225,7 @@
         "local allowlisted support export"
       ],
       "prerequisites": [
-        "Use the companion build and a gateway administrator for Projects → Gateway.",
+        "Use the companion build and a gateway administrator for Gateway Settings in Designer or Projects.",
         "The project itself needs no tags, assets, database, scripts or external network.",
         "Use only a disposable sign-in for the optional session revocation exercise; it changes that session’s authentication state."
       ],

@@ -6,7 +6,13 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
-## Current ten roadmap increments: local verification, 2026-09-29
+## Gateway Settings navigation: local verification, 2026-09-29
+
+Designer and Projects now expose one **Gateway Settings** entry. The existing console contains Overview, Sessions, Diagnostics, Security and Audit; Security retains Users & access and Operator settings. Legacy `/security` links resolve to `/gateway#security` under the same administrator gate. Engineering headers use an accessible icon-only sign-out button. Account name and password field pairs align despite unequal helper text and stack on narrow screens.
+
+TypeScript/production build, five gateway-console API groups and nine workshop-build groups passed. Browser checks on isolated port 5091 covered navigation from Designer and Projects, the legacy URL, Security/operator settings/Audit/Diagnostics, icon-only sign-out, denied non-administrator access, equal field top edges in light/dark appearance and 480-pixel field stacking/tab wrapping. No account changes were submitted; browser warning/error logs were empty. Port 5090 serves browser bundle `index-vyLsAnWP.js` over the unchanged gateway process/data. Evidence stays under ignored `.data/test-evidence/gateway-settings-*`. This is a navigation/layout increment; G04 transport and service acceptance remain open.
+
+## Previous ten roadmap increments: local verification, 2026-09-29
 
 The current source adds one bounded increment for each of D06–D12 and G01–G03. These are incremental baselines, not completion of ten entire roadmap phases. Focused model, gateway and browser checks establish the scope described below. Port 5090 serves the tested self-contained Windows build.
 

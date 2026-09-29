@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, apiUrl, authenticatedFetch, assertAuthResponseCurrent } from "./api";
 import { SessionIdentity } from "./OperatorAccess";
 import Icon from "./Icon";
+import Security from "./Security";
 import "./gatewayConsole.css";
 
 interface Session { id: string; username: string; displayName: string; audience: string; createdAt: string; lastActivityAt: string; expiresAt: string }
@@ -9,7 +10,7 @@ interface Metrics { observedAt: string; uptimeSeconds: number; cpuPercent: numbe
 interface Overview { currentSessionId: string; observedAt: string; identity: string; version: string; framework: string; platform: string; sessions: Session[]; metrics: Metrics; projects: { id: string; name: string; archived: boolean; published: boolean }[]; connections: { id: string; name: string; type: string; status: string }[]; tags: { total: number; configured: number; good: number; unavailable: number } }
 const bytes = (value: number | null) => value === null ? "Unavailable" : `${(value / 1024 / 1024).toLocaleString(undefined, { maximumFractionDigits: 0 })} MiB`;
 const time = (value: string) => new Date(value).toLocaleString();
-const sections = [{ id: "overview", name: "Overview" }, { id: "sessions", name: "Sessions" }, { id: "diagnostics", name: "Diagnostics" }] as const;
+const sections = [{ id: "overview", name: "Overview" }, { id: "sessions", name: "Sessions" }, { id: "diagnostics", name: "Diagnostics" }, { id: "security", name: "Security" }, { id: "audit", name: "Audit" }] as const;
 type Section = typeof sections[number]["id"];
 const sectionFromHash = (): Section => sections.find(item => `#${item.id}` === window.location.hash)?.id ?? "overview";
 
@@ -45,16 +46,18 @@ export default function GatewayConsole() {
     finally { setBusy(false); }
   }
   const matching = (text: string) => text.toLowerCase().includes(query.toLowerCase());
+  const securitySection = section === "security" || section === "audit";
   return <div className="gateway-console">
-    <header><a href="/" className="projects-brand"><span className="brand-mark"><Icon name="spark" size={24} /></span><strong>SparkStudio</strong></a><strong>Gateway</strong><a href="/">Projects</a><a href="/security">Security and audit</a><SessionIdentity /></header>
-    <main><div className="gateway-heading"><div><div className="eyebrow">GATEWAY ADMINISTRATION</div><h1>{data?.identity || "Gateway console"}</h1><p>Shared resources, active sessions and process diagnostics.</p></div><button className="button" disabled={busy} onClick={() => void refresh()}>{busy ? "Refreshing…" : "Refresh status"}</button></div>
+    <header><a href="/" className="projects-brand"><span className="brand-mark"><Icon name="spark" size={24} /></span><strong>SparkStudio</strong></a><strong>Gateway Settings</strong><a href="/">Projects</a><SessionIdentity iconOnlySignOut /></header>
+    <main><div className="gateway-heading"><div><div className="eyebrow">GATEWAY ADMINISTRATION</div><h1>{data?.identity || "Gateway Settings"}</h1><p>Shared resources, active sessions, security and diagnostics.</p></div>{!securitySection && <button className="button" disabled={busy} onClick={() => void refresh()}>{busy ? "Refreshing…" : "Refresh status"}</button>}</div>
       <nav aria-label="Gateway sections">{sections.map(item => <a key={item.id} href={`#${item.id}`} aria-current={section === item.id ? "page" : undefined}>{item.name}</a>)}</nav>
+      {securitySection ? <Security key={section} section={section} /> : <>
       {error && <p className="gateway-error" role="alert">{error}</p>}
       {data && <p className={stale ? "gateway-stale" : "gateway-observation"} role="status">{stale ? "Stale observation — refresh before relying on this status." : "Snapshot"} · Observed {time(data.observedAt)}</p>}
       {!data ? <p>{busy ? "Loading gateway status…" : "Status unavailable. Use Refresh status to retry."}</p> : <>
         {section === "overview" && <>
           <div className="gateway-cards"><article><span>Projects</span><strong>{data.projects.filter(item => !item.archived).length}</strong><small>{data.projects.filter(item => item.archived).length} archived</small></article><article><span>Connections</span><strong>{data.connections.length}</strong><small>Saved status; not a fresh connection test</small></article><article><span>Tag values</span><strong>{data.tags.total}</strong><small>{data.tags.unavailable} unavailable · {data.tags.configured} configured</small></article><article><span>Uptime</span><strong>{Math.floor(data.metrics.uptimeSeconds / 60)} min</strong><small>Resets on gateway restart</small></article></div>
-          <p>{data.version} · {data.framework} · {data.platform}</p><label>Find a resource<input value={query} onChange={event => setQuery(event.target.value)} placeholder="Project or connection name" /></label>
+          <p>{data.version} · {data.framework} · {data.platform}</p><label className="gateway-filter">Find a resource<input value={query} onChange={event => setQuery(event.target.value)} placeholder="Project or connection name" /></label>
           <h2>Applications</h2><div className="gateway-resource-list">{data.projects.filter(item => matching(`${item.name} ${item.id}`)).map(item => <article key={item.id}><strong>{item.name}</strong><span>{item.archived ? "Archived" : item.published ? "Published" : "Draft only"}</span>{!item.archived && <><a href={`/designer/${item.id}`}>Designer</a>{item.published && <a href={`/runtime/${item.id}`}>Operator application</a>}</>}</article>)}</div>
           <h2>Connections</h2>{data.connections.length === 0 ? <p>No connections configured.</p> : <div className="gateway-resource-list">{data.connections.filter(item => matching(`${item.name} ${item.type}`)).map(item => <article key={item.id}><strong>{item.name}</strong><span>{item.type}</span><span>{item.status}</span></article>)}</div>}
         </>}
@@ -63,8 +66,9 @@ export default function GatewayConsole() {
         </>}
         {section === "diagnostics" && <><h2>Process and API observations</h2><div className="gateway-cards"><article><span>Process memory</span><strong>{bytes(data.metrics.processWorkingSetBytes)}</strong><small>Managed heap {bytes(data.metrics.managedMemoryBytes)}</small></article><article><span>CPU</span><strong>{data.metrics.cpuPercent === null ? "Not sampled" : `${data.metrics.cpuPercent.toFixed(1)}%`}</strong><small>Process CPU / logical processors since prior sample</small></article><article><span>Available disk</span><strong>{bytes(data.metrics.diskAvailableBytes)}</strong><small>Volume containing gateway data</small></article><article><span>API requests</span><strong>{data.metrics.completedRequests}</strong><small>{data.metrics.failedRequests} returned errors · {data.metrics.activeRequests} active (includes streams)</small></article></div>
           <p>{data.metrics.retention} Request paths are route templates; request values and bodies are excluded.</p><button className="button" disabled={busy} onClick={() => void download()}>Download support snapshot</button><p>The JSON snapshot contains process metrics and resource counts. It excludes credentials, identities, configuration values, tag values, scripts and keys.</p>
-          <label>Filter request routes<input value={query} onChange={event => setQuery(event.target.value)} placeholder="Route, status or method" /></label><div className="gateway-table"><table><thead><tr><th>Observed</th><th>Method</th><th>Route</th><th>Status</th><th>Duration</th></tr></thead><tbody>{data.metrics.requestWindow.filter(item => matching(`${item.route} ${item.method} ${item.status}`)).map((item, index) => <tr key={index}><td>{time(item.recordedAt)}</td><td>{item.method}</td><td><code>{item.route}</code></td><td>{item.status}</td><td>{item.durationMs.toFixed(1)} ms</td></tr>)}</tbody></table></div>
+          <label className="gateway-filter">Filter request routes<input value={query} onChange={event => setQuery(event.target.value)} placeholder="Route, status or method" /></label><div className="gateway-table"><table><thead><tr><th>Observed</th><th>Method</th><th>Route</th><th>Status</th><th>Duration</th></tr></thead><tbody>{data.metrics.requestWindow.filter(item => matching(`${item.route} ${item.method} ${item.status}`)).map((item, index) => <tr key={index}><td>{time(item.recordedAt)}</td><td>{item.method}</td><td><code>{item.route}</code></td><td>{item.status}</td><td>{item.durationMs.toFixed(1)} ms</td></tr>)}</tbody></table></div>
         </>}
+      </>}
       </>}
     </main>
   </div>;

@@ -7,6 +7,9 @@
 .session-actions button { padding:0; border:0; background:none; color:var(--text-muted); cursor:pointer; font-size:11px; white-space:nowrap; }
 .session-actions button:hover { color:var(--accent); }
 .session-actions button:disabled { opacity:.6; cursor:wait; }
+.session-actions .session-sign-out { display:grid; place-items:center; width:34px; height:36px; padding:0; border-radius:6px; }
+.session-actions .session-sign-out:hover { background:var(--accent-soft); }
+.session-sign-out:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .session-error { flex-basis:100%; color:var(--danger, #dc2626); font-size:12px; }
 .nav-bottom > .session-identity { padding:10px 4px; }
 .sidebar-session { flex-wrap:nowrap; gap:6px; border-top:1px solid var(--nav-border); color:var(--nav-text); }
@@ -15,7 +18,7 @@
 .sidebar-session .session-person small { color:var(--nav-muted); font-size:9px; white-space:normal; }
 .sidebar-session .session-settings:hover { background:var(--nav-hover); color:var(--nav-heading); }
 .sidebar-session .session-actions { flex-shrink:0; }
-.sidebar-session .session-sign-out { display:grid; place-items:center; width:34px; height:36px; padding:0; color:var(--nav-muted); border-radius:6px; }
+.sidebar-session .session-sign-out { color:var(--nav-muted); }
 .sidebar-session .session-sign-out:hover { background:var(--nav-hover); color:var(--nav-heading); }
 .sidebar-session button:focus-visible { outline:2px solid var(--nav-accent); outline-offset:2px; }
 .workspace-collapsed .sidebar-session .session-person { display:none; }

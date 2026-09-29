@@ -1169,7 +1169,7 @@ export default function App() {
           ))}
         </nav>
         <button className="nav-link" title="Search project (Ctrl+Shift+F)" aria-label="Search project" disabled={!project || Boolean(previewActionBusy)} onClick={() => setSearchOpen(true)}><Icon name="search" /><span>Search project</span></button>
-        {gatewayAdmin && <a className="designer-project-link" href="/security" title="Gateway security"><Icon name="shield" size={17} /><span>Security</span></a>}
+        {gatewayAdmin && <a className="designer-project-link" href="/gateway" title="Gateway Settings" aria-label="Gateway Settings"><Icon name="settings" size={17} /><span>Gateway Settings</span></a>}
         </div>
         <div className="nav-bottom">
           <a
