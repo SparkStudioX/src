@@ -36,7 +36,7 @@ The current source includes query-backed forms and scalar properties, single-sel
 
 ## Run on Windows
 
-For a prepared package, download the installer and checksum from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.5). It bundles .NET, Python and browser assets. Preview.5 retains the wait for the owned gateway process to exit before replacing files and fixes access to that process during elevated upgrade preparation. Setup-code instructions and the compact Designer version label remain included. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md): an elevated preview.2 service-install retry and preview.5's read-only service-process check are verified on one Windows host; the preview.5 upgrade and broader lifecycle acceptance remain open.
+For a prepared package, download the installer and checksum from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.5). It bundles .NET, Python and browser assets. Preview.5 retains the wait for the owned gateway process to exit before replacing files and fixes access to that process during elevated upgrade preparation. Setup-code instructions and the compact Designer version label remain included. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md): an elevated preview.5 upgrade over a running preview.3 service succeeded on one Windows host without a Windows restart, and all 486 installed payload hashes matched. Rollback, uninstall, complete real-data preservation and broader service-account/ACL acceptance remain open.
 
 For development, use Windows x64 with Node/npm available. Node 22.17.1 was used for the recorded checks. Run from the repository root in PowerShell:
 
