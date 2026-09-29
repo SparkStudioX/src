@@ -41,10 +41,11 @@ function Highlight({ text, term }: { text: string; term: string }) {
 }
 
 /** Search reads editor drafts and navigates to their owners; it never executes a resource. */
-export default function ProjectSearch({ entries, onOpen, onClose, scriptsLoading = false, scriptsError }: {
+export default function ProjectSearch({ entries, onOpen, onClose, onReplace, scriptsLoading = false, scriptsError }: {
   entries: SearchEntry[];
   onOpen: (target: SearchTarget) => void;
   onClose: () => void;
+  onReplace?: (find: string) => void;
   scriptsLoading?: boolean;
   scriptsError?: string;
 }) {
@@ -145,6 +146,6 @@ export default function ProjectSearch({ entries, onOpen, onClose, scriptsLoading
         <p className="project-search-reference-note">Structured references cover configured screen, template, query and component links. Code and SQL are searchable text; tag and asset availability is not checked here.</p>
       </aside>
     </div>
-    <footer className="project-search-footer"><span>↑ ↓ select · Enter opens · Esc closes</span>{selectedReference && <button type="button" className="button project-search-mobile-references" onClick={showReferences}>References ({referenceCount})</button>}<button type="button" className="button" onClick={onClose}>Close</button><button type="button" className="button primary" disabled={!selected} onClick={openSelected}>Open result<Icon name="arrow" size={15} /></button></footer>
+    <footer className="project-search-footer"><span>↑ ↓ select · Enter opens · Esc closes</span>{onReplace && <button type="button" className="button" onClick={() => onReplace(term)} title="Preview literal replacements in display text or tag paths (Ctrl+Shift+H / Cmd+Shift+H)">Replace…</button>}{selectedReference && <button type="button" className="button project-search-mobile-references" onClick={showReferences}>References ({referenceCount})</button>}<button type="button" className="button" onClick={onClose}>Close</button><button type="button" className="button primary" disabled={!selected} onClick={openSelected}>Open result<Icon name="arrow" size={15} /></button></footer>
   </dialog>, document.body);
 }

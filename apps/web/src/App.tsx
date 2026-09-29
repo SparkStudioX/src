@@ -70,6 +70,8 @@ import type { ScriptSearchResource, SearchTarget } from "./projectSearch";
 import ResourceChangeDialog from "./ResourceChangeDialog";
 import { applyResourceChange, planResourceChange } from "./resourceChanges";
 import type { ResourceChangeRequest } from "./resourceChanges";
+import BulkReplaceDialog from "./BulkReplaceDialog";
+import { applyBulkReplacement } from "./bulkReplacement";
 import { useDesignerPanes } from "./useDesignerPanes";
 import "./canvasEditing.css";
 import "./designerDocuments.css";
@@ -189,6 +191,7 @@ export default function App() {
   const [projectImportOpen, setProjectImportOpen] = useState(false);
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [bulkReplaceFind, setBulkReplaceFind] = useState<string | null>(null);
   const [searchQueries, setSearchQueries] = useState<NamedQuery[] | null>(null);
   const [searchScripts, setSearchScripts] = useState<ScriptSearchResource[]>([]);
   const [scriptsEditorReady, setScriptsEditorReady] = useState(false);
@@ -306,8 +309,9 @@ export default function App() {
   };
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f" && project && !previewActionBusy && !document.querySelector("dialog[open]")) {
-        event.preventDefault(); setSearchOpen(true);
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && project && !previewActionBusy && !document.querySelector("dialog[open]")) {
+        if (event.key.toLowerCase() === "f") { event.preventDefault(); setSearchOpen(true); }
+        if (event.key.toLowerCase() === "h") { event.preventDefault(); setBulkReplaceFind(""); }
       }
     };
     window.addEventListener("keydown", shortcut);
@@ -2638,7 +2642,16 @@ export default function App() {
       />}
       {gatewayAdmin && projectImportOpen && <ProjectImportDialog onClose={() => setProjectImportOpen(false)} />}
       {accountSettingsOpen && <AccountSettingsDialog hasUnsavedChanges={dirty || queriesDirty || scriptsDirty} onClose={() => setAccountSettingsOpen(false)} />}
-      {searchOpen && project && <ProjectSearch entries={searchEntries} onOpen={navigateSearch} onClose={() => setSearchOpen(false)} scriptsLoading={searchScriptsLoading} scriptsError={searchScriptsError} />}
+      {searchOpen && project && <ProjectSearch entries={searchEntries} onOpen={navigateSearch} onClose={() => setSearchOpen(false)} scriptsLoading={searchScriptsLoading} scriptsError={searchScriptsError}
+        onReplace={find => { setSearchOpen(false); setBulkReplaceFind(find); }} />}
+      {bulkReplaceFind !== null && project && <BulkReplaceDialog project={project} initialFind={bulkReplaceFind}
+        onClose={() => setBulkReplaceFind(null)} onOpenReference={navigateSearch}
+        onApply={(plan, selectedIds) => {
+          if (previewActionBusy) throw new Error("Wait for the current preview action to finish before applying replacements.");
+          change(current => applyBulkReplacement(plan, current, selectedIds));
+          setBulkReplaceFind(null);
+          notify(`${selectedIds.length} properties replaced in the draft. Undo is available; save and publish when ready.`);
+        }} />}
       {resourceChangePlan && <ResourceChangeDialog plan={resourceChangePlan}
         onNameChange={name => setResourceChangeContext(previous => previous && previous.request.action === "rename" ? { ...previous, request: { ...previous.request, name } } : previous)}
         onApply={commitResourceChange} onClose={closeResourceChange} onOpenReference={navigateSearch}

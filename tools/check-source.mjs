@@ -68,6 +68,7 @@ const toolFiles = new Set([
   'workshop-packages.mjs', 'build-workshops.mjs', 'test-workshop-build.mjs', 'test-workshop-packages.mjs',
   'test-project-search.mjs',
   'test-resource-changes.mjs',
+  'test-bulk-replacement.mjs',
   'test-runtime.mjs', 'test-tag-definitions.mjs', 'test-template-runtime.mjs',
   'check-source.mjs', 'test-source-boundary.mjs', 'install-source-hooks.ps1',
   'test-input-controls.mjs',
@@ -117,6 +118,7 @@ const architectureDocs = new Set([
   'PROJECTS.md',
   'PROJECT_SEARCH.md',
   'RESOURCE_CHANGES.md',
+  'BULK_REPLACEMENT.md',
   'QUERY_CONTROLS.md', 'DRAWING.md',
   'SECURITY.md',
 ]);
@@ -127,6 +129,7 @@ const explicitFiles = new Set([
   'examples/catalog.json', 'examples/README.md',
   'examples/project-search.json',
   'examples/resource-changes.json',
+  'examples/bulk-replacement.json',
   'examples/operator-inputs.json',
   'examples/property-bindings.json',
   'examples/query-properties.json',

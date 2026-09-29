@@ -60,7 +60,7 @@
   .project-search-fields select { min-width: 110px; }
   .project-search-body { grid-template-columns: 1fr; height: min(520px, calc(100dvh - 275px)); }
   .project-search-detail { display: none; }
-  .project-search-footer { padding: 10px 13px; }
+  .project-search-footer { padding: 10px 13px; flex-wrap: wrap; }
   .project-search-footer > span { display: none; }
   .project-search-footer .project-search-mobile-references { display: inline-flex; margin-right: auto; }
 }
