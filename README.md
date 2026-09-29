@@ -2,7 +2,7 @@
 
 SparkStudio is an early-preview industrial application builder with a browser designer, a published operator runtime and a self-hosted gateway. The application uses ASP.NET Core/.NET 10, React/TypeScript and CPython 3; it does not require Java or Jython.
 
-[Website](https://sparkstudiox.com/) · [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.2) · [Product scope](docs/architecture/PRODUCT.md) · [Verification and roadmap](docs/architecture/PARITY.md)
+[Website](https://sparkstudiox.com/) · [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.3) · [Product scope](docs/architecture/PRODUCT.md) · [Verification and roadmap](docs/architecture/PARITY.md)
 
 The current source includes **local accounts, separate engineering/operator sessions, server-enforced project permissions and a bounded audit trail**. First run requires administrator setup on the gateway computer. Remote account/API access requires HTTPS; network deployment and service lifecycle acceptance remain separate gates. Python scripts run with the gateway account's operating-system access; worker processes are not a security sandbox. See the [security guide](docs/architecture/SECURITY.md).
 
@@ -36,7 +36,7 @@ The current source includes query-backed forms and scalar properties, single-sel
 
 ## Run on Windows
 
-For a prepared package, download the installer and checksum from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.2). It bundles .NET, Python and browser assets. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md): extraction, application execution and an elevated service-install retry are verified on one Windows host; broader service lifecycle, upgrade recovery and uninstall acceptance remain open.
+For a prepared package, download the installer and checksum from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.3). It bundles .NET, Python and browser assets. Preview.3 adds setup-code instructions and a compact Designer version label. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md): extraction, application execution and an elevated preview.2 service-install retry are verified on one Windows host; broader service lifecycle, upgrade recovery and uninstall acceptance remain open.
 
 For development, use Windows x64 with Node/npm available. Node 22.17.1 was used for the recorded checks. Run from the repository root in PowerShell:
 
@@ -59,7 +59,7 @@ Watch mode keeps the browser address at `http://127.0.0.1:5090`. Vite updates fr
 
 The same `.data/development` projects and accounts are used by default. For a separate test environment, pass `-DataDirectory .data/my-test-gateway`; relative directories resolve from the source repository root. Run only one gateway against any data directory. Ctrl+C stops both process trees started by watch mode; diagnostics remain under local-only `.data/dev-watch/`. Run the initial build first; omit `-NoBuild` to restore/build prerequisites before watching. Changes to dependencies may require another build. Browser refresh or backend restart can reset unsaved browser state, so save Designer edits before changing application code. Source updates do not publish project drafts or update an installed package. Without `-Watch`, the existing build-and-run behavior is unchanged; an already-running packaged gateway does not adopt source edits automatically.
 
-Create the first administrator using the local code in `.data/development/security/setup-code.txt`. Choose your own password in the setup form; there is no default password. Existing projects remain intact. Use **Security** to add accounts and assign per-project Design/Publish/View/Operate permissions. Operator links require a separate operator sign-in. The current public installer predates this account system.
+Create the first administrator using the local code in `.data/development/security/setup-code.txt`. Choose your own password in the setup form; there is no default password. Existing projects remain intact. Use **Security** to add accounts and assign per-project Design/Publish/View/Operate permissions. Operator links require a separate operator sign-in. The current Windows preview includes this account system.
 
 The first build acquires the pinned workspace .NET SDK, embedded Python, NuGet dependencies and npm dependencies. SDK/cache files are kept under `.tools`, and the Windows Python runtime under `runtimes/python/windows-x64`. `build.ps1 -SkipRestore` reuses previously restored dependencies; it does not prepare a fresh machine.
 
@@ -212,7 +212,7 @@ Focused automated checks, all 24 portable package round trips and the documented
 node tools/build-workshops.mjs --version 2026.09.29.4
 ```
 
-The fresh `artifacts/workshops/2026.09.29.4/` folder contains individual projects and guides, checksums, compatibility metadata and `SparkStudio-Workshops-2026.09.29.4.zip`. Distribute the ZIP alongside a compatible installer release or as a separate workshop release; individual projects can be shared with their guides. End users import through **Projects → Import .sparkproj** without build tools. The original public preview installer predates the required feature baseline. See [building and verifying workshop releases](examples/README.md#building-and-verifying-a-distribution).
+The fresh `artifacts/workshops/2026.09.29.4/` folder contains individual projects and guides, checksums, compatibility metadata and `SparkStudio-Workshops-2026.09.29.4.zip`. Distribute the ZIP alongside a compatible installer release or as a separate workshop release; individual projects can be shared with their guides. End users import through **Projects → Import .sparkproj** without build tools. Use the current Windows preview and its matching workshop bundle; the original 0.1.0 installer predates the required feature baseline. See [building and verifying workshop releases](examples/README.md#building-and-verifying-a-distribution).
 
 ## Source layout and verification
 

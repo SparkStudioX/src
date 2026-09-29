@@ -7,6 +7,12 @@
 .auth-card h1 { font-size: 25px; margin: 8px 0 12px; letter-spacing: -.5px; }
 .auth-card > p { color: var(--text-secondary); line-height: 1.65; margin-bottom: 22px; }
 .auth-card .security-form > .button { width: 100%; justify-content: center; padding: 12px; }
+.auth-setup-help { margin: 0 0 24px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-subtle); font-size: 12px; line-height: 1.6; }
+.auth-setup-help h2 { margin: 0 0 8px; font-size: 15px; }
+.auth-setup-help p { margin: 8px 0; color: var(--text-secondary); }
+.auth-setup-help pre { margin: 12px 0; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); white-space: pre-wrap; }
+.auth-setup-help code { overflow-wrap: anywhere; font-size: 11px; user-select: text; }
+.auth-setup-help summary { cursor: pointer; color: var(--accent); font-weight: 600; }
 .auth-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .security-page { min-height: 100vh; background: var(--page-bg); padding: 30px max(24px, calc((100vw - 1240px) / 2)); }
 .security-header, .security-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; }

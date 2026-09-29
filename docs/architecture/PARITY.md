@@ -6,6 +6,12 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Setup guidance and Designer version display, 2026-09-29
+
+The first-run engineering page now identifies the Windows installer's default setup-code file, shows the administrator PowerShell command to read it, and explains that the code rather than the path belongs in the form. Portable/development/container guidance remains separate. Initial setup no longer focuses a lower form field and scrolls past those instructions. No setup-code value is exposed or fetched by the browser.
+
+The Designer gateway card separates connection status from a compact release version; full build metadata remains in its tooltip and diagnostics. A missing version is reported as unavailable. TypeScript and the production build passed. An isolated loopback browser test showed the setup instructions, full path and form; authenticated Designer showed the short version on its own line, retained its full build tooltip and had no card overflow or browser warnings/errors. This UI test used disposable data on 5091 and the preview.2 backend; the installed 5090 service was untouched. Screenshots remain in ignored `.data/test-evidence/setup-code-guidance.png` and `designer-short-version.png`.
+
 ## Windows installer readiness correction, 2026-09-29
 
 The actual `0.2.0-preview.1` service installation failed its 45-second readiness check: the helper polled authenticated `/api/health` without a session. Windows recorded service creation without a corresponding startup crash; the helper removed the newly created service after the timeout and retained `%ProgramData%\SparkStudio`. The earlier extraction tests did not exercise this installation check.

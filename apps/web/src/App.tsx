@@ -1200,7 +1200,9 @@ export default function App() {
             <span>Self-hosted · local workspace</span>
             <div className="local-card-details">
               <span>{connected ? "Connected" : "Reconnecting"}</span>
-              <span>v{health?.version || "0.1.0"}</span>
+              <span title={health?.version ? `Gateway build: ${health.version}` : undefined}>
+                {health?.version ? `v${health.version.split("+", 1)[0]}` : "Version unavailable"}
+              </span>
             </div>
           </div>
           <SessionIdentity placement="sidebar" onAccountSettings={() => setAccountSettingsOpen(true)} />

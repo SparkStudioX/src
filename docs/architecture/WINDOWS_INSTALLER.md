@@ -1,17 +1,17 @@
 # SparkStudio Windows preview installation guide
 
-Download the installer, checksum and optional workshops from the [v0.2.0-preview.2 release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.2). The Windows x64 package includes the gateway, .NET runtime, CPython, browser Designer/operator application and dependency notices. Running it requires no separate .NET SDK, Python or Node.js installation.
+Download the installer, checksum and optional workshops from the [v0.2.0-preview.3 release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.3). The Windows x64 package includes the gateway, .NET runtime, CPython, browser Designer/operator application and dependency notices. Running it requires no separate .NET SDK, Python or Node.js installation.
 
 This is an **unsigned preview for local evaluation**. Current-user extraction and execution on loopback are verified. An elevated preview.2 installer retry after a failed preview.1 installation also started the LocalService gateway successfully on one Windows host with retained ProgramData. Broader installation, upgrade recovery, uninstall, service-account secret encryption and ACL acceptance remain open. Docker and macOS are not part of this release.
 
-Preview.2 fixes a startup-check error in preview.1: the installer anonymously polled the protected `/api/health` endpoint and could report a 45-second timeout even when the gateway had started. The corrected check uses `/api/ready`, described below.
+Preview.3 adds Windows administrator instructions for finding the setup code and a compact Designer version label with the full build in its tooltip. It retains preview.2's fix for a startup-check error in preview.1: the installer anonymously polled the protected `/api/health` endpoint and could report a 45-second timeout even when the gateway had started. The corrected check uses `/api/ready`, described below.
 
 ## Verify the download
 
-The installer is `SparkStudio-Setup-0.2.0-preview.2-windows-x64-unsigned.exe`. Download its adjacent `.exe.sha256` from the same release and compare it with:
+The installer is `SparkStudio-Setup-0.2.0-preview.3-windows-x64-unsigned.exe`. Download its adjacent `.exe.sha256` from the same release and compare it with:
 
 ```powershell
-Get-FileHash .\SparkStudio-Setup-0.2.0-preview.2-windows-x64-unsigned.exe -Algorithm SHA256
+Get-FileHash .\SparkStudio-Setup-0.2.0-preview.3-windows-x64-unsigned.exe -Algorithm SHA256
 ```
 
 The published checksum identifies that executable; a rebuild can differ. Do not disable Windows security or organizational policy to run an unsigned package. Release notes record the tested source revision and package verification. The extracted `package-manifest.json` records bundled file hashes and build provenance.
@@ -21,7 +21,7 @@ The published checksum identifies that executable; a rebuild can differ. Do not 
 Run the downloaded installer with:
 
 ```powershell
-.\SparkStudio-Setup-0.2.0-preview.2-windows-x64-unsigned.exe /PORTABLE=1 /CURRENTUSER
+.\SparkStudio-Setup-0.2.0-preview.3-windows-x64-unsigned.exe /PORTABLE=1 /CURRENTUSER
 ```
 
 Choose an empty writable directory. This mode extracts files without creating a service, installation registration, Start-menu shortcuts or an uninstaller. From that directory, start the gateway using an unused loopback port and a separate writable data directory:
@@ -60,7 +60,7 @@ On Projects, **Settings** opens Gateway Settings. Designer has a **Gateway Setti
 
 ## Workshop examples
 
-Download `SparkStudio-Workshops-0.2.0-preview.2.zip` and verify its adjacent `.sha256`. It contains **24 portable `.sparkproj` workshops**, walkthroughs and compatibility metadata. Import a file from `projects/` through **Import .sparkproj** on Projects. Each import creates a new unpublished draft; review and explicitly publish it before opening its operator application.
+Download `SparkStudio-Workshops-0.2.0-preview.3.zip` and verify its adjacent `.sha256`. It contains **24 portable `.sparkproj` workshops**, walkthroughs and compatibility metadata. Import a file from `projects/` through **Import .sparkproj** on Projects. Each import creates a new unpublished draft; review and explicitly publish it before opening its operator application.
 
 Portable workshops use synthetic data and need no OPC UA server, SQL Server or internet connection. Python exercises use the bundled interpreter. Follow each guide's action permissions and unavailable-data exercises. Eight additional authored source examples need gateway resources or user-supplied assets; the catalog identifies them separately and they are not portable imports. See the [workshop guide](https://github.com/SparkStudioX/src/blob/main/examples/README.md).
 
@@ -80,10 +80,10 @@ Normal installation requests administrator elevation and is designed to register
 
 On the tested Windows host, the user completed elevated installation of preview.2 after preview.1's failed startup check, retaining `%ProgramData%\SparkStudio`. Windows reported the service running with automatic startup as `LocalService`, using the installed executable and the retained data directory on loopback port 5090. The installed version was `0.2.0-preview.2` from source revision `05cc9bf`; `/api/ready` returned HTTP 200 with caching disabled, exactly the four documented fields, a matching service process ID and `pythonAvailable: true`. This verifies that retry and startup on this host; it does not establish broad service lifecycle, secret encryption or ACL acceptance.
 
-Persistent service data belongs in `%ProgramData%\SparkStudio`. The installer configures a protected ACL for SYSTEM, Administrators and the service SID. For a fresh service installation, read the setup code from an elevated PowerShell terminal:
+Persistent service data belongs in `%ProgramData%\SparkStudio`. The installer configures a protected ACL for SYSTEM, Administrators and the service SID. For a fresh service installation, open PowerShell with **Run as administrator** on the gateway computer and read the setup code:
 
 ```powershell
-Get-Content "$env:ProgramData\SparkStudio\security\setup-code.txt"
+Get-Content -LiteralPath "$env:ProgramData\SparkStudio\security\setup-code.txt"
 ```
 
 The helper rejects conflicting/unowned services, occupied ports and machine-level runtime/data overrides. It does not stop an unrelated development gateway. Choose another port or deliberately stop that gateway first. Effective service-account access and ACL propagation still need acceptance testing.
@@ -98,7 +98,7 @@ Stop the gateway and back up its complete data directory before upgrading. Back 
 
 For service upgrades, use the same program directory. The helper attempts to preserve configuration and resume a previously running service if preparation fails, but provides no transactional rollback of replaced application files. Actual upgrade/recovery acceptance is pending.
 
-If preview.1 reported the 45-second startup timeout, retry with the preview.2 installer in the same program directory after backing up `%ProgramData%\SparkStudio`. The failed startup check retains that data, and retrying does not require deleting it. Use the installer to start the service; launching the executable directly from Program Files without an explicit writable `--DataDirectory` is a different startup path and can fail with access denied.
+If preview.1 reported the 45-second startup timeout, retry with the current installer in the same program directory after backing up `%ProgramData%\SparkStudio`. The failed startup check retains that data, and retrying does not require deleting it. Use the installer to start the service; launching the executable directly from Program Files without an explicit writable `--DataDirectory` is a different startup path and can fail with access denied.
 
 Service uninstall is designed to remove the owned service after confirmation and abort file removal if the helper fails. Persistent data is retained. Portable removal consists of stopping the process and removing only the extracted application directory; retain or deliberately remove the separate data directory. Actual service uninstall is unverified.
 

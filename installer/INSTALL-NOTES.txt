@@ -1,4 +1,4 @@
-SparkStudio 0.2.0-preview.2 - unsigned Windows preview
+SparkStudio 0.2.0-preview.3 - unsigned Windows preview
 
 This package includes the gateway, .NET runtime, browser Designer and operator application, and CPython. No separate SDK, Node.js or Python installation is required to run it.
 
@@ -6,9 +6,13 @@ Current-user extraction (/PORTABLE=1 /CURRENTUSER) is the verified evaluation pa
 
 On first launch, create an administrator using security/setup-code.txt in the gateway data directory. There are no default credentials. Projects require explicit publication before operators can open them. Accounts, project grants and gateway resources persist on disk.
 
-Normal installation requests elevation and is designed to create a LocalService Windows service on loopback, with data in C:\ProgramData\SparkStudio. The port can be changed in the wizard. No firewall rule or remote access is enabled. Actual elevated installation, service-account execution, upgrade recovery and uninstall require acceptance testing on a disposable Windows machine.
+For a Windows service installation, open PowerShell with Run as administrator on the gateway computer and run:
+Get-Content -LiteralPath "$env:ProgramData\SparkStudio\security\setup-code.txt"
+Paste the file's code, not its path, into Gateway setup code. Portable, development and container installations use security/setup-code.txt in their configured data directory. The file is removed after initial setup. Preview.3 displays these instructions in the setup form and shortens the Designer version label; the full build remains available in its tooltip.
 
-Preview.2 fixes preview.1's erroneous 45-second startup timeout caused by anonymously checking the protected /api/health endpoint. The installer now uses a direct-loopback-only /api/ready check for product, startup status, bundled Python and process ID. Health details and gateway diagnostics remain protected. Portable extraction and readiness tests do not establish actual elevated service installation acceptance.
+Normal installation requests elevation and is designed to create a LocalService Windows service on loopback, with data in C:\ProgramData\SparkStudio. The port can be changed in the wizard. No firewall rule or remote access is enabled. An elevated preview.2 retry after a failed preview.1 installation started successfully as LocalService on one Windows host with retained data. Broader installation, service-account secret encryption and ACL behavior, upgrade recovery and uninstall still require acceptance testing.
+
+This release retains preview.2's fix for preview.1's erroneous 45-second startup timeout caused by anonymously checking the protected /api/health endpoint. The installer uses a direct-loopback-only /api/ready check for product, startup status, bundled Python and process ID. Health details and gateway diagnostics remain protected. Portable extraction and readiness tests do not establish actual elevated service installation acceptance.
 
 After a preview.1 startup timeout, back up C:\ProgramData\SparkStudio and retry this installer in the same program directory. Existing data is retained; do not delete it to retry. Use the installer to start the service, or supply an explicit writable --DataDirectory when starting the executable directly.
 

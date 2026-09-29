@@ -213,12 +213,19 @@ function SignInForm({ setup }: { setup: boolean }) {
   }
   return <><div className="eyebrow">{setup ? "FIRST-TIME SETUP" : auth.audience === "operator" ? "OPERATOR ACCESS" : "ENGINEERING ACCESS"}</div><h1>{setup ? "Create your administrator" : "Sign in"}</h1>
     <p>{setup ? "Use the setup code saved on the gateway computer to create its first administrator." : auth.audience === "operator" ? "Open the operator application with your assigned project access." : "Access projects and engineering tools with your gateway account."}</p>
+    {setup && <section className="auth-setup-help" aria-labelledby="setup-code-heading">
+      <h2 id="setup-code-heading">Find your setup code</h2>
+      <p>On the gateway computer, open <strong>PowerShell</strong> with <strong>Run as administrator</strong>. For the Windows installer, run:</p>
+      <pre><code>{'Get-Content -LiteralPath "$env:ProgramData\\SparkStudio\\security\\setup-code.txt"'}</code></pre>
+      <p>The default file is <code>{"C:\\ProgramData\\SparkStudio\\security\\setup-code.txt"}</code>. Paste the code it contains into <strong>Gateway setup code</strong> below.</p>
+      <details><summary>Portable, development or container installation</summary><p>Read <code>security/setup-code.txt</code> inside your configured gateway data directory instead. The file is removed after you create the first administrator.</p></details>
+    </section>}
     {auth.notice && <p className="security-notice" role="status">{auth.notice}</p>}
     <form className="security-form" onSubmit={event => { event.preventDefault(); void submit(); }}>
-      <label>Username<input autoFocus autoComplete="username" required minLength={setup ? 3 : undefined} maxLength={64} pattern={setup ? "[A-Za-z0-9._\\-]{3,64}" : undefined} value={username} onChange={event => setUsername(event.target.value)} disabled={busy} /></label>
+      <label>Username<input autoFocus={!setup} autoComplete="username" required minLength={setup ? 3 : undefined} maxLength={64} pattern={setup ? "[A-Za-z0-9._\\-]{3,64}" : undefined} value={username} onChange={event => setUsername(event.target.value)} disabled={busy} /></label>
       {setup && <label>Display name<input autoComplete="name" maxLength={100} value={displayName} onChange={event => setDisplayName(event.target.value)} disabled={busy} /></label>}
       <label>Password<input type="password" autoComplete={setup ? "new-password" : "current-password"} required minLength={setup ? 12 : undefined} maxLength={256} value={password} onChange={event => setPassword(event.target.value)} disabled={busy} /></label>
-      {setup && <><label>Confirm password<input type="password" autoComplete="new-password" required maxLength={256} value={confirm} onChange={event => setConfirm(event.target.value)} disabled={busy} /></label><label>Gateway setup code<input autoComplete="off" required value={code} onChange={event => setCode(event.target.value)} disabled={busy} /><small>Read security/setup-code.txt in the gateway data directory. The code is available only on that computer.</small></label><p className="muted">Use 12–256 characters for the password. This account will manage users, gateway settings and project grants.</p></>}
+      {setup && <><label>Confirm password<input type="password" autoComplete="new-password" required maxLength={256} value={confirm} onChange={event => setConfirm(event.target.value)} disabled={busy} /></label><label>Gateway setup code<input autoComplete="off" required value={code} onChange={event => setCode(event.target.value)} disabled={busy} /><small>Paste the code from the local file shown above, not the file path.</small></label><p className="muted">Use 12–256 characters for the password. This account will manage users, gateway settings and project grants.</p></>}
       {error && <p className="security-error" role="alert">{error}</p>}<button className="button primary" disabled={busy}>{busy ? "Please wait…" : setup ? "Create administrator" : "Sign in"}</button>
     </form></>;
 }

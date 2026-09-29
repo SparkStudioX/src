@@ -316,7 +316,9 @@ button svg {
 }
 .local-card-details {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   border-top: 1px solid var(--nav-border);
   margin-top: 12px;
   padding-top: 10px;
@@ -325,6 +327,8 @@ button svg {
 }
 .local-card-details span:last-child {
   color: var(--nav-muted);
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 .workspace-account {
   border-top: 1px solid var(--nav-border);
