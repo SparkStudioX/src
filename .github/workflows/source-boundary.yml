@@ -25,3 +25,5 @@ jobs:
         run: node tools/check-source.mjs --history HEAD
       - name: Exercise the source boundary with disposable Git fixtures
         run: node tools/test-source-boundary.mjs
+      - name: Validate workshop catalog and portable packages offline
+        run: node tools/test-workshop-build.mjs

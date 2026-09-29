@@ -184,6 +184,16 @@ docker compose down
 
 Compose publishes host loopback only and retains a named data volume. Stop any other gateway using the configured host port first. Building requires dependency access; a prepared image can run without Internet access. Real connectors still need their configured local servers. Third-party Python packages, an offline wheelhouse and complete update/rollback procedures are future work.
 
+## Feature workshops
+
+The [workshop catalog](examples/README.md) covers 19 authored examples. Thirteen build into independent, importable `.sparkproj` projects; six require gateway tags or SQLite setup and are clearly listed separately. Each major feature should include a workshop, walkthrough, prerequisites and verification. The portable collection uses synthetic data and works without external servers or Internet access.
+
+```powershell
+node tools/build-workshops.mjs --version 2026.09.29
+```
+
+The fresh `artifacts/workshops/2026.09.29/` folder contains individual projects and guides, checksums, compatibility metadata and `SparkStudio-Workshops-2026.09.29.zip`. Distribute the ZIP alongside a compatible installer release or as a separate workshop release; individual projects can be shared with their guides. End users import through **Projects → Import .sparkproj** without build tools. The original public preview installer predates the required feature baseline. See [building and verifying workshop releases](examples/README.md#building-and-verifying-a-distribution).
+
 ## Source layout and verification
 
 Read the [source boundary guide](docs/SOURCE_BOUNDARY.md) and run `tools/install-source-hooks.ps1` after cloning. Never commit vendor reference material, private runtime data or generated packages.

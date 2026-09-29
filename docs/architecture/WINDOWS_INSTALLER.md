@@ -48,6 +48,8 @@ Uninstall is designed to remove the owned service only after confirmation and to
 
 ## Building and offline scope
 
+Feature workshops can accompany an installer as a separate ZIP or ship independently. Build them with `node tools/build-workshops.mjs --version <bundle-version>` and follow the [workshop release checks](../../examples/README.md#building-and-verifying-a-distribution). Individual `.sparkproj` imports require no Node.js or build tools. Workshop compatibility is recorded by feature baseline and tested source revision; the historical installer described above does not support the current collection. The installer build does not silently import examples into an existing gateway or include local development data.
+
 From the source repository root:
 
 ```powershell

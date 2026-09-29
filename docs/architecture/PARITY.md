@@ -6,6 +6,14 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) now
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Workshop distribution: local verification, 2026-09-29
+
+The [workshop catalog](../../examples/README.md) inventories 19 independently authored examples: 13 portable projects and six requiring explicit gateway setup. Major user-facing features now include a workshop, walkthrough, prerequisites and verification as part of completion. The offline builder creates individual draft-only `.sparkproj` files, user guides, compatibility/source metadata, SHA-256 checksums and a standalone ZIP under ignored `artifacts/workshops/`. These assets can accompany a compatible installer or ship as a separate workshop release. The original public preview installer predates the required feature baseline; no public release was uploaded for this change.
+
+Nine offline build checks passed, including all catalog entries, exact authored defaults, deterministic archives, dependency restrictions, unsafe paths and checksums. All 13 generated projects passed real gateway import as unpublished drafts, explicit publication, operator snapshot checks, sample-query execution and re-export. Fixture projects were archived, and gateway tag definitions and connection configurations remained unchanged. No imported action or script-resource event was invoked by the package verifier; the existing feature walkthrough checks remain separate evidence. Source policy passed 347 worktree entries and the source-boundary regression suite. CI now includes the offline workshop checks.
+
+Port 5090 continues to run the previously verified query-property package. This distribution workflow changes no application runtime behavior and does not advance D05; resource search and references remain the next application increment.
+
 ## Current named-query scalar properties: local verification, 2026-09-29
 
 Scalar property **fx** now offers **Named query**, with exactly one result row and a selected scalar column, typed containing-form parameter mappings, optional `value` transformation, explicit preview and on-change or polling refresh. Supported targets include presentation, process values and geometry across all 35 component types. Save, publication and package validation reject invalid targets, conflicting modes, update queries and incompatible definitions. See [QUERY_PROPERTIES.md](QUERY_PROPERTIES.md).

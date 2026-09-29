@@ -10,3 +10,5 @@ This checkout contains independently authored SparkStudio application source onl
 - Keep the local hooks installed and the source-boundary CI check enabled. A passing automated check supplements human review; it does not establish provenance by itself.
 
 Build and test commands are documented in README.md. Existing source-relative paths must remain portable to a fresh clone.
+
+For each substantial user-facing feature, add or update an independently authored workshop and its entry in `examples/catalog.json`. Include a short walkthrough, expected behavior, prerequisites and compatibility. Validate portable `.sparkproj` workshops through import, explicit publication and re-export before release; classify examples that need gateway setup separately. Never build distributable examples from development project exports, private reference projects or live gateway data. Workshop packages and bundles belong under ignored `artifacts/workshops/` and ship as release assets, not source commits.
