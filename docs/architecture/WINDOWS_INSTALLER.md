@@ -1,17 +1,17 @@
 # SparkStudio Windows preview installation guide
 
-Download the installer, checksum and optional workshops from the [v0.2.0-preview.3 release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.3). The Windows x64 package includes the gateway, .NET runtime, CPython, browser Designer/operator application and dependency notices. Running it requires no separate .NET SDK, Python or Node.js installation.
+Download the installer, checksum and optional workshops from the [v0.2.0-preview.4 release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.4). The Windows x64 package includes the gateway, .NET runtime, CPython, browser Designer/operator application and dependency notices. Running it requires no separate .NET SDK, Python or Node.js installation.
 
 This is an **unsigned preview for local evaluation**. Current-user extraction and execution on loopback are verified. An elevated preview.2 installer retry after a failed preview.1 installation also started the LocalService gateway successfully on one Windows host with retained ProgramData. Broader installation, upgrade recovery, uninstall, service-account secret encryption and ACL acceptance remain open. Docker and macOS are not part of this release.
 
-Preview.3 adds Windows administrator instructions for finding the setup code and a compact Designer version label with the full build in its tooltip. It retains preview.2's fix for a startup-check error in preview.1: the installer anonymously polled the protected `/api/health` endpoint and could report a 45-second timeout even when the gateway had started. The corrected check uses `/api/ready`, described below.
+Preview.4 waits for the actual owned gateway process to exit before copying application files. It retains preview.3's Windows administrator instructions for finding the setup code and compact Designer version label with the full build in its tooltip. It also retains preview.2's fix for a startup-check error in preview.1: the installer anonymously polled the protected `/api/health` endpoint and could report a 45-second timeout even when the gateway had started. The corrected check uses `/api/ready`, described below.
 
 ## Verify the download
 
-The installer is `SparkStudio-Setup-0.2.0-preview.3-windows-x64-unsigned.exe`. Download its adjacent `.exe.sha256` from the same release and compare it with:
+The installer is `SparkStudio-Setup-0.2.0-preview.4-windows-x64-unsigned.exe`. Download its adjacent `.exe.sha256` from the same release and compare it with:
 
 ```powershell
-Get-FileHash .\SparkStudio-Setup-0.2.0-preview.3-windows-x64-unsigned.exe -Algorithm SHA256
+Get-FileHash .\SparkStudio-Setup-0.2.0-preview.4-windows-x64-unsigned.exe -Algorithm SHA256
 ```
 
 The published checksum identifies that executable; a rebuild can differ. Do not disable Windows security or organizational policy to run an unsigned package. Release notes record the tested source revision and package verification. The extracted `package-manifest.json` records bundled file hashes and build provenance.
@@ -21,7 +21,7 @@ The published checksum identifies that executable; a rebuild can differ. Do not 
 Run the downloaded installer with:
 
 ```powershell
-.\SparkStudio-Setup-0.2.0-preview.3-windows-x64-unsigned.exe /PORTABLE=1 /CURRENTUSER
+.\SparkStudio-Setup-0.2.0-preview.4-windows-x64-unsigned.exe /PORTABLE=1 /CURRENTUSER
 ```
 
 Choose an empty writable directory. This mode extracts files without creating a service, installation registration, Start-menu shortcuts or an uninstaller. From that directory, start the gateway using an unused loopback port and a separate writable data directory:
@@ -60,7 +60,7 @@ On Projects, **Settings** opens Gateway Settings. Designer has a **Gateway Setti
 
 ## Workshop examples
 
-Download `SparkStudio-Workshops-0.2.0-preview.3.zip` and verify its adjacent `.sha256`. It contains **24 portable `.sparkproj` workshops**, walkthroughs and compatibility metadata. Import a file from `projects/` through **Import .sparkproj** on Projects. Each import creates a new unpublished draft; review and explicitly publish it before opening its operator application.
+Download `SparkStudio-Workshops-0.2.0-preview.4.zip` and verify its adjacent `.sha256`. It contains **24 portable `.sparkproj` workshops**, walkthroughs and compatibility metadata. Import a file from `projects/` through **Import .sparkproj** on Projects. Each import creates a new unpublished draft; review and explicitly publish it before opening its operator application.
 
 Portable workshops use synthetic data and need no OPC UA server, SQL Server or internet connection. Python exercises use the bundled interpreter. Follow each guide's action permissions and unavailable-data exercises. Eight additional authored source examples need gateway resources or user-supplied assets; the catalog identifies them separately and they are not portable imports. See the [workshop guide](https://github.com/SparkStudioX/src/blob/main/examples/README.md).
 
@@ -98,9 +98,21 @@ Stop the gateway and back up its complete data directory before upgrading. Back 
 
 For service upgrades, use the same program directory. The helper attempts to preserve configuration and resume a previously running service if preparation fails, but provides no transactional rollback of replaced application files. Actual upgrade/recovery acceptance is pending.
 
+Preview.3 could reach file copying after Windows reported the service stopped but before its process exited. This caused an `Access denied` error replacing `clrjit.dll` and could require **Retry** after the old process finished exiting; a smooth preview.3 upgrade was not verified. Preview.4 waits for the actual owned gateway process to exit before allowing file copying. A stopped service status alone is insufficient to establish that its files are unlocked.
+
 If preview.1 reported the 45-second startup timeout, retry with the current installer in the same program directory after backing up `%ProgramData%\SparkStudio`. The failed startup check retains that data, and retrying does not require deleting it. Use the installer to start the service; launching the executable directly from Program Files without an explicit writable `--DataDirectory` is a different startup path and can fail with access denied.
 
 Service uninstall is designed to remove the owned service after confirmation and abort file removal if the helper fails. Persistent data is retained. Portable removal consists of stopping the process and removing only the extracted application directory; retain or deliberately remove the separate data directory. Actual service uninstall is unverified.
+
+## Reset accounts with a reversible local backup
+
+Use this only when deliberately resetting all accounts. It resets users, password hashes, project grants and saved security settings, including the public operator base URL and project tag-prefix restrictions. Projects, connections and the audit log remain in place. Existing sessions end when the gateway stops.
+
+1. On the gateway computer, use an administrator account to stop the SparkStudio service and wait for its actual gateway process to exit. Verify the service's process ID and executable before stopping it; do not stop an unrelated gateway. For portable use, stop its foreground process instead.
+2. In the configured data directory, rename `security/identities.json` to a unique backup name such as `identities.backup-20260929-153000.json`. Keep it inside the protected `security` directory and retain its access restrictions; it contains password hashes and grants. Do not delete it or edit its users list to `[]`: an existing empty identity store is invalid and prevents startup.
+3. Restart the gateway. Without `identities.json`, it returns to initial setup and creates `security/setup-code.txt`. Read that code locally as described above, create the new administrator, and deliberately recreate accounts, grants and security settings.
+
+To undo the reset, stop the service and wait for its gateway process to exit again. Preserve any newly created identity store under another unique protected backup name, restore the original backup as `identities.json`, and restart. This restores the old accounts, grants and saved security settings; it does not restore old sessions or roll back project changes.
 
 ## Offline use and scripting
 

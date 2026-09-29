@@ -6,6 +6,16 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Windows upgrade shutdown barrier, 2026-09-29
+
+An elevated preview.3 upgrade over a running preview.2 service reached file copying about 110 milliseconds after the service reported stopped, while its process still held `clrjit.dll`. The installer displayed Access denied; a later Retry succeeded. Preview.3 was held from public release. Service status alone was not a sufficient file-replacement barrier.
+
+Preview.4 pins the verified, owned gateway process before sending STOP and waits for both the service to stop and that exact process to exit within one 40-second deadline. It rejects ambiguous pending service states before copying and never terminates a process to force an upgrade. An already-stopped service does not expose a valid former PID; the helper does not guess or kill a lingering process from an externally initiated stop.
+
+Independent source review and an isolated helper build passed. The helper passed 21 ownership checks, 18 readiness checks and six shutdown checks, including a real mapped Windows DLL that stays locked after a simulated stopped notification, a bounded timeout that leaves the process alive, and executable-identity rejection. These checks do not establish elevated service-upgrade acceptance; the exact preview.4 package and running-service upgrade are the next verification gates.
+
+A reversible account-reset procedure was verified using disposable extracted-gateway data only: moving `security/identities.json` to a protected backup returned setupRequired and generated a new local setup code. All 118 tracked project, asset, catalog, connection, tag and audit files were unchanged; the backup content and ACL were retained. The temporary gateway was stopped after the check. Installed accounts and ProgramData were not modified. See the [reset instructions](WINDOWS_INSTALLER.md#reset-accounts-with-a-reversible-local-backup).
+
 ## Setup guidance and Designer version display, 2026-09-29
 
 The first-run engineering page now identifies the Windows installer's default setup-code file, shows the administrator PowerShell command to read it, and explains that the code rather than the path belongs in the form. Portable/development/container guidance remains separate. Initial setup no longer focuses a lower form field and scrolls past those instructions. No setup-code value is exposed or fetched by the browser.

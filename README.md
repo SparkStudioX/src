@@ -2,7 +2,7 @@
 
 SparkStudio is an early-preview industrial application builder with a browser designer, a published operator runtime and a self-hosted gateway. The application uses ASP.NET Core/.NET 10, React/TypeScript and CPython 3; it does not require Java or Jython.
 
-[Website](https://sparkstudiox.com/) · [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.3) · [Product scope](docs/architecture/PRODUCT.md) · [Verification and roadmap](docs/architecture/PARITY.md)
+[Website](https://sparkstudiox.com/) · [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.4) · [Product scope](docs/architecture/PRODUCT.md) · [Verification and roadmap](docs/architecture/PARITY.md)
 
 The current source includes **local accounts, separate engineering/operator sessions, server-enforced project permissions and a bounded audit trail**. First run requires administrator setup on the gateway computer. Remote account/API access requires HTTPS; network deployment and service lifecycle acceptance remain separate gates. Python scripts run with the gateway account's operating-system access; worker processes are not a security sandbox. See the [security guide](docs/architecture/SECURITY.md).
 
@@ -36,7 +36,7 @@ The current source includes query-backed forms and scalar properties, single-sel
 
 ## Run on Windows
 
-For a prepared package, download the installer and checksum from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.3). It bundles .NET, Python and browser assets. Preview.3 adds setup-code instructions and a compact Designer version label. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md): extraction, application execution and an elevated preview.2 service-install retry are verified on one Windows host; broader service lifecycle, upgrade recovery and uninstall acceptance remain open.
+For a prepared package, download the installer and checksum from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.4). It bundles .NET, Python and browser assets. Preview.4 waits for the owned gateway process to exit before replacing files, and retains the setup-code instructions and compact Designer version label added in preview.3. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md): extraction, application execution and an elevated preview.2 service-install retry are verified on one Windows host; broader service lifecycle, upgrade recovery and uninstall acceptance remain open.
 
 For development, use Windows x64 with Node/npm available. Node 22.17.1 was used for the recorded checks. Run from the repository root in PowerShell:
 

@@ -28,6 +28,7 @@ internal static class Program
             var action = options.GetValueOrDefault("action") ?? throw new ArgumentException("Missing --action.");
             if (action != "probe" && options.ContainsKey("process-id")) throw new ArgumentException("--process-id is supported only by the read-only probe action.");
             if (action == "self-test") { await SelfTestAsync(); return 0; }
+            if (action == "shutdown-test-child") { ShutdownTestChild(options.GetValueOrDefault("install-dir") ?? ""); return 0; }
             var directory = ValidateDirectory(options.GetValueOrDefault("install-dir") ?? throw new ArgumentException("Missing --install-dir."));
             if (!int.TryParse(options.GetValueOrDefault("port", "5090"), out var port) || port is < 1 or > 65535)
                 throw new ArgumentException("Port must be an integer between 1 and 65535.");
@@ -62,7 +63,7 @@ internal static class Program
                 case "prepare":
                     ProbePort(port, existing, registration);
                     var running = existing is not null && existing.State != Native.Stopped;
-                    if (service is not null) Native.StopAndWait(service);
+                    if (service is not null) Native.StopAndWait(service, directory);
                     try { ProbePort(port, null, null); }
                     catch { if (running && service is not null) Native.StartAndWait(service); throw; }
                     result = running ? "stopped" : "ready";
@@ -84,7 +85,7 @@ internal static class Program
                 default:
                     if (service is not null)
                     {
-                        Native.StopAndWait(service);
+                        Native.StopAndWait(service, directory);
                         Native.DeleteChecked(service);
                     }
                     if (registration is not null)
@@ -228,13 +229,13 @@ internal static class Program
             {
                 if (created is not null)
                 {
-                    Native.StopAndWait(created);
+                    Native.StopAndWait(created, directory);
                     Native.DeleteChecked(created);
                     if (previous is null) Registry.LocalMachine.DeleteSubKeyTree(RegistryPath, false); else SaveRegistration(previous);
                 }
                 else if (existing is not null && previous is not null)
                 {
-                    Native.StopAndWait(existing);
+                    Native.StopAndWait(existing, directory);
                     Native.Configure(existing, Command(previous.InstallDirectory, previous.Port));
                     SaveRegistration(previous);
                 }
@@ -343,6 +344,74 @@ internal static class Program
         finally { listener.Stop(); }
         Console.WriteLine($"PASS {checks} installer ownership, path, argument and occupied-port checks; no service or registration was changed.");
         await ReadinessSelfTestAsync();
+        await ShutdownSelfTestAsync();
+    }
+
+    // A disposable diagnostic child maps an ordinary copied DLL so the self-test
+    // exercises real Windows image-file locks without creating or stopping a service.
+    private static void ShutdownTestChild(string directory)
+    {
+        var path = Path.Combine(ValidateDirectory(directory), "shutdown-test.dll");
+        var library = NativeLibrary.Load(path);
+        try
+        {
+            Console.WriteLine("image-loaded");
+            if (Console.ReadLine() != "stop") return;
+            Console.WriteLine("service-stopped");
+            Thread.Sleep(700); // SCM notification can precede process teardown.
+        }
+        finally { NativeLibrary.Free(library); }
+    }
+
+    private static async Task ShutdownSelfTestAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "SparkStudio-shutdown-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var image = Path.Combine(directory, "shutdown-test.dll");
+        File.Copy(Path.Combine(Environment.SystemDirectory, "version.dll"), image);
+        var start = new ProcessStartInfo(Environment.ProcessPath ?? throw new InvalidOperationException("Missing helper executable path."))
+        { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        start.ArgumentList.Add("--action"); start.ArgumentList.Add("shutdown-test-child");
+        start.ArgumentList.Add("--install-dir"); start.ArgumentList.Add(directory);
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("Unable to start isolated shutdown fixture.");
+        var checks = 0;
+        try
+        {
+            if (await process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(10)) != "image-loaded")
+                throw new InvalidOperationException("The isolated shutdown fixture did not map its native image.");
+            using var pinned = Native.PinProcess((uint)process.Id, Environment.ProcessPath!);
+            try { File.Delete(image); throw new InvalidOperationException("The native image fixture did not hold a Windows file lock."); }
+            catch (UnauthorizedAccessException) { checks++; }
+            catch (IOException) { checks++; }
+            try { Native.WaitForProcessExit(pinned, 40); throw new InvalidOperationException("A live process was accepted as exited."); }
+            catch (TimeoutException) { if (process.HasExited) throw new InvalidOperationException("Timeout terminated the diagnostic process."); checks++; }
+            await process.StandardInput.WriteLineAsync("stop");
+            await process.StandardInput.FlushAsync();
+            if (await process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(10)) != "service-stopped")
+                throw new InvalidOperationException("The shutdown fixture did not publish its early stopped notification.");
+            var wait = Stopwatch.StartNew();
+            Native.WaitForStoppedAndExited(() => Native.Stopped, pinned, Stopwatch.StartNew());
+            if (wait.ElapsedMilliseconds < 350 || !process.HasExited || process.ExitCode != 0)
+                throw new InvalidOperationException("Reported service stop was confused with native process exit.");
+            checks++;
+            File.Delete(image);
+            if (File.Exists(image)) throw new InvalidOperationException("The mapped native image remained locked after the process exited.");
+            checks++;
+            Native.WaitForProcessExit(pinned, 0); // Waiting on the original handle remains valid after exit.
+            checks++;
+            try { using var mismatch = Native.PinProcess((uint)Environment.ProcessId, Path.Combine(directory, "unrelated.exe")); throw new InvalidOperationException("An unrelated process image was accepted."); }
+            catch (ArgumentException) { checks++; }
+            Console.WriteLine($"PASS {checks} installer process-exit, early service-stop, native image-lock, bounded timeout and process-identity checks; no service or registration was changed.");
+        }
+        finally
+        {
+            // Close input to let our own fixture exit naturally even when an assertion
+            // fails. Never terminate a service or another process to pass a test.
+            process.StandardInput.Close();
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            if (File.Exists(image)) File.Delete(image);
+            Directory.Delete(directory);
+        }
     }
 
     private static async Task ReadinessSelfTestAsync()
@@ -482,11 +551,63 @@ internal static class Native
         Wait(service, Running);
     }
 
-    internal static void StopAndWait(ServiceHandle service)
+    internal static void StopAndWait(ServiceHandle service, string directory)
     {
-        if (Status(service).State == Stopped) return;
-        if (!ControlService(service, 1, out _) && Marshal.GetLastWin32Error() != ServiceNotActive) throw new Win32Exception();
-        Wait(service, Stopped);
+        var observed = ProcessStatus(service);
+        if (observed.State == Stopped) return;
+        // Pending states do not guarantee a valid SCM process ID. Do not guess a
+        // process or start replacing files while another stop/start is in progress.
+        if (observed.State is not (Running or 7) || observed.ProcessId == 0)
+            throw new InvalidOperationException("The SparkStudio service is changing state. Wait for it to finish, then retry setup. Program files have not been replaced by this step.");
+        using var process = PinProcess(observed.ProcessId, Path.Combine(directory, "SparkStudio.Gateway.exe"));
+        var confirmed = ProcessStatus(service);
+        if (confirmed.State != Stopped && confirmed.ProcessId != observed.ProcessId)
+            throw new InvalidOperationException("The SparkStudio service process changed before shutdown. Retry setup after its state is stable.");
+        var deadline = Stopwatch.StartNew();
+        if (confirmed.State is not (Stopped or 3) && !ControlService(service, 1, out _) && Marshal.GetLastWin32Error() != ServiceNotActive)
+            throw new Win32Exception();
+        WaitForStoppedAndExited(() => Status(service).State, process, deadline);
+        if (Status(service).State != Stopped)
+            throw new InvalidOperationException("The SparkStudio service restarted during shutdown. Setup has not continued; check the service before retrying.");
+    }
+
+    internal static SafeProcessHandle PinProcess(uint processId, string expectedExecutable)
+    {
+        const uint synchronizeAndQuery = 0x00100000 | 0x1000;
+        var process = OpenProcess(synchronizeAndQuery, false, processId);
+        if (process.IsInvalid) { var error = Marshal.GetLastWin32Error(); process.Dispose(); throw new Win32Exception(error); }
+        try
+        {
+            var path = new System.Text.StringBuilder(32768);
+            var length = path.Capacity;
+            if (!QueryFullProcessImageName(process, 0, path, ref length)) throw new Win32Exception();
+            if (!Path.GetFullPath(path.ToString()).Equals(Path.GetFullPath(expectedExecutable), StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("The service process does not match the owned gateway executable. No process was stopped or terminated.");
+            return process;
+        }
+        catch { process.Dispose(); throw; }
+    }
+
+    internal static void WaitForStoppedAndExited(Func<uint> serviceState, SafeProcessHandle process, Stopwatch deadline)
+    {
+        while (serviceState() != Stopped)
+        {
+            if (deadline.ElapsedMilliseconds >= 40000)
+                throw new TimeoutException("The SparkStudio service did not stop within 40 seconds. No process was terminated. Wait for shutdown to finish before retrying setup.");
+            Thread.Sleep(100);
+        }
+        // SERVICE_STOPPED is a notification, not a process-exit barrier. Retain
+        // the original kernel handle so PID reuse cannot change what we wait on.
+        WaitForProcessExit(process, (int)Math.Max(0, 40000 - deadline.ElapsedMilliseconds));
+    }
+
+    internal static void WaitForProcessExit(SafeProcessHandle process, int timeoutMilliseconds)
+    {
+        var result = WaitForSingleObject(process, checked((uint)timeoutMilliseconds));
+        if (result == 0) return;
+        if (result == 258)
+            throw new TimeoutException("The SparkStudio gateway process has not finished exiting. Setup has not continued and no process was terminated. Wait for shutdown to finish before retrying setup.");
+        throw new Win32Exception();
     }
 
     private static void Wait(ServiceHandle service, uint desired)
@@ -508,8 +629,14 @@ internal static class Native
 
     internal static uint RunningProcessId(ServiceHandle service)
     {
-        if (!QueryServiceStatusEx(service, 0, out var status, Marshal.SizeOf<ServiceStatusProcess>(), out _)) throw new Win32Exception();
+        var status = ProcessStatus(service);
         return status.State == Running ? status.ProcessId : 0;
+    }
+
+    private static ServiceStatusProcess ProcessStatus(ServiceHandle service)
+    {
+        if (!QueryServiceStatusEx(service, 0, out var status, Marshal.SizeOf<ServiceStatusProcess>(), out _)) throw new Win32Exception();
+        return status;
     }
 
     internal static void DeleteChecked(ServiceHandle service) { if (!DeleteService(service)) throw new Win32Exception(); }
@@ -541,4 +668,7 @@ internal static class Native
     [DllImport("advapi32.dll", SetLastError = true)] private static extern bool ControlService(ServiceHandle service, uint control, out ServiceStatus status);
     [DllImport("advapi32.dll", SetLastError = true)] private static extern bool DeleteService(ServiceHandle service);
     [DllImport("advapi32.dll", SetLastError = true)] internal static extern bool CloseServiceHandle(IntPtr handle);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern SafeProcessHandle OpenProcess(uint access, bool inheritHandle, uint processId);
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] private static extern bool QueryFullProcessImageName(SafeProcessHandle process, uint flags, System.Text.StringBuilder path, ref int length);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern uint WaitForSingleObject(SafeProcessHandle process, uint milliseconds);
 }
