@@ -2,24 +2,32 @@
 
 Each major user-facing feature should ship with an independently authored workshop project, a short exercise guide, compatibility information and a verified import/publish/runtime check. Workshops serve as both learning material and reproducible acceptance examples. Use synthetic data and make any gateway setup or writes explicit.
 
-[catalog.json](catalog.json) is the machine-readable inventory of all 22 source examples. Sixteen are portable project workshops; six require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
+[catalog.json](catalog.json) is the machine-readable inventory of all 31 source examples. Twenty-four are portable project workshops; seven require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
 
 ## Use a downloaded workshop
 
 1. Use the SparkStudio build identified by the workshop bundle, or a newer compatible build with its listed features. The first `v0.1.0-preview.1` installer predates this collection. A package's format version describes the archive, not the feature set supported by an older application.
 2. Sign in to Projects as a gateway administrator and choose **Import .sparkproj**. Importing a `.sparkproj` creates a new, unpublished project; it does not replace an existing application or configure gateway resources.
-3. Open the new project in Designer. Review its screens, bindings and scripts, and follow the supplied workshop guide. Preview is useful for checking the authored interactions.
+3. Open the new project in Designer. Review its screens, bindings and scripts, and follow the supplied workshop guide. Preview starts in **Live read-only**: native local inputs, pure bindings, navigation and read queries work; authored browser JavaScript and Python actions are blocked. To exercise those scripts, a gateway administrator must explicitly enable **Live actions**, or you can use the explicitly published operator application with its required permissions. Changing Preview modes resets its forms and popup; leaving Preview revokes its temporary capability.
 4. Publish the project, grant the intended user View access and, where Python buttons are part of the exercise, Operate access. Open its operator application and complete the exercise there too. Engineering and operator sign-in are separate sessions.
 5. Repeat an exercise by reopening the application or importing a fresh copy. Browser session values are not saved in the package. Examples that write memory tags need their explicitly declared gateway values reset separately.
 
 The portable collection needs no OPC UA server, SQL Server, external database or internet connection during use. Query properties uses the gateway's built-in synthetic sample provider. Process displays and process graphics use deliberately undefined synthetic tag paths for their unavailable-data exercises; leave those paths undefined as their guides specify. Read-only Python preview buttons need the Python runtime shipped with the matching gateway package. Browser-only workshops do not depend on Python actions.
 
-Project packages carry saved screens, templates, queries, script drafts and referenced local images. They do not contain accounts, grants, credentials, connection configuration, tag definitions or values, databases, active publications or live browser state. See [project packages](../docs/architecture/PROJECTS.md) for the complete format and import rules.
+Project packages carry saved screens, templates, queries, script drafts, styles, translations, authoring defaults and referenced local images. They do not contain accounts, grants, credentials, connection configuration, tag definitions or values, databases, active publications/history or live browser state. See [project packages](../docs/architecture/PROJECTS.md) for the complete format and import rules.
 
 ## Portable collection
 
 | Workshop | What to try | Python actions |
 | --- | --- | --- |
+| [Canvas precision](canvas-precision.json) | Select by type, match grouped dimensions and inspect numeric grid coordinates. | None |
+| [Reusable visual styles](visual-styles.json) | Share style resources, compare local/bound overrides and inspect protected references. | None |
+| [Preview communication](preview-communication.json) | Verify default action denial, explicitly enable temporary Live actions and reset back to read-only. | Optional return-only messages |
+| [Publication history](publication-history.json) | Restore an earlier operator snapshot while preserving the current Designer draft. | None |
+| [Designer diagnostics](designer-diagnostics.json) | Capture intentional property failures, filter their messages and open the owning controls. | None; optional deliberate browser-event failure |
+| [Offline caption translations](localization.json) | Switch languages while preserving form values; inspect missing-translation fallback. | None |
+| [Canvas authoring defaults](authoring-defaults.json) | Set new-document sizes and grid defaults while existing geometry stays unchanged. | None |
+| [Gateway operations](gateway-operations.json) | Inspect the administrator inventory, disposable sessions and local support diagnostics. | None |
 | [Bulk replacement](bulk-replacement.json) | Preview selected text replacements, preserve form values and undo a whole batch. | None |
 | [Resource changes](resource-changes.json) | Preview renames and deletion impact, inspect blockers and undo changes. | Read-only message button |
 | [Project resource search](project-search.json) | Find resources, follow structured references and distinguish script-text matches. | Read-only message button |
@@ -41,10 +49,11 @@ The catalog records a common verified feature baseline by source commit rather t
 
 ## Examples that require gateway setup
 
-These remain useful authored source fixtures, but are excluded from the standalone portable collection. A raw example JSON file is not a `.sparkproj` import file. The six examples below require deliberate setup because a project package cannot provide the gateway resources they use.
+These remain useful authored source fixtures, but are excluded from the standalone portable collection. A raw example JSON file is not a `.sparkproj` import file. The seven examples below require deliberate setup because their gateway resources or chosen image files are not supplied by these source fixtures.
 
 | Source example | Additional setup | Runtime writes |
 | --- | --- | --- |
+| [Asset library and replacements](asset-library.json) | Bring/upload two local images and assign all three authored image references before publishing. | No equipment/data writes; Designer uploads assets and changes selected image references. |
 | [Operator form](application-form.json) | Four synthetic `Application` memory tags. | Explicit Python save writes those tags. |
 | [Operator inputs](operator-inputs.json) | Six synthetic `InputWorkshop` memory tags. | Explicit Python save writes those tags. |
 | [Expression bindings](property-bindings.json) | One synthetic Boolean `BindingWorkshop/Permit` memory tag. | None; the Python action only returns form values. |
@@ -54,7 +63,7 @@ These remain useful authored source fixtures, but are excluded from the standalo
 
 The generic `tools/load-example.mjs <id>` loader is a development tool for an authenticated local gateway on port 5090 or 5091. It backs up and adds missing resources to the **default project**, preserves existing resource IDs and tag values, and leaves the draft unpublished unless `--publish` is supplied. It cannot retarget an arbitrary project. Prefer portable imports for the collection above. The [security verification guide](../docs/architecture/SECURITY.md#verification-commands) describes authentication for an isolated test gateway; there is no unauthenticated loader bypass.
 
-SQLite data controls instead uses `tools/load-data-controls-example.mjs`. This creates and immediately publishes a separate project and creates its reserved sample connection/database; it refuses existing configured resources. Read the catalog's prerequisites before running either kind of loader. Use an isolated development gateway for examples that configure shared tags or connections.
+SQLite data controls instead uses `tools/load-data-controls-example.mjs`. This creates and immediately publishes a separate project and creates its reserved sample connection/database; it refuses existing configured resources. The asset-library fixture requires two user-selected local images and complete assignments before publication; its configured project can then be exported through the normal project package workflow. Read the catalog's prerequisites before running either kind of loader. Use an isolated development gateway for examples that configure shared tags or connections. The Gateway operations session-revocation exercise requires a clearly identified disposable sign-in.
 
 ## Building and verifying a distribution
 

@@ -13,7 +13,7 @@ public static class SparkProjectPackage
     public const int MaximumAssets = 512;
     private const int MaximumEntries = 4 + MaximumAssets * 2;
     private static readonly string[] RequiredEntries = ["manifest.json", "project.json", "queries.json", "scripts-draft.json"];
-    private static readonly string[] ProjectFields = ["id", "name", "revision", "parameters", "screens", "templates", "navigation", "sessionState"];
+    private static readonly string[] ProjectFields = ["id", "name", "revision", "parameters", "screens", "templates", "navigation", "sessionState", "styles", "authoringDefaults", "localization"];
     private static readonly Regex AssetEntry = new(@"\Aassets/([a-f0-9]{64})\.(json|bin)\z", RegexOptions.CultureInvariant);
     private static readonly Regex AssetId = new(@"\A[a-f0-9]{64}\z", RegexOptions.CultureInvariant);
     private static readonly Regex ParameterName = new(@"\A@?[A-Za-z_][A-Za-z0-9_]{0,127}\z", RegexOptions.CultureInvariant);

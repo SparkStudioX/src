@@ -15,6 +15,7 @@ export interface SelectionBounds extends Point, CanvasSize {}
 export type ComponentSelection = Iterable<string>;
 export type Alignment = "left" | "hcenter" | "right" | "top" | "vcenter" | "bottom";
 export type Distribution = "horizontal" | "vertical";
+export type MatchingSize = "width" | "height" | "both";
 
 export interface DuplicateOptions {
   offset?: Point;
@@ -80,6 +81,18 @@ export function toggleGroupSelection(components: readonly CanvasComponent[], sel
   return components.filter(component => selected.has(component.id)).map(component => component.id);
 }
 
+/** Type selection is local to one document and keeps saved groups atomic. */
+export function selectComponentType(components: readonly CanvasComponent[], type: string): string[] {
+  return expandGroupSelection(components, components.filter(component => component.type === type).map(component => component.id));
+}
+
+/** Zero disables the grid; custom grids are whole design pixels up to 128. */
+export function parseGridSize(value: string): number | null {
+  if (!/^\d+$/.test(value.trim())) return null;
+  const size = Number(value);
+  return Number.isSafeInteger(size) && size >= 0 && size <= 128 ? size : null;
+}
+
 export function groupSelected(components: readonly CanvasComponent[], selectedIds: ComponentSelection, groupId: string): CanvasComponent[] {
   const ids = new Set(expandGroupSelection(components, selectedIds));
   const selected = components.filter(component => ids.has(component.id));
@@ -124,6 +137,46 @@ function arrangementUnits(components: readonly CanvasComponent[], selectedIds: C
 
 export function arrangementCount(components: readonly CanvasComponent[], selectedIds: ComponentSelection): number {
   return arrangementUnits(components, selectedIds).length;
+}
+
+/** Match the first selected unit in layer order without moving its origin.
+ * Groups scale on requested axes. Reject the whole edit if any target cannot fit,
+ * rather than quietly producing different sizes or partially changing selection.
+ */
+export function matchSelectedSize(
+  components: readonly CanvasComponent[], selectedIds: ComponentSelection,
+  dimension: MatchingSize, canvas: CanvasSize,
+): { components: CanvasComponent[]; error?: string } {
+  const units = arrangementUnits(components, selectedIds);
+  if (units.length < 2 || !validCanvas(canvas) || !["width", "height", "both"].includes(dimension)) return { components: [...components] };
+  const reference = units[0].bounds;
+  const sizing = new Map<string, { bounds: SelectionBounds; scaleX: number; scaleY: number; width: number; height: number; single: boolean }>();
+  for (const unit of units.slice(1)) {
+    const scaleX = dimension === "height" ? 1 : reference.width / unit.bounds.width;
+    const scaleY = dimension === "width" ? 1 : reference.height / unit.bounds.height;
+    if (!Number.isFinite(scaleX) || !Number.isFinite(scaleY))
+      return { components: [...components], error: "The selected geometry cannot be resized safely. Correct its dimensions in the property sheet first." };
+    const width = dimension === "height" ? unit.bounds.width : reference.width;
+    const height = dimension === "width" ? unit.bounds.height : reference.height;
+    if (unit.bounds.x < 0 || unit.bounds.y < 0 || unit.bounds.x + width > canvas.width || unit.bounds.y + height > canvas.height)
+      return { components: [...components], error: "The matching size would extend beyond the canvas. Move the selected objects inward, then try again." };
+    for (const component of components.filter(item => unit.ids.has(item.id))) {
+      if ((scaleX !== 1 && (unit.ids.size === 1 ? width : component.width * scaleX) < 40) || (scaleY !== 1 && (unit.ids.size === 1 ? height : component.height * scaleY) < 28))
+        return { components: [...components], error: "The matching size would make a control smaller than 40 × 28 pixels. Choose a larger reference object or ungroup the controls." };
+      sizing.set(component.id, { bounds: unit.bounds, scaleX, scaleY, width, height, single: unit.ids.size === 1 });
+    }
+  }
+  return { components: components.map(component => {
+    const target = sizing.get(component.id);
+    if (!target || target.scaleX === 1 && target.scaleY === 1) return component;
+    return {
+      ...component,
+      x: target.bounds.x + (component.x - target.bounds.x) * target.scaleX,
+      y: target.bounds.y + (component.y - target.bounds.y) * target.scaleY,
+      width: target.single ? target.width : component.width * target.scaleX,
+      height: target.single ? target.height : component.height * target.scaleY,
+    };
+  }) };
 }
 
 const finite = (value: number, fallback = 0) => Number.isFinite(value) ? value : fallback;

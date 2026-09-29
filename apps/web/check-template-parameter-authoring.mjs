@@ -273,7 +273,7 @@ function visitApp(node) {
 }
 visitApp(appAst);
 assert.ok(previewActionSource && popupExecuteSource, 'Designer action callbacks exist');
-const compileCallback = source => ts.transpileModule(`return (${source});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+const compileCallback = source => ts.transpileModule(`const previewCommunication = { busy: false, session: { mode: "live-actions" } }; return (${source});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 const makePreviewAction = new Function('gatewayAdmin', 'screen', 'project', 'previewActionBusy', 'editorParameterError', 'editorParameters', 'currentPreviewInputs', 'validateInputs', 'setPreviewActionBusy', 'actionKey', 'api', 'notify', 'window', compileCallback(previewActionSource));
 const makePopupExecute = new Function('gatewayAdmin', 'api', compileCallback(popupExecuteSource));
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };

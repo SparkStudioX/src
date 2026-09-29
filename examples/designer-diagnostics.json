@@ -1,0 +1,22 @@
+{
+  "name": "Designer diagnostics workshop",
+  "navigation": { "mode": "none", "startupScreenId": "diagnostics-home", "items": [] },
+  "queries": [{ "id": "production-summary", "name": "Production summary (sample)", "connectionId": "sample", "sql": "SELECT Line, Product, Produced, Target FROM ProductionSummary WHERE Line = @line", "parameters": [{ "name": "line", "type": "string", "defaultValue": "Line1" }] }],
+  "templates": [],
+  "screens": [{
+    "id": "diagnostics-home", "name": "Diagnostics workshop", "width": 1080, "height": 850,
+    "components": [
+      { "id": "diagnostics-title", "type": "label", "x": 24, "y": 20, "width": 1032, "height": 54, "props": { "text": "Find a failed property. Open its owner.", "fontSize": 29 } },
+      { "id": "diagnostics-help", "type": "label", "x": 24, "y": 88, "width": 1032, "height": 76, "props": { "text": "Preview this screen, change a local value, then open Project diagnostics. Refresh snapshot is explicit; the collector does not execute scripts or queries.", "fontSize": 18 } },
+      { "id": "diagnostics-width-input", "type": "numberInput", "x": 24, "y": 190, "width": 470, "height": 84, "props": { "text": "Requested label width (-20 to 460)", "fieldKey": "requestedWidth", "defaultValue": 300, "min": -20, "max": 460 } },
+      { "id": "diagnostics-width-target", "type": "label", "x": 552, "y": 190, "width": 300, "height": 84, "props": { "text": "My width reads the local input", "fontSize": 20, "borderColor": "#697aac", "borderWidth": 1, "bindings": { "width": { "expression": "width", "references": { "width": { "kind": "input", "key": "requestedWidth" } } } } } },
+      { "id": "diagnostics-color-input", "type": "checkbox", "x": 24, "y": 310, "width": 470, "height": 62, "props": { "text": "Produce an invalid color", "fieldKey": "invalidColor", "defaultValue": false } },
+      { "id": "diagnostics-color-target", "type": "label", "x": 552, "y": 310, "width": 504, "height": 62, "props": { "text": "My border color reads the checkbox", "fontSize": 19, "borderWidth": 3, "borderColor": "#4058ad", "bindings": { "borderColor": { "expression": "bad ? 'not-a-color' : '#4058ad'", "references": { "bad": { "kind": "input", "key": "invalidColor" } } } } } },
+      { "id": "diagnostics-event-input", "type": "checkbox", "x": 24, "y": 410, "width": 470, "height": 66, "props": { "text": "Create a deliberate browser-event error", "fieldKey": "failEvent", "defaultValue": false, "componentEvents": { "propertyChange": { "language": "javascript", "properties": ["value"], "code": "if (event.value === true) throw new Error('Deliberate diagnostic workshop event failure.');" } } } },
+      { "id": "diagnostics-event-help", "type": "label", "x": 552, "y": 410, "width": 504, "height": 90, "props": { "text": "Read-only Preview blocks this authored event. Enable Live actions explicitly to collect its deliberate error; the script has no data-write or network calls.", "fontSize": 17 } },
+      { "id": "diagnostics-query-value", "type": "label", "x": 24, "y": 530, "width": 470, "height": 70, "props": { "text": "Built-in query caption", "fontSize": 24, "queryBindings": { "text": { "queryId": "production-summary", "column": "Product", "parameters": { "line": { "expression": "'Line1'", "references": {} } } } } } },
+      { "id": "diagnostics-query-help", "type": "label", "x": 552, "y": 526, "width": 504, "height": 98, "props": { "text": "The renderer reads its sample query normally. This first diagnostic snapshot does not capture query samples; it says so instead of reporting an invented success or failure.", "fontSize": 17 } },
+      { "id": "diagnostics-limits", "type": "label", "x": 24, "y": 662, "width": 1032, "height": 126, "props": { "text": "Try width -1 and the invalid-color checkbox, then inspect Property bindings. Open a result to leave Preview and select its component. Restore valid inputs and refresh to confirm recovery. This original workshop contains no device configuration, tag definitions, database writes or private data.", "fontSize": 18 } }
+    ]
+  }]
+}

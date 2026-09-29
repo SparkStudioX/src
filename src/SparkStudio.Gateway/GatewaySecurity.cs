@@ -85,6 +85,7 @@ public static class GatewaySecurity
     }
 
     public static SecurityUser? CurrentUser(HttpContext context) => Item(context, UserKey) as SecurityUser;
+    public static string? CurrentSessionAdministrationId(HttpContext context) => (Item(context, SessionKey) as SecuritySession)?.AdministrationId;
 
     public static bool SessionStillValid(HttpContext context)
     {

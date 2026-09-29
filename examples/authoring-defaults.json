@@ -1,0 +1,16 @@
+{
+  "name": "Authoring defaults workshop",
+  "authoringDefaults": { "screenWidth": 1400, "screenHeight": 900, "templateWidth": 700, "templateHeight": 450, "gridSize": 12 },
+  "templates": [{ "id": "defaults-card", "name": "Existing card", "width": 300, "height": 160, "parameters": {}, "components": [
+    { "id": "card-title", "type": "label", "x": 20, "y": 18, "width": 260, "height": 50, "props": { "text": "300 × 160", "fontSize": 28 } },
+    { "id": "card-help", "type": "label", "x": 20, "y": 80, "width": 260, "height": 60, "props": { "text": "This existing template retains its authored size.", "fontSize": 16 } }
+  ] }],
+  "screens": [{ "id": "defaults-home", "name": "Existing screen", "width": 1100, "height": 680, "components": [
+    { "id": "title", "type": "label", "x": 32, "y": 24, "width": 1036, "height": 54, "props": { "text": "Start the next document your way", "fontSize": 30 } },
+    { "id": "intro", "type": "label", "x": 32, "y": 104, "width": 1036, "height": 94, "props": { "text": "Project settings stores starting canvas sizes and grid spacing. This existing screen stays 1100 × 680 even though the next screen starts at 1400 × 900.", "fontSize": 20 } },
+    { "id": "card", "type": "template", "x": 32, "y": 238, "width": 300, "height": 160, "props": { "text": "Existing card placement", "templateId": "defaults-card", "parameters": {}, "borderColor": "#8d9fcf", "borderWidth": 1 } },
+    { "id": "new-help", "type": "label", "x": 384, "y": 230, "width": 684, "height": 156, "props": { "text": "Add a screen and a template, then inspect their dimensions: 1400 × 900 and 700 × 450. Undo each creation to return to this workshop. Existing resources are not resized.", "fontSize": 19 } },
+    { "id": "edit-help", "type": "label", "x": 32, "y": 446, "width": 1036, "height": 92, "props": { "text": "Open Project settings → Canvas authoring defaults. Change the sizes, cancel once, then apply a valid change. Save the project and reopen it to use its saved grid default.", "fontSize": 20 } },
+    { "id": "footer", "type": "label", "x": 32, "y": 588, "width": 1036, "height": 50, "props": { "text": "Synthetic workshop · No external connections · Defaults are portable project data, not a runtime layout mode", "fontSize": 15 } }
+  ] }]
+}

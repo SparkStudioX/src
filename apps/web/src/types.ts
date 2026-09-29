@@ -158,6 +158,10 @@ export interface CanvasComponent {
   width: number;
   height: number;
   props: {
+    /** Optional project visual style; local values and bindings retain precedence. */
+    styleId?: string;
+    /** Optional reusable caption translation; input values and actions are never translated. */
+    textKey?: string;
     stateBinding?: InputStateBinding;
     componentEvents?: ComponentEvents;
     events?: Partial<Record<InputEventType, InputEventScript>>;
@@ -241,6 +245,20 @@ export interface Project {
   templates?: Template[];
   navigation?: ProjectNavigationSettings;
   sessionState?: StateDefinitions;
+  styles?: VisualStyle[];
+  localization?: TranslationCatalog;
+  authoringDefaults?: { screenWidth: number; screenHeight: number; templateWidth: number; templateHeight: number; gridSize: number };
+}
+export type VisualStyleProperty = "color" | "backgroundColor" | "foregroundColor" | "borderColor" | "borderWidth" | "fontSize";
+export interface VisualStyle {
+  id: string;
+  name: string;
+  properties: Partial<Pick<CanvasComponent["props"], VisualStyleProperty>>;
+}
+export interface TranslationCatalog {
+  defaultLocale: string;
+  locales: string[];
+  messages: Record<string, Record<string, string>>;
 }
 export interface ProjectNavigationSettings {
   startupScreenId: string;
@@ -328,6 +346,7 @@ export interface TagDefinition {
   enabled?: boolean;
 }
 export interface Publication {
+  warnings?: string[];
   published?: boolean;
   revision?: number;
   publishedAt?: string;

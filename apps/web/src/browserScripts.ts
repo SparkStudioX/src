@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import { requirePreviewScriptPermission } from "./previewRequest";
 import type { Project, RuntimeStateApi, Screen } from "./types";
 import { BrowserScriptLifecycle } from "./browserScriptModel";
 import type { BrowserPublication } from "./browserScriptModel";
@@ -12,6 +13,7 @@ export function useBrowserScripts(project: Project | null, screen: Screen | unde
   const current=useRef({project,screen,notify,navigate});
   current.current={project,screen,notify,navigate};
   if (!lifecycle.current) lifecycle.current=new BrowserScriptLifecycle((resource,event,parameters,app,session) => {
+    requirePreviewScriptPermission();
     const execute=new Function("event","parameters","app","session",`"use strict"; return (async () => {\n${resource.code}\n})();`);
     return execute(event,parameters,app,session);
   });

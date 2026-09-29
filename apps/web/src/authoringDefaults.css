@@ -1,0 +1,6 @@
+.authoring-defaults-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+.authoring-defaults-fields > label { display: grid; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+.authoring-defaults-fields > label > div { display: flex; gap: 8px; align-items: center; }
+.authoring-defaults-fields input { min-width: 0; width: 100%; }
+.authoring-defaults-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 560px) { .authoring-defaults-fields { grid-template-columns: 1fr; } }

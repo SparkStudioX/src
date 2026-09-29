@@ -1,4 +1,5 @@
 import { resolvePath } from "./api";
+import { previewScriptsAllowed, requirePreviewScriptPermission } from "./previewRequest";
 import { bindingTargets, propertyValue, supportsBindingTarget } from "./propertyBindings";
 import { isInput } from "./inputs";
 import { inputAssignmentError } from "./inputEvents";
@@ -33,7 +34,7 @@ const frozen = <T,>(value: T): T => {
   const freeze = (item: unknown) => { if (item && typeof item === "object") { Object.values(item).forEach(freeze); Object.freeze(item); } };
   freeze(copy); return copy;
 };
-export interface ComponentEventDiagnostic { id: number; componentId: string; message: string; level: "error" | "info" }
+export interface ComponentEventDiagnostic { id: number; componentId: string; message: string; level: "error" | "info"; recordedAt: string }
 export interface ComponentEventStatus { diagnostics: ComponentEventDiagnostic[]; breaker: string }
 
 /** One run-wide breaker; popup/instance churn cannot reset its budget. */
@@ -57,7 +58,7 @@ export class ComponentEventCoordinator {
     queueMicrotask(() => { this.notificationQueued = false; for (const listener of [...this.listeners]) listener(); });
   }
   report(componentId: string, message: string, level: "error" | "info" = "error") {
-    this.state = { ...this.state, diagnostics: [...this.state.diagnostics, { id: ++this.sequence, componentId, message: message.slice(0, 2500), level }].slice(-20) };
+    this.state = { ...this.state, diagnostics: [...this.state.diagnostics, { id: ++this.sequence, componentId, message: message.slice(0, 2500), level, recordedAt: new Date(this.now()).toISOString() }].slice(-20) };
     this.changed();
   }
   dismiss(id: number) { this.state = { ...this.state, diagnostics: this.state.diagnostics.filter(item => item.id !== id) }; this.changed(); }
@@ -111,12 +112,14 @@ export interface ComponentEventContext {
 export type ComponentEventExecutor = (script: ComponentEventScript, event: AutomaticComponentEvent, inputs: InputValues,
   parameters: RuntimeParameters, app: ComponentEventApp) => unknown | Promise<unknown>;
 export const executeComponentEvent: ComponentEventExecutor = (script, event, inputs, parameters, app) => {
+  requirePreviewScriptPermission();
   const execute = new Function("event", "inputs", "parameters", "app", `"use strict"; return (async () => {\n${script.code}\n})();`);
   return execute(event, inputs, parameters, app);
 };
 interface Invocation { active: boolean; controller: AbortController }
 interface EventOwner {
   context: ComponentEventContext; baseline: ComponentPropertySamples; closed: boolean; blocked: boolean;
+  scriptsAllowed: boolean;
   queue: Promise<void>; pending: number; invocations: Set<Invocation>; cleanups: (() => unknown | Promise<unknown>)[];
   controller: AbortController;
   unregister: () => void; cleanupReading: boolean; cleanupValues?: RuntimeStateValues;
@@ -144,7 +147,7 @@ export class ComponentEventLifecycle {
     const { context, samples } = this.prepared;
     if (context.isCurrent?.() === false) return;
     if (!this.owner) {
-      const owner: EventOwner = { context, baseline: frozen(samples), closed: false, blocked: false, queue: Promise.resolve(), pending: 0,
+      const owner: EventOwner = { context, baseline: frozen(samples), closed: false, blocked: false, scriptsAllowed: previewScriptsAllowed(), queue: Promise.resolve(), pending: 0,
         invocations: new Set(), cleanups: [], controller: new AbortController(), unregister: () => {}, cleanupReading: false };
       owner.unregister = context.coordinator.register(() => this.cancel(owner)); this.owner = owner;
       this.enqueue(owner, "mount", { type: "mount", componentId: context.component.id });
@@ -244,6 +247,9 @@ export class ComponentEventLifecycle {
     }).finally(() => { owner.pending--; finish(); });
   }
   private async cleanup(owner: EventOwner) {
+    // A read-only owner's unmount script stays disabled even after the outer
+    // preview has closed and the transport has returned to authoring mode.
+    if (!owner.scriptsAllowed) { owner.cleanups.length = 0; return; }
     owner.cleanupReading = true;
     const context = owner.context, script = context.component.props.componentEvents?.unmount;
     const invocation = { active: true, controller: new AbortController() }; invocation.controller.abort();
@@ -255,7 +261,7 @@ export class ComponentEventLifecycle {
     try {
       await this.bounded(async () => { for (const run of runs) {
         if (!invocation.active) return;
-        try { await run(); } catch (error) { context.coordinator.report(context.component.id, `unmount: ${error instanceof Error ? error.message : String(error)}`); }
+        try { requirePreviewScriptPermission(); await run(); } catch (error) { context.coordinator.report(context.component.id, `unmount: ${error instanceof Error ? error.message : String(error)}`); }
       } }, invocation, this.cleanupTimeoutMs);
     } catch (error) { context.coordinator.report(context.component.id, `unmount: ${error instanceof Error ? error.message : String(error)}`); }
     finally { invocation.active = false; owner.cleanupReading = false; }

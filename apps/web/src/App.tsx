@@ -43,8 +43,8 @@ import { resolveTemplateParameters, templatePlacementError } from "./templateMod
 import Tags from "./Tags";
 import { isInput, validateInputs } from "./inputs";
 import { useFormInputs } from "./inputStateBindings";
-import { alignSelected, arrangementCount, checkpoint, distributeSelected, duplicateSelected, expandGroupSelection, groupSelected, marqueeBounds, marqueeSelection, moveSelected, projectContent, resizeComponent, resizeGroup, restoreHistory, selectionBounds, toggleGroupSelection, ungroupSelected } from "./canvasEditing";
-import type { ProjectHistory, SelectionBounds } from "./canvasEditing";
+import { alignSelected, arrangementCount, checkpoint, distributeSelected, duplicateSelected, expandGroupSelection, groupSelected, marqueeBounds, marqueeSelection, matchSelectedSize, moveSelected, parseGridSize, projectContent, resizeComponent, resizeGroup, restoreHistory, selectComponentType, selectionBounds, toggleGroupSelection, ungroupSelected } from "./canvasEditing";
+import type { MatchingSize, ProjectHistory, SelectionBounds } from "./canvasEditing";
 import ComponentEventEditor from "./ComponentEventEditor";
 import ComponentLifecycleEditor from "./ComponentLifecycleEditor";
 import { ComponentEventDiagnostics } from "./ComponentEvents";
@@ -74,6 +74,19 @@ import BulkReplaceDialog from "./BulkReplaceDialog";
 import { applyBulkReplacement } from "./bulkReplacement";
 import { useDesignerPanes } from "./useDesignerPanes";
 import "./canvasEditing.css";
+import { VisualStyleProvider } from "./VisualStyleContext";
+import { LocalizationProvider, useLocaleSelection, LocaleSelector } from "./LocalizationContext";
+import TranslationsEditor, { ComponentTranslationAssignment } from "./TranslationsEditor";
+import { applyLocalizationCatalog } from "./localization";
+import { DesignerDiagnostics } from "./DesignerDiagnosticsDialog";
+import VisualStylesEditor, { ComponentStyleAssignment } from "./VisualStylesEditor";
+import { applyStyleCatalog } from "./visualStyles";
+import { usePreviewCommunication } from "./usePreviewCommunication";
+import { PreviewControls } from "./PreviewControls";
+import PublicationHistoryDialog from "./PublicationHistoryDialog";
+import { newDocumentDimensions, projectAuthoringDefaults } from "./authoringDefaults";
+import AssetLibraryDialog from "./AssetLibraryDialog";
+import { applyAssetReplacement } from "./assetLibrary";
 import "./designerDocuments.css";
 
 type Workspace = "designer" | "tags" | "connections" | "queries" | "scripts";
@@ -190,6 +203,12 @@ export default function App() {
   const [packageExporting, setPackageExporting] = useState(false);
   const [projectImportOpen, setProjectImportOpen] = useState(false);
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
+  const [stylesEditorOpen, setStylesEditorOpen] = useState(false);
+  const [translationsOpen, setTranslationsOpen] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [publicationHistoryOpen, setPublicationHistoryOpen] = useState(false);
+  const [assetLibraryOpen, setAssetLibraryOpen] = useState(false);
+  const previewCommunication = usePreviewCommunication();
   const [searchOpen, setSearchOpen] = useState(false);
   const [bulkReplaceFind, setBulkReplaceFind] = useState<string | null>(null);
   const [searchQueries, setSearchQueries] = useState<NamedQuery[] | null>(null);
@@ -222,6 +241,7 @@ export default function App() {
     }
   });
   const [project, setProject] = useState<Project | null>(null);
+  const projectLocale = useLocaleSelection(project);
   const [tags, setTags] = useState<Tag[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [queries, setQueries] = useState<NamedQuery[]>([]);
@@ -235,11 +255,26 @@ export default function App() {
   const [selectionIds, setSelectedIds] = useState<string[]>([]);
   const setSelectedId = useCallback((value: string | null) => { setSearchLocation(null); setSelectedIds(value ? [value] : []); }, []);
   const [gridSize, setGridSize] = useState(8);
+  const [gridDraft, setGridDraft] = useState("8");
+  const gridProject = useRef<string | null>(null);
+  useEffect(() => {
+    if (project && gridProject.current !== project.id) {
+      gridProject.current = project.id;
+      const size = projectAuthoringDefaults(project).gridSize;
+      setGridSize(size); setGridDraft(String(size));
+    }
+  }, [project]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publication, setPublication] = useState<Publication | null>(null);
   const [preview, setPreview] = useState(false);
+  useEffect(() => {
+    if (workspace !== "designer" && (preview || previewCommunication.session)) {
+      setPreview(false); setPreviewPopup(null);
+      void previewCommunication.stop().catch(() => {});
+    }
+  }, [workspace, preview, previewCommunication.session, previewCommunication.stop]);
   const designerPanes = useDesignerPanes(Boolean(project) && workspace === "designer" && !preview);
   const [previewInputs, setPreviewInputs] = useState<
     Record<string, InputValues>
@@ -445,7 +480,7 @@ export default function App() {
     editingTemplate ||
     project?.screens.find((item) => item.id === screenId);
   const applicationState = useApplicationState(project, screen,
-    JSON.stringify([project?.id, project?.revision, preview, workspace === "designer"]),
+    JSON.stringify([project?.id, project?.revision, preview, previewCommunication.session?.token, workspace === "designer"]),
     editingTemplate ? editingTemplate.instanceState ?? {} : undefined);
   const templateContext = editingTemplate && project ? resolveTemplateParameters(editingTemplate, project.parameters) : undefined;
   const editorParameterError = templateContext?.error;
@@ -484,6 +519,7 @@ export default function App() {
       notify("This search result no longer exists. Search again to use the current draft.", true); return;
     }
     setWorkspace("designer"); setPreview(false); setLeftTab("project");
+    if (preview || previewCommunication.session) { setPreviewPopup(null); void previewCommunication.stop().catch(() => {}); }
     openDocument({ kind: target.kind, id: target.id });
     setSearchNavigation(target);
   };
@@ -516,7 +552,7 @@ export default function App() {
   ) => {
     if (instance?.isCurrent?.() === false) return;
     if (!gatewayAdmin) { notify("A gateway administrator must sign in to run draft Python code.", true); return; }
-    if (!screen || !project || previewActionBusy || editorParameterError) return;
+    if (!screen || !project || previewActionBusy || editorParameterError || previewCommunication.busy || !previewCommunication.session) return;
     const actionParameters = instance?.parameters || editorParameters;
     const actionInputs = instance?.inputs || currentPreviewInputs;
     const invalid = validateInputs(
@@ -660,11 +696,29 @@ export default function App() {
     if (!screen || !selection.some(component => component.groupId)) return;
     replaceComponents(ungroupSelected(screen.components, selectedIds));
   };
+  const matchSelectionSize = (dimension: MatchingSize) => {
+    if (!screen || previewActionBusy) return;
+    const result = matchSelectedSize(screen.components, selectedIds, dimension, screen);
+    if (result.error) notify(result.error, true);
+    else replaceComponents(result.components);
+  };
+  const selectType = (type: string) => {
+    if (!screen || previewActionBusy) return;
+    setSearchLocation(null);
+    setSelectedIds(selectComponentType(screen.components, type));
+  };
+  const finishGridEdit = () => {
+    const size = parseGridSize(gridDraft);
+    if (size === null) { setGridDraft(String(gridSize)); notify("Enter a whole grid size from 0 to 128 pixels. Zero disables snapping.", true); }
+    else { setGridSize(size); setGridDraft(String(size)); }
+  };
   const canvasKeyboard = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (preview || previewActionBusy || !screen || (event.target as HTMLElement).closest("input,textarea,select,button,[contenteditable=true]")) return;
     const command = event.ctrlKey || event.metaKey;
     if (command && event.key.toLowerCase() === "a") {
-      event.preventDefault(); setSelectedIds(screen.components.map((component) => component.id));
+      event.preventDefault();
+      if (event.shiftKey) { if (selection[0]) selectType(selection[0].type); }
+      else setSelectedIds(screen.components.map((component) => component.id));
     } else if (command && event.key.toLowerCase() === "d") {
       event.preventDefault(); duplicateSelection();
     } else if (command && event.key.toLowerCase() === "g") {
@@ -721,8 +775,10 @@ export default function App() {
       });
       setPublication({ ...published, published: true });
       notify(
-        `Revision ${published.revision ?? project.revision} published. Open the operator application to use it.`,
+        `Revision ${published.revision ?? project.revision} published. ${published.warnings?.length ? published.warnings.join(" ") : "Open the operator application to use it."}`,
+        Boolean(published.warnings?.length),
       );
+      if (published.warnings?.length) setPublicationHistoryOpen(true);
     } catch (error) {
       notify(error instanceof Error ? error.message : String(error), true);
     } finally {
@@ -965,21 +1021,20 @@ export default function App() {
     const next: Screen = {
       id: id("screen"),
       name: `Screen ${(project?.screens.length || 0) + 1}`,
-      width: 1200,
-      height: 760,
+      ...newDocumentDimensions(project || {}, "screen"),
       components: [],
     };
     change((current) => ({ ...current, screens: [...current.screens, next] }));
     openDocument({ kind: "screen", id: next.id });
     setSelectedId(null);
     setPreview(false);
+    if (preview || previewCommunication.session) { setPreviewPopup(null); void previewCommunication.stop().catch(() => {}); }
   };
   const addTemplate = () => {
     const next: Template = {
       id: id("template"),
       name: `Template ${(project?.templates?.length || 0) + 1}`,
-      width: 600,
-      height: 400,
+      ...newDocumentDimensions(project || {}, "template"),
       parameters:
         project?.parameters.line !== undefined ? { line: "{line}" } : {},
       components: [],
@@ -991,6 +1046,7 @@ export default function App() {
     openDocument({ kind: "template", id: next.id });
     setSelectedId(null);
     setPreview(false);
+    if (preview || previewCommunication.session) { setPreviewPopup(null); void previewCommunication.stop().catch(() => {}); }
     setLeftTab("project");
   };
   const openTemplate = (templateId: string) => {
@@ -1028,7 +1084,7 @@ export default function App() {
   ];
 
   return (
-    <ApplicationStateProvider value={applicationState}><div className="app-shell" onClickCapture={event => {
+    <LocalizationProvider catalog={project?.localization} locale={projectLocale.locale}><VisualStyleProvider styles={project?.styles}><ApplicationStateProvider value={applicationState}><div className="app-shell" onClickCapture={event => {
       if (!(dirty || queriesDirty || scriptsDirty) || event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
       const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
       if (!(link instanceof HTMLAnchorElement) || link.hasAttribute("download") || (link.target && link.target !== "_self")) return;
@@ -1182,20 +1238,21 @@ export default function App() {
                 </span>
                 <button
                   className={`button ${preview ? "preview-active" : ""}`}
-                  disabled={!screen || Boolean(previewActionBusy) || !preview && Boolean(editorParameterError)}
-                  onClick={() => {
-                    setPreview(!preview);
-                    setPreviewPopup(null);
-                    if (!preview) setPreviewInputs({});
-                    setSelectedId(null);
-                  }}
+                  disabled={!screen || previewCommunication.busy || Boolean(previewActionBusy) || !preview && Boolean(editorParameterError)}
+                  onClick={() => void (async () => {
+                    try {
+                      if (preview) { setPreview(false); await previewCommunication.stop(); }
+                      else if (await previewCommunication.start("read-only")) setPreview(true);
+                      setPreviewPopup(null); setPreviewInputs({}); setSelectedId(null);
+                    } catch (error) { setPreview(false); await previewCommunication.stop().catch(() => {}); notify(error instanceof Error ? error.message : String(error), true); }
+                  })()}
                 >
                   <Icon name={preview ? "stop" : "play"} size={15} />
                   {preview ? "Exit preview" : "Preview"}
                 </button>
                 <button
                   className="button"
-                  disabled={saving || !dirty}
+                  disabled={preview || saving || !dirty}
                   onClick={() => void save()}
                 >
                   <Icon name="save" size={16} />
@@ -1203,7 +1260,7 @@ export default function App() {
                 </button>
                 <button
                   className="button primary"
-                  disabled={!permissions.publish || dirty || saving || publishing}
+                  disabled={preview || !permissions.publish || dirty || saving || publishing}
                   title={
                     !permissions.publish ? "Your account needs publish permission for this project" : dirty
                       ? "Save your project before publishing to operators"
@@ -1218,6 +1275,11 @@ export default function App() {
             )}
           </div>
         </header>
+        {preview && <PreviewControls session={previewCommunication.session} busy={previewCommunication.busy} gatewayAdmin={gatewayAdmin}
+          onDiagnostics={() => setDiagnosticsOpen(true)}
+          onChangeMode={async mode => { if (await previewCommunication.start(mode)) { setPreviewInputs({}); setPreviewPopup(null); } }}>
+          <LocaleSelector catalog={project?.localization} locale={projectLocale.locale} onChange={projectLocale.setLocale} />
+        </PreviewControls>}
         {preview && <ComponentEventDiagnostics state={applicationState} />}
         {loadError && (
           <div className="gateway-error">
@@ -1267,6 +1329,13 @@ export default function App() {
                   <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setProjectSettingsOpen(true)}>
                     <Icon name="settings" size={15} /> Project settings
                   </button>
+                  <details className="project-tools"><summary>Project tools</summary><div>
+                  <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setStylesEditorOpen(true)}>Visual styles</button>
+                  <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setTranslationsOpen(true)}>Translations</button>
+                  <button className="project-settings-button" type="button" onClick={() => setDiagnosticsOpen(true)}>Project diagnostics</button>
+                  <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setPublicationHistoryOpen(true)}>Publication history</button>
+                  <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setAssetLibraryOpen(true)}>Asset library</button>
+                  </div></details>
                   <ProjectNavigation key={project.id} storageKey={projectStorageKey("sparkstudio.projectPanes.v1", project.id)}>
                     <div className="project-tree">
                       <div className="section-heading">
@@ -1651,9 +1720,18 @@ export default function App() {
               </div>}
               {!preview && screen && (
                 <div className="canvas-arrange-toolbar" aria-label="Canvas arrangement">
-                  <label>Grid <select aria-label="Snap grid" value={gridSize} onChange={(event) => setGridSize(Number(event.target.value))}>
-                    <option value={0}>Off</option><option value={4}>4 px</option><option value={8}>8 px</option><option value={16}>16 px</option>
-                  </select></label>
+                  <label title="Whole design pixels from 0 to 128. Zero disables snapping; canvas bounds take precedence.">Grid <input className="canvas-grid-input" aria-label="Snap grid pixels" type="number" min={0} max={128} step={1} value={gridDraft} aria-invalid={parseGridSize(gridDraft) === null} onChange={event => {
+                    setGridDraft(event.target.value);
+                    const size = parseGridSize(event.target.value);
+                    if (size !== null) setGridSize(size);
+                  }} onBlur={finishGridEdit} onKeyDown={event => {
+                    if (event.key === "Enter") { event.preventDefault(); finishGridEdit(); }
+                    else if (event.key === "Escape") { event.preventDefault(); setGridDraft(String(gridSize)); }
+                  }} /> px</label>
+                  <select aria-label="Select components by type" value="" disabled={!screen.components.length} title="Select this component type in the current document, including its group members. Ctrl+Shift+A selects the first selected control's type." onChange={event => selectType(event.target.value)}>
+                    <option value="" disabled>Select type…</option>
+                    {palettes.filter(item => screen.components.some(component => component.type === item.type)).map(item => <option key={item.type} value={item.type}>{item.name}</option>)}
+                  </select>
                   <button className="canvas-group-command" disabled={selection.length < 2 || Boolean(selectedGroupId)} onClick={groupSelection} title="Group selection (Ctrl+G)"><Icon name="layers" size={14} /> Group</button>
                   <button className="canvas-group-command" disabled={!selection.some(component => component.groupId)} onClick={ungroupSelection} title="Ungroup selection (Ctrl+Shift+G)">Ungroup</button>
                   <select aria-label="Align selection" value="" disabled={selectedUnitCount < 2} onChange={(event) => replaceComponents(alignSelected(screen.components, selectedIds, event.target.value as "left" | "hcenter" | "right" | "top" | "vcenter" | "bottom"))}>
@@ -1662,8 +1740,11 @@ export default function App() {
                   <select aria-label="Distribute selection" value="" disabled={selectedUnitCount < 3} onChange={(event) => replaceComponents(distributeSelected(screen.components, selectedIds, event.target.value as "horizontal" | "vertical"))}>
                     <option value="" disabled>Distribute…</option><option value="horizontal">Horizontal gaps</option><option value="vertical">Vertical gaps</option>
                   </select>
+                  <select aria-label="Match selected sizes" value="" disabled={selectedUnitCount < 2} title="Match the first selected object in layer order. Groups scale as one object; bound geometry remains authored." onChange={event => matchSelectionSize(event.target.value as MatchingSize)}>
+                    <option value="" disabled>Match size…</option><option value="width">Same width</option><option value="height">Same height</option><option value="both">Same width and height</option>
+                  </select>
                   <button disabled={!selection.length} onClick={deleteSelection} title="Delete selection"><Icon name="trash" size={14} /></button>
-                  <span>{selectedGroupId ? `Group · ${selection.length} controls` : selection.length ? `${selection.length} selected` : "Drag empty canvas to select · Shift-click to add"}</span>
+                  <span aria-live="polite">{selectedGroupId ? `Group · ${selection.length} controls` : selection.length ? `${selection.length} selected` : "Drag empty canvas to select · Shift-click to add"}</span>
                 </div>
               )}
               {!screen && <div className="designer-empty-document">
@@ -1674,7 +1755,7 @@ export default function App() {
               </div>}
               {screen && (!preview || !editorParameterError) && (
                 <Canvas
-                  key={JSON.stringify([screen.id, preview, editingTemplate?.parameterTypes ?? null])}
+                  key={JSON.stringify([screen.id, preview, previewCommunication.session?.token, editingTemplate?.parameterTypes ?? null])}
                   screen={screen}
                   tags={tags}
                   parameters={editorParameters}
@@ -1828,6 +1909,8 @@ export default function App() {
                         <Icon name="trash" size={15} />
                       </button>
                     </div>
+                    <ComponentStyleAssignment component={selected} styles={project.styles} onChange={updateProps} onManage={() => setStylesEditorOpen(true)} />
+                    <ComponentTranslationAssignment component={selected} catalog={project.localization} onChange={updateProps} onManage={() => setTranslationsOpen(true)} />
                     <PropertyBindingsEditor
                       key={selected.id}
                       component={selected}
@@ -2692,6 +2775,7 @@ export default function App() {
             }
           }}
           onExecute={async (action) => {
+            if (previewCommunication.busy || !previewCommunication.session) throw new Error("A current preview communication session is required. Exit and reopen Preview.");
             if (action.instance?.isCurrent?.() === false) throw new Error("The template parameters changed before this action could run.");
             if (!gatewayAdmin) throw new Error("A gateway administrator must sign in to run draft Python code.");
             const result = await api<ScriptResult>("/scripts/run", "POST", {
@@ -2717,7 +2801,25 @@ export default function App() {
           </button>
         </div>
       )}
-    </div></ApplicationStateProvider>
+      {stylesEditorOpen && project && <VisualStylesEditor project={project} onClose={() => setStylesEditorOpen(false)} onApply={(styles, expected) => {
+        if (previewActionBusy) throw new Error("Wait for the active preview action to finish.");
+        change(current => applyStyleCatalog(current, expected, styles)); setStylesEditorOpen(false);
+      }} />}
+      {publicationHistoryOpen && <PublicationHistoryDialog canPublish={permissions.publish} onClose={() => setPublicationHistoryOpen(false)} onRestored={() => notify("Operator publication restored. Designer drafts are unchanged.")} />}
+      {translationsOpen && project && <TranslationsEditor project={project} onClose={() => setTranslationsOpen(false)} onApply={(catalog, expected) => {
+        if (previewActionBusy) throw new Error("Wait for the active preview action to finish.");
+        change(current => applyLocalizationCatalog(current, expected, catalog)); setTranslationsOpen(false);
+      }} />}
+      {diagnosticsOpen && project && <DesignerDiagnostics project={project} document={screen} ownerKind={editingTemplate ? "template" : "screen"}
+        context={{ components: screen?.components || [], tags, parameters: editorParameters, inputs: currentPreviewInputs, state: applicationState.values, communicationLost: !connected }}
+        searchEntries={searchEntries} eventCoordinator={applicationState.store.componentEvents} onOpen={navigateSearch} onClose={() => setDiagnosticsOpen(false)} />}
+      {assetLibraryOpen && project && <AssetLibraryDialog project={project} assets={assets} onClose={() => setAssetLibraryOpen(false)}
+        onOpenReference={use => { setAssetLibraryOpen(false); navigateSearch({ kind: use.ownerKind, id: use.ownerId, componentId: use.componentId }); }}
+        onApply={(plan, ids) => {
+          if (previewActionBusy) throw new Error("Wait for the active preview action to finish.");
+          change(current => applyAssetReplacement(plan, current, assets, ids)); setAssetLibraryOpen(false); notify(`${ids.length} image references replaced. Undo is available; save and publish when ready.`);
+        }} />}
+    </div></ApplicationStateProvider></VisualStyleProvider></LocalizationProvider>
   );
 }
 
@@ -2849,6 +2951,7 @@ function Canvas({
   }, { state: applicationState, scope: "designer", active: preview });
   const [scale, setScale] = useState(1);
   const [dragging, setDragging] = useState(false);
+  const [gestureBounds, setGestureBounds] = useState<SelectionBounds | null>(null);
   const [marquee, setMarquee] = useState<SelectionBounds | null>(null);
   const selectedComponents = screen.components.filter(component => selectedIds.includes(component.id));
   const selectedGroupId = selectedComponents.length > 1 && selectedComponents[0].groupId && selectedComponents.every(component => component.groupId === selectedComponents[0].groupId) ? selectedComponents[0].groupId : null;
@@ -2949,6 +3052,7 @@ function Canvas({
         return item.x !== original.x || item.y !== original.y || item.width !== original.width || item.height !== original.height;
       })) return;
       if (!moved) { moved = true; onBeginMove(); setDragging(true); }
+      setGestureBounds(selectionBounds(nextComponents, movingIds));
       onReplace(nextComponents, false);
     };
     const end = () => {
@@ -2959,6 +3063,7 @@ function Canvas({
       element.removeEventListener("lostpointercapture", end);
       if (element.hasPointerCapture(event.pointerId)) element.releasePointerCapture(event.pointerId);
       setDragging(false);
+      setGestureBounds(null);
     };
     gestureCleanup.current = end;
     element.addEventListener("pointermove", move);
@@ -2981,7 +3086,7 @@ function Canvas({
           <Icon name="monitor" size={12} />
           {screen.name}
         </span>
-        <span>{Math.round(scale * 100)}%</span>
+        <span className="canvas-precision-readout">{!preview && gestureBounds && <span aria-hidden="true">X {Number(gestureBounds.x.toFixed(1))} · Y {Number(gestureBounds.y.toFixed(1))} · W {Number(gestureBounds.width.toFixed(1))} · H {Number(gestureBounds.height.toFixed(1))}</span>}{Math.round(scale * 100)}%</span>
       </div>
       <div
         className="canvas-scaler"
@@ -3087,6 +3192,10 @@ function Canvas({
             <div className="resize-handle group-resize-handle" title="Resize group proportionally on each axis" aria-label="Resize group" onPointerDown={event => drag(event, selectedComponents[0], "group")} />
           </div>}
           {marquee && !preview && <div className="canvas-marquee" aria-hidden="true" style={{ left: marquee.x, top: marquee.y, width: marquee.width, height: marquee.height }} />}
+          {gestureBounds && !preview && <div className="canvas-precision-guides" aria-hidden="true">
+            <span className="vertical" style={{ left: gestureBounds.x }} /><span className="vertical" style={{ left: gestureBounds.x + gestureBounds.width }} />
+            <span className="horizontal" style={{ top: gestureBounds.y }} /><span className="horizontal" style={{ top: gestureBounds.y + gestureBounds.height }} />
+          </div>}
         </div>
       </div>
       <div className="canvas-footnote">

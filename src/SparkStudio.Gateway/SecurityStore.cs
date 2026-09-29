@@ -18,7 +18,10 @@ public sealed record SecurityUser(string Id, string Username, string DisplayName
 public sealed record SecuritySettings(long Revision, string? PublicBaseUrl, IReadOnlyDictionary<string, string[]> ProjectTagPrefixes);
 public sealed record SecurityAuditEntry(string Id, string RecordedAt, string Actor, string Action, string? ProjectId,
     string Outcome, string? TargetUserId, string? Resource = null);
-public sealed record SecuritySession(string Id, string UserId, long UserRevision, string Audience, string CsrfToken, DateTimeOffset ExpiresAt);
+public sealed record SecuritySession(string Id, string UserId, long UserRevision, string Audience, string CsrfToken, DateTimeOffset ExpiresAt,
+    string? AdministrationId = null, DateTimeOffset CreatedAt = default, DateTimeOffset LastActivityAt = default);
+public sealed record SessionInventoryItem(string Id, string Username, string DisplayName, string Audience,
+    DateTimeOffset CreatedAt, DateTimeOffset LastActivityAt, DateTimeOffset ExpiresAt);
 public sealed record SecurityCreateUser(string Username, string Password, string? DisplayName = null, bool GatewayAdmin = false,
     bool Disabled = false, Dictionary<string, SecurityProjectGrant>? ProjectGrants = null);
 public sealed record SecurityUpdateUser(long Revision, string? DisplayName, bool GatewayAdmin, bool Disabled,
@@ -277,7 +280,8 @@ public sealed class SecurityStore
             var now = DateTimeOffset.UtcNow;
             foreach (var expired in sessions.Values.Where(session => session.ExpiresAt <= now).ToArray()) sessions.Remove(expired.Id);
             if (sessions.Count >= 10_000) throw new BadHttpRequestException("Too many active sessions. Try again later.", 429);
-            var session = new SecuritySession(RandomToken(), user.Id, user.Revision, audience, RandomToken(), now.AddHours(8));
+            var session = new SecuritySession(RandomToken(), user.Id, user.Revision, audience, RandomToken(), now.AddHours(8),
+                Guid.NewGuid().ToString("N"), now, now);
             sessions.Add(session.Id, session);
             return session;
         }
@@ -291,11 +295,38 @@ public sealed class SecurityStore
             var user = state.Users.FirstOrDefault(item => item.User.Id == session.UserId)?.User;
             if (session.ExpiresAt <= DateTimeOffset.UtcNow || user is null || user.Disabled || user.Revision != session.UserRevision)
             { sessions.Remove(id); return null; }
+            session = session with { LastActivityAt = DateTimeOffset.UtcNow };
+            sessions[id] = session;
             return (session, CopyUser(user));
         }
     }
 
     public void RevokeSession(string? id) { if (id is not null) lock (gate) sessions.Remove(id); }
+
+    // Administration handles are unrelated to authentication/CSRF secrets.
+    public IReadOnlyList<SessionInventoryItem> SessionInventory()
+    {
+        lock (gate)
+        {
+            var now = DateTimeOffset.UtcNow;
+            return sessions.Values.Where(session => session.ExpiresAt > now && session.AdministrationId is not null)
+                .Select(session => (Session: session, User: state.Users.FirstOrDefault(item => item.User.Id == session.UserId)?.User))
+                .Where(item => item.User is not null && !item.User.Disabled && item.User.Revision == item.Session.UserRevision)
+                .Select(item => new SessionInventoryItem(item.Session.AdministrationId!, item.User!.Username, item.User.DisplayName,
+                    item.Session.Audience, item.Session.CreatedAt, item.Session.LastActivityAt, item.Session.ExpiresAt))
+                .OrderByDescending(item => item.LastActivityAt).ToArray();
+        }
+    }
+
+    public bool RevokeManagedSession(string administrationId)
+    {
+        if (!Guid.TryParseExact(administrationId, "N", out _)) throw new ArgumentException("Invalid session administration ID.");
+        lock (gate)
+        {
+            var session = sessions.Values.FirstOrDefault(item => item.AdministrationId == administrationId);
+            return session is not null && sessions.Remove(session.Id);
+        }
+    }
 
     public void Audit(SecurityUser? actor, string action, string? projectId, string outcome, string? targetUserId = null, string? resource = null)
     {

@@ -7,6 +7,10 @@ import { InputEventLifecycle } from "./inputEvents";
 import { useApplicationStateContext } from "./applicationState";
 import { useComponentEvents } from "./ComponentEvents";
 import { useQueryPropertyContext } from "./useQueryPropertyBindings";
+import { useVisualStyles } from "./VisualStyleContext";
+import { applyVisualStyle } from "./visualStyles";
+import { useLocalization } from "./LocalizationContext";
+import { localizeComponent } from "./localization";
 import type { ComponentProps } from "react";
 import type { CanvasComponent, InputValue } from "./types";
 import "./boundComponent.css";
@@ -23,17 +27,15 @@ export type InheritedComponentAppearance = Pick<CanvasComponent["props"], "color
 export default function BoundComponent({ components, inheritedAppearance, onAutomaticInputChange, ...props }: BoundComponentProps) {
   const applicationState = useApplicationStateContext();
   const queryProperties = useQueryPropertyContext();
+  const styles = useVisualStyles();
+  const localization = useLocalization();
   const [eventStatus, setEventStatus] = useState<{ message: string; error: boolean } | null>(null);
   const lifecycle = useRef<InputEventLifecycle | null>(null);
   if (!lifecycle.current) lifecycle.current = new InputEventLifecycle();
   const scope = components ?? [props.component];
-  const inherited = { ...inheritedAppearance };
-  // An explicit leaf color also wins over a container's foreground default.
-  if (props.component.props.color !== undefined || props.component.props.bindings?.color || props.component.props.queryBindings?.color) delete inherited.foregroundColor;
-  // Clearing an authored style leaves an explicit undefined in the editor until
-  // saving. Treat that exactly like an absent style when applying defaults.
-  const defaults = Object.fromEntries(Object.entries(inherited).filter(([key]) => props.component.props[key as keyof InheritedComponentAppearance] === undefined));
-  const component = inheritedAppearance ? { ...props.component, props: { ...props.component.props, ...defaults } } : props.component;
+  const localized = localizeComponent(props.component, localization.catalog, localization.locale);
+  const styled = applyVisualStyle(localized.component, styles, inheritedAppearance);
+  const component = styled.component;
   const result = evaluateComponentBindings(component, {
     components: scope,
     tags: props.tags,
@@ -44,6 +46,7 @@ export default function BoundComponent({ components, inheritedAppearance, onAuto
     queryProperties,
   });
   const errors = Object.entries(result.errors);
+  if (styled.error) errors.push(["style", styled.error]);
   const querySamples = queryProperties?.[props.component.id] ?? {};
   const queryWaiting = errors.length > 0 && errors.every(([target]) => querySamples[target as keyof typeof querySamples]?.status === "loading");
   const queryErrors = errors.filter(([target]) => Object.hasOwn(props.component.props.queryBindings ?? {}, target));
@@ -115,6 +118,7 @@ export default function BoundComponent({ components, inheritedAppearance, onAuto
       borderStyle: borderWidth === undefined ? undefined : "solid",
     } as CSSProperties}
     data-component-id={props.component.id}
+    lang={localized.locale}
     aria-disabled={props.preview && !enabled || undefined}
   >
     <div className="bound-component-content" inert={props.preview && !enabled}>
@@ -139,6 +143,7 @@ export default function BoundComponent({ components, inheritedAppearance, onAuto
       />
     </div>
     {!props.preview && !visible && <span className="binding-visibility-note">Hidden in runtime</span>}
+    {localized.warning && <span className="component-localization-note" role="status" title={localized.warning}>{localized.warning}</span>}
     {props.preview && eventStatus && <div className={`component-input-event-status${eventStatus.error ? " error" : ""}`} role={eventStatus.error ? "alert" : "status"} title={eventStatus.message}>{eventStatus.message}</div>}
     {errors.length > 0 && <div className="component-binding-error" role="status" title={errors.map(([target, error]) => `${target}: ${error}`).join("\n")}>
       {queryWaiting ? "Loading query…" : queryErrors.length ? `Query unavailable: ${queryErrors.map(([target]) => target).join(", ")}` : `Binding error: ${errors.map(([target]) => target).join(", ")}`}

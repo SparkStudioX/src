@@ -4,6 +4,7 @@ import type { Project, ProjectNavigationSettings, RuntimeParameters, Screen, Sta
 import { defaultNavigationLabel, navigationLabelError, projectNavigationSettings } from "./runtimeNavigation";
 import { TemplateParametersEditor } from "./TemplateParametersEditor";
 import { StateDefinitionsEditor } from "./StateDefinitionsEditor";
+import { AuthoringDefaultsEditor } from "./AuthoringDefaultsEditor";
 import "./documentProperties.css";
 import "./resourceChanges.css";
 
@@ -21,7 +22,7 @@ interface DocumentPropertiesProps {
 interface ProjectPropertiesProps {
   canRename?: boolean;
   project: Project;
-  onChange: (patch: Partial<Pick<Project, "name" | "parameters" | "navigation" | "sessionState">>) => void;
+  onChange: (patch: Partial<Pick<Project, "name" | "parameters" | "navigation" | "sessionState" | "authoringDefaults">>) => void;
   notify: Notify;
 }
 
@@ -261,6 +262,7 @@ export function ProjectSettingsDialog({ project, onChange, notify, onClose, canR
 export function ProjectProperties({ project, onChange, notify, canRename = true }: ProjectPropertiesProps) {
   return <div className="document-properties" aria-label="Project properties">
     <NavigationProperties project={project} onChange={onChange} notify={notify} />
+    <AuthoringDefaultsEditor value={project.authoringDefaults} onApply={authoringDefaults => onChange({ authoringDefaults })} />
     <div className="document-property-columns" aria-hidden="true"><span>Property</span><span>Value</span></div>
     <section className="document-property-group" aria-label="Project general properties">
       <h3>General</h3>

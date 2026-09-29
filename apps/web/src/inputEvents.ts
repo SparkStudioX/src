@@ -1,4 +1,5 @@
 import type { RuntimeParameters, RuntimeStateApi } from "./types";
+import { requirePreviewScriptPermission } from "./previewRequest";
 import { isInput, validateInputs } from "./inputs";
 import type { CanvasComponent, InputEventScript, InputEventType, InputValue, InputValues } from "./types";
 
@@ -38,6 +39,7 @@ export function inputAssignmentError(components: CanvasComponent[], fieldKey: st
 // Authors are trusted: browser event code has the page's privileges. The app
 // helpers restrict form effects, but are not a JavaScript security sandbox.
 export const executeInputEvent: InputEventExecutor = (script, event, inputs, parameters, app) => {
+  requirePreviewScriptPermission();
   const execute = new Function("event", "inputs", "parameters", "app", `"use strict"; return (async () => {\n${script.code}\n})();`);
   return execute(event, inputs, parameters, app);
 };

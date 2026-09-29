@@ -1,0 +1,20 @@
+{
+  "name": "Canvas precision workshop",
+  "screens": [{
+    "id": "precision-home", "name": "Precision desk", "width": 1200, "height": 780,
+    "components": [
+      { "id": "title", "type": "label", "x": 32, "y": 24, "width": 1136, "height": 52, "props": { "text": "Place it precisely", "fontSize": 32 } },
+      { "id": "intro", "type": "label", "x": 32, "y": 92, "width": 1136, "height": 70, "props": { "text": "Select Rectangle from Select type. Match width or height using the leftmost card as the reference, then undo the entire operation once.", "fontSize": 19 } },
+      { "id": "reference-card", "type": "rectangle", "x": 40, "y": 190, "width": 180, "height": 100, "props": { "text": "Reference card", "fillColor": "#5972c7", "strokeColor": "#a4b5f2", "strokeWidth": 2, "cornerRadius": 5 } },
+      { "id": "middle-card", "type": "rectangle", "x": 360, "y": 200, "width": 230, "height": 140, "props": { "text": "Middle card", "fillColor": "#816daa", "strokeColor": "#beacda", "strokeWidth": 2, "cornerRadius": 5 } },
+      { "id": "right-card", "type": "rectangle", "x": 780, "y": 220, "width": 280, "height": 160, "props": { "text": "Right card", "fillColor": "#a37936", "strokeColor": "#d6b079", "strokeWidth": 2, "cornerRadius": 5 } },
+      { "id": "reference-label", "type": "label", "x": 40, "y": 304, "width": 240, "height": 40, "props": { "text": "Reference: 180 × 100", "fontSize": 18 } },
+      { "id": "group-help", "type": "label", "x": 32, "y": 408, "width": 1136, "height": 46, "props": { "text": "The two left circles form one saved group. Select Ellipse to include the whole group and the independent circle.", "fontSize": 18 } },
+      { "id": "group-left", "type": "ellipse", "groupId": "paired-circles", "x": 40, "y": 480, "width": 50, "height": 50, "props": { "text": "Group left", "fillColor": "#5972c7", "strokeColor": "#a4b5f2", "strokeWidth": 2 } },
+      { "id": "group-right", "type": "ellipse", "groupId": "paired-circles", "x": 110, "y": 480, "width": 80, "height": 50, "props": { "text": "Group right", "fillColor": "#816daa", "strokeColor": "#beacda", "strokeWidth": 2 } },
+      { "id": "independent-circle", "type": "ellipse", "x": 390, "y": 480, "width": 170, "height": 80, "props": { "text": "Independent circle", "fillColor": "#a37936", "strokeColor": "#d6b079", "strokeWidth": 2 } },
+      { "id": "grid-help", "type": "label", "x": 32, "y": 610, "width": 1136, "height": 76, "props": { "text": "Try a 12 px grid and drag a card. Boundary guides and X/Y/W/H show the authored box. Arrow keys nudge 1 px; Shift+Arrow nudges 10 px. Zero disables the grid.", "fontSize": 18 } },
+      { "id": "footer", "type": "label", "x": 32, "y": 710, "width": 1136, "height": 40, "props": { "text": "Synthetic design exercise · No tags, database, images or scripts · Existing coordinates remain fixed in runtime", "fontSize": 14 } }
+    ]
+  }]
+}

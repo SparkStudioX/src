@@ -6,7 +6,8 @@ const source = name => fs.readFileSync(new URL(`./src/${name}.ts`, import.meta.u
 const asModule = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
 const compile = code => ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
 const authSessionUrl = asModule(compile(source('authSession')));
-const apiUrl = asModule(compile(source('api')).replaceAll('"./authSession"', JSON.stringify(authSessionUrl)));
+const previewRequestUrl = asModule(compile(source('previewRequest')));
+const apiUrl = asModule(compile(source('api')).replaceAll('"./authSession"', JSON.stringify(authSessionUrl)).replaceAll('"./previewRequest"', JSON.stringify(previewRequestUrl)));
 const listTreeUrl = asModule(compile(source('listTreeModel')));
 const drawingUrl = asModule(compile(source('drawingComponents')));
 const load = name => import(asModule(compile(source(name)).replaceAll('"./api"', JSON.stringify(apiUrl)).replaceAll('"./listTreeModel"', JSON.stringify(listTreeUrl)).replaceAll('"./drawingComponents"', JSON.stringify(drawingUrl))));

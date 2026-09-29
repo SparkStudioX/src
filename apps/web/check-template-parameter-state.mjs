@@ -23,7 +23,7 @@ function loader(harness = false) { const cache = new Map(); return function load
     .replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
     .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, dependency) => {
       const stub = harness && ['applicationState','templates','inputStateBindings','ComponentEvents'].includes(name) && dependency === 'react' ? hookUrl
-        : harness && name === 'templates' ? ({'./BoundComponent':leafUrl,'./useQueryRepeater':queryUrl,'./useQueryPropertyBindings':url('export const useQueryPropertyBindings=()=>({});export const useQueryPropertyContext=()=>undefined;export const QueryPropertyProvider=({children})=>children;')})[dependency] : undefined;
+        : harness && name === 'templates' ? ({'./BoundComponent':leafUrl,'./useQueryRepeater':queryUrl,'./VisualStyleContext':url('export const useVisualStyles=()=>undefined;'),'./LocalizationContext':url('export const useLocalization=()=>({});'),'./useQueryPropertyBindings':url('export const useQueryPropertyBindings=()=>({});export const useQueryPropertyContext=()=>undefined;export const QueryPropertyProvider=({children})=>children;')})[dependency] : undefined;
       return prefix + JSON.stringify(stub ?? (dependency.startsWith('./') ? load(dependency.slice(2)) : pathToFileURL(require.resolve(dependency)).href));
     });
   const result = url(code); cache.set(name, result); return result;

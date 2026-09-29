@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 namespace SparkStudio.Gateway;
 
 /// <summary>Operators use an explicitly published, persisted snapshot of screens and named queries.</summary>
-public sealed class PublicationStore
+public sealed partial class PublicationStore
 {
     private readonly object gate = new();
     private readonly string path;
@@ -23,7 +23,7 @@ public sealed class PublicationStore
     {
         lock (gate)
             return publication is null ? new JsonObject { ["published"] = false }
-                : new JsonObject { ["published"] = true, ["revision"] = publication["project"]!["revision"]!.DeepClone(), ["publishedAt"] = publication["publishedAt"]!.DeepClone() };
+                : new JsonObject { ["published"] = true, ["revision"] = publication["project"]!["revision"]!.DeepClone(), ["publishedAt"] = publication["publishedAt"]!.DeepClone(), ["warnings"] = HistoryWarnings() };
     }
 
     public JsonObject Publish(ProjectStore store, int revision)
@@ -50,10 +50,7 @@ public sealed class PublicationStore
             snapshot["queries"] = new JsonArray(queries.Select(query => query.DeepClone()).ToArray());
             snapshot["publishedAt"] = DateTimeOffset.UtcNow.ToString("O");
             snapshot["schemaVersion"] = 1;
-            // Preserve the previous publication if persistence fails.
-            File.WriteAllText(path + ".tmp", snapshot.ToJsonString(ProjectStore.Json));
-            File.Move(path + ".tmp", path, true);
-            publication = snapshot;
+            CommitWithHistory(snapshot);
             return Metadata();
         }
     }

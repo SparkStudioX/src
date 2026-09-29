@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+const base='http://127.0.0.1:5091/api';
+async function call(route,method='GET',body,expected=200){const response=await fetch(base+route,{method,headers:body!==undefined?{'Content-Type':'application/json'}:undefined,body:body===undefined?undefined:JSON.stringify(body)});assert.equal(response.status,expected,`${method} ${route}: ${await response.clone().text()}`);return response.status===204?null:response.json();}
+const created=await call('/projects','POST',{name:`Publication history ${randomUUID().slice(0,8)}`},200);
+const id=created.id, prefix=`/projects/${id}`;
+let groups=0;const pass=name=>{groups++;console.log('PASS '+name);};
+try {
+  let project=await call(prefix+'/project');
+  project.screens=[{id:'main',name:'First screen',width:640,height:400,components:[{id:'title',type:'label',x:20,y:20,width:400,height:60,props:{text:'First version'}}]}];
+  project.templates=[];project.parameters={};project.navigation={mode:'none',startupScreenId:'main',items:[]};
+  project=await call(prefix+'/project','PUT',project);
+  const first=await call(prefix+'/project/publish','POST',{revision:project.revision});
+  let history=await call(prefix+'/project/history');assert.equal(history.entries.length,1);assert.equal(history.entries[0].current,true);
+  const firstId=history.entries[0].id;
+  project.screens[0].components[0].props.text='Second version';
+  project=await call(prefix+'/project','PUT',project);
+  const second=await call(prefix+'/project/publish','POST',{revision:project.revision});
+  history=await call(prefix+'/project/history');assert.equal(history.entries.length,2);
+  assert.equal((await call(prefix+'/runtime/project')).screens[0].components[0].props.text,'Second version');
+  pass('each explicit publication records metadata and preserves the prior operator snapshot');
+  await call(prefix+`/project/history/${firstId}/restore`,'POST',{expectedPublishedAt:first.publishedAt},409);
+  assert.equal((await call(prefix+'/runtime/project')).publishedAt,second.publishedAt);
+  pass('stale restore cannot replace a newer publication');
+  project.screens[0].components[0].props.text='Third unsent operator draft';
+  const savedDraft=await call(prefix+'/project','PUT',project);
+  const restored=await call(prefix+`/project/history/${firstId}/restore`,'POST',{expectedPublishedAt:second.publishedAt});
+  const operator=await call(prefix+'/runtime/project');
+  assert.equal(operator.screens[0].components[0].props.text,'First version');assert.notEqual(restored.publishedAt,first.publishedAt);assert.notEqual(restored.publishedAt,second.publishedAt);
+  assert.deepEqual(await call(prefix+'/project'),savedDraft);
+  history=await call(prefix+'/project/history');assert.equal(history.entries.length,3);assert.equal(history.entries.filter(item=>item.current).length,1);
+  pass('restore creates a fresh operator version and preserves the complete draft');
+  assert.ok(history.scope.includes('Script-library'));assert.ok(!JSON.stringify(history).includes('Third unsent operator draft'));assert.ok(!JSON.stringify(history).includes('props'));
+  await call(prefix+'/project/history/not-an-id/restore','POST',{expectedPublishedAt:restored.publishedAt},400);
+  await call(prefix+`/project/history/${randomUUID().replaceAll('-','')}/restore`,'POST',{expectedPublishedAt:restored.publishedAt},404);
+  pass('history discloses snapshot scope, excludes authored bodies and rejects invalid identifiers');
+  for(let index=0;index<22;index++)await call(prefix+'/project/publish','POST',{revision:savedDraft.revision});
+  history=await call(prefix+'/project/history');assert.equal(history.entries.length,20);assert.equal(history.retention,20);
+  pass('history retention remains bounded through repeated publication');
+} finally { await call(prefix+'/archive','POST',{archived:true}); }
+console.log(`${groups} publication history groups passed; disposable project archived.`);

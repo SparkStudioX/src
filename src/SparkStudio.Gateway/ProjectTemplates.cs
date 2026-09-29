@@ -35,6 +35,9 @@ internal static class ProjectTemplates
             ValidateDocuments(templates, "Template", project["parameters"] as JsonObject, project["sessionState"] as JsonObject);
         }
         TemplateParameterTypes.ValidateProject(project);
+        ProjectStyleValidator.ValidateProject(project);
+        ProjectLocalizationValidator.ValidateProject(project);
+        AuthoringDefaultsValidator.ValidateProject(project);
         TemplateParameterBindings.ValidateProject(project);
         ComponentQueryBindingValidator.ValidateProject(project);
         QueryRepeaterSource.ValidateStructure(project);

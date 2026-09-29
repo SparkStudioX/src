@@ -1,0 +1,22 @@
+# Gateway console workshop
+
+Open **Projects → Gateway** as a gateway administrator. The console has bookmarked Overview, Sessions and Diagnostics sections. Observations are explicit snapshots, marked stale after 30 seconds or a failed refresh. A saved connection status does not imply a fresh successful connection test.
+
+Overview lists application entry points, connection states and tag counts. Sessions lists separate engineering/operator sign-ins, creation/last-activity/expiry times, and an opaque administration handle unrelated to cookie and CSRF secrets. The current session is labeled. Review and confirm revocation to require that session to sign in on its next request; other sessions remain valid. Permission and CSRF checks apply at the API boundary, and the action is audited.
+
+Diagnostics reports process working set, managed memory, process CPU normalized to logical processors, available space on the data volume, active API requests and lifetime response counts. CPU needs two observations at least one second apart. Active requests include long-lived event streams. The last 128 completed API requests retain route templates, response status and elapsed time; request parameters and bodies are not retained. Counters and sessions reset on restart. This is not durable logging, equipment history, a worker profiler or a performance acceptance claim.
+
+**Download support snapshot** creates a local JSON file with an explicit allowlist of metrics and resource counts. It excludes account identities, connection details, request values, tokens, credentials, tag values/paths, authored resources, script output, exception bodies and keys. The console never uploads this snapshot anywhere. A support snapshot is not a backup.
+
+## Try it
+
+Import and publish the original **Gateway operations** workshop using a compatible build. No external services, Python or gateway tags are required. The project is a named resource for the administration exercises; the operator screen contains the exercise instructions, not embedded administration privileges.
+
+1. Open Gateway, search its name and follow its Designer and operator links. Return to the Gateway overview and refresh.
+2. Open Sessions. Observe distinct engineering/operator audiences. Open a disposable sign-in in another browser profile, refresh and identify its account, time and audience before selecting Revoke session. Confirm; its next request must require sign-in while your other session continues. Do not revoke a production operator as a test.
+3. Open Diagnostics. Refresh twice, at least one second apart, and compare CPU/memory observations. Route paths display placeholders, not actual project IDs or request query strings.
+4. Wait over 30 seconds: the page must label the observation stale. Refresh to obtain a new timestamp.
+5. Download and inspect the support JSON. Verify the exclusion list and bounded route records. Only explicitly share it after reviewing its contents.
+6. Sign in as an ordinary Designer or an operator and open `/gateway`: access must be denied. Existing project access stays unchanged.
+
+Session-to-project activity attribution, continuous connection diagnostics, durable metric retention and controlled failure/load acceptance remain later increments of G01/G02. This workshop does not claim those gates complete.

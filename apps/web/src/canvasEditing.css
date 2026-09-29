@@ -11,6 +11,8 @@
 }
 .canvas-arrange-toolbar label { display: flex; align-items: center; gap: 6px; }
 .canvas-arrange-toolbar select { width: auto; max-width: 158px; height: 28px; padding: 3px 7px; font-size: 11px; background: var(--surface-subtle); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; }
+.canvas-arrange-toolbar .canvas-grid-input { width: 58px; height: 28px; padding: 3px 5px; font-size: 11px; background: var(--surface-subtle); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; }
+.canvas-arrange-toolbar .canvas-grid-input[aria-invalid="true"] { border-color: var(--danger, #d95d68); }
 .canvas-arrange-toolbar button { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 4px; }
 .canvas-arrange-toolbar button.canvas-group-command { width: auto; padding: 3px 8px; gap: 5px; color: var(--text-secondary); font-size: 11px; }
 .canvas-arrange-toolbar select:disabled, .canvas-arrange-toolbar button:disabled { opacity: .4; }
@@ -23,6 +25,11 @@
 .canvas-marquee { position: absolute; border: 1px solid var(--accent); background: var(--accent-soft); opacity: .7; pointer-events: none; z-index: 1000; }
 .canvas-group-bounds { position: absolute; outline: 1.5px solid var(--accent); outline-offset: 2px; pointer-events: none; z-index: 3; }
 .canvas-group-bounds .group-resize-handle { pointer-events: auto; touch-action: none; width: 12px; height: 12px; }
+.canvas-precision-readout { display: inline-flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: flex-end; font-variant-numeric: tabular-nums; }
+.canvas-precision-guides { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1001; }
+.canvas-precision-guides span { position: absolute; opacity: .55; pointer-events: none; }
+.canvas-precision-guides .vertical { top: 0; bottom: 0; border-left: 1px dashed var(--accent); }
+.canvas-precision-guides .horizontal { left: 0; right: 0; border-top: 1px dashed var(--accent); }
 .layer-group-marker { display: inline-flex; flex: 0 0 auto; color: var(--muted); }
 .redo-icon { display: flex; transform: scaleX(-1); }
 .multi-selection-panel p { font-size: 11px; line-height: 1.65; color: var(--text-secondary); }

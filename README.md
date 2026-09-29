@@ -10,7 +10,7 @@ The current source includes **local accounts, separate engineering/operator sess
 
 - Administrator account setup, user/grant management, separate engineering/operator sign-in, read-only viewers, session revocation, project tag-read scopes, audit and copyable published operator links.
 - Projects home and Designer project navigation, with create, rename, duplicate, archive/restore and portable `.sparkproj` import/export. Each project has its own screens, queries, scripts, assets and operator URL; gateway connections and tags are shared.
-- Fixed-canvas screen editing with explicit X/Y positions, marquee/multiple selection, persistent flat groups, group resizing, grid snapping, alignment, distribution, duplication and Undo/Redo.
+- Fixed-canvas screen editing with explicit X/Y positions, marquee/multiple selection, persistent flat groups, group resizing, a bounded custom grid, selection by type, matching dimensions, alignment, distribution, duplication and Undo/Redo. Project authoring defaults apply to new screens/templates without resizing existing documents.
 - Thirty-five component types, including fourteen inputs, state controls, numeric LED, progress, tank, level and thermometer displays, plus editable lines/shapes/pipes and pump/valve/motor symbols.
 - Published Python button actions with typed form inputs, isolated template/row context and persisted local memory-tag writes.
 - Reusable templates and saved-row repeaters nested through four template levels, with independent inputs for every complete instance/row path, typed parameters, inherited wrapper properties and validated popup provenance. Query-backed repeaters stay at the screen or popup root.
@@ -20,7 +20,10 @@ The current source includes **local accounts, separate engineering/operator sess
 - Component Mounted, Property changed and Unmounted JavaScript handlers, with a staged property-sheet editor, ordered observation, bounded queues, async deadlines, shared feedback-loop protection and cleanup that cannot write into a disposed context.
 - Declared, typed browser session, screen and private template-instance state, read by bindings and updated through script helpers or two-way value bindings on thirteen non-password input types. Each template placement and repeater row owns its private values; nested templates still share their containing screen's state, and popups start fresh screen state while retaining the session.
 - A persistent scripting workspace for reusable libraries and gateway/browser events, plus an expanded Python onClick editor with syntax highlighting, completion and form/parameter context.
-- Immutable local images and parameterized modal popups with independent form state.
+- Immutable local images with searchable usage and previewed reference replacement, plus parameterized modal popups with independent form state.
+- Reusable visual styles and packaged caption translations, with staged editors, explicit source precedence and stable resource references.
+- Live read-only Designer Preview by default, with administrator-confirmed live actions, expiring session/project capabilities and bounded authoring diagnostics.
+- An administrator gateway overview, revocable session inventory, process/API diagnostics and a redacted support download. Checked operator publication history restores a prior application while preserving its Designer draft.
 - OPC UA discovery, browse/read and monitored-item subscriptions; managed local SQLite databases and SQL Server connections with parameterized named reads and explicit updates.
 - Query tables with configurable headings, order, visibility, widths, alignment and value formats, plus loaded-row paging, filtering, sorting, refresh, selection into declared form inputs and validated inline edits through published Python handlers.
 - Single-selection dropdowns, lists and trees with static or named-query choices, validated row-to-form mappings and published server-side membership checks. Query trees declare a parent column; input-driven tag paths let a selected machine determine its process display.
@@ -29,7 +32,7 @@ The current source includes **local accounts, separate engineering/operator sess
 
 These are bounded implementations, not complete Ignition feature or file-format compatibility. Real SQL Server validation, external OPC writes, expression tags, UDTs, historian, alarms, reporting and migration tooling remain outstanding. See the [component matrix](docs/architecture/COMPONENTS.md).
 
-The current source includes query-backed forms, single-selection lists/trees, loaded-result table paging and inline editing, typed nested templates with parameter fx bindings and private instance state, two-way input/state bindings, automatic property/lifecycle events, state controls, five process displays and six drawing/symbol types. Next application work extends binding sources and query-backed properties on these context and cancellation contracts. Broader event families and unified action authoring remain planned. Supplied-data charts are the next palette family; historian, alarms and reporting still need their backing subsystems. The [component guide](docs/architecture/COMPONENTS.md) defines behavior and remaining work; the [verification ledger](docs/architecture/PARITY.md) separates current evidence from earlier package results. SQLite has real disposable-database and gateway/Python integration checks; SQL Server reads and DML still need a live test server. The linked public preview installer records the earlier baseline.
+The current source includes query-backed forms and scalar properties, single-selection lists/trees, loaded-result table paging and inline editing, typed nested templates with parameter fx bindings and private instance state, two-way input/state bindings, automatic property/lifecycle events, state controls, five process displays and six drawing/symbol types. Further binding sources, responsive containers, conditional styles, deeper diagnostics, unified action authoring and complete gateway recovery remain planned. Supplied-data charts are the next palette family; historian, alarms and reporting still need their backing subsystems. The [component guide](docs/architecture/COMPONENTS.md) defines behavior and remaining work; the [verification ledger](docs/architecture/PARITY.md) separates each implemented increment from its remaining acceptance gates. SQLite has real disposable-database and gateway/Python integration checks; SQL Server reads and DML still need a live test server. Final browser/package verification of the newest ten roadmap increments is in progress, and the linked public preview installer records an earlier baseline.
 
 ## Run on Windows
 
@@ -186,13 +189,24 @@ Compose publishes host loopback only and retains a named data volume. Stop any o
 
 ## Feature workshops
 
-The [workshop catalog](examples/README.md) covers 22 authored examples. Sixteen build into independent, importable `.sparkproj` projects; six require gateway tags or SQLite setup and are clearly listed separately. Each major feature should include a workshop, walkthrough, prerequisites and verification. The portable collection uses synthetic data and works without external servers or Internet access.
+The [workshop catalog](examples/README.md) covers 31 authored examples. Twenty-four build into independent, importable `.sparkproj` projects; seven require gateway tags, SQLite setup or local image assignment and are clearly listed separately. Each major feature includes a workshop, walkthrough, prerequisites and verification. The portable collection uses synthetic data and works without external servers or Internet access.
 
 Designer **Search project** (Ctrl+Shift+F / Cmd+Shift+F) finds draft resources, properties, bindings, queries and scripts, with direct navigation and structured-reference views. See [project search](docs/architecture/PROJECT_SEARCH.md) and its portable workshop. Run `node tools/test-project-search.mjs` with Node 22.17 or newer to check the pure index and reference contracts offline.
 
 Screen/template renames and canvas-resource deletions have [change previews](docs/architecture/RESOURCE_CHANGES.md), reference blockers and one-step Undo. Names retain stable resource IDs. Code-text matches require review and are never rewritten automatically. `node tools/test-resource-changes.mjs` checks these preview/apply contracts offline.
 
 **Search project → Replace…** (Ctrl+Shift+H / Cmd+Shift+H) previews literal replacements in supported display text or tag paths. Select the properties to change, apply them as one undoable draft edit, then save and publish explicitly. Stable IDs, code, SQL, expressions and input values are excluded. See [bulk replacement](docs/architecture/BULK_REPLACEMENT.md) and run `node tools/test-bulk-replacement.mjs` for its offline contracts.
+
+The newest workshops cover the following authoring and gateway increments:
+
+- [Canvas precision](docs/architecture/CANVAS_PRECISION.md) and [authoring defaults](docs/architecture/AUTHORING_DEFAULTS.md): matching geometry, custom grids and starting dimensions for new resources.
+- [Visual styles](docs/architecture/VISUAL_STYLES.md) and [caption translations](docs/architecture/LOCALIZATION.md): shared appearance, local overrides and offline language resources.
+- [Preview communication](docs/architecture/PREVIEW_COMMUNICATION.md) and [Designer diagnostics](docs/architecture/DESIGNER_DIAGNOSTICS.md): guarded live actions and explicit diagnostic snapshots.
+- [Asset library](docs/architecture/ASSET_LIBRARY.md): local image usage and selected replacement with one Undo step. Assign uploaded images before publishing this setup-required exercise.
+- [Gateway console and diagnostics](docs/architecture/GATEWAY_CONSOLE.md): administration, session inventory and bounded process/API observations.
+- [Publication history](docs/architecture/PUBLICATION_HISTORY.md): checked revisions, reviewed restore, retention limits and preserved drafts.
+
+Focused automated checks and the offline build of all 24 portable entries have passed. Final batch browser, package round-trip and deployment evidence is still pending in the [verification ledger](docs/architecture/PARITY.md); use a matching current gateway build for these workshops.
 
 ```powershell
 node tools/build-workshops.mjs --version 2026.09.29

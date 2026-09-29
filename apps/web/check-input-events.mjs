@@ -186,4 +186,18 @@ await test('rendering defaults never executes event code and explicit appearance
   for (const fragment of ['has-custom-background', 'has-custom-foreground', 'has-custom-font', '--component-background:#112233', '--component-text-color:#abcdef', '--component-border-width:2px', '--component-font-size:18px']) assert.ok(html.includes(fragment), fragment);
   assert.doesNotMatch(html, /must not run|component-input-event-status/);
 });
+await test('read-only and unavailable Preview never start authored input JavaScript or its fetch', async () => {
+  const { setPreviewRequestContext } = await import(moduleUrl('previewRequest'));
+  const original = globalThis.fetch; let calls = 0;
+  globalThis.fetch = async () => { calls++; return {}; };
+  const event = { language: 'javascript', code: 'await fetch("https://example.invalid");' };
+  try {
+    setPreviewRequestContext(null); assert.throws(() => executeInputEvent(event, {}, {}, {}, {}), /read-only Preview/);
+    setPreviewRequestContext({ token: 'x', mode: 'read-only', expiresAt: new Date(Date.now() + 60000).toISOString() });
+    assert.throws(() => executeInputEvent(event, {}, {}, {}, {}), /read-only Preview/); assert.equal(calls, 0);
+    setPreviewRequestContext({ token: 'x', mode: 'live-actions', expiresAt: new Date(Date.now() + 60000).toISOString() });
+    await executeInputEvent(event, {}, {}, {}, {}); assert.equal(calls, 1);
+    setPreviewRequestContext(null, false); await executeInputEvent(event, {}, {}, {}, {}); assert.equal(calls, 2);
+  } finally { globalThis.fetch = original; setPreviewRequestContext(null, false); }
+});
 console.log(`${passed}/${passed} input event model and renderer checks passed.`);

@@ -1,0 +1,10 @@
+.publication-history-dialog { width:min(940px,94vw); max-height:90dvh; padding:0; color:var(--ink); background:var(--panel); border:1px solid var(--border); border-radius:10px; }
+.publication-history-dialog::backdrop { background:#101826a8; }
+.publication-history-dialog header,.publication-history-dialog footer { padding:18px 24px; }
+.publication-history-dialog header { border-bottom:1px solid var(--border); }
+.publication-history-dialog footer { display:flex; justify-content:flex-end; gap:12px; border-top:1px solid var(--border); }
+.publication-history-body { padding:8px 24px 24px; overflow:auto; max-height:65dvh; }
+.publication-history-dialog table { border-collapse:collapse; width:100%; text-align:left; }
+.publication-history-dialog th,.publication-history-dialog td { padding:12px; border-bottom:1px solid var(--border); }
+.publication-restore-review { border:1px solid var(--accent); padding:18px; margin-top:16px; background:var(--surface-subtle); }
+.publication-restore-review button { margin-right:10px; }

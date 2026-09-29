@@ -10,6 +10,266 @@
   },
   "workshops": [
     {
+      "id": "designer-diagnostics",
+      "title": "Designer diagnostics",
+      "summary": "Capture a bounded local snapshot of property failures, resource references, tag quality and retained browser-event messages.",
+      "source": "examples/designer-diagnostics.json",
+      "distribution": "portable",
+      "features": [
+        "explicit diagnostic snapshots",
+        "root-scope binding evaluation",
+        "category and severity filters",
+        "owner navigation",
+        "query-sample uncertainty",
+        "timestamped browser-event messages"
+      ],
+      "prerequisites": [
+        "Use the companion build with Project diagnostics and the built-in sample read-query provider.",
+        "No equipment, configured tags, external database, assets, Python or external network is required.",
+        "The optional deliberate browser-event failure needs administrator-enabled Live actions; default read-only Preview blocks authored scripts."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "diagnostics-home",
+      "guide": "docs/architecture/DESIGNER_DIAGNOSTICS.md",
+      "walkthrough": [
+        "Enter Preview, set requested width to -1 and enable the invalid-color checkbox. Open Project diagnostics and inspect both Property bindings failures.",
+        "Filter for width, open its owner and verify Preview ends with that component selected without editing its definition.",
+        "Reenter Preview with valid defaults and refresh the snapshot. The former property errors disappear; Query properties explicitly reports its sample was not captured.",
+        "Try the deliberate event checkbox in read-only Preview and inspect the blocked event message. Optionally enable Live actions and repeat to see its authored failure and timestamp.",
+        "Inspect Resource references and Tag quality/connection. The example creates no tags; quality records reflect only the current gateway snapshot."
+      ]
+    },
+    {
+      "id": "canvas-precision",
+      "title": "Canvas precision",
+      "summary": "Select controls by type, match widths/heights with group-aware bounds and inspect authored grid coordinates.",
+      "source": "examples/canvas-precision.json",
+      "distribution": "portable",
+      "features": [
+        "type selection",
+        "group-aware size matching",
+        "numeric grid snapping",
+        "boundary guides",
+        "single-step geometry undo"
+      ],
+      "prerequisites": [
+        "Use the companion Designer build with Select type, Match size and numeric grid controls.",
+        "No tags, assets, scripts, database or external network is required."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "precision-home",
+      "guide": "docs/architecture/CANVAS_PRECISION.md",
+      "walkthrough": [
+        "Select Rectangle and match width, height and both dimensions; undo each operation.",
+        "Select Ellipse and compare the saved group with the independent circle. Match the grouped bounds and undo.",
+        "Use Ctrl+Shift+A or Cmd+Shift+A to select the chosen component type. Try grid 12 and then 0; drag while inspecting boundary guides and X/Y/W/H.",
+        "Save and publish an accepted arrangement. Runtime bindings remain authoritative over any authored coordinates they control."
+      ]
+    },
+    {
+      "id": "visual-styles",
+      "title": "Reusable visual styles",
+      "summary": "Share appearance across screens and reusable forms while retaining local overrides and binding precedence.",
+      "source": "examples/visual-styles.json",
+      "distribution": "portable",
+      "features": [
+        "project style resources",
+        "component style assignment",
+        "appearance source inspection",
+        "nested appearance inheritance",
+        "reference-protected deletion",
+        "atomic catalog undo"
+      ],
+      "prerequisites": [
+        "Use the companion build with Visual styles in the Designer Project pane.",
+        "No equipment, tags, database, assets, scripts or external network is required."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "style-home",
+      "guide": "docs/architecture/VISUAL_STYLES.md",
+      "walkthrough": [
+        "Edit independent station notes in Preview and compare shared style appearance on both panels.",
+        "Change Section caption font size, cancel once, then Apply. The local 30-pixel override stays unchanged until cleared.",
+        "Toggle Use attention color: its binding wins while the assigned style still supplies font appearance. The disabled button remains disabled.",
+        "Change Station card background and compare Assembly with the Packing local override. Inspect why deleting a referenced style is blocked.",
+        "Undo the catalog once, then save and publish an accepted change. Export/re-import to verify stable style assignments."
+      ]
+    },
+    {
+      "id": "preview-communication",
+      "title": "Preview communication",
+      "summary": "Start with gateway-enforced read-only Preview, then deliberately enable temporary draft actions as an administrator.",
+      "source": "examples/preview-communication.json",
+      "distribution": "portable",
+      "features": [
+        "read-only preview capabilities",
+        "explicit administrator live actions",
+        "capability revocation",
+        "mode-change cancellation",
+        "nested and popup action guards"
+      ],
+      "prerequisites": [
+        "The built-in sample query needs no external database or configured tags.",
+        "The optional screen/template/popup Python message buttons require the bundled Python runtime and an administrator-enabled Live actions session.",
+        "Authored browser scripts are also disabled in default read-only Preview; publication has its own operator permission boundary."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "preview-home",
+      "guide": "docs/architecture/PREVIEW_COMMUNICATION.md",
+      "walkthrough": [
+        "Enter Preview and verify Live read-only, editable native local fields, pure bindings, sample query reads and popup navigation.",
+        "Try the three Python message buttons: each is blocked in read-only mode.",
+        "As a gateway administrator, open Enable live actions, cancel once, then confirm. The form resets and popup closes.",
+        "Run the optional screen, nested and popup message actions. They only return messages and do not write gateway data.",
+        "Return to read-only and verify the actions are blocked again. Exit and reopen Preview to confirm Live actions is never remembered."
+      ]
+    },
+    {
+      "id": "publication-history",
+      "title": "Publication history",
+      "summary": "Review and restore an earlier operator snapshot while preserving the current Designer draft.",
+      "source": "examples/publication-history.json",
+      "distribution": "portable",
+      "features": [
+        "bounded publication history",
+        "checksummed operator snapshots",
+        "reviewed restore",
+        "stale-publication conflict handling",
+        "draft and operator separation"
+      ],
+      "prerequisites": [
+        "Use the companion build with Publication history and a user with Publish permission.",
+        "No Python runtime, tags, assets, database or external network is required.",
+        "This is application snapshot history; separately published libraries/jobs, databases and gateway configuration are outside its restore scope."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "release-home",
+      "guide": "docs/architecture/PUBLICATION_HISTORY.md",
+      "walkthrough": [
+        "Publish Release A, then edit the title to Release B and publish again. Compare the two history entries.",
+        "Leave Release C as a draft, review Release A and explicitly restore its operator publication.",
+        "Reload the operator application: Release A renders while the Designer retains Release C.",
+        "Use another Designer tab to publish while a restore review is open; the stale restore must be rejected.",
+        "Export and import the project. Its draft survives, while the new project starts unpublished without local publication history."
+      ]
+    },
+    {
+      "id": "localization",
+      "title": "Offline caption translations",
+      "summary": "Translate component captions through an offline message catalog while preserving live form values and parameter identities.",
+      "source": "examples/localization.json",
+      "distribution": "portable",
+      "features": [
+        "project translation catalog",
+        "caption message assignments",
+        "browser-local language selection",
+        "parameter-preserving translations",
+        "visible fallback notes",
+        "text-binding precedence"
+      ],
+      "prerequisites": [
+        "Use the companion build with Translations and the Preview/operator Language selector.",
+        "No database, equipment, tags, assets, scripts or external network is required.",
+        "This increment translates captions in en/es/fr/de/it/pt language families; number/date formatting, menu/option labels and RTL layout are separate work."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "locale-home",
+      "guide": "docs/architecture/LOCALIZATION.md",
+      "walkthrough": [
+        "Enter distinct main and station notes in Preview. Select Spanish and verify captions change while notes, machine parameters and choice values remain unchanged.",
+        "Navigate using translated buttons. Select French and inspect the deliberately missing translation with its visible English fallback note.",
+        "Add the missing French translation, cancel once, then Apply. Undo restores the catalog in one step.",
+        "Inspect reference-protected message deletion and parameter-token validation. Save and explicitly publish an accepted translation.",
+        "Open an application-only operator link with ?lang=es. Export/re-import to verify the catalog and authored defaults."
+      ]
+    },
+    {
+      "id": "authoring-defaults",
+      "title": "Canvas authoring defaults",
+      "summary": "Save starting document sizes and grid spacing without resizing existing screens and templates.",
+      "source": "examples/authoring-defaults.json",
+      "distribution": "portable",
+      "features": [
+        "project authoring defaults",
+        "new-document dimensions",
+        "saved initial grid",
+        "Apply and Cancel",
+        "portable settings"
+      ],
+      "prerequisites": [
+        "Use the companion build with Canvas authoring defaults in Project settings.",
+        "No tags, assets, scripts, database or external network is required."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "defaults-home",
+      "guide": "docs/architecture/AUTHORING_DEFAULTS.md",
+      "walkthrough": [
+        "Inspect the existing 1100 × 680 screen and 300 × 160 template. Their dimensions remain independent of project defaults.",
+        "Add a screen and template to inspect the configured 1400 × 900 and 700 × 450 starting sizes; undo each creation.",
+        "Edit defaults in Project settings, cancel once, then apply a valid change and undo it.",
+        "Save grid 12, change the session toolbar grid to 4, then reopen Designer and verify the saved initial grid returns.",
+        "Export/re-import and repeat the new-document checks. Existing geometry stays unchanged."
+      ]
+    },
+    {
+      "id": "gateway-operations",
+      "title": "Gateway operations",
+      "summary": "Explore the administrator resource/session console and bounded operational diagnostics using a synthetic application.",
+      "source": "examples/gateway-operations.json",
+      "distribution": "portable",
+      "features": [
+        "gateway application inventory",
+        "engineering/operator session inventory",
+        "reviewed session revocation",
+        "timestamped diagnostic snapshots",
+        "local allowlisted support export"
+      ],
+      "prerequisites": [
+        "Use the companion build and a gateway administrator for Projects → Gateway.",
+        "The project itself needs no tags, assets, database, scripts or external network.",
+        "Use only a disposable sign-in for the optional session revocation exercise; it changes that session’s authentication state."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "gateway-lab",
+      "guide": "docs/architecture/GATEWAY_CONSOLE.md",
+      "walkthrough": [
+        "Import and publish the named workshop. Open Projects → Gateway and locate its Designer/operator links.",
+        "Compare engineering and operator sessions. If testing revocation, identify and revoke only a disposable session, leaving the current and other sessions active.",
+        "Open Diagnostics and refresh twice at least one second apart. Inspect CPU, memory, disk and bounded route observations.",
+        "Wait over 30 seconds to verify the stale snapshot indicator, then refresh.",
+        "Download and inspect the local support snapshot; it excludes credentials, identities, authored project content and tag values. Ordinary Designer/operator users cannot open the console."
+      ]
+    },
+    {
+      "id": "asset-library",
+      "title": "Asset library and replacements",
+      "summary": "Review structured image use and preview selective replacements across screens and shared template definitions.",
+      "source": "examples/asset-library.json",
+      "distribution": "setup-required",
+      "features": [
+        "searchable local asset library",
+        "structured image references",
+        "selective replacement previews",
+        "shared-template replacements",
+        "atomic project undo"
+      ],
+      "prerequisites": [
+        "Load the authored fixture into a separate project and bring two local PNG, JPEG or WebP images, each up to 512 KiB.",
+        "Upload both images and assign image A to Desk photo, Detail photo and the shared template image before publication. The fixture intentionally contains no image files.",
+        "After setup, normal project export produces a portable .sparkproj with the referenced image assets. No tags, database or scripts are required."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "images-home",
+      "guide": "docs/architecture/ASSET_LIBRARY.md",
+      "walkthrough": [
+        "Upload two local images, configure the three authored image references and open Asset library.",
+        "Search by image name or shared template location and open a listed owning component without editing it.",
+        "Preview replacement with image B; select only Desk photo, apply and use one Undo. Other references remain on A.",
+        "Replace only the shared template image and compare both placements, then undo.",
+        "Save all replacements while the operator stays on its previous publication. Publish explicitly, export and re-import the configured project."
+      ]
+    },
+    {
       "id": "bulk-replacement",
       "title": "Bulk replacement",
       "summary": "Preview literal text changes across screens and templates, apply selected properties and undo the entire batch.",

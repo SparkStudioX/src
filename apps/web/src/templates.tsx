@@ -11,6 +11,10 @@ import { parameterBindingInputs, parameterBindingState, resolveParameterBindings
 import { useComponentEvents } from "./ComponentEvents";
 import { QueryPropertyProvider, useQueryPropertyBindings, useQueryPropertyContext } from "./useQueryPropertyBindings";
 import { useQueryRepeater } from "./useQueryRepeater";
+import { useVisualStyles } from "./VisualStyleContext";
+import { applyVisualStyle } from "./visualStyles";
+import { useLocalization } from "./LocalizationContext";
+import { localizeComponent } from "./localization";
 import Icon from "./Icon";
 import type {
   CanvasComponent,
@@ -107,16 +111,18 @@ export function ProjectComponentView(props: ProjectComponentProps) {
 function BoundTemplateInstance(props: TemplateInstanceProps) {
   const applicationState = useApplicationStateContext();
   const queryProperties = useQueryPropertyContext();
-  const inherited = { ...props.inheritedAppearance };
-  if (props.component.props.color !== undefined || props.component.props.bindings?.color || props.component.props.queryBindings?.color) delete inherited.foregroundColor;
-  const defaults = Object.fromEntries(Object.entries(inherited).filter(([key]) => props.component.props[key as keyof InheritedComponentAppearance] === undefined));
-  const authored = { ...props.component, props: { ...props.component.props, ...defaults } };
+  const styles = useVisualStyles();
+  const localization = useLocalization();
+  const localized = localizeComponent(props.component, localization.catalog, localization.locale);
+  const styled = applyVisualStyle(localized.component, styles, props.inheritedAppearance);
+  const authored = styled.component;
   const result = evaluateComponentBindings(authored, {
     components: props.components ?? [props.component], tags: props.tags, parameters: props.parameters,
     inputs: props.inputs ?? {}, communicationLost: props.communicationLost, state: applicationState?.values,
     queryProperties,
   });
   const errors = Object.entries(result.errors);
+  if (styled.error) errors.push(["style", styled.error]);
   const querySamples = queryProperties?.[props.component.id] ?? {};
   const queryWaiting = errors.length > 0 && errors.every(([target]) => querySamples[target as keyof typeof querySamples]?.status === "loading");
   const queryErrors = errors.filter(([target]) => Object.hasOwn(props.component.props.queryBindings ?? {}, target));
@@ -148,7 +154,7 @@ function BoundTemplateInstance(props: TemplateInstanceProps) {
     if (appearance[key] !== undefined) Object.assign(inheritedAppearance, { [key]: appearance[key] });
   return <div className={`bound-component template-binding-frame${runtimeHidden ? " bound-component-hidden" : ""}${!visible ? " design-hidden" : ""}${errors.length ? " binding-failed" : ""}`}
     hidden={runtimeHidden}
-    role="group" aria-label={caption} data-component-id={props.component.id} aria-disabled={props.preview && !enabled || undefined}
+    role="group" aria-label={caption} lang={localized.locale} data-component-id={props.component.id} aria-disabled={props.preview && !enabled || undefined}
     style={{
       backgroundColor: appearance.backgroundColor, color: appearance.foregroundColor,
       borderColor: appearance.borderColor, borderWidth: appearance.borderWidth,
@@ -169,6 +175,7 @@ function BoundTemplateInstance(props: TemplateInstanceProps) {
         onScopedInputChange={(scope, key, value) => { if (writeGate.current) props.onScopedInputChange?.(scope, key, value); }} />
     </div>
     {!props.preview && !visible && <span className="binding-visibility-note">Hidden in runtime</span>}
+    {localized.warning && <span className="component-localization-note" role="status" title={localized.warning}>{localized.warning}</span>}
     {errors.length > 0 && <div className="component-binding-error" role="status" title={errors.map(([target, error]) => `${target}: ${error}`).join("\n")}>
       {queryWaiting ? "Loading query…" : queryErrors.length ? `Query unavailable: ${queryErrors.map(([target]) => target).join(", ")}` : `Binding error: ${errors.map(([target]) => target).join(", ")}`}
     </div>}

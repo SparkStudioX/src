@@ -1,0 +1,14 @@
+{
+  "name": "Publication history",
+  "parameters": {},
+  "screens": [{
+    "id": "release-home", "name": "Release desk", "width": 1000, "height": 640,
+    "components": [
+      { "id": "title", "type": "label", "x": 32, "y": 28, "width": 936, "height": 64, "props": { "text": "Release A · Packing desk", "fontSize": 30 } },
+      { "id": "instructions", "type": "label", "x": 32, "y": 112, "width": 936, "height": 100, "props": { "text": "Publish this version. Change the title to Release B, save and publish again. Publication history can restore Release A while retaining your current Designer draft.", "fontSize": 19 } },
+      { "id": "note", "type": "textInput", "x": 32, "y": 240, "width": 560, "height": 80, "props": { "text": "Local operator note", "fieldKey": "note", "defaultValue": "No production data in this workshop" } },
+      { "id": "boundary", "type": "label", "x": 32, "y": 350, "width": 936, "height": 120, "props": { "text": "Restore affects the published application snapshot. It does not restore operator input, database records, gateway tags, connection settings, separately published script libraries or event jobs.", "fontSize": 18 } },
+      { "id": "footer", "type": "label", "x": 32, "y": 530, "width": 936, "height": 60, "props": { "text": "Original synthetic workshop · No external services or writes · Publication changes require Publish permission", "fontSize": 15 } }
+    ]
+  }]
+}

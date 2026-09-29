@@ -12,13 +12,18 @@ async function check(name, run) { await run(); passed++; console.log(`PASS ${nam
 await check('catalog accounts for every authored example, its source, guide, prerequisites and walkthrough', () => {
   assert.ok(portable.length); assert.ok(catalog.workshops.some(entry => entry.distribution === 'setup-required'));
 });
-await check('every portable archive preserves authored screens/templates/state and has only draft project entries', async () => {
+await check('every portable archive preserves authored screens/templates/state/styles/translations/defaults and has only draft project entries', async () => {
   for (const entry of portable) {
     const source = JSON.parse(await readFile(new URL(entry.source, new URL('../', import.meta.url)), 'utf8'));
     const built = await buildWorkshop(root, entry, options.exportedAt), files = readZip(built.bytes);
     assert.deepEqual([...files.keys()].sort(), ['manifest.json', 'project.json', 'queries.json', 'scripts-draft.json']);
     assert.deepEqual(built.project.screens, source.screens ?? [source.screen]); assert.deepEqual(built.project.templates, source.templates ?? []);
     assert.deepEqual(built.project.sessionState, source.sessionState); assert.deepEqual(built.project.parameters, source.parameters ?? {});
+    const archivedProject = JSON.parse(files.get('project.json'));
+    for (const field of ['styles', 'authoringDefaults', 'localization']) {
+      assert.deepEqual(built.project[field], source[field], `${entry.id}: authored ${field} must survive package projection`);
+      assert.deepEqual(archivedProject[field], source[field], `${entry.id}: archived ${field} must match its authored source exactly`);
+    }
     assert.deepEqual(built.scripts, { revision: 0, resources: [] });
     const manifest = JSON.parse(files.get('manifest.json')); assert.equal(manifest.content, 'draft-only');
     assert.deepEqual(manifest.connectionDependencies, built.queries.length ? [{ id: 'sample', name: 'Built-in sample' }] : []);

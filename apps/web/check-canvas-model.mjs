@@ -6,11 +6,12 @@ const source = name => fs.readFileSync(new URL(`./src/${name}.ts`, import.meta.u
 const compile = code => ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
 const asModule = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
 const authSessionUrl = asModule(compile(source('authSession')));
-const apiUrl = asModule(compile(source('api')).replaceAll('"./authSession"', JSON.stringify(authSessionUrl)));
+const previewRequestUrl = asModule(compile(source('previewRequest')));
+const apiUrl = asModule(compile(source('api')).replaceAll('"./authSession"', JSON.stringify(authSessionUrl)).replaceAll('"./previewRequest"', JSON.stringify(previewRequestUrl)));
 const listTreeUrl = asModule(compile(source('listTreeModel')));
 const inputsUrl = asModule(compile(source('inputs')).replaceAll('"./api"', JSON.stringify(apiUrl)).replaceAll('"./listTreeModel"', JSON.stringify(listTreeUrl)));
 const compiled = compile(source('canvasEditing')).replaceAll('"./inputs"', JSON.stringify(inputsUrl));
-const { selectionBounds, snapToGrid, moveSelected, resizeComponent, alignSelected, distributeSelected, duplicateSelected, marqueeBounds, marqueeSelection, checkpoint, restoreHistory, projectContent, expandGroupSelection, toggleGroupSelection, groupSelected, ungroupSelected, deleteSelected, resizeGroup, arrangementCount } =
+const { selectionBounds, snapToGrid, moveSelected, resizeComponent, alignSelected, distributeSelected, duplicateSelected, marqueeBounds, marqueeSelection, checkpoint, restoreHistory, projectContent, expandGroupSelection, toggleGroupSelection, groupSelected, ungroupSelected, deleteSelected, resizeGroup, arrangementCount, selectComponentType, parseGridSize, matchSelectedSize } =
   await import(asModule(compiled));
 
 let checks = 0;
@@ -415,6 +416,95 @@ check('group creation and resize round-trip through save serialization, Undo and
   const redone = restoreHistory(regrouped.history, regrouped.project, 'redo');
   assert.equal(projectContent(redone.project), projectContent(saved));
   assert.equal(redone.project.revision, 9);
+});
+
+check('custom grids accept bounded whole pixels and reject empty, fractional or malformed values', () => {
+  for (const [value, expected] of [['0', 0], ['1', 1], ['12', 12], ['128', 128], [' 24 ', 24], ['008', 8]]) assert.equal(parseGridSize(value), expected);
+  for (const value of ['', ' ', '-1', '129', '2.5', 'NaN', 'Infinity', '1e2', '0x10', '5px', '+8']) assert.equal(parseGridSize(value), null, value);
+});
+
+check('selection by type includes group siblings, preserves layer order and stays document local', () => {
+  const items = [component('label', 0, 0), { ...component('button', 50, 0, 40, 28, 'button'), groupId: 'pair' }, component('outside', 150, 0, 40, 28, 'button'), { ...component('group-label', 100, 0), groupId: 'pair' }];
+  assert.deepEqual(selectComponentType(items, 'label'), ['label', 'button', 'group-label']);
+  assert.deepEqual(selectComponentType(items, 'button'), ['button', 'outside', 'group-label']);
+  assert.deepEqual(selectComponentType(items, 'unknown'), []);
+  assert.deepEqual(selectComponentType([], 'label'), []);
+});
+
+check('matching width uses first selected layer regardless of selection order and preserves data', () => {
+  const binding = { width: { expression: '200', references: {} } };
+  const items = [component('reference', 0, 10, 80, 50), component('outside', 100, 10, 70, 60), component('target', 150, 100, 40, 28, 'button', { text: 'Keep', bindings: binding })];
+  const result = matchSelectedSize(items, ['target', 'reference', 'reference', 'missing'], 'width', bounds);
+  assert.equal(result.error, undefined);
+  assert.deepEqual(geometries(result.components), [{ id: 'reference', x: 0, y: 10, width: 80, height: 50 }, { id: 'outside', x: 100, y: 10, width: 70, height: 60 }, { id: 'target', x: 150, y: 100, width: 80, height: 28 }]);
+  assert.equal(result.components[0], items[0]);
+  assert.equal(result.components[1], items[1]);
+  assert.equal(result.components[2].props, items[2].props);
+  assert.equal(result.components[2].props.bindings, binding);
+  assert.equal(items[2].width, 40);
+});
+
+check('matching height and both dimensions retain target origins', () => {
+  const items = [component('first', 10, 10, 75, 60), component('next', 120, 70, 110, 40)];
+  assert.deepEqual(geometries(matchSelectedSize(items, ['first', 'next'], 'height', bounds).components)[1], { id: 'next', x: 120, y: 70, width: 110, height: 60 });
+  assert.deepEqual(geometries(matchSelectedSize(items, ['first', 'next'], 'both', bounds).components)[1], { id: 'next', x: 120, y: 70, width: 75, height: 60 });
+});
+
+check('matching a group scales child geometry on the requested axis as one object', () => {
+  const items = [component('reference', 0, 0, 240, 112), { ...component('a', 10, 130, 40, 28), groupId: 'pair' }, { ...component('b', 70, 144, 60, 28), groupId: 'pair' }];
+  const result = matchSelectedSize(items, ['reference', 'a'], 'width', { width: 500, height: 500 });
+  assert.equal(result.error, undefined);
+  assert.deepEqual(geometries(result.components).slice(1), [{ id: 'a', x: 10, y: 130, width: 80, height: 28 }, { id: 'b', x: 130, y: 144, width: 120, height: 28 }]);
+  assert.equal(selectionBounds(result.components, ['a', 'b']).width, 240);
+  assert.ok(result.components.slice(1).every(item => item.groupId === 'pair'));
+});
+
+check('a reference group measures its complete bounds and does not change', () => {
+  const items = [{ ...component('a', 10, 10, 40, 28), groupId: 'pair' }, component('target', 100, 100, 80, 30), { ...component('b', 60, 30, 80, 42), groupId: 'pair' }];
+  const result = matchSelectedSize(items, ['target', 'b'], 'both', bounds);
+  assert.equal(result.error, undefined);
+  assert.equal(result.components[0], items[0]);
+  assert.equal(result.components[2], items[2]);
+  assert.deepEqual(geometries(result.components)[1], { id: 'target', x: 100, y: 100, width: 130, height: 62 });
+});
+
+check('matching sizes fails atomically if any target cannot fit or a grouped child is too small', () => {
+  const items = [component('reference', 0, 0, 100, 80), component('fits', 110, 0, 40, 28), component('edge', 260, 100, 40, 28)];
+  const oversized = matchSelectedSize(items, items.map(item => item.id), 'width', bounds);
+  assert.match(oversized.error, /beyond the canvas/);
+  assert.ok(oversized.components.every((item, index) => item === items[index]));
+  const group = [component('reference', 0, 0, 60, 28), { ...component('a', 0, 100), groupId: 'pair' }, { ...component('b', 60, 100), groupId: 'pair' }];
+  const small = matchSelectedSize(group, ['reference', 'b'], 'width', bounds);
+  assert.match(small.error, /smaller than 40/);
+  assert.ok(small.components.every((item, index) => item === group[index]));
+});
+
+check('matching size ignores grid rounding and safely handles empty, invalid and unchanged selections', () => {
+  const items = [component('first', 0, 0, 70.5, 28), component('second', 90, 0, 40, 28)];
+  assert.equal(matchSelectedSize(items, ['first', 'second'], 'width', bounds).components[1].width, 70.5);
+  assert.deepEqual(matchSelectedSize(items, [], 'both', bounds), { components: items });
+  assert.deepEqual(matchSelectedSize(items, ['first'], 'width', bounds), { components: items });
+  assert.deepEqual(matchSelectedSize(items, ['first', 'second'], 'width', { width: NaN, height: 200 }), { components: items });
+  const invalid = [{ ...items[0], width: Infinity }, items[1]];
+  assert.deepEqual(matchSelectedSize(invalid, ['first', 'second'], 'width', bounds), { components: invalid });
+  const same = matchSelectedSize(items, ['first', 'second'], 'height', bounds);
+  assert.ok(same.components.every((item, index) => item === items[index]));
+  assert.deepEqual(matchSelectedSize(items, ['first', 'second'], 'invalid', bounds), { components: items });
+  const tiny = [component('reference', 0, 0, 80, 40), component('tiny', 0, 80, Number.MIN_VALUE, 30)];
+  assert.match(matchSelectedSize(tiny, ['reference', 'tiny'], 'width', bounds).error, /cannot be resized safely/);
+});
+
+check('a size command is one reversible history transaction and preserves server revisions', () => {
+  const original = { id: 'p', name: 'Sizing', revision: 1, parameters: {}, screens: [{ id: 's', ...bounds, components: [component('a', 0, 0, 90, 56), component('b', 100, 50), component('c', 200, 100)] }] };
+  const result = matchSelectedSize(original.screens[0].components, ['a', 'b', 'c'], 'both', bounds);
+  assert.equal(result.error, undefined);
+  const edited = { ...original, revision: 5, screens: [{ ...original.screens[0], components: result.components }] };
+  const undone = restoreHistory(checkpoint({ past: [], future: [] }, original), edited, 'undo');
+  assert.equal(projectContent(undone.project), projectContent(original));
+  assert.equal(undone.project.revision, 5);
+  assert.equal(undone.history.past.length, 0);
+  const redone = restoreHistory(undone.history, undone.project, 'redo');
+  assert.equal(projectContent(redone.project), projectContent(edited));
 });
 
 console.log(`${checks}/${checks} canvas model checks passed.`);

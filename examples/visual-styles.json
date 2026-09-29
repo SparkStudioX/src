@@ -1,0 +1,35 @@
+{
+  "name": "Visual styles workshop",
+  "styles": [
+    { "id": "station-card", "name": "Station card", "properties": { "backgroundColor": "#eaf0fa", "foregroundColor": "#20304d", "borderColor": "#7187af", "borderWidth": 2, "fontSize": 18 } },
+    { "id": "action", "name": "Primary action", "properties": { "color": "#4667ad", "fontSize": 19, "borderColor": "#284678", "borderWidth": 1 } },
+    { "id": "caption", "name": "Section caption", "properties": { "foregroundColor": "#54709c", "fontSize": 24 } }
+  ],
+  "templates": [
+    { "id": "station-panel", "name": "Styled station panel", "width": 450, "height": 200, "parameters": { "station": "Assembly" }, "components": [
+      { "id": "station-name", "type": "label", "x": 18, "y": 12, "width": 410, "height": 44, "props": { "text": "{station}", "styleId": "caption" } },
+      { "id": "station-note", "type": "textInput", "x": 18, "y": 70, "width": 410, "height": 86, "props": { "text": "Independent station note", "fieldKey": "stationNote", "defaultValue": "Ready for handoff" } }
+    ] }
+  ],
+  "screens": [
+    { "id": "style-home", "name": "Style desk", "width": 1040, "height": 840, "components": [
+      { "id": "title", "type": "label", "x": 24, "y": 20, "width": 992, "height": 50, "props": { "text": "One style, shared across the application", "fontSize": 28 } },
+      { "id": "intro", "type": "label", "x": 24, "y": 86, "width": 992, "height": 60, "props": { "text": "Edit a style in Designer, inspect local overrides, then publish when ready. Operator notes remain local to each form.", "fontSize": 17 } },
+      { "id": "assembly", "type": "template", "x": 24, "y": 166, "width": 450, "height": 200, "props": { "text": "Assembly panel", "templateId": "station-panel", "parameters": { "station": "Assembly" }, "styleId": "station-card" } },
+      { "id": "packing", "type": "template", "x": 550, "y": 166, "width": 450, "height": 200, "props": { "text": "Packing panel", "templateId": "station-panel", "parameters": { "station": "Packing" }, "styleId": "station-card", "backgroundColor": "#fff1dc" } },
+      { "id": "binding-toggle", "type": "checkbox", "x": 24, "y": 392, "width": 450, "height": 50, "props": { "text": "Use attention color", "fieldKey": "attention", "defaultValue": false } },
+      { "id": "bound-caption", "type": "label", "x": 550, "y": 392, "width": 450, "height": 72, "props": { "text": "Binding overrides the assigned caption style", "styleId": "caption", "bindings": { "foregroundColor": { "expression": "attention ? '#b84624' : '#245f45'", "references": { "attention": { "kind": "input", "key": "attention" } } } } } },
+      { "id": "local-override", "type": "label", "x": 24, "y": 490, "width": 450, "height": 66, "props": { "text": "Local font override: 30 px", "styleId": "caption", "fontSize": 30 } },
+      { "id": "inherited-caption", "type": "label", "x": 550, "y": 490, "width": 450, "height": 66, "props": { "text": "Shared caption font and color", "styleId": "caption" } },
+      { "id": "open-review", "type": "button", "x": 24, "y": 596, "width": 450, "height": 58, "props": { "text": "Open review screen", "action": "navigate", "targetScreenId": "style-review", "styleId": "action" } },
+      { "id": "disabled", "type": "button", "x": 550, "y": 596, "width": 450, "height": 58, "props": { "text": "Disabled remains disabled", "action": "navigate", "targetScreenId": "style-review", "styleId": "action", "enabled": false } },
+      { "id": "help", "type": "label", "x": 24, "y": 688, "width": 976, "height": 120, "props": { "text": "Try Project visual styles → Section caption. Change its font size: both station headings and the shared caption change. The local font override stays at 30 px, while the bound caption keeps its expression color. Styles contain appearance only; they cannot grant access or change enabled/visible state.", "fontSize": 17 } }
+    ] },
+    { "id": "style-review", "name": "Style review", "width": 960, "height": 430, "components": [
+      { "id": "title", "type": "label", "x": 24, "y": 24, "width": 912, "height": 60, "props": { "text": "Shared styles cross screen boundaries", "styleId": "caption" } },
+      { "id": "help", "type": "label", "x": 24, "y": 108, "width": 912, "height": 134, "props": { "text": "This heading and navigation button use the same style resources as the main screen. Deleting a referenced style is blocked until all its assignments are removed. Cancelling the style editor leaves the draft unchanged; Apply adds one Undo step. Save and Publish stay separate.", "fontSize": 19 } },
+      { "id": "home", "type": "button", "x": 24, "y": 280, "width": 440, "height": 58, "props": { "text": "Back to style desk", "action": "navigate", "targetScreenId": "style-home", "styleId": "action" } }
+    ] }
+  ],
+  "navigation": { "mode": "none", "startupScreenId": "style-home", "items": [] }
+}

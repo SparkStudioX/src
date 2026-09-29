@@ -1,6 +1,6 @@
 # Component property and lifecycle events
 
-Select a component and open **Component events → Edit lifecycle & property events** in its property sheet. The editor stages three JavaScript handlers: **Mounted**, **Property changed**, and **Unmounted**. Apply records one Designer undo step; Cancel discards the draft. Save and publish to deploy the definitions to operators. Designer authoring does not execute these scripts; Preview and the operator application do.
+Select a component and open **Component events → Edit lifecycle & property events** in its property sheet. The editor stages three JavaScript handlers: **Mounted**, **Property changed**, and **Unmounted**. Apply records one Designer undo step; Cancel discards the draft. Save and publish to deploy the definitions to operators. Designer authoring and default read-only Preview do not execute these scripts. An administrator must explicitly enable [live-actions Preview](PREVIEW_COMMUNICATION.md) to exercise them there; the published operator application retains its normal event behavior.
 
 These handlers add automatic local behavior to all component types, including template and repeater wrappers. They are separate from explicit user input change/commit events and gateway Python button actions. The application supplies browser state and form helpers, not gateway query or equipment command helpers. Author scripts remain trusted JavaScript and are not a security sandbox.
 

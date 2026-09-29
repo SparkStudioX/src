@@ -1,5 +1,6 @@
 import type { RuntimeParameters } from "./types";
 import { authenticatedFetch, assertAuthResponseCurrent } from "./authSession";
+import { preparePreviewRequest } from "./previewRequest";
 export { authenticatedFetch, assertAuthResponseCurrent, authHeaders, eventStreamUrl } from "./authSession";
 export class ApiError extends Error {
   constructor(
@@ -11,13 +12,14 @@ export class ApiError extends Error {
   }
 }
 
-export type ProjectRoute = { kind: "home" } | { kind: "security" } | { kind: "designer" | "runtime"; projectId: string | null } | { kind: "invalid" };
+export type ProjectRoute = { kind: "home" } | { kind: "security" } | { kind: "gateway" } | { kind: "designer" | "runtime"; projectId: string | null } | { kind: "invalid" };
 const projectIdPattern = /^[a-z][a-z0-9-]{0,63}$/;
 
 /** Route IDs are opaque catalog keys, never arbitrary path fragments. */
 export function parseProjectRoute(pathname: string): ProjectRoute {
   if (pathname === "/" || pathname === "/projects" || pathname === "/projects/") return { kind: "home" };
   if (pathname === "/security" || pathname === "/security/") return { kind: "security" };
+  if (pathname === "/gateway" || pathname === "/gateway/") return { kind: "gateway" };
   const match = /^\/(designer|runtime)(?:\/([^/]+))?\/?$/.exec(pathname);
   if (!match) return { kind: "invalid" };
   if (!match[2]) return { kind: match[1] as "designer" | "runtime", projectId: null };
@@ -40,7 +42,7 @@ export function projectPage(kind: "designer" | "runtime", projectId = currentPro
 /** Gateway resources are shared; only authoring/runtime application resources are scoped. */
 export function apiUrl(path: string, projectId = currentProjectId()): string {
   if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\")) throw new Error("Use a local API path.");
-  const scoped = /^\/(?:project|queries|scripts|assets|runtime)(?:\/|\?|$)/.test(path);
+  const scoped = /^\/(?:project|queries|scripts|assets|runtime|preview)(?:\/|\?|$)/.test(path);
   if (!scoped || projectId === null) return `/api${path}`;
   if (!projectIdPattern.test(projectId)) throw new Error("Invalid project ID.");
   return `/api/projects/${encodeURIComponent(projectId)}${path}`;
@@ -56,14 +58,17 @@ export async function api<T>(
   body?: unknown,
   signal?: AbortSignal,
 ): Promise<T> {
-  const response = await authenticatedFetch(apiUrl(path), {
-    signal,
+  const preview = preparePreviewRequest(path, signal);
+  try {
+  const response = await authenticatedFetch(apiUrl(preview.path), {
+    signal: preview.signal,
     method,
     headers:
-      body !== undefined ? { "Content-Type": "application/json" } : undefined,
+      { ...preview.headers, ...(body !== undefined ? { "Content-Type": "application/json" } : {}) },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const raw = await response.text();
+  preview.assertCurrent();
   // A 401 already invalidated the session; still return its useful sign-in error.
   if (response.status !== 401) assertAuthResponseCurrent(response);
   let data: unknown;
@@ -91,6 +96,7 @@ export async function api<T>(
       "The gateway returned an unexpected response. Check that the gateway is running.",
     );
   return data as T;
+  } finally { preview.finish(); }
 }
 
 export function id(prefix: string): string {

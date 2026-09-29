@@ -38,7 +38,7 @@ Live tags and connection definitions remain shared. Publication boundaries remai
 - Libraries and event scripts have an independent explicit script publication. Publishing scripts updates libraries used by later operator actions; projects and libraries do not yet form one atomic release.
 - An open runtime retains its loaded screens until reload. Table/dropdown reads carry that publication's identity and fail explicitly if a new version was published, preventing new query definitions from mixing with old screens. Stale published actions are also rejected; archiving or withdrawing a project clears its open runtime on the publication poll. Legacy API callers that omit the optional query token retain latest-publication behavior.
 
-Reload after publishing. Publication history, rollback, multi-user editing and complete gateway backup/restore are future work. Designer Preview runs trusted scripts and may change local memory values; draft isolation does not make preview read-only.
+Reload after publishing or restoring a publication. [Publication history](PUBLICATION_HISTORY.md) retains up to 20 reviewed operator snapshots; multi-user editing and complete gateway backup/restore remain future work. Designer Preview starts [live read-only](PREVIEW_COMMUNICATION.md): native local inputs, pure bindings and read queries work, while Python, authored browser scripts and writes are blocked. A gateway administrator can explicitly enable temporary live actions for that engineering session and project. Trusted scripts are not sandboxed, and leaving Preview cannot undo their completed effects.
 
 ## Tags and connectors
 

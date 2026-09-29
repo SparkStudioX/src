@@ -1,0 +1,26 @@
+{
+  "name": "Asset library workshop",
+  "navigation": { "mode": "menu", "startupScreenId": "images-home", "items": [{ "screenId": "images-home", "label": "Image desk" }, { "screenId": "images-detail", "label": "Second screen" }] },
+  "templates": [{ "id": "image-card", "name": "Shared image card", "width": 400, "height": 270, "parameters": {}, "components": [
+    { "id": "shared-photo", "type": "image", "x": 20, "y": 16, "width": 360, "height": 194, "props": { "text": "Shared photo", "alt": "Shared workshop image", "fit": "contain" } },
+    { "id": "shared-caption", "type": "label", "x": 20, "y": 222, "width": 360, "height": 30, "props": { "text": "One image reference in the template", "fontSize": 17 } }
+  ] }],
+  "screens": [
+    { "id": "images-home", "name": "Image desk", "width": 1100, "height": 780, "components": [
+      { "id": "title", "type": "label", "x": 32, "y": 24, "width": 1036, "height": 54, "props": { "text": "Local images, deliberate replacements", "fontSize": 30 } },
+      { "id": "intro", "type": "label", "x": 32, "y": 98, "width": 1036, "height": 94, "props": { "text": "Bring two local PNG, JPEG or WebP images, each up to 512 KiB. Upload them through an image component's property sheet. No images are bundled in this exercise.", "fontSize": 19 } },
+      { "id": "desk-photo", "type": "image", "x": 32, "y": 218, "width": 540, "height": 290, "props": { "text": "Desk photo", "alt": "Desk workshop image", "fit": "contain" } },
+      { "id": "shared-card", "type": "template", "x": 628, "y": 218, "width": 400, "height": 270, "props": { "text": "Shared image placement", "templateId": "image-card", "parameters": {}, "borderColor": "#8d9fcf", "borderWidth": 1 } },
+      { "id": "setup-help", "type": "label", "x": 32, "y": 540, "width": 1036, "height": 88, "props": { "text": "Choose image A for Desk photo, Detail photo and Shared photo. Open Asset library, select image A, choose image B and preview its three structured uses.", "fontSize": 19 } },
+      { "id": "detail", "type": "button", "x": 32, "y": 666, "width": 330, "height": 50, "props": { "text": "Open second screen", "action": "navigate", "targetScreenId": "images-detail" } },
+      { "id": "footer", "type": "label", "x": 398, "y": 656, "width": 650, "height": 70, "props": { "text": "Replace selected references, not image files. Position, size and alt text remain unchanged; one Undo restores the batch.", "fontSize": 17 } }
+    ] },
+    { "id": "images-detail", "name": "Second screen", "width": 1100, "height": 680, "components": [
+      { "id": "title", "type": "label", "x": 32, "y": 24, "width": 1036, "height": 54, "props": { "text": "A second owner and a shared definition", "fontSize": 29 } },
+      { "id": "detail-photo", "type": "image", "x": 32, "y": 120, "width": 540, "height": 290, "props": { "text": "Detail photo", "alt": "Detail workshop image", "fit": "contain" } },
+      { "id": "shared-card", "type": "template", "x": 628, "y": 120, "width": 400, "height": 270, "props": { "text": "Second shared placement", "templateId": "image-card", "parameters": {}, "borderColor": "#8d9fcf", "borderWidth": 1 } },
+      { "id": "help", "type": "label", "x": 32, "y": 450, "width": 1036, "height": 98, "props": { "text": "Replacing Shared photo affects both placements after publication. Replacing only Desk photo leaves this screen unchanged. Save alone does not update the published application.", "fontSize": 19 } },
+      { "id": "back", "type": "button", "x": 32, "y": 586, "width": 330, "height": 50, "props": { "text": "Back to image desk", "action": "navigate", "targetScreenId": "images-home" } }
+    ] }
+  ]
+}

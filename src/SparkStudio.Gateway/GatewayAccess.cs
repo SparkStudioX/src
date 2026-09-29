@@ -44,7 +44,7 @@ public static class GatewayAccess
             var catalog = context.RequestServices.GetRequiredService<ProjectCatalog>();
             // Legacy application aliases always resolve the default project in DI.
             // A routing header must never authorize another project's grant for them.
-            var alias = route is not null && new[] { "/api/project", "/api/queries", "/api/scripts", "/api/assets", "/api/runtime" }
+            var alias = route is not null && new[] { "/api/project", "/api/queries", "/api/scripts", "/api/assets", "/api/runtime", "/api/preview" }
                 .Any(prefix => route == prefix || route.StartsWith(prefix + "/", StringComparison.Ordinal));
             var projectId = context.Request.RouteValues["projectId"]?.ToString()
                 ?? (alias ? catalog.DefaultId : context.Request.Headers["X-SPARK-PROJECT"].FirstOrDefault()

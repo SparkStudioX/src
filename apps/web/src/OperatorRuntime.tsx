@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
+import { VisualStyleProvider } from "./VisualStyleContext";
+import { LocalizationProvider, useLocaleSelection, LocaleSelector } from "./LocalizationContext";
 import { api, ApiError, eventStreamUrl, projectPage, resolvePath, scriptFailureMessage } from "./api";
 import { useAuth } from "./Auth";
 import { SessionIdentity } from "./OperatorAccess";
@@ -90,6 +92,7 @@ export default function OperatorRuntime() {
   const showRuntimeControls = runtimePresentation(typeof window === "undefined" ? "" : window.location.search ?? "") === "controls";
   const canOperate = permissions.operate;
   const [project, setProject] = useState<PublishedProject | null>(null);
+  const projectLocale = useLocaleSelection(project);
   const [screenId, setScreenId] = useState("");
   const [popup, setPopup] = useState<PopupState | null>(null);
   const [parameters, setParameters] = useState<Record<string, string>>({});
@@ -391,7 +394,7 @@ export default function OperatorRuntime() {
 
   return (
     <ApplicationStateProvider value={applicationState}>
-    <QueryPropertyProvider value={queryProperties}>
+    <LocalizationProvider catalog={project?.localization} locale={projectLocale.locale}><VisualStyleProvider styles={project?.styles}><QueryPropertyProvider value={queryProperties}>
     <div className={`operator-app${showRuntimeControls ? "" : " operator-application-only"}`}>
       {showRuntimeControls && <header className="operator-header">
         <div className="operator-brand">
@@ -405,6 +408,7 @@ export default function OperatorRuntime() {
         </div>
         <div className="operator-header-center">
           <ThemePicker />
+          <LocaleSelector catalog={project?.localization} locale={projectLocale.locale} onChange={projectLocale.setLocale} />
           <span
             className={`operator-status ${connected ? "" : "disconnected"}`}
           >
@@ -765,6 +769,6 @@ export default function OperatorRuntime() {
         <span className="operator-wordmark">sparkstudio</span>
       </footer>}
     </div>
-    </QueryPropertyProvider></ApplicationStateProvider>
+    </QueryPropertyProvider></VisualStyleProvider></LocalizationProvider></ApplicationStateProvider>
   );
 }

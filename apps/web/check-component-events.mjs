@@ -139,4 +139,25 @@ await check('trusted script entry point exposes only local helpers and frozen sn
   const seen=[],ctx=context({components:[component,c('amount','numberInput',{fieldKey:'amount'})],setInput:(...args)=>seen.push(args)});ctx.component={...component,props:{...component.props,componentEvents:{mount:script('if (!Object.isFrozen(parameters) || app.query || app.writeTag) throw new Error("bad contract"); app.setInput("amount", 4); app.onCleanup(() => {});')}}};
   const runner=mounted(executeComponentEvent,ctx);await runner.whenIdle();assert.deepEqual(seen,[['amount',4]]);assert.equal(ctx.coordinator.snapshot().diagnostics.length,0);runner.deactivate();await runner.whenIdle();
 });
+await check('read-only Preview never starts authored lifecycle JavaScript or its fetch', async()=>{
+  const {setPreviewRequestContext}=await import(load('previewRequest'));
+  const original=globalThis.fetch;let calls=0;globalThis.fetch=async()=>{calls++;return{};};
+  try {
+    setPreviewRequestContext({token:'x',mode:'read-only',expiresAt:new Date(Date.now()+60000).toISOString()});
+    assert.throws(()=>executeComponentEvent(script('await fetch("https://example.invalid");'),{},{},{},{}),/read-only Preview/);assert.equal(calls,0);
+    setPreviewRequestContext(null);assert.throws(()=>executeComponentEvent(script('await fetch("https://example.invalid");'),{},{},{},{}),/read-only Preview/);
+    setPreviewRequestContext({token:'x',mode:'live-actions',expiresAt:new Date(Date.now()+60000).toISOString()});
+    await executeComponentEvent(script('await fetch("https://example.invalid");'),{},{},{},{});assert.equal(calls,1);
+    setPreviewRequestContext(null,false);await executeComponentEvent(script('await fetch("https://example.invalid");'),{},{},{},{});assert.equal(calls,2);
+  } finally {globalThis.fetch=original;setPreviewRequestContext(null,false);}
+});
+await check('read-only owner cannot execute an unmount script after Preview has closed', async()=>{
+  const {setPreviewRequestContext}=await import(load('previewRequest'));
+  const original=globalThis.fetch;let calls=0;globalThis.fetch=async()=>{calls++;return{};};
+  try {
+    setPreviewRequestContext({token:'x',mode:'read-only',expiresAt:new Date(Date.now()+60000).toISOString()});
+    const ctx=context();ctx.component={...ctx.component,props:{componentEvents:{unmount:script('await fetch("https://example.invalid");')}}};
+    const runner=mounted(executeComponentEvent,ctx);await runner.whenIdle();setPreviewRequestContext(null,false);runner.deactivate();await runner.whenIdle();assert.equal(calls,0);
+  } finally {globalThis.fetch=original;setPreviewRequestContext(null,false);}
+});
 console.log(`${passed} component-event checks passed.`);

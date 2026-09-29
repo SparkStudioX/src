@@ -1,0 +1,14 @@
+.preview-communication { display:flex; align-items:center; gap:16px; padding:12px 20px; border-bottom:1px solid var(--border); background:var(--panel); color:var(--ink); font-size:12px; }
+.preview-communication-summary { display:grid; gap:5px; flex:1; min-width:240px; }
+.preview-communication-actions { display:flex; align-items:center; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
+.preview-communication-actions .locale-selector { padding:0; border:0; background:transparent; font-size:11px; white-space:nowrap; }
+.preview-communication-actions .locale-selector select { padding:6px; }
+.preview-communication span { color:var(--text-secondary); line-height:1.5; }
+.preview-communication-live { border-left:4px solid #bc842b; }
+.preview-communication > p { color:var(--danger); }
+.preview-live-dialog { width:min(520px,calc(100vw - 40px)); border:1px solid var(--border); border-radius:8px; color:var(--ink); background:var(--panel); padding:24px; }
+.preview-live-dialog::backdrop { background:#11182799; }
+.preview-live-dialog h2 { font-size:19px; margin:0 0 14px; }
+.preview-live-dialog p { font-size:13px; line-height:1.65; }
+.preview-live-dialog footer { display:flex; justify-content:flex-end; gap:10px; margin-top:22px; }
+@media(max-width:700px) { .preview-communication { align-items:flex-start; flex-wrap:wrap; } }

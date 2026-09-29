@@ -14,6 +14,8 @@ Directory.CreateDirectory(dataDir);
 var protection = builder.Services.AddDataProtection().SetApplicationName("SparkStudio").PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir, "keys")));
 if (OperatingSystem.IsWindows()) protection.ProtectKeysWithDpapi();
 builder.Services.AddGatewaySecurity(dataDir);
+builder.Services.AddSingleton(new GatewayObservations(dataDir));
+builder.Services.AddSingleton<PreviewSessions>();
 builder.Services.AddSingleton(sp => new ProjectCatalog(dataDir, sp.GetRequiredService<IDataProtectionProvider>()));
 builder.Services.AddSingleton(_ => new ConnectorService(dataDir));
 builder.Services.AddSingleton(sp => new TagEngine(sp.GetRequiredService<ProjectCatalog>().GatewayStore,
@@ -53,8 +55,11 @@ app.Use(async (context, next) =>
     }
 });
 app.UseRouting();
+app.UseGatewayObservations();
 app.UseApplicationAccess();
+app.UsePreviewCommunication();
 app.MapGatewaySecurityEndpoints();
+app.MapGatewayConsoleEndpoints();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapGet("/api/projects", (HttpContext context, ProjectCatalog catalog, SecurityStore security) => GatewayAccess.Catalog(context, catalog, security)).Access("signedIn", "context");
@@ -95,6 +100,7 @@ app.Run();
 
 static void MapProjectEndpoints(RouteGroupBuilder routes)
 {
+routes.MapPreviewEndpoints();
 routes.MapGet("/health", (PythonRunner python) => new { status = "ok", version = "0.1.0", pythonAvailable = python.Available, demoMode = true, deployment = "local-development" }).Access("signedIn", "context");
 routes.MapGet("/project", (ProjectStore store) => store.GetProject()).Access("design");
 routes.MapGet("/assets", (LocalAssetStore assets) => assets.List()).Access("design");
@@ -122,6 +128,8 @@ routes.MapPut("/project", (JsonObject project, ProjectStore store, HttpContext c
     return store.SaveProject(project);
 }).Access("design", audit: true);
 routes.MapGet("/project/publication", (PublicationStore publication) => publication.Metadata()).Access("read", "context");
+routes.MapGet("/project/history", (PublicationStore publication) => publication.History()).Access("design");
+routes.MapPost("/project/history/{id}/restore", (string id, PublicationRollbackRequest request, PublicationStore publication) => publication.Rollback(id, request.ExpectedPublishedAt)).Access("publish", audit: true);
 routes.MapPost("/project/publish", (PublishRequest request, ProjectStore store, PublicationStore publication) => publication.Publish(store, request.Revision)).Access("publish", audit: true);
 routes.MapGet("/runtime/project", (PublicationStore publication) => publication.GetProject()).Access("view", "operator");
 routes.MapGet("/runtime/queries", (string? publishedAt, PublicationStore publication) => publication.GetQueries(publishedAt)).Access("view", "operator");

@@ -9,6 +9,12 @@
 .designer .project-settings-button { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; padding: 11px 13px; border-bottom: 1px solid var(--border); color: var(--text-secondary); text-align: left; font-size: 11px; }
 .designer .project-settings-button:hover { color: var(--ink); background: var(--surface-subtle); }
 .designer .project-settings-button:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.designer .project-tools { flex: 0 0 auto; border-bottom: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; }
+.designer .project-tools > summary { padding: 10px 13px; cursor: pointer; font-weight: 600; }
+.designer .project-tools > summary:hover { color: var(--ink); background: var(--surface-subtle); }
+.designer .project-tools > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.designer .project-tools > div { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 0 7px 7px; }
+.designer .project-tools .project-settings-button { width: 100%; padding: 8px 7px; border: 0; border-radius: 4px; }
 .designer .project-navigation-track { display: grid; min-width: 0; }
 .designer .project-navigation-pane { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
 .designer .project-navigation-pane > :is(.project-tree, .template-list, .component-tree) { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; max-height: none; overflow: hidden; padding-bottom: 7px; border-bottom: 0; }

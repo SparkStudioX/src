@@ -1,0 +1,41 @@
+{
+  "name": "Offline caption translation workshop",
+  "localization": {
+    "defaultLocale": "en", "locales": ["en", "es", "fr"],
+    "messages": {
+      "desk.title": { "en": "Station handoff", "es": "Entrega de estación", "fr": "Relève de poste" },
+      "desk.note": { "en": "Shift note", "es": "Nota del turno", "fr": "Note de quart" },
+      "station.title": { "en": "Station {station}", "es": "Estación {station}", "fr": "Poste {station}" },
+      "station.note": { "en": "Local station note", "es": "Nota local de la estación", "fr": "Note locale du poste" },
+      "review.open": { "en": "Open review", "es": "Abrir revisión", "fr": "Ouvrir la révision" },
+      "review.title": { "en": "Handoff review", "es": "Revisión de entrega", "fr": "Révision de la relève" },
+      "home.open": { "en": "Back to handoff", "es": "Volver a la entrega", "fr": "Retour à la relève" },
+      "fallback.note": { "en": "This caption deliberately has no French translation.", "es": "Este texto no tiene traducción al francés." }
+    }
+  },
+  "templates": [
+    { "id": "locale-card", "name": "Localized station", "width": 450, "height": 190, "parameters": { "station": "Assembly" }, "components": [
+      { "id": "title", "type": "label", "x": 16, "y": 10, "width": 418, "height": 48, "props": { "text": "Station {station}", "textKey": "station.title", "fontSize": 25 } },
+      { "id": "note", "type": "textInput", "x": 16, "y": 78, "width": 418, "height": 80, "props": { "text": "Local station note", "textKey": "station.note", "fieldKey": "stationNote", "defaultValue": "BATCH-014" } }
+    ] }
+  ],
+  "screens": [
+    { "id": "locale-home", "name": "Handoff", "width": 1040, "height": 790, "components": [
+      { "id": "title", "type": "label", "x": 24, "y": 20, "width": 992, "height": 50, "props": { "text": "Station handoff", "textKey": "desk.title", "fontSize": 32 } },
+      { "id": "help", "type": "label", "x": 24, "y": 92, "width": 992, "height": 78, "props": { "text": "Choose Language in Preview or the optional operator controls. The captions change immediately; typed notes, machine identifiers and submitted values stay unchanged.", "fontSize": 18 } },
+      { "id": "shift-note", "type": "textInput", "x": 24, "y": 190, "width": 470, "height": 86, "props": { "text": "Shift note", "textKey": "desk.note", "fieldKey": "shiftNote", "defaultValue": "ORDER-204" } },
+      { "id": "mode", "type": "select", "x": 550, "y": 190, "width": 466, "height": 86, "props": { "text": "Stable choice values (not translated)", "fieldKey": "mode", "defaultValue": "ready", "options": [{ "label": "Ready", "value": "ready" }, { "label": "Hold", "value": "hold" }] } },
+      { "id": "assembly", "type": "template", "x": 24, "y": 318, "width": 450, "height": 190, "props": { "text": "Assembly form", "templateId": "locale-card", "parameters": { "station": "Assembly" }, "borderColor": "#7187af", "borderWidth": 1 } },
+      { "id": "packing", "type": "template", "x": 550, "y": 318, "width": 450, "height": 190, "props": { "text": "Packing form", "templateId": "locale-card", "parameters": { "station": "Packing" }, "borderColor": "#7187af", "borderWidth": 1 } },
+      { "id": "fallback", "type": "label", "x": 24, "y": 548, "width": 992, "height": 80, "props": { "text": "This caption deliberately has no French translation.", "textKey": "fallback.note", "fontSize": 21 } },
+      { "id": "review", "type": "button", "x": 24, "y": 656, "width": 450, "height": 58, "props": { "text": "Open review", "textKey": "review.open", "action": "navigate", "targetScreenId": "locale-review" } },
+      { "id": "footer", "type": "label", "x": 550, "y": 656, "width": 466, "height": 86, "props": { "text": "Offline resource captions only. Number/date formats, menu labels, option labels, scripting and right-to-left layouts remain separate work.", "fontSize": 16 } }
+    ] },
+    { "id": "locale-review", "name": "Review", "width": 960, "height": 470, "components": [
+      { "id": "title", "type": "label", "x": 24, "y": 24, "width": 912, "height": 60, "props": { "text": "Handoff review", "textKey": "review.title", "fontSize": 30 } },
+      { "id": "help", "type": "label", "x": 24, "y": 114, "width": 912, "height": 140, "props": { "text": "Language selection is local to this browser and project. It is not a project edit and does not require saving. Translation resource edits in Designer are drafts until explicitly saved and published. Application-only launch links can select a declared language with ?lang=es.", "fontSize": 20 } },
+      { "id": "home", "type": "button", "x": 24, "y": 300, "width": 450, "height": 58, "props": { "text": "Back to handoff", "textKey": "home.open", "action": "navigate", "targetScreenId": "locale-home" } }
+    ] }
+  ],
+  "navigation": { "mode": "none", "startupScreenId": "locale-home", "items": [] }
+}

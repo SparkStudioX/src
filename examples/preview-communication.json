@@ -1,0 +1,37 @@
+{
+  "name": "Preview communication workshop",
+  "navigation": { "mode": "none", "startupScreenId": "preview-home", "items": [] },
+  "queries": [{ "id": "production-summary", "name": "Production summary (sample)", "connectionId": "sample", "sql": "SELECT Line, Product, Produced, Target FROM ProductionSummary WHERE Line = @line", "parameters": [{ "name": "line", "type": "string", "defaultValue": "Line1" }] }],
+  "templates": [{
+    "id": "preview-panel", "name": "Read and act panel", "width": 470, "height": 230,
+    "parameters": { "station": "Assembly" },
+    "components": [
+      { "id": "heading", "type": "label", "x": 18, "y": 14, "width": 434, "height": 46, "props": { "text": "{station} panel", "fontSize": 23 } },
+      { "id": "help", "type": "label", "x": 18, "y": 68, "width": 434, "height": 72, "props": { "text": "This nested button has the same gateway preview boundary as a screen button. It only returns a message.", "fontSize": 17 } },
+      { "id": "echo", "type": "button", "x": 18, "y": 160, "width": 434, "height": 48, "props": { "text": "Run nested Python message", "action": "script", "script": "result = {'message': 'Nested Python ran for ' + parameters['station'] + '. No gateway data was changed.'}" } }
+    ]
+  }],
+  "screens": [{
+    "id": "preview-home", "name": "Preview communication", "width": 1060, "height": 900,
+    "components": [
+      { "id": "title", "type": "label", "x": 24, "y": 20, "width": 1012, "height": 54, "props": { "text": "Preview deliberately. Choose when actions run.", "fontSize": 28 } },
+      { "id": "intro", "type": "label", "x": 24, "y": 86, "width": 1012, "height": 74, "props": { "text": "Preview starts with live reads and local interaction. Every Python button is blocked until an administrator explicitly enables Live actions. This workshop's Python only returns messages.", "fontSize": 18 } },
+      { "id": "note", "type": "textInput", "x": 24, "y": 180, "width": 480, "height": 80, "props": { "text": "Local preview note", "fieldKey": "note", "defaultValue": "Ready to inspect" } },
+      { "id": "note-caption", "type": "label", "x": 540, "y": 180, "width": 496, "height": 80, "props": { "text": "Local note", "fontSize": 21, "bindings": { "text": { "expression": "'Local note: ' + note", "references": { "note": { "kind": "input", "key": "note" } } } } } },
+      { "id": "summary", "type": "table", "x": 24, "y": 284, "width": 1012, "height": 190, "props": { "text": "Built-in sample query remains readable", "queryId": "production-summary", "parameters": { "line": "Line1" } } },
+      { "id": "panel", "type": "template", "x": 24, "y": 500, "width": 470, "height": 230, "props": { "templateId": "preview-panel", "parameters": { "station": "Assembly" }, "borderColor": "#697aac", "borderWidth": 1 } },
+      { "id": "script", "type": "button", "x": 540, "y": 514, "width": 496, "height": 48, "props": { "text": "Run screen Python message", "action": "script", "script": "result = {'message': 'Screen Python ran. Note: ' + inputs['note'] + '. No gateway data was changed.'}" } },
+      { "id": "popup", "type": "button", "x": 540, "y": 588, "width": 496, "height": 48, "props": { "text": "Open local popup", "action": "openPopup", "targetScreenId": "preview-popup" } },
+      { "id": "mode-help", "type": "label", "x": 540, "y": 662, "width": 496, "height": 82, "props": { "text": "Changing communication mode resets the preview form and popup. Leaving Preview and returning always starts read-only.", "fontSize": 17 } },
+      { "id": "footer", "type": "label", "x": 24, "y": 786, "width": 1012, "height": 74, "props": { "text": "Original synthetic workshop · Built-in sample data · No tag or database writes · Bundled Python is needed only for the optional live-action message checks", "fontSize": 16 } }
+    ]
+  }, {
+    "id": "preview-popup", "name": "Preview popup", "kind": "popup", "width": 640, "height": 360,
+    "components": [
+      { "id": "title", "type": "label", "x": 24, "y": 24, "width": 592, "height": 54, "props": { "text": "The same rule inside a popup", "fontSize": 26 } },
+      { "id": "help", "type": "label", "x": 24, "y": 94, "width": 592, "height": 82, "props": { "text": "Opening and closing this popup works in read-only Preview. Its Python action needs the explicitly enabled live-action capability.", "fontSize": 18 } },
+      { "id": "script", "type": "button", "x": 24, "y": 200, "width": 592, "height": 48, "props": { "text": "Run popup Python message", "action": "script", "script": "result = {'message': 'Popup Python ran. No gateway data was changed.'}" } },
+      { "id": "close", "type": "button", "x": 24, "y": 274, "width": 592, "height": 48, "props": { "text": "Close popup", "action": "closePopup" } }
+    ]
+  }]
+}
