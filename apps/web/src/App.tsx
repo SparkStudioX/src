@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { api, currentProjectId, displayValue, eventStreamUrl, id, projectPage, projectStorageKey, resolvePath } from "./api";
 import { useAuth } from "./Auth";
@@ -64,6 +64,9 @@ import { reconcileNavigationAfterScreenChange } from "./runtimeNavigation";
 import { closeDesignerDocument, documentKey, openDesignerDocument, restoreDesignerDocuments } from "./designerDocuments";
 import type { DesignerDocument, DesignerDocuments } from "./designerDocuments";
 import ProjectNavigation from "./ProjectNavigation";
+import ProjectSearch from "./ProjectSearchDialog";
+import { buildProjectSearch } from "./projectSearch";
+import type { ScriptSearchResource, SearchTarget } from "./projectSearch";
 import { useDesignerPanes } from "./useDesignerPanes";
 import "./canvasEditing.css";
 import "./designerDocuments.css";
@@ -182,6 +185,16 @@ export default function App() {
   const [packageExporting, setPackageExporting] = useState(false);
   const [projectImportOpen, setProjectImportOpen] = useState(false);
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQueries, setSearchQueries] = useState<NamedQuery[] | null>(null);
+  const [searchScripts, setSearchScripts] = useState<ScriptSearchResource[]>([]);
+  const [searchScriptsLoading, setSearchScriptsLoading] = useState(false);
+  const [searchScriptsError, setSearchScriptsError] = useState("");
+  const [queryNavigation, setQueryNavigation] = useState<{ id: string; token: number }>();
+  const [scriptNavigation, setScriptNavigation] = useState<{ id: string; token: number }>();
+  const [searchNavigation, setSearchNavigation] = useState<SearchTarget | null>(null);
+  const [searchLocation, setSearchLocation] = useState<SearchTarget | null>(null);
+  const searchNavigationToken = useRef(0);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const discardNavigation = useRef(false);
   useEffect(() => {
@@ -209,7 +222,7 @@ export default function App() {
   const screenId = activeDocument?.kind === "screen" ? activeDocument.id : "";
   const editingTemplateId = activeDocument?.kind === "template" ? activeDocument.id : null;
   const [selectionIds, setSelectedIds] = useState<string[]>([]);
-  const setSelectedId = useCallback((value: string | null) => setSelectedIds(value ? [value] : []), []);
+  const setSelectedId = useCallback((value: string | null) => { setSearchLocation(null); setSelectedIds(value ? [value] : []); }, []);
   const [gridSize, setGridSize] = useState(8);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -246,6 +259,29 @@ export default function App() {
     (message: string, error = false) => setToast({ message, error }),
     [],
   );
+  const receiveSearchScripts = useCallback((resources: ScriptSearchResource[]) => {
+    setSearchScripts(resources); setSearchScriptsLoading(false); setSearchScriptsError("");
+  }, []);
+  useEffect(() => {
+    if (!searchOpen || scriptsVisited) return;
+    let active = true;
+    setSearchScriptsLoading(true); setSearchScriptsError("");
+    void api<{ resources: ScriptSearchResource[] }>("/scripts/resources")
+      .then(value => { if (active) setSearchScripts(value.resources); })
+      .catch(reason => { if (active) { setSearchScripts([]); setSearchScriptsError(reason instanceof Error ? reason.message : String(reason)); } })
+      .finally(() => { if (active) setSearchScriptsLoading(false); });
+    return () => { active = false; };
+  }, [searchOpen, scriptsVisited]);
+  const searchEntries = useMemo(() => project ? buildProjectSearch(project, searchQueries ?? queries, searchScripts) : [], [project, queries, searchQueries, searchScripts]);
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f" && project && !previewActionBusy && !document.querySelector("dialog[open]")) {
+        event.preventDefault(); setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", shortcut);
+    return () => window.removeEventListener("keydown", shortcut);
+  }, [project, previewActionBusy]);
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => setToast(null), 6500);
@@ -388,7 +424,8 @@ export default function App() {
         : project.parameters
     : {};
   const selectedIds = expandGroupSelection(screen?.components || [], selectionIds);
-  const selectedId = selectedIds.length === 1 ? selectedIds[0] : null;
+  const inspectingSearchComponent = searchLocation !== null && searchLocation.id === screen?.id && searchLocation.kind === (editingTemplateId ? "template" : "screen") && selectionIds.length === 1 && searchLocation.componentId === selectionIds[0];
+  const selectedId = inspectingSearchComponent ? selectionIds[0] : selectedIds.length === 1 ? selectedIds[0] : null;
   const selected = screen?.components.find(
     (component) => component.id === selectedId,
   );
@@ -396,6 +433,40 @@ export default function App() {
   const selectedUnitCount = arrangementCount(screen?.components || [], selectedIds);
   const selectedGroupId = selection.length > 1 && selection[0].groupId && selection.every(component => component.groupId === selection[0].groupId) ? selection[0].groupId : null;
   useEffect(() => { setSelectedIds([]); setEventEditorId(null); setInputEventEditorId(null); setLifecycleEventEditorId(null); }, [screen?.id, editingTemplateId, preview]);
+  const navigateSearch = (target: SearchTarget) => {
+    if (!project || previewActionBusy) return;
+    setSearchOpen(false);
+    setSearchNavigation(null); setSearchLocation(null);
+    if (target.kind === "query") {
+      setWorkspace("queries"); setQueryNavigation({ id: target.id, token: ++searchNavigationToken.current }); return;
+    }
+    if (target.kind === "script") {
+      setWorkspace("scripts"); setScriptNavigation({ id: target.id, token: ++searchNavigationToken.current }); return;
+    }
+    if (target.kind === "project") { setProjectSettingsOpen(true); return; }
+    const resource = (target.kind === "screen" ? project.screens : project.templates ?? []).find(item => item.id === target.id);
+    if (!resource || target.componentId && !resource.components.some(item => item.id === target.componentId)) {
+      notify("This search result no longer exists. Search again to use the current draft.", true); return;
+    }
+    setWorkspace("designer"); setPreview(false); setLeftTab("project");
+    openDocument({ kind: target.kind, id: target.id });
+    setSearchNavigation(target);
+  };
+  // Apply selection after changing documents, following the normal selection reset above.
+  useEffect(() => {
+    if (!searchNavigation || workspace !== "designer" || preview || !screen || screen.id !== searchNavigation.id || Boolean(editingTemplateId) !== (searchNavigation.kind === "template")) return;
+    setSelectedId(searchNavigation.componentId ?? null);
+    setSearchLocation(searchNavigation);
+    setSearchNavigation(null);
+  }, [searchNavigation, workspace, preview, screen, editingTemplateId, setSelectedId]);
+  useEffect(() => {
+    if (!searchLocation?.property || !selected || searchLocation.componentId !== selected.id || searchLocation.id !== screen?.id) return;
+    const property = searchLocation.property.replace(/^props\./, "").replace(/^(bindings|queryBindings)\./, "").split(".")[0];
+    const row = document.querySelector<HTMLElement>(`#designer-properties-panel [data-property="${CSS.escape(property)}"]`);
+    row?.scrollIntoView({ block: "nearest" });
+    row?.setAttribute("data-search-match", "true");
+    return () => row?.removeAttribute("data-search-match");
+  }, [searchLocation, selected?.id, screen?.id]);
   const previewForm = useFormInputs({ document: screen, tags, parameters: editorParameters,
     edits: screen ? previewInputs[screen.id] : undefined, communicationLost: !connected,
     state: applicationState, active: preview && !previewActionBusy && !editorParameterError,
@@ -995,6 +1066,7 @@ export default function App() {
             </button>
           ))}
         </nav>
+        <button className="nav-link" title="Search project (Ctrl+Shift+F)" aria-label="Search project" disabled={!project || Boolean(previewActionBusy)} onClick={() => setSearchOpen(true)}><Icon name="search" /><span>Search project</span></button>
         {gatewayAdmin && <a className="designer-project-link" href="/security" title="Gateway security"><Icon name="shield" size={17} /><span>Security</span></a>}
         </div>
         <div className="nav-bottom">
@@ -1606,7 +1678,7 @@ export default function App() {
                   actionBusyId={previewActionBusy}
                   selectedIds={selectedIds}
                   gridSize={gridSize}
-                  onSelect={setSelectedIds}
+                  onSelect={values => { setSearchLocation(null); setSelectedIds(values); }}
                   onReplace={replaceComponents}
                   onKeyDown={canvasKeyboard}
                   onBeginMove={() => {
@@ -1666,14 +1738,16 @@ export default function App() {
                   <Icon name="settings" size={15} />
                   <strong>Properties</strong>
                   <span>
-                    {selection.length > 1 ? "SELECTION" : selected
+                    {selection.length > 1 && !selected ? "SELECTION" : selected
                       ? "COMPONENT"
                       : editingTemplate
                         ? "TEMPLATE"
                         : screen ? "SCREEN" : "NO SELECTION"}
                   </span>
                 </div>
-                {selection.length > 1 ? (
+                {searchLocation?.property && searchLocation.id === screen?.id && searchLocation.componentId === selected?.id && <div className="inspector-section search-location" role="status"><small>Search location</small><code>{searchLocation.property}</code><button type="button" aria-label="Dismiss search location" onClick={() => setSearchLocation(null)}>×</button></div>}
+                {inspectingSearchComponent && selection.length > 1 && <div className="inspector-section"><p>Inspecting {selected?.props.text || selectedId} within the selected group. Canvas move, duplicate and delete commands still affect the group.</p></div>}
+                {selection.length > 1 && !selected ? (
                   <div className="inspector-section multi-selection-panel">
                     <h3>{selectedGroupId ? "Group" : "Selection"} · {selection.length} components</h3>
                     <p>{selectedGroupId ? "Drag any member to move the group. Drag the group's bottom-right handle to scale its component positions and sizes. Ungroup to edit individual controls." : "Drag any selected control to move the selection. Align and Distribute treat each saved group as one unit."}</p>
@@ -1701,9 +1775,10 @@ export default function App() {
                       </div>
                       <button
                         className="icon-button"
-                        title="Delete component"
-                        aria-label="Delete component"
+                        title={selection.length > 1 ? "Delete selected group" : "Delete component"}
+                        aria-label={selection.length > 1 ? "Delete selected group" : "Delete component"}
                         onClick={() => {
+                          if (selection.length > 1) { deleteSelection(); return; }
                           updateScreen((current) => ({
                             ...current,
                             components: current.components.filter(
@@ -2483,6 +2558,9 @@ export default function App() {
             parameters={project.parameters}
             notify={notify}
             onDirtyChange={setQueriesDirty}
+            navigationRequest={queryNavigation}
+            onNavigationHandled={() => setQueryNavigation(undefined)}
+            onSearchResources={setSearchQueries}
           />
         </div>}
         {project && (workspace === "scripts" || scriptsVisited) && <div style={{display:workspace === "scripts" ? "contents" : "none"}}><Suspense fallback={<div className="management-page">Loading scripting workspace…</div>}>
@@ -2491,6 +2569,11 @@ export default function App() {
             pythonAvailable={health?.pythonAvailable || false}
             notify={notify}
             onDirtyChange={setScriptsDirty}
+            navigationRequest={scriptNavigation}
+            onNavigationHandled={() => setScriptNavigation(undefined)}
+            onSearchResources={receiveSearchScripts}
+            onSearchError={setSearchScriptsError}
+            onSearchLoading={setSearchScriptsLoading}
           />
         </Suspense></div>}
         <footer className="statusbar">
@@ -2553,6 +2636,7 @@ export default function App() {
       />}
       {gatewayAdmin && projectImportOpen && <ProjectImportDialog onClose={() => setProjectImportOpen(false)} />}
       {accountSettingsOpen && <AccountSettingsDialog hasUnsavedChanges={dirty || queriesDirty || scriptsDirty} onClose={() => setAccountSettingsOpen(false)} />}
+      {searchOpen && project && <ProjectSearch entries={searchEntries} onOpen={navigateSearch} onClose={() => setSearchOpen(false)} scriptsLoading={searchScriptsLoading} scriptsError={searchScriptsError} />}
       {projectSettingsOpen && project && <ProjectSettingsDialog project={project} canRename={gatewayAdmin} notify={notify}
         onChange={patch => change(current => ({ ...current, ...patch }))} onClose={() => setProjectSettingsOpen(false)} />}
       {pendingNavigation && <UnsavedProjectNavigation onStay={() => setPendingNavigation(null)} onDiscard={() => {

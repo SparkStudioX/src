@@ -46,3 +46,7 @@
 .designer-pane-separator:is(:hover, :focus-visible), .designer-panes-resizing > .designer-pane-separator { background: var(--accent-soft); }
 .designer-pane-separator:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .designer-panes-resizing, .designer-panes-resizing * { cursor: ew-resize !important; user-select: none !important; }
+.property-sheet-row[data-search-match="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
+.search-location { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.search-location code { overflow-wrap: anywhere; flex: 1; font-size: 12px; }
+.search-location button { background: transparent; color: inherit; border: 0; cursor: pointer; font-size: 20px; }

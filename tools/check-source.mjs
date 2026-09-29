@@ -66,6 +66,7 @@ const toolFiles = new Set([
   'build-installer.ps1', 'test-installer.ps1', 'generate-example-assets.ps1',
   'load-example.mjs', 'test-assets-popups.mjs', 'test-gateway.mjs', 'test-runtime-actions.mjs',
   'workshop-packages.mjs', 'build-workshops.mjs', 'test-workshop-build.mjs', 'test-workshop-packages.mjs',
+  'test-project-search.mjs',
   'test-runtime.mjs', 'test-tag-definitions.mjs', 'test-template-runtime.mjs',
   'check-source.mjs', 'test-source-boundary.mjs', 'install-source-hooks.ps1',
   'test-input-controls.mjs',
@@ -113,6 +114,7 @@ const architectureDocs = new Set([
   'QUERY_PROPERTIES.md',
   'PROPERTY_SHEET_EVENTS.md',
   'PROJECTS.md',
+  'PROJECT_SEARCH.md',
   'QUERY_CONTROLS.md', 'DRAWING.md',
   'SECURITY.md',
 ]);
@@ -121,6 +123,7 @@ const explicitFiles = new Set([
   'runtimes/python/worker.py', 'installer/SparkStudio.iss', 'installer/INSTALL-NOTES.txt',
   'examples/application-form.json', 'examples/reusable-applications.json', 'examples/assets-popups.json',
   'examples/catalog.json', 'examples/README.md',
+  'examples/project-search.json',
   'examples/operator-inputs.json',
   'examples/property-bindings.json',
   'examples/query-properties.json',

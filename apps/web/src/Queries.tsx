@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, displayValue, id } from "./api";
 import { Field } from "./App";
 import Icon from "./Icon";
@@ -11,6 +11,9 @@ export default function Queries({
   parameters,
   notify,
   onDirtyChange,
+  navigationRequest,
+  onNavigationHandled,
+  onSearchResources,
   canRunUpdates = true,
 }: {
   queries: NamedQuery[];
@@ -19,6 +22,9 @@ export default function Queries({
   parameters: RuntimeParameters;
   notify: (message: string, error?: boolean) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  navigationRequest?: { id: string; token: number };
+  onNavigationHandled?: (token: number) => void;
+  onSearchResources?: (resources: NamedQuery[]) => void;
   canRunUpdates?: boolean;
 }) {
   const [selectedId, setSelectedId] = useState(queries[0]?.id || "");
@@ -31,7 +37,31 @@ export default function Queries({
   const selected = queries.find((query) => query.id === selectedId);
   const current = draft || selected;
   const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(selected);
+  const handledNavigation = useRef<number | null>(null);
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => {
+    if (!onSearchResources) return;
+    onSearchResources(draft
+      ? queries.some(query => query.id === draft.id)
+        ? queries.map(query => query.id === draft.id ? draft : query)
+        : [...queries, draft]
+      : queries);
+  }, [queries, draft, onSearchResources]);
+  const openQuery = useCallback((queryId: string) => {
+    if (current?.id === queryId) return;
+    if (dirty) { notify("Save or discard the current query's changes before opening another query.", true); return; }
+    if (!queries.some(query => query.id === queryId)) { notify("This named query is no longer available.", true); return; }
+    setSelectedId(queryId);
+    setDraft(null);
+    setResult(null);
+    setError("");
+  }, [current?.id, dirty, queries, notify]);
+  useEffect(() => {
+    if (!navigationRequest || handledNavigation.current === navigationRequest.token || busy) return;
+    handledNavigation.current = navigationRequest.token;
+    openQuery(navigationRequest.id);
+    onNavigationHandled?.(navigationRequest.token);
+  }, [navigationRequest, busy, openQuery, onNavigationHandled]);
   useEffect(() => {
     if (onDirtyChange) return;
     const warn = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault(); };
@@ -108,7 +138,9 @@ export default function Queries({
         </div>
         <button
           className="button primary"
+          disabled={busy}
           onClick={() => {
+            if (dirty) { notify("Save or discard the current query's changes before creating another query.", true); return; }
             setDraft({
               id: id("query"),
               name: "New query",
@@ -137,12 +169,8 @@ export default function Queries({
             <button
               className={`resource-item ${query.id === selectedId ? "active" : ""}`}
               key={query.id}
-              onClick={() => {
-                setSelectedId(query.id);
-                setDraft(null);
-                setResult(null);
-                setError("");
-              }}
+              disabled={busy}
+              onClick={() => openQuery(query.id)}
             >
               <span className="resource-icon">
                 <Icon name="database" size={18} />
@@ -180,6 +208,7 @@ export default function Queries({
                   </div>
                 </div>
                 <div className="editor-actions">
+                  {draft && <button className="button" disabled={busy} onClick={() => { setDraft(null); setResult(null); setError(""); }}>Discard changes</button>}
                   <button
                     className="button"
                     disabled={busy || !draft}

@@ -20,6 +20,7 @@ interface ScriptResource {
   parameters: Record<string, Scalar>;
 }
 interface ScriptDraft { revision: number; resources: ScriptResource[] }
+export type ScriptSearchResource = ScriptResource;
 interface ScriptPublication { published: boolean; revision?: number; publishedAt?: string; draftRevision?: number }
 interface EventStatus {
   activeRevision: number | null;
@@ -72,11 +73,16 @@ function parseParameters(text: string): Record<string, Scalar> {
 }
 function time(value?: string | null) { return value ? new Date(value).toLocaleTimeString() : "—"; }
 
-export default function Scripts({ parameters, pythonAvailable, notify, onDirtyChange }: {
+export default function Scripts({ parameters, pythonAvailable, notify, onDirtyChange, navigationRequest, onNavigationHandled, onSearchResources, onSearchError, onSearchLoading }: {
   parameters: RuntimeParameters;
   pythonAvailable: boolean;
   notify: (message: string, error?: boolean) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  navigationRequest?: { id: string; token: number };
+  onNavigationHandled?: (token: number) => void;
+  onSearchResources?: (resources: ScriptSearchResource[]) => void;
+  onSearchError?: (message: string) => void;
+  onSearchLoading?: (loading: boolean) => void;
 }) {
   const { gatewayAdmin, permissions } = useAuth();
   const [draft, setDraft] = useState<ScriptDraft | null>(null);
@@ -92,6 +98,7 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<"" | "save" | "publish" | "run">("");
   const [error, setError] = useState("");
+  const [searchLoadError, setSearchLoadError] = useState("");
   const [result, setResult] = useState<ScriptResult | null>(null);
   const [outputTab, setOutputTab] = useState<"output" | "result" | "events">("output");
   const [status, setStatus] = useState<EventStatus | null>(null);
@@ -100,9 +107,15 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
   const [confirm, setConfirm] = useState<"" | "reload" | "delete">("");
   const mounted = useRef(true);
   const loadEpoch = useRef(0);
+  const handledNavigation = useRef<number | null>(null);
   const selected = draft?.resources.find(resource => resource.id === selectedId);
   const dirty = draft !== null && JSON.stringify(draft) !== saved;
   useEffect(() => { onDirtyChange?.(dirty || Boolean(defaultError)); }, [dirty, defaultError, onDirtyChange]);
+  useEffect(() => {
+    if (draft) onSearchResources?.(draft.resources);
+  }, [draft, onSearchResources]);
+  useEffect(() => { onSearchError?.(searchLoadError); }, [searchLoadError, onSearchError]);
+  useEffect(() => { onSearchLoading?.(loading); }, [loading, onSearchLoading]);
   const browserScript = selected?.type === "client";
   const language = browserScript ? "javascript" : "python";
   const currentCode = selected?.code ?? consoleCode;
@@ -111,13 +124,13 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const load = useCallback(async () => {
     const epoch = ++loadEpoch.current;
-    setLoading(true); setError(""); setConfirm("");
+    setLoading(true); setError(""); setSearchLoadError(""); setConfirm("");
     try {
       const [next, published] = await Promise.all([api<ScriptDraft>("/scripts/resources"), api<ScriptPublication>("/scripts/publication")]);
       if (!mounted.current || epoch !== loadEpoch.current) return;
       setDraft(next); setSaved(JSON.stringify(next)); setPublication(published);
       setSelectedId(null); setOpenIds([]); setDefaultError(""); setDefaultText("{}");
-    } catch (reason) { if (mounted.current && epoch === loadEpoch.current) setError(message(reason)); }
+    } catch (reason) { if (mounted.current && epoch === loadEpoch.current) { setError(message(reason)); setSearchLoadError(message(reason)); } }
     finally { if (mounted.current && epoch === loadEpoch.current) setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -146,15 +159,27 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
     return () => { active = false; clearInterval(timer); };
   }, []);
 
-  const open = (resource: ScriptResource | null, discardInvalid = false) => {
+  const open = useCallback((resource: ScriptResource | null, discardInvalid = false) => {
     if (busy) return;
+    if ((resource?.id ?? null) === selectedId && !discardInvalid) return;
     if (defaultError && !discardInvalid) { setError("Finish correcting parameter JSON before switching scripts. Your unfinished text is retained in the editor."); return; }
     setSelectedId(resource?.id ?? null);
     if (resource) setOpenIds(previous => previous.includes(resource.id) ? previous : [...previous, resource.id]);
     setDefaultText(JSON.stringify(resource?.parameters ?? {}, null, 2));
     setDefaultError(""); setConfirm(""); setError(""); setResult(null);
     setRunParameterText(JSON.stringify(resource?.parameters ?? parameters, null, 2));
-  };
+  }, [busy, selectedId, defaultError, parameters]);
+  useEffect(() => {
+    if (!navigationRequest || handledNavigation.current === navigationRequest.token || loading || busy) return;
+    handledNavigation.current = navigationRequest.token;
+    const resource = draft?.resources.find(item => item.id === navigationRequest.id);
+    if (!resource) notify("This script resource is no longer available. Reload resources and try again.", true);
+    else if (resource.id !== selectedId && defaultError) {
+      const explanation = "Finish correcting parameter JSON before switching scripts. Your unfinished text is retained in the editor.";
+      setError(explanation); notify(explanation, true);
+    } else open(resource);
+    onNavigationHandled?.(navigationRequest.token);
+  }, [navigationRequest, loading, busy, draft, selectedId, defaultError, open, notify, onNavigationHandled]);
   const edit = (patch: Partial<ScriptResource>) => {
     if (!selected || busy) return;
     setDraft(previous => previous && ({ ...previous, resources: previous.resources.map(resource => resource.id === selected.id ? { ...resource, ...patch } : resource) }));
