@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../SparkStudio.Connectors/SparkStudio.Connectors.csproj" /></ItemGroup>
+  <ItemGroup><PackageReference Include="OPCFoundation.NetStandard.Opc.Ua.Server" Version="1.5.378.176" /></ItemGroup>
+</Project>

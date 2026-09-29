@@ -1,0 +1,166 @@
+# Component coverage
+
+SparkStudio uses a direct fixed-canvas application workflow: place controls at explicit X/Y coordinates, resize/group them, bind properties and author events. Runtime fitting preserves authored geometry unless a layout binding changes it. Responsive containers are optional future work, not a prerequisite for building an application.
+
+## Current palette
+
+| Type | Initial behavior | Outstanding coverage |
+| --- | --- | --- |
+| `label` | Text, explicit styling and bound captions/color | Rich formatting, localization and broader property/events |
+| `value` | Direct/indirect tag value, units, quality and bound presentation properties | Rich value formatting, value transforms and extension behavior |
+| `gauge` | Bounded tag visualization and bound presentation properties | Additional scales/styles and broader property/events |
+| `button` | Navigation, authored Python action with expanded event editor, open/close popup and bound caption/state/color | State, momentary, one-shot and broader event semantics |
+| `table` | Named-query results, ordered display columns with headings/visibility/width/alignment/formats, loaded-row paging/filtering, sorting, refresh, selection into same-scope inputs and typed inline edits through published Python handlers | Server-side paging/filtering, batch/null/date editing, richer cell renderers and selection events |
+| `list` | Single string selection from static or named-query choices, keyboard navigation, input events and same-form row mappings | Multiple selection, richer item presentation and remote paging |
+| `treeView` | Single string selection from a validated static or query hierarchy, expansion, keyboard navigation, input events and same-form row mappings | Multiple selection, lazy child loading, drag/reparent and tag-provider browsing |
+| `textInput` | Declared text form field with optional change/commit events | Formatting and richer validation |
+| `passwordInput` | Masked, initially blank local string field with change/commit events; saved nonempty defaults and tag prefilling are rejected | Authentication workflows and password-management integration |
+| `textArea` | Multiline string form field with optional change/commit events | Rich text and formatting |
+| `numberInput` | Finite numeric form field with limits and optional change/commit events | Precision/units and richer write behavior |
+| `spinner` | Numeric form field with bounded step buttons | Richer numeric formatting and write/acknowledgment semantics |
+| `slider` | Numeric form field with explicit minimum/maximum and step | Additional scales/styles and write/acknowledgment semantics |
+| `checkbox` | Boolean form input | Richer state binding and events |
+| `toggle` | Boolean form input with switch presentation | Multi-state, momentary, command/acknowledgment behavior |
+| `multiStateButton` | Segmented radio choices over 2–32 declared strings; local selection and immediate change/commit | Dynamic choices and server-confirmed command states |
+| `multiStateIndicator` | Exact string-to-label/color mapping over 1–32 states; scalar State value binding; explicit unknown/unavailable state | Rich symbols, transitions and animation |
+| `ledDisplay` | Seven-segment numeric display with units, fixed decimals and a bound numeric value | Alphanumeric segments, richer number patterns and animation |
+| `progressBar` | Horizontal/vertical bounded progress with value/percentage labels and explicit unavailable/off-scale states | Indeterminate animation and additional direction/styles |
+| `cylindricalTank` | Scaled vertical liquid display with value/percentage labels | Alternate tank geometry and advanced scales |
+| `levelIndicator` | Graduated horizontal/vertical fill and numeric range | Custom tick intervals, pointer variants and multi-range scales |
+| `thermometer` | Vertical tube/bulb display over a numeric range, including negative temperatures | Subrange configuration and automatic axis scaling |
+| `line` | Two editable endpoints inside the component, stroke styling and rotation | Arrowheads and endpoint attachments |
+| `rectangle` | Filled/outlined rectangle, static corner radius and bound stroke/fill/rotation | Gradients and advanced paint styles |
+| `ellipse` | Filled/outlined ellipse with bound stroke/fill/rotation | Arcs and partial ellipses |
+| `polyline` | Route over 2–64 editable points with stroke styling and rotation; the final point may return to the first | Curves, filled polygons, connection anchors and automatic routing |
+| `pipe` | Route over 2–64 points, outline/interior colors and Boolean flow/direction indication | Pipe networks, joints, automatic routing and process simulation |
+| `equipmentSymbol` | Original pump, valve and motor symbols with bound active state, accessible caption and optional screen/popup navigation | Additional equipment, command/acknowledgment behavior and symbol import |
+| `select` | Static or named-query choices, value/label columns, validated row-to-form mappings and explicit selection reload | Cascading query parameters from form inputs, richer datasets and paging |
+| `radioGroup` | One selected string from declared options | Dynamic options and richer selection behavior |
+| `dateTimeInput` | Optional local wall-clock date/time string | Timezones, offset conversion, scheduling and richer date constraints |
+| `template` | Single-level reusable component group with Text, Number and Boolean parameters | Nesting, inheritance, parameter fx bindings and mutable instance state |
+| `repeater` | Independent instances over saved rows or validated named-query results; typed parameters and stable row identity | Broader collections, paging, nested containers and parameter fx bindings |
+| `image` | Immutable local still image with fit/alt text | Asset deletion/archive management and broader media |
+| `icon` | Bundled named icons with theme/default colors | Full symbol/drawing library |
+
+The current source palette has 35 types, including fourteen inputs. Coverage is partial for each family: a type's presence does not mean every property, event or operating mode is implemented. Reusable components share definitions while form state and action targets remain scoped by instance and saved/query row. Popup screens use these components; a popup is a screen kind, not a separate component type.
+
+Inputs update local form state and pass through declared-input validation when a Python button action submits them. A toggle is not a device command. Numeric step sizes guide UI interaction rather than enforcing a divisibility rule. Date/time strings use `YYYY-MM-DDTHH:mm`, carry no timezone or offset and may be empty; there is no implicit conversion to UTC.
+
+All fourteen input controls can declare optional browser JavaScript change/commit handlers. Timing varies by control: text/password commits on Enter/blur, text areas on Ctrl/Meta+Enter/blur, choices and spinner buttons immediately, and sliders on release. List/tree focus and expansion do not change selection or run handlers. Passwords start blank and remain transient form values; masking does not provide authentication or encrypt a submitted form. A multi-state button changes a local form field and sends no device command by itself. The [property sheet/events contract](PROPERTY_SHEET_EVENTS.md) defines the full timing, payload, queue and same-form helper rules.
+
+The verification ledger separates authoring/model, renderer, gateway and browser checks. See [PARITY.md](PARITY.md) for recorded counts and exact boundaries. Current source checks do not update the public installer or offline Linux verification baseline.
+
+## Properties and component events
+
+Controls and template/repeater instances expose a name/value common property sheet with direct fx buttons for 13 targets: Text, Enabled, Visible, Accent color, X, Y, Width, Height, Font size, Background, Text color, Border color and Border width. Numeric displays and gauges additionally expose Tag path for form-driven asset indirection; multi-state indicators expose State value. Process displays add Value, Minimum, Maximum, Decimals, Unit, Show value, Show percent and Orientation where supported. Drawing components add Stroke color, Fill color, Stroke width, Rotation, Flowing, Reverse flow and Active where supported. These 30 target names apply only to their supported component types. Existing type-specific configuration rows and complex editors remain available. This does not make arbitrary JSON fields bindable. Instance bindings use the parent form; ordinary children use their own instance/row scope. Sources are named references to a local/sibling custom property, current form input, parameter or tag. A constrained expression computes a scalar result without executing Python or JavaScript. The modal binding editor previews results and errors before Apply. Read [PROPERTY_BINDINGS.md](PROPERTY_BINDINGS.md) for syntax, target types, limits and validation.
+
+An indicator's State value binding preserves the scalar source until evaluation, then uses canonical string conversion to match its state map (`false` becomes `"false"`, `2` becomes `"2"`). Matching is exact. Unmapped values show Unknown state; failed bindings show State unavailable and a binding diagnostic. They do not retain a previous color or reuse the authored fallback. State labels and hex colors are local definitions; they do not implement an alarm lifecycle.
+
+Custom properties are static saved Number, Text or Boolean definitions in this increment. Bindings reevaluate against current form values, parameters and tag snapshots. Errors show diagnostics and block interaction; failed visibility remains visible for diagnosis. Hidden controls remain dimmed and selectable in the designer, and do not render or intercept input at runtime. Enabled and Visible do not establish permissions or server authorization.
+
+Layout bindings affect Preview/operator positions and sizes; stored authoring geometry stays stable for selection and resizing. Numeric limits are X/Y 0–8,192, Width/Height 1–8,192, Font size 1–256 and Border width 0–32. Color targets accept hex values. A group's stored geometry can therefore differ from its bound runtime layout.
+
+Python button events use an expanded source editor with syntax highlighting, line numbers, find, completion, saved-library names and input/parameter context. Apply changes the project draft as one history step; Cancel leaves it unchanged. The gateway receives validated `inputs` and `parameters`, and the script can return `result`. Libraries retain their independent script publication. Input change/commit handlers are separate trusted browser JavaScript, saved and published with the project. They receive an event payload and input/parameter snapshots; `app.setInput` validates assignments within that form without recursive events, and `app.notify` displays feedback. There is still no browser component object, generic property-change callback or mutable custom session state API.
+
+## Process displays
+
+LED display, Progress bar, Cylindrical tank, Level indicator and Thermometer are read-only displays. All five expose numeric **Value**, **Decimals** (integer 0–6) and **Unit** (text up to 32 characters), with fx buttons on the property sheet. The four bounded displays also expose **Minimum**, **Maximum**, **Show value** and **Show percent**. Progress bar and Level indicator allow horizontal or vertical **Orientation**. Tank and thermometer stay vertical. Values and ranges must be finite numbers within the safe integer range; numeric strings are rejected. Defaults are value 0, decimals 1, unit blank, minimum 0, maximum 100, show value on and show percent off.
+
+Minimum must be less than Maximum. Saved static values and known constant binding results are checked at save/publication; dynamic pairs are checked together during rendering. Failed bindings, invalid ranges and missing/bad-quality tags show **Value unavailable** and a diagnostic. They never become an authored fallback or zero. Out-of-range readings retain their actual number and show **Above range** or **Below range**, even when Show value is off. Fill and its percentage clamp to 0–100%. These conditions contribute one runtime health issue per control.
+
+Bind Value to a named tag reference for live data. Dragging a tag onto one of these controls creates that binding; these five types do not accept a direct Tag path property. Other supported sources retain the same input, parameter and custom-property scope as ordinary bindings. Static units resolve parameter placeholders once; bound units are already literal results. These displays have no input events, commands or automatic writes.
+
+The numeric LED uses locally authored seven-segment SVG shapes; tank and thermometer use independent clip IDs so repeated instances do not share fill geometry. All assets work offline. Alphanumeric LED formats, indeterminate progress, configurable tick intervals, advanced scales and thermometer subranges remain future work.
+
+Load the independent sample with `node tools/load-example.mjs process-displays`. Its local spinner changes all five readings; the availability checkbox demonstrates failure without modifying device tags. Publish the screen with deliberate project navigation. The example writes no equipment or database data.
+
+## Drawing and equipment symbols
+
+Line, Rectangle, Ellipse, Polyline, Pipe and Equipment symbol use the same fixed-canvas move/resize/group/history workflow as other components. **Edit points** changes normalized X/Y positions from 0–100% inside a line or route. A line has exactly two endpoints; polyline and pipe routes have 2–64 ordered points. Row controls move coordinates, insert a midpoint, reorder or remove points; Apply creates one undo step and Cancel discards the draft. Consecutive duplicate points and invalid numbers are rejected. Shapes and symbols are original local SVG primitives with bounded rendering; there is no arbitrary SVG/path import.
+
+All six types expose bound Stroke color, Stroke width (1–32 pixels) and Rotation (0–360 degrees). Rectangle, Ellipse, Pipe and Equipment symbol also expose Fill color (hex or `none`). Rectangle corner radius is a static 0–50% of its shorter side. Pipe Flowing and Reverse flow are Boolean indicators, using Accent color for flow marks; motion respects reduced-motion preferences. Equipment symbol selects a static pump, valve or motor and uses Boolean Active with Accent color. Missing or invalid bound values show Graphic unavailable instead of an apparently valid authored fallback.
+
+Equipment symbols are inert by default. Their optional On click action opens a normal screen or a declared popup with parameter overrides; they do not run Python, write equipment or close popups. Accessible labels describe all drawings; equipment labels also display beneath the symbol. The [drawing guide](DRAWING.md) covers geometry, property scopes, navigation and current limits. Load the independent sample with `node tools/load-example.mjs process-graphics` and review it in Designer before publication.
+
+## Canvas arrangement
+
+Drag across empty canvas space to select intersecting controls; Shift/Ctrl-drag adds to the current selection and Shift/Ctrl-click toggles individual components or complete groups. Move selected components together, use optional 4/8/16-pixel grids, six edge/center alignment actions and horizontal/vertical equal-gap distribution. Distribution requires at least three units, each an ungrouped component or complete group, and leaves an overfull selection unchanged rather than introducing negative gaps. Arrow keys nudge by 1 pixel; Shift+arrows use 10 pixels independently of the grid.
+
+Movement clamps a shared delta to preserve relative geometry. A single control's resize handle enforces a 40×28 minimum, bounded by a smaller canvas if necessary. An oversized imported selection is anchored at zero on its oversized axis without distorting its components. Canvas bounds take precedence when a snapped edge cannot land on the grid.
+
+Ctrl+G creates a persistent flat group and Ctrl+Shift+G ungroups it. Selecting one member selects all; move, copy and delete are atomic, and alignment/distribution operate on whole-group bounds. A single selected group's bottom-right handle scales member geometry about the group's top-left using one factor per axis. Font sizes do not scale. All children must remain at least 40×28 within canvas bounds; impossible resize constraints leave the group unchanged. Grouping existing groups merges them and does not create a hierarchy or another form scope.
+
+Duplication preserves component order and makes independent copies of properties, with unique component/group IDs and input field names. Explicit custom-property references between selected controls are remapped to their copies; self references remain self references. References to unselected controls, form-input names, tag paths and scripts retain their authored values, so copied field references need review. Delete removes the current selection. Undo (Ctrl+Z) and Redo (Ctrl+Y or Ctrl+Shift+Z) restore content while retaining the latest acknowledged project revision. A new edit clears Redo, and returning to the saved content clears the unsaved state. Each group resize gesture creates one history checkpoint.
+
+## Query tables and database forms
+
+Tables use a named read query from SQLite, SQL Server or the built-in sample provider. Column-header buttons toggle ascending/descending sorting, and the filter matches displayed row values without executing new SQL. Filtering and sorting apply to the whole loaded result before paging. The result is bounded by the connector's 1,000-row cap and any narrower limit in the authored query. Server-side paging remains planned. Optional typed inline edits use explicit Edit/Save/Cancel controls and a published Python commit handler; see [inline table editing](QUERY_CONTROLS.md#inline-table-editing).
+
+The inspector's static **Page size** is an integer from 1 to 100, default 25, without an fx binding. Previous/Next controls move through the loaded result and display its row range and page count; they do not fetch additional records. Changing the filter, sort or query context resets the page. A refreshed result that shrinks clamps the page to its remaining range. Moving between pages preserves the selected record and local form edits; row-key validation still covers the full loaded result.
+
+**Edit columns** configures up to 64 ordered source keys with optional headings, visibility, widths from 40 to 1,200 pixels, left/center/right alignment and Auto/Text/Number/Boolean/Date-time formats. The editor has row controls for Add/Remove, Move up/down and Apply/Cancel. Empty or absent configuration preserves automatic columns; an explicit list must contain at least one visible column. Invalid definitions or missing configured source keys show a diagnostic and block table selection/paging. Configuration can be authored while a query is unavailable and is checked against its schema when data arrives.
+
+Number columns use 0–10 fixed decimal places and optional literal suffixes. Boolean formatting accepts native Boolean values or numeric 0/1. Date/time requires a valid timestamp with an explicit timezone and renders in UTC. Nulls stay missing; invalid typed values show marked cells and diagnostics rather than fabricated data. Explicit text formatting preserves literal strings and rejects unsafe native numeric values. Configured filtering searches visible formatted text only; sorting and row mappings retain raw values. Hidden/unlisted fields remain available for stable row identity and validated form mapping, so visibility is not data authorization. Changing column configuration or page size resets the table's filter/sort/page without overwriting form inputs. See [table display columns](QUERY_CONTROLS.md#table-display-columns) for exact fields and limits.
+
+A table may declare `props.rowKey` as a stable unique result column and `props.selectionFields` as a mapping from input field name to result column, for example `{ "id": "id", "quantity": "quantity" }`. Save/publication validation requires mapped inputs to exist in the same screen or template; a mapping cannot reach another template instance or repeater row. Row selection transfers values into local form state, and an authored button action performs the actual update after normal declared-input validation. Selection is available by click, Enter or Space and is locked during a running action. Authors must return compatible scalar values for every mapped column and a valid unique key.
+
+The refresh button fetches the query again. Tables poll every ten seconds while connected and also refresh after successful operator actions. Selection does not continuously replace an operator's form edits with refreshed data; refresh and reselect the row when retrying a revision conflict. A lost gateway connection shows unavailable query state. Runtime query metadata omits SQL and tables cannot publish with an update-query data source.
+
+Run `node tools/load-sqlite-example.mjs` from the repository root to add the independently authored Work orders and New work order screens to the default local gateway. The loader accepts an optional local 5090/5091 URL and `--publish`; without the flag, review and publish both script resources and the project. It rejects incompatible reserved IDs/names before mutations, backs up existing authoring resources under `.data/example-backups`, creates a managed database with synthetic data only when absent, and never overwrites an existing database. See the [README workflow](../../README.md#build-an-application).
+
+The example connects tables to declared form fields and calls a reusable Python library from published button actions. Create returns an affected-row count. Save checks ID and `version` in its parameterized UPDATE, increments the version on success and reports a conflict if zero rows match. A gateway timer updates an active-order memory tag. The SQLite database remains under the gateway data directory; this example does not use external equipment or require SQL Server.
+
+Managed SQLite has explicit creation and schema browsing, read-only SELECT execution, and a separate named-update path for single INSERT…VALUES/UPDATE/DELETE statements. Testing a missing database does not create it; arbitrary filesystem paths and arbitrary schema execution are unavailable. Python `system.db.runNamedQuery` returns a dataset for reads and an integer for updates. Published button actions retain their captured query definitions until project publication; named-query draft edits do not change those actions. Shared libraries follow script-resource publication, while live connection settings and gateway-resource query configuration remain shared.
+
+The recorded source checks pass 157 connector checks and 12 SQLite gateway groups, including actual database creation/persistence, DML, typed parameters, optimistic conflicts, cancellation, filesystem escape rejection and published-action/query isolation. SQL Server update execution uses the same explicit contract but has not been verified against a live SQL Server. Current source evidence does not retroactively update the earlier public installer or Docker verification baseline.
+
+## Single-selection lists and trees
+
+List and Tree view each hold one string form value. Static choices contain 1–100 Value/Label rows; values are unique nonblank strings up to 4,096 characters and labels are nonblank strings up to 200. Tree rows additionally declare a Parent, with no parent meaning a root. Parents must exist in the same set; self-links, cycles and hierarchies deeper than 16 levels are rejected. Exact value strings are preserved. An explicit default must match a choice; an omitted static default selects the first authored choice.
+
+The dedicated options editor stages Add/Remove, Value, Label, Parent and default changes until Apply; Cancel discards the draft. Renaming a node updates its draft child links and default selection. Removing a selected default or a parent with remaining children requires repairing the draft before Apply. Options and hierarchy are structural settings without fx bindings.
+
+Dropdown, List and Tree view can instead read up to 500 choices from a named read query. All three declare value/label columns and optional validated same-form row mappings. Tree view requires a parent column, with null or empty values denoting roots; Dropdown and List forbid that column setting. The whole returned tree must satisfy the same graph rules. Query failures and missing selections remain explicit. Published Python actions re-check membership using the captured query. See [QUERY_CONTROLS.md](QUERY_CONTROLS.md) for the precise source contract.
+
+At runtime, Up/Down and Home/End move focus among visible items; Enter/Space selects. Typing a label prefix moves focus to a matching visible item. Tree Right expands a node or focuses its first child, and Left collapses a node or focuses its parent. Expanding/collapsing does not select or run an input event. Selecting a different item changes and commits its local form value immediately. Neither control supports multiple selection or automatic equipment writes.
+
+Run `node tools/load-data-controls-example.mjs` to create and publish the independent [Data workshop](../../examples/data-controls.json). Its separate synthetic SQLite database supports three read queries and two screens: **Records and hierarchy** demonstrates query list/tree mappings and a two-row table page; **Independent station forms** demonstrates separate list/tree state in two template instances. Preview buttons report local values without modifying records or equipment. The [loader](../../tools/load-data-controls-example.mjs) leaves existing projects unchanged, accepts local ports 5090/5091 and refuses existing reserved project/connection/database configuration. It publishes immediately; it is not an additive update to an existing project.
+
+## Full component-family roadmap
+
+The intended application palette includes the families below. This is an independently authored product roadmap, not a claim of implemented equivalence or import compatibility. Components marked Planned do not currently exist as functional palette controls. Supplied-data charts and everyday application controls can progress before the historian and alarm subsystems.
+
+| Family | Current coverage | Planned components and behavior | Required supporting work |
+| --- | --- | --- | --- |
+| Text and forms | Partial: label, numeric/tag value, text/password/multiline/numeric inputs, spinner, slider, checkbox, toggle, select, radio group, local date/time | Formatted and validated fields, rich text, separate date/time pickers, language selector, barcode scanner input, file upload and reusable forms | Validation/error contracts, localization, device-input handling, local asset/upload limits and scoped submission |
+| Buttons and commands | Partial: action/navigation/popup button and multi-state local selection | Additional button presentations, one-shot, momentary, command/acknowledgment controls and richer keyboard/pointer events | Server authorization, requested/confirmed state, timeouts, cancellation, audit and release-loss handling |
+| Process display | Partial: numeric/tag value, gauge, multi-state indicator, LED display, progress bar, cylindrical tank, level indicator and thermometer | Meter, compass, linear scale, moving analog indicator, sparkline and additional display modes | Numeric scales, quality/unknown state, units, formatting, animation limits and accessibility |
+| Data and navigation | Partial: named-query table with configured display columns, typed inline edits and loaded-result paging, same-form row mappings, query dropdown and static/query single-selection list/tree | Batch/null/date editing, server-side paging, multiple selection, comments panel, tag browse tree, menus, tab strip and contextual navigation | Data models, stable keys, remote paging/filtering, editing/selection events and provider visibility |
+| Layout and embedding | Partial: coordinate canvas, flat groups, single-level templates and saved/query repeaters | Tab/accordion/carousel containers, split/column/flex/breakpoint layouts, nested templates, view canvas, dashboards, docked views and additional dialog flows | Parent-child geometry, independent scope/lifecycle, resize/overflow, template dependencies and focus/keyboard behavior |
+| Drawing and symbols | Partial: line, rectangle, ellipse, editable polyline/pipe routes, pump/valve/motor symbols, local still images and bundled icons | Curves, filled polygons, pipe networks/joints, additional symbols, text drawing, diagram connectors, paintable canvas and barcode display | Connection anchors/routing, bounded path extensions, asset lifecycle, accessibility and command-state contracts |
+| Charts from supplied data | Planned | XY, bar, radar, status, pie, box-and-whisker, Gantt, time-series, additional gauges, sparkline and chart range selector | Typed datasets, series/axis configuration, range selection, aggregation, quality gaps and bounded rendering |
+| History and trends | Planned | Historical/power trend charts, historian query controls and historical range selection | Durable historian storage, retention, timestamp/quality handling, downsampling and query permissions |
+| Alarms | Planned | Alarm status table, alarm journal table, acknowledgment controls and notification presentation | Alarm evaluation/state transitions, durable journals, permissions, audit and notification delivery |
+| Calendar and scheduling | Planned | Calendar, popup calendar, date range, day/week/month views, equipment schedule, appointments and schedule editing | Timezone/DST rules, recurrence, conflict detection, permissions and durable scheduling |
+| Administration | Planned | User management, schedule management, roster management and sequence-flow monitor | Identity/RBAC, durable scheduling/rosters, sequence execution engine, audit and permission-aware editing |
+| Documents and media | Planned beyond still images/icons | Markdown, PDF viewer, sound player, video, IP camera viewer and embedded web browser | Offline-safe resources, sanitization, codecs/browser support, content policies and embedded-origin restrictions |
+| Reports and files | Planned | Report viewer, row selector, column selector and scoped file explorer | Report layouts/data/rendering, dataset selection contracts and a gateway-managed file store with permissions |
+| Utility components | Planned | Timer and signal generator | Explicit browser/gateway scope, cancellation, bounded frequency, clock behavior and lifecycle events |
+| Maps and location | Planned | Local/site maps, geographic maps, markers and equipment overlays | Air-gapped tile/asset packaging, coordinate transforms, supported providers and licensing/deployment configuration |
+
+Single-selection lists/trees, loaded-result table paging, configurable display columns, validated inline editing and the first drawing/symbol set are implemented. Supplied-data charts are the next palette family; their dataset, series, axis and quality-gap contracts remain to be built. Advanced table selection/editing, drawing connections, remaining inputs and process-display modes continue alongside that work. Layout and nested-component work proceeds with explicit scope and lifecycle rules. Historian, alarms, reporting and device commands each need their backing subsystem before their dependent controls can be promoted beyond prototypes. Dates are not promised by this ordering; the acceptance dimensions below apply to every slice.
+
+Momentary and one-shot controls require explicit command/acknowledgment behavior, timeouts and cancellation handling. A browser cannot guarantee delivery of a release event. External equipment writes remain unavailable until authorization and audit contracts exist.
+
+Historian charts need history storage and quality-aware queries; alarm tables need alarm state/journals; reports need a rendering engine. Those dependencies delay their specific components, not basic palette expansion.
+
+## Acceptance dimensions
+
+- **Editing:** add/select/marquee/move/resize/remove, undo/redo, properties, save/reload and published geometry.
+- **Data:** value/type/quality, direct/indirect context, missing/disabled/bad-quality behavior.
+- **Events:** timing, payloads, keyboard/pointer behavior, validation, cancellation and duplicate handling.
+- **Writes:** server-side permission/type checks, requested versus confirmed state, failures and audit.
+- **Publication:** valid references, draft isolation, saved action identity and version transitions.
+- **Operation:** offline assets, accessibility, browser/platform coverage and recovery behavior.
+
+A palette tile or a local memory-tag demo does not establish full component parity, authorized device writes or compatible project imports.

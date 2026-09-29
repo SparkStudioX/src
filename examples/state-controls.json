@@ -1,0 +1,176 @@
+{
+  "name": "State controls workshop",
+  "tags": [],
+  "screens": [
+    {
+      "id": "state-controls",
+      "name": "State controls",
+      "width": 1100,
+      "height": 680,
+      "components": [
+        {
+          "id": "title",
+          "type": "label",
+          "x": 36,
+          "y": 28,
+          "width": 1028,
+          "height": 56,
+          "props": {
+            "text": "Controls that build applications",
+            "fontSize": 30
+          }
+        },
+        {
+          "id": "description",
+          "type": "label",
+          "x": 36,
+          "y": 92,
+          "width": 1028,
+          "height": 54,
+          "props": {
+            "text": "Stage a mode, display a mapped state, and enter masked text. All values stay in this local form until you preview them.",
+            "fontSize": 16
+          }
+        },
+        {
+          "id": "mode",
+          "type": "multiStateButton",
+          "x": 36,
+          "y": 188,
+          "width": 630,
+          "height": 108,
+          "props": {
+            "text": "Requested mode · local selection",
+            "fieldKey": "mode",
+            "defaultValue": "stopped",
+            "options": [
+              {
+                "value": "stopped",
+                "label": "Stopped"
+              },
+              {
+                "value": "manual",
+                "label": "Manual"
+              },
+              {
+                "value": "auto",
+                "label": "Automatic"
+              }
+            ]
+          }
+        },
+        {
+          "id": "selected",
+          "type": "multiStateIndicator",
+          "x": 704,
+          "y": 184,
+          "width": 360,
+          "height": 120,
+          "props": {
+            "text": "Selected mode · form preview",
+            "stateValue": "stopped",
+            "states": [
+              {
+                "value": "stopped",
+                "label": "Stopped",
+                "color": "#718096"
+              },
+              {
+                "value": "manual",
+                "label": "Manual",
+                "color": "#d97706"
+              },
+              {
+                "value": "auto",
+                "label": "Automatic",
+                "color": "#2563eb"
+              }
+            ],
+            "bindings": {
+              "stateValue": {
+                "expression": "mode",
+                "references": {
+                  "mode": {
+                    "kind": "input",
+                    "key": "mode"
+                  }
+                }
+              }
+            },
+            "borderWidth": 1,
+            "borderColor": "#64748b"
+          }
+        },
+        {
+          "id": "passphrase",
+          "type": "passwordInput",
+          "x": 36,
+          "y": 338,
+          "width": 460,
+          "height": 100,
+          "props": {
+            "text": "Sample passphrase · do not enter a real secret",
+            "fieldKey": "passphrase",
+            "defaultValue": ""
+          }
+        },
+        {
+          "id": "preview",
+          "type": "button",
+          "x": 36,
+          "y": 484,
+          "width": 360,
+          "height": 56,
+          "props": {
+            "text": "Preview local form",
+            "action": "script",
+            "script": "result = {'message': 'Requested mode: ' + inputs['mode'] + '. Masked field: ' + ('entered' if inputs['passphrase'] else 'empty') + '. No equipment or database was changed.'}"
+          }
+        },
+        {
+          "id": "unknown",
+          "type": "multiStateIndicator",
+          "x": 704,
+          "y": 338,
+          "width": 360,
+          "height": 120,
+          "props": {
+            "text": "Unmapped feedback example",
+            "stateValue": "unknown",
+            "states": [
+              {
+                "value": "stopped",
+                "label": "Stopped",
+                "color": "#718096"
+              },
+              {
+                "value": "manual",
+                "label": "Manual",
+                "color": "#d97706"
+              },
+              {
+                "value": "auto",
+                "label": "Automatic",
+                "color": "#2563eb"
+              }
+            ],
+            "borderWidth": 1,
+            "borderColor": "#64748b"
+          }
+        },
+        {
+          "id": "help",
+          "type": "label",
+          "x": 36,
+          "y": 584,
+          "width": 1028,
+          "height": 64,
+          "props": {
+            "text": "State colors always have text labels. Bind State value through fx to a tag, parameter or form field. Unknown values and bad quality show an explicit unavailable state.",
+            "fontSize": 15
+          }
+        }
+      ]
+    }
+  ]
+}

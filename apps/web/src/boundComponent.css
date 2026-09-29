@@ -1,0 +1,26 @@
+.bound-component, .bound-component-content { width: 100%; height: 100%; min-width: 0; min-height: 0; }
+.bound-component { position: relative; }
+/* Remove the positioned geometry too, so hidden overlapping controls cannot
+   intercept input intended for a visible control below them. */
+.canvas-component:has(> .bound-component-hidden),
+.popup-component:has(> .bound-component-hidden),
+.template-leaf:has(> .bound-component-hidden) { display: none; }
+.bound-component.design-hidden > .bound-component-content { opacity: .35; }
+.bound-component.binding-failed { outline: 1px solid var(--warning-border); }
+.component-binding-error, .binding-visibility-note {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 3px 6px; font-size: 11px; line-height: 1.3;
+  background: var(--warning-bg); color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  pointer-events: none;
+}
+.binding-visibility-note { background: var(--panel); color: var(--muted); }
+/* Explicit property-sheet styles override each control's theme defaults. */
+.bound-component.has-custom-background :is(.render-button, .render-value, .render-gauge, .render-table, input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea, select) { background-color: var(--component-background); }
+.bound-component.has-custom-foreground :is(.render-label, .render-button, .render-value, .render-gauge, .render-table, .render-input, input, textarea, select, label, legend, output, strong, span) { color: var(--component-text-color); }
+.bound-component.has-custom-font :is(.render-label, .render-button, .render-value, .render-gauge, .render-table, .render-input, input, textarea, select, label, legend, output) { font-size: var(--component-font-size); }
+/* Spinner buttons share the input's authored appearance, including hover. */
+.bound-component.has-custom-background .spinner-control button,
+.bound-component.has-custom-background .spinner-control button:hover:not(:disabled) { background-color: var(--component-background); }
+.bound-component.has-custom-foreground .spinner-control button { color: var(--component-text-color); }
+.bound-component.has-custom-font .spinner-control button { font-size: var(--component-font-size); }

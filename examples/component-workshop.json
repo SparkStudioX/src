@@ -1,0 +1,16 @@
+{
+  "name": "Component property sheet and events",
+  "screens": [{
+    "id": "component-workshop", "name": "Component workshop", "width": 1000, "height": 650,
+    "components": [
+      {"id":"cw-title","type":"label","x":32,"y":24,"width":920,"height":45,"props":{"text":"Forms, properties and events","fontSize":28}},
+      {"id":"cw-help","type":"label","x":32,"y":78,"width":920,"height":55,"props":{"text":"Change Quantity or Unit price to calculate Total. Commit an Order code with Enter or Tab.","fontSize":16}},
+      {"id":"cw-code","type":"textInput","x":32,"y":155,"width":380,"height":105,"props":{"text":"Order code","fieldKey":"orderCode","defaultValue":"WO-1001","events":{"commit":{"language":"javascript","code":"const code = event.value.trim().toUpperCase();\napp.setInput('orderCode', code);\napp.notify('Order code committed: ' + code);"}}}},
+      {"id":"cw-quantity","groupId":"pricing","type":"spinner","x":32,"y":290,"width":220,"height":110,"props":{"text":"Quantity","fieldKey":"quantity","defaultValue":2,"min":1,"max":20,"step":1,"events":{"change":{"language":"javascript","code":"if (Number.isFinite(inputs.quantity) && Number.isFinite(inputs.unitPrice)) {\n  app.setInput('total', Math.round(inputs.quantity * inputs.unitPrice * 100) / 100);\n}"},"commit":{"language":"javascript","code":"app.notify('Quantity committed: ' + event.value);"}}}},
+      {"id":"cw-price","groupId":"pricing","type":"numberInput","x":278,"y":290,"width":220,"height":110,"props":{"text":"Unit price","fieldKey":"unitPrice","defaultValue":2.5,"min":0,"max":1000,"step":0.5,"events":{"change":{"language":"javascript","code":"if (Number.isFinite(inputs.quantity) && Number.isFinite(inputs.unitPrice)) {\n  app.setInput('total', Math.round(inputs.quantity * inputs.unitPrice * 100) / 100);\n}"}}}},
+      {"id":"cw-total","type":"numberInput","x":545,"y":290,"width":340,"height":95,"props":{"text":"Total (calculated)","fieldKey":"total","defaultValue":5,"min":0,"max":20000,"enabled":false}},
+      {"id":"cw-layout","type":"label","x":545,"y":425,"width":340,"height":85,"props":{"text":"Live layout","fontSize":20,"foregroundColor":"#ffffff","backgroundColor":"#334155","borderColor":"#94a3b8","borderWidth":2,"bindings":{"text":{"expression":"code","references":{"code":{"kind":"input","key":"orderCode"}}},"width":{"expression":"200 + quantity * 8","references":{"quantity":{"kind":"input","key":"quantity"}}},"backgroundColor":{"expression":"quantity > 10 ? '#9a3412' : '#334155'","references":{"quantity":{"kind":"input","key":"quantity"}}}}}},
+      {"id":"cw-footer","type":"label","x":32,"y":540,"width":910,"height":70,"props":{"text":"Quantity and Unit price are a saved group. The order card has bound width, text and background. Browser events edit this form only; this example writes no devices or databases.","fontSize":15}}
+    ]
+  }]
+}

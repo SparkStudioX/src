@@ -1,0 +1,15 @@
+.list-tree-editor { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.list-tree-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.list-tree-heading > strong { font-size: 12px; }
+.list-tree-help { margin: 8px 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+.list-tree-summary { list-style: none; padding: 0; margin: 0; max-height: 240px; overflow: auto; }
+.list-tree-summary > li { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border); font-size: 11px; }
+.list-tree-summary > li > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.list-tree-summary small { color: var(--muted); font-size: 10px; }
+.list-tree-summary span > small { display: block; padding-top: 2px; }
+.list-tree-option-row { margin: 0 0 8px; padding: 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-subtle); }
+.list-tree-option-row > label, .list-tree-default { display: block; color: var(--text-secondary); font-size: 11px; margin-top: 8px; }
+.list-tree-option-row > label > input, .list-tree-option-row > label > select, .list-tree-default > select, .table-page-size-editor > input { width: 100%; min-width: 0; margin-top: 4px; min-height: 30px; padding: 5px; border: 1px solid var(--border); border-radius: 3px; background: var(--panel); color: var(--ink); font: inherit; font-size: 11px; }
+.list-tree-option-row input:focus-visible, .list-tree-option-row select:focus-visible, .list-tree-default select:focus-visible, .table-page-size-editor > input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.list-tree-error { color: var(--danger); margin: 8px 0; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.list-tree-actions { display: flex; gap: 7px; margin-top: 10px; }

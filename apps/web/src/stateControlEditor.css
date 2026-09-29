@@ -1,0 +1,18 @@
+.state-control-editor { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.state-control-heading, .state-control-row-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.state-control-heading > strong, .state-control-row-heading > strong { font-size: 12px; }
+.state-control-help { margin: 8px 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+.state-control-summary { list-style: none; padding: 0; margin: 0; }
+.state-control-summary > li { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border); font-size: 12px; }
+.state-control-summary > li > span:not(.state-control-swatch) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.state-control-summary small { color: var(--muted); font-size: 10px; }
+.state-control-summary span > small { display: block; padding-top: 2px; }
+.state-control-swatch { width: 16px; height: 16px; flex: 0 0 16px; border: 1px solid var(--border); border-radius: 3px; }
+.state-control-row { margin: 0 0 8px; padding: 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-subtle); }
+.state-control-row > label, .state-control-default { display: block; color: var(--text-secondary); font-size: 11px; margin-top: 8px; }
+.state-control-row > label > input, .state-control-default > select, .state-control-color > input { width: 100%; min-width: 0; margin-top: 4px; height: 30px; padding: 5px; border: 1px solid var(--border); border-radius: 3px; background: var(--panel); color: var(--ink); font: inherit; font-size: 11px; }
+.state-control-row input:focus-visible, .state-control-default select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.state-control-color { display: flex; gap: 5px; }
+.state-control-color > input[type=color] { flex: 0 0 34px; padding: 3px; }
+.state-control-error { color: var(--danger); margin: 8px 0; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.state-control-actions { display: flex; gap: 7px; margin-top: 10px; }

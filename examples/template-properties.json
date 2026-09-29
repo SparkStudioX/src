@@ -1,0 +1,404 @@
+{
+  "name": "Template property workshop",
+  "tags": [],
+  "templates": [
+    {
+      "id": "station-form",
+      "name": "Station form",
+      "width": 360,
+      "height": 320,
+      "parameters": {
+        "station": "Station",
+        "limit": "40",
+        "permit": "true"
+      },
+      "components": [
+        {
+          "id": "heading",
+          "type": "label",
+          "x": 20,
+          "y": 18,
+          "width": 320,
+          "height": 40,
+          "props": {
+            "text": "{station}",
+            "fontSize": 24
+          }
+        },
+        {
+          "id": "note",
+          "type": "label",
+          "x": 20,
+          "y": 64,
+          "width": 320,
+          "height": 42,
+          "props": {
+            "text": "Limit: {limit} units · Permission: {permit}",
+            "fontSize": 14
+          }
+        },
+        {
+          "id": "quantity",
+          "type": "spinner",
+          "x": 20,
+          "y": 116,
+          "width": 320,
+          "height": 84,
+          "props": {
+            "text": "Quantity for {station}",
+            "fieldKey": "quantity",
+            "defaultValue": 12,
+            "min": 1,
+            "max": 100,
+            "step": 1,
+            "bindings": {
+              "enabled": {
+                "expression": "permit",
+                "references": {
+                  "permit": {
+                    "kind": "parameter",
+                    "key": "permit"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "preview",
+          "type": "button",
+          "x": 20,
+          "y": 224,
+          "width": 320,
+          "height": 48,
+          "props": {
+            "text": "Preview {station}",
+            "action": "script",
+            "script": "assert isinstance(parameters['limit'], (int, float)) and not isinstance(parameters['limit'], bool)\nassert isinstance(parameters['permit'], bool)\nassert parameters['permit'] and inputs['quantity'] <= parameters['limit']\nresult = {'message': parameters['station'] + ': ' + str(inputs['quantity']) + ' units previewed. Typed limit=' + str(parameters['limit']) + ', permit=' + str(parameters['permit']) + '. Nothing was written.'}",
+            "bindings": {
+              "enabled": {
+                "expression": "permit && quantity <= limit",
+                "references": {
+                  "permit": {
+                    "kind": "parameter",
+                    "key": "permit"
+                  },
+                  "limit": {
+                    "kind": "parameter",
+                    "key": "limit"
+                  },
+                  "quantity": {
+                    "kind": "input",
+                    "key": "quantity"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "parameterTypes": {
+        "limit": "number",
+        "permit": "boolean"
+      }
+    }
+  ],
+  "screens": [
+    {
+      "id": "template-property-workshop",
+      "name": "Template properties",
+      "width": 1180,
+      "height": 820,
+      "components": [
+        {
+          "id": "heading",
+          "type": "label",
+          "x": 32,
+          "y": 24,
+          "width": 1116,
+          "height": 46,
+          "props": {
+            "text": "Reusable forms, live properties",
+            "fontSize": 30
+          }
+        },
+        {
+          "id": "description",
+          "type": "label",
+          "x": 32,
+          "y": 82,
+          "width": 1116,
+          "height": 48,
+          "props": {
+            "text": "Typed public parameters give each station its own numeric limit and Boolean permission.",
+            "fontSize": 16
+          }
+        },
+        {
+          "id": "width",
+          "type": "slider",
+          "x": 32,
+          "y": 158,
+          "width": 252,
+          "height": 90,
+          "props": {
+            "text": "Single form width",
+            "fieldKey": "panelWidth",
+            "defaultValue": 360,
+            "min": 300,
+            "max": 420,
+            "step": 10
+          }
+        },
+        {
+          "id": "offset",
+          "type": "slider",
+          "x": 304,
+          "y": 158,
+          "width": 240,
+          "height": 90,
+          "props": {
+            "text": "Single form position",
+            "fieldKey": "panelX",
+            "defaultValue": 32,
+            "min": 32,
+            "max": 120,
+            "step": 8
+          }
+        },
+        {
+          "id": "enabled",
+          "type": "checkbox",
+          "x": 580,
+          "y": 156,
+          "width": 264,
+          "height": 64,
+          "props": {
+            "text": "Enable all station forms",
+            "fieldKey": "formsEnabled",
+            "defaultValue": true
+          }
+        },
+        {
+          "id": "visible",
+          "type": "checkbox",
+          "x": 580,
+          "y": 226,
+          "width": 264,
+          "height": 64,
+          "props": {
+            "text": "Show the single form",
+            "fieldKey": "showPanel",
+            "defaultValue": true
+          }
+        },
+        {
+          "id": "attention",
+          "type": "toggle",
+          "x": 884,
+          "y": 156,
+          "width": 264,
+          "height": 92,
+          "props": {
+            "text": "Highlight the forms",
+            "fieldKey": "attention",
+            "defaultValue": false
+          }
+        },
+        {
+          "id": "single-caption",
+          "type": "label",
+          "x": 32,
+          "y": 294,
+          "width": 480,
+          "height": 32,
+          "props": {
+            "text": "ONE TEMPLATE INSTANCE",
+            "fontSize": 14
+          }
+        },
+        {
+          "id": "repeater-caption",
+          "type": "label",
+          "x": 580,
+          "y": 294,
+          "width": 568,
+          "height": 32,
+          "props": {
+            "text": "THE SAME TEMPLATE, REPEATED",
+            "fontSize": 14
+          }
+        },
+        {
+          "id": "single-station",
+          "type": "template",
+          "x": 32,
+          "y": 342,
+          "width": 360,
+          "height": 350,
+          "props": {
+            "text": "Single station form",
+            "templateId": "station-form",
+            "parameters": {
+              "station": "Station A",
+              "limit": "30"
+            },
+            "backgroundColor": "#172534",
+            "borderColor": "#44748f",
+            "borderWidth": 2,
+            "bindings": {
+              "width": {
+                "expression": "value",
+                "references": {
+                  "value": {
+                    "kind": "input",
+                    "key": "panelWidth"
+                  }
+                }
+              },
+              "x": {
+                "expression": "value",
+                "references": {
+                  "value": {
+                    "kind": "input",
+                    "key": "panelX"
+                  }
+                }
+              },
+              "enabled": {
+                "expression": "value",
+                "references": {
+                  "value": {
+                    "kind": "input",
+                    "key": "formsEnabled"
+                  }
+                }
+              },
+              "visible": {
+                "expression": "value",
+                "references": {
+                  "value": {
+                    "kind": "input",
+                    "key": "showPanel"
+                  }
+                }
+              },
+              "color": {
+                "expression": "attention ? \"#ffd16a\" : \"#83b5ed\"",
+                "references": {
+                  "attention": {
+                    "kind": "input",
+                    "key": "attention"
+                  }
+                }
+              },
+              "backgroundColor": {
+                "expression": "attention ? \"#302a1e\" : \"#172534\"",
+                "references": {
+                  "attention": {
+                    "kind": "input",
+                    "key": "attention"
+                  }
+                }
+              },
+              "borderColor": {
+                "expression": "attention ? \"#ffd16a\" : \"#44748f\"",
+                "references": {
+                  "attention": {
+                    "kind": "input",
+                    "key": "attention"
+                  }
+                }
+              }
+            },
+            "foregroundColor": "#edf5ff"
+          }
+        },
+        {
+          "id": "stations",
+          "type": "repeater",
+          "x": 580,
+          "y": 342,
+          "width": 568,
+          "height": 350,
+          "props": {
+            "text": "Repeated station forms",
+            "templateId": "station-form",
+            "columns": 2,
+            "gap": 16,
+            "rows": [
+              {
+                "id": "station-b",
+                "parameters": {
+                  "station": "Station B",
+                  "limit": "50"
+                }
+              },
+              {
+                "id": "station-c",
+                "parameters": {
+                  "station": "Station C",
+                  "permit": "false"
+                }
+              }
+            ],
+            "backgroundColor": "#172534",
+            "borderColor": "#44748f",
+            "borderWidth": 2,
+            "bindings": {
+              "enabled": {
+                "expression": "value",
+                "references": {
+                  "value": {
+                    "kind": "input",
+                    "key": "formsEnabled"
+                  }
+                }
+              },
+              "color": {
+                "expression": "attention ? \"#ffd16a\" : \"#83b5ed\"",
+                "references": {
+                  "attention": {
+                    "kind": "input",
+                    "key": "attention"
+                  }
+                }
+              },
+              "backgroundColor": {
+                "expression": "attention ? \"#302a1e\" : \"#172534\"",
+                "references": {
+                  "attention": {
+                    "kind": "input",
+                    "key": "attention"
+                  }
+                }
+              },
+              "borderColor": {
+                "expression": "attention ? \"#ffd16a\" : \"#44748f\"",
+                "references": {
+                  "attention": {
+                    "kind": "input",
+                    "key": "attention"
+                  }
+                }
+              }
+            },
+            "foregroundColor": "#edf5ff"
+          }
+        },
+        {
+          "id": "hint",
+          "type": "label",
+          "x": 32,
+          "y": 728,
+          "width": 1116,
+          "height": 58,
+          "props": {
+            "text": "Station A allows 30 units; B allows 50; C is read-only. Select a template in Designer to edit public parameter types and defaults.",
+            "fontSize": 15
+          }
+        }
+      ]
+    }
+  ]
+}

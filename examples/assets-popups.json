@@ -1,0 +1,588 @@
+{
+  "assets": [
+    {
+      "id": "0df6492ea1fd39c00f5a4a8b6f96e39c5a6729f211ded9f904be96b18dc4600c",
+      "name": "Assembly cell",
+      "file": "assets/assembly-cell.png",
+      "contentType": "image/png"
+    }
+  ],
+  "tags": [
+    {
+      "path": "[default]Workcenters/Line1/Target",
+      "kind": "memory",
+      "dataType": "Double",
+      "value": 90,
+      "enabled": true
+    },
+    {
+      "path": "[default]Workcenters/Line1/Mode",
+      "kind": "memory",
+      "dataType": "String",
+      "value": "automatic",
+      "enabled": true
+    },
+    {
+      "path": "[default]Workcenters/Line2/Target",
+      "kind": "memory",
+      "dataType": "Double",
+      "value": 115,
+      "enabled": true
+    },
+    {
+      "path": "[default]Workcenters/Line2/Mode",
+      "kind": "memory",
+      "dataType": "String",
+      "value": "manual",
+      "enabled": true
+    },
+    {
+      "path": "[default]Orders/1001/Status",
+      "kind": "memory",
+      "dataType": "String",
+      "value": "Staged",
+      "enabled": true
+    },
+    {
+      "path": "[default]Orders/1001/Priority",
+      "kind": "memory",
+      "dataType": "String",
+      "value": "normal",
+      "enabled": true
+    },
+    {
+      "path": "[default]Orders/1002/Status",
+      "kind": "memory",
+      "dataType": "String",
+      "value": "Staged",
+      "enabled": true
+    },
+    {
+      "path": "[default]Orders/1002/Priority",
+      "kind": "memory",
+      "dataType": "String",
+      "value": "normal",
+      "enabled": true
+    }
+  ],
+  "templates": [
+    {
+      "id": "detail-workcenter-form",
+      "name": "Workcenter detail form",
+      "width": 500,
+      "height": 510,
+      "parameters": {
+        "machine": "Line1",
+        "title": "Workcenter"
+      },
+      "components": [
+        {
+          "id": "heading",
+          "type": "label",
+          "x": 20,
+          "y": 18,
+          "width": 390,
+          "height": 42,
+          "props": {
+            "text": "{title}",
+            "fontSize": 27
+          }
+        },
+        {
+          "id": "machine-label",
+          "type": "label",
+          "x": 20,
+          "y": 68,
+          "width": 460,
+          "height": 28,
+          "props": {
+            "text": "Machine {machine} · local application settings",
+            "fontSize": 14
+          }
+        },
+        {
+          "id": "target",
+          "type": "numberInput",
+          "x": 20,
+          "y": 123,
+          "width": 220,
+          "height": 76,
+          "props": {
+            "text": "Target rate",
+            "fieldKey": "target",
+            "tagPath": "[default]Workcenters/{machine}/Target",
+            "min": 0,
+            "max": 200,
+            "defaultValue": 90
+          }
+        },
+        {
+          "id": "mode",
+          "type": "select",
+          "x": 260,
+          "y": 123,
+          "width": 220,
+          "height": 76,
+          "props": {
+            "text": "Operating mode",
+            "fieldKey": "mode",
+            "tagPath": "[default]Workcenters/{machine}/Mode",
+            "defaultValue": "automatic",
+            "options": [
+              {
+                "label": "Automatic",
+                "value": "automatic"
+              },
+              {
+                "label": "Manual",
+                "value": "manual"
+              }
+            ]
+          }
+        },
+        {
+          "id": "apply",
+          "type": "button",
+          "x": 20,
+          "y": 226,
+          "width": 220,
+          "height": 48,
+          "props": {
+            "text": "Save {machine} settings",
+            "action": "script",
+            "script": "machine = parameters['machine']\npaths = ['[default]Workcenters/' + machine + '/Target', '[default]Workcenters/' + machine + '/Mode']\nqualities = system.tag.writeBlocking(paths, [inputs['target'], inputs['mode']])\nif not all(quality.isGood() for quality in qualities):\n    raise RuntimeError('Settings were not fully saved. Check the configured memory tags.')\nresult = {'message': machine + ' settings saved.'}"
+          }
+        },
+        {
+          "id": "saved-target",
+          "type": "value",
+          "x": 20,
+          "y": 314,
+          "width": 220,
+          "height": 155,
+          "props": {
+            "text": "Saved target",
+            "tagPath": "[default]Workcenters/{machine}/Target",
+            "unit": "units/min"
+          }
+        },
+        {
+          "id": "saved-mode",
+          "type": "value",
+          "x": 260,
+          "y": 314,
+          "width": 220,
+          "height": 155,
+          "props": {
+            "text": "Saved mode",
+            "tagPath": "[default]Workcenters/{machine}/Mode"
+          }
+        },
+        {
+          "id": "machine-icon",
+          "type": "icon",
+          "x": 432,
+          "y": 18,
+          "width": 48,
+          "height": 48,
+          "props": {
+            "icon": "settings",
+            "alt": "Workcenter settings"
+          }
+        }
+      ]
+    },
+    {
+      "id": "order-detail-launcher",
+      "name": "Order detail launcher",
+      "width": 360,
+      "height": 174,
+      "parameters": {
+        "orderId": "1001",
+        "product": "Assembly kit",
+        "quantity": "48"
+      },
+      "components": [
+        {
+          "id": "title",
+          "type": "label",
+          "x": 18,
+          "y": 16,
+          "width": 280,
+          "height": 34,
+          "props": {
+            "text": "Order {orderId}",
+            "fontSize": 24
+          }
+        },
+        {
+          "id": "order-icon",
+          "type": "icon",
+          "x": 312,
+          "y": 17,
+          "width": 28,
+          "height": 28,
+          "props": {
+            "icon": "tag",
+            "alt": "Order"
+          }
+        },
+        {
+          "id": "product",
+          "type": "label",
+          "x": 18,
+          "y": 56,
+          "width": 324,
+          "height": 27,
+          "props": {
+            "text": "{product} · {quantity} units",
+            "fontSize": 15
+          }
+        },
+        {
+          "id": "open",
+          "type": "button",
+          "x": 18,
+          "y": 105,
+          "width": 324,
+          "height": 46,
+          "props": {
+            "text": "Open order {orderId}",
+            "action": "openPopup",
+            "targetScreenId": "order-detail-popup",
+            "parameters": {
+              "orderId": "{orderId}",
+              "product": "{product}",
+              "quantity": "{quantity}"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "id": "equipment-desk",
+      "name": "Equipment desk",
+      "kind": "screen",
+      "width": 1200,
+      "height": 760,
+      "components": [
+        {
+          "id": "title",
+          "type": "label",
+          "x": 32,
+          "y": 28,
+          "width": 1100,
+          "height": 52,
+          "props": {
+            "text": "Equipment desk",
+            "fontSize": 32
+          }
+        },
+        {
+          "id": "description",
+          "type": "label",
+          "x": 32,
+          "y": 89,
+          "width": 1136,
+          "height": 34,
+          "props": {
+            "text": "Open a machine or order form while keeping your place on the main screen.",
+            "fontSize": 17
+          }
+        },
+        {
+          "id": "workcell-image",
+          "type": "image",
+          "x": 32,
+          "y": 150,
+          "width": 700,
+          "height": 320,
+          "props": {
+            "assetId": "0df6492ea1fd39c00f5a4a8b6f96e39c5a6729f211ded9f904be96b18dc4600c",
+            "alt": "Assembly cell with infeed conveyor, workcenter and outfeed conveyor",
+            "fit": "contain"
+          }
+        },
+        {
+          "id": "assembly-a",
+          "type": "button",
+          "x": 32,
+          "y": 500,
+          "width": 334,
+          "height": 52,
+          "props": {
+            "text": "Assembly A settings",
+            "action": "openPopup",
+            "targetScreenId": "workcenter-detail-popup",
+            "parameters": {
+              "machine": "Line1",
+              "title": "Assembly A"
+            }
+          }
+        },
+        {
+          "id": "assembly-b",
+          "type": "button",
+          "x": 398,
+          "y": 500,
+          "width": 334,
+          "height": 52,
+          "props": {
+            "text": "Assembly B settings",
+            "action": "openPopup",
+            "targetScreenId": "workcenter-detail-popup",
+            "parameters": {
+              "machine": "Line2",
+              "title": "Assembly B"
+            }
+          }
+        },
+        {
+          "id": "image-caption",
+          "type": "label",
+          "x": 32,
+          "y": 574,
+          "width": 700,
+          "height": 28,
+          "props": {
+            "text": "Image stored locally on the gateway · no internet connection required",
+            "fontSize": 15
+          }
+        },
+        {
+          "id": "operator-note",
+          "type": "textInput",
+          "x": 32,
+          "y": 636,
+          "width": 700,
+          "height": 78,
+          "props": {
+            "text": "Shift note — kept here while a popup is open",
+            "fieldKey": "shiftNote",
+            "defaultValue": ""
+          }
+        },
+        {
+          "id": "orders-title",
+          "type": "label",
+          "x": 780,
+          "y": 151,
+          "width": 388,
+          "height": 40,
+          "props": {
+            "text": "Dispatch queue",
+            "fontSize": 26
+          }
+        },
+        {
+          "id": "orders",
+          "type": "repeater",
+          "x": 780,
+          "y": 216,
+          "width": 388,
+          "height": 410,
+          "props": {
+            "templateId": "order-detail-launcher",
+            "columns": 1,
+            "gap": 18,
+            "rows": [
+              {
+                "id": "order-1001",
+                "parameters": {
+                  "orderId": "1001",
+                  "product": "Assembly kit",
+                  "quantity": "48"
+                }
+              },
+              {
+                "id": "order-1002",
+                "parameters": {
+                  "orderId": "1002",
+                  "product": "Drive housing",
+                  "quantity": "24"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "scope",
+          "type": "label",
+          "x": 780,
+          "y": 655,
+          "width": 388,
+          "height": 62,
+          "props": {
+            "text": "Sample workflows\nPopups save local memory tags.",
+            "fontSize": 16
+          }
+        }
+      ]
+    },
+    {
+      "id": "workcenter-detail-popup",
+      "name": "Workcenter settings",
+      "kind": "popup",
+      "width": 630,
+      "height": 690,
+      "parameters": {
+        "machine": "Line1",
+        "title": "Workcenter"
+      },
+      "components": [
+        {
+          "id": "settings-form",
+          "type": "template",
+          "x": 24,
+          "y": 20,
+          "width": 582,
+          "height": 594,
+          "props": {
+            "templateId": "detail-workcenter-form",
+            "parameters": {
+              "machine": "{machine}",
+              "title": "{title}"
+            }
+          }
+        },
+        {
+          "id": "close",
+          "type": "button",
+          "x": 24,
+          "y": 624,
+          "width": 180,
+          "height": 44,
+          "props": {
+            "text": "Close settings",
+            "action": "closePopup"
+          }
+        }
+      ]
+    },
+    {
+      "id": "order-detail-popup",
+      "name": "Order details",
+      "kind": "popup",
+      "width": 560,
+      "height": 590,
+      "parameters": {
+        "orderId": "1001",
+        "product": "Assembly kit",
+        "quantity": "48"
+      },
+      "components": [
+        {
+          "id": "order-icon",
+          "type": "icon",
+          "x": 28,
+          "y": 26,
+          "width": 46,
+          "height": 46,
+          "props": {
+            "icon": "tag",
+            "alt": "Order details"
+          }
+        },
+        {
+          "id": "title",
+          "type": "label",
+          "x": 96,
+          "y": 26,
+          "width": 436,
+          "height": 46,
+          "props": {
+            "text": "Order {orderId}",
+            "fontSize": 30
+          }
+        },
+        {
+          "id": "product",
+          "type": "label",
+          "x": 28,
+          "y": 90,
+          "width": 504,
+          "height": 34,
+          "props": {
+            "text": "{product} · {quantity} units",
+            "fontSize": 18
+          }
+        },
+        {
+          "id": "status",
+          "type": "value",
+          "x": 28,
+          "y": 153,
+          "width": 504,
+          "height": 145,
+          "props": {
+            "text": "Order status",
+            "tagPath": "[default]Orders/{orderId}/Status"
+          }
+        },
+        {
+          "id": "priority",
+          "type": "select",
+          "x": 28,
+          "y": 324,
+          "width": 504,
+          "height": 74,
+          "props": {
+            "text": "Dispatch priority",
+            "fieldKey": "priority",
+            "tagPath": "[default]Orders/{orderId}/Priority",
+            "defaultValue": "normal",
+            "options": [
+              {
+                "label": "Normal",
+                "value": "normal"
+              },
+              {
+                "label": "Urgent",
+                "value": "urgent"
+              }
+            ]
+          }
+        },
+        {
+          "id": "release",
+          "type": "button",
+          "x": 28,
+          "y": 428,
+          "width": 294,
+          "height": 48,
+          "props": {
+            "text": "Release order {orderId}",
+            "action": "script",
+            "script": "order = parameters['orderId']\npaths = ['[default]Orders/' + order + '/Priority', '[default]Orders/' + order + '/Status']\nqualities = system.tag.writeBlocking(paths, [inputs['priority'], 'Released'])\nif not all(quality.isGood() for quality in qualities):\n    raise RuntimeError('Order update was incomplete. Check the configured memory tags.')\nresult = {'message': 'Sample order ' + order + ' released with ' + inputs['priority'] + ' priority.'}"
+          }
+        },
+        {
+          "id": "close",
+          "type": "button",
+          "x": 346,
+          "y": 428,
+          "width": 186,
+          "height": 48,
+          "props": {
+            "text": "Close details",
+            "action": "closePopup"
+          }
+        },
+        {
+          "id": "scope",
+          "type": "label",
+          "x": 28,
+          "y": 515,
+          "width": 504,
+          "height": 38,
+          "props": {
+            "text": "Saved order context · writes local sample memory tags",
+            "fontSize": 14
+          }
+        }
+      ]
+    }
+  ]
+}

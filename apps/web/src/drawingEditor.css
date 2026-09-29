@@ -1,0 +1,19 @@
+.drawing-editor { min-width: 0; }
+.drawing-editor-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+.drawing-editor-heading h3 { margin: 0; }
+.drawing-editor-heading strong { font-size: 11px; }
+.drawing-editor-help, .drawing-editor-summary { margin: 8px 0; font-size: 11px; line-height: 1.55; color: var(--text-muted); overflow-wrap: anywhere; }
+.drawing-editor-draft { display: flex; flex-direction: column; gap: 9px; margin-top: 10px; }
+.drawing-point-preview { width: 100%; height: 160px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); }
+.drawing-point-preview polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+.drawing-point-preview circle { fill: var(--accent); stroke: var(--panel); stroke-width: .6; }
+.drawing-point-preview text { font-size: 7px; fill: var(--ink); }
+.drawing-point-preview .drawing-point-frame { fill: none; stroke: var(--border); stroke-width: .7; }
+.drawing-point-row { display: flex; flex-direction: column; gap: 7px; padding: 8px; border: 1px solid var(--border); border-radius: 4px; min-width: 0; }
+.drawing-point-order { display: flex; gap: 3px; }
+.drawing-point-order .button { padding: 3px 5px; }
+.drawing-point-coordinates { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.drawing-point-coordinates label, .drawing-editor-field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-muted); min-width: 0; }
+.drawing-point-coordinates input, .drawing-editor-field input, .drawing-editor-field select { width: 100%; min-width: 0; }
+.drawing-editor-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.drawing-editor-error { color: var(--danger, #dc2626); font-size: 11px; line-height: 1.5; margin: 0; }

@@ -1,0 +1,22 @@
+.drawing-component {
+  position: relative; display: block; width: 100%; height: 100%; min-width: 0; min-height: 0;
+  box-sizing: border-box; overflow: hidden; color: var(--component-text-color, var(--ink));
+  font: inherit; font-size: var(--component-font-size, 12px);
+}
+.drawing-svg { display: block; width: 100%; height: 100%; overflow: hidden; }
+.drawing-caption {
+  position: absolute; bottom: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: center;
+  padding: 0 3px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; pointer-events: none;
+  font-size: inherit; line-height: 1.2;
+}
+.drawing-action { padding: 0; border: 0; border-radius: 3px; background: transparent; text-align: center; cursor: pointer; }
+.drawing-action:focus-visible { outline: 2px solid var(--component-accent, var(--accent)); outline-offset: -2px; }
+.drawing-action:disabled { cursor: default; opacity: 1; }
+.drawing-unavailable { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 8px; background: var(--component-background, var(--surface-sunken)); text-align: center; }
+.drawing-unavailable .drawing-caption { position: static; flex: 0 0 auto; }
+.drawing-unavailable strong { font-size: inherit; }
+.drawing-diagnostic { color: var(--component-text-color, var(--muted)); font-size: inherit; overflow-wrap: anywhere; }
+.drawing-flow-animated { animation: drawing-pipe-flow 1s linear infinite; }
+.drawing-flow-animated.drawing-flow-reverse { animation-direction: reverse; }
+@keyframes drawing-pipe-flow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: var(--drawing-flow-offset); } }
+@media (prefers-reduced-motion: reduce) { .drawing-flow-animated { animation: none; } }

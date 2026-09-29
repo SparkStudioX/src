@@ -1,0 +1,203 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import ts from 'typescript';
+
+const require = createRequire(import.meta.url), asModule = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
+const hookUrl = asModule(`let scopes=new Map(),current='',index=0;
+export const begin=scope=>{current=scope;index=0;if(!scopes.has(scope))scopes.set(scope,[]);};export const clear=()=>{scopes=new Map();};
+export const useState=initial=>{const values=scopes.get(current),at=index++;if(!(at in values))values[at]=typeof initial==='function'?initial():initial;return[values[at],next=>{values[at]=typeof next==='function'?next(values[at]):next;}];};
+export const useRef=initial=>{const values=scopes.get(current),at=index++;return values[at]??={current:initial};};export const useId=()=>'drawing-test';export const useEffect=()=>{};`);
+const portalUrl = asModule('export const createPortal=children=>children;');
+function loader(interactive = false) {
+  const modules = new Map();
+  return function url(name) {
+    if (modules.has(name)) return modules.get(name);
+    const file = ['tsx', 'ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(file => fs.existsSync(file)); assert.ok(file, name);
+    const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
+      .replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
+      .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_full, prefix, _quote, dependency) => `${prefix}${JSON.stringify(interactive && dependency === 'react' ? hookUrl : interactive && dependency === 'react-dom' ? portalUrl : dependency.startsWith('./') ? url(dependency.slice(2)) : pathToFileURL(require.resolve(dependency)).href)}`);
+    const result = asModule(code); modules.set(name, result); return result;
+  };
+}
+const real = loader(), interactive = loader(true), hooks = await import(hookUrl);
+const { DrawingEditor } = await import(real('DrawingEditor'));
+const { DrawingEditor: Editor } = await import(interactive('DrawingEditor'));
+const { PropertyBindingsEditor } = await import(real('PropertyBindingsEditor'));
+const { PropertyBindingsEditor: Bindings } = await import(interactive('PropertyBindingsEditor'));
+const { drawingTypes, drawingDefaults, validateDrawingProps, supportsDrawingProperty } = await import(real('drawingComponents'));
+const { checkpoint, restoreHistory } = await import(real('canvasEditing'));
+const { isInput } = await import(real('inputs'));
+const { isProcessDisplay } = await import(real('processDisplays'));
+const { iconNames } = await import(real('Icon'));
+const noOp = () => {}, make = (type = 'polyline', props = {}) => ({ id: 'drawing', type, x: 20, y: 30, width: 260, height: 180, props: { ...drawingDefaults(type), text: 'Equipment route', ...props } });
+const nodes = node => !node || typeof node !== 'object' ? [] : [node, ...React.Children.toArray(node.props?.children).flatMap(nodes)];
+function drive(component, Component = Editor, commit = noOp) {
+  hooks.clear(); let tree;
+  const patches = [], errors = [], props = { component, components: [component], tags: [], parameters: {}, inputs: {}, onGeometryChange: noOp,
+    onChange: patch => { patches.push(patch); commit(patch); }, notify: message => errors.push(message) };
+  function expand(node, path = 'root') {
+    if (!node || typeof node !== 'object') return node;
+    if (typeof node.type === 'function') { hooks.begin(`${path}:${node.type.name}:${node.key || ''}`); return expand(node.type(node.props), `${path}:${node.type.name}`); }
+    return { ...node, props: { ...node.props, children: React.Children.toArray(node.props?.children).map((child, index) => expand(child, `${path}:${child?.key || index}`)) } };
+  }
+  const refresh = () => { tree = expand(React.createElement(Component, props)); };
+  const find = predicate => { const node = nodes(tree).find(predicate); assert.ok(node, 'Expected drawing authoring control'); return node; };
+  const field = label => find(node => node.props?.['aria-label'] === label);
+  const input = key => find(node => node.props?.id?.endsWith(`-property-${key}`));
+  const button = text => find(node => node.type === 'button' && React.Children.toArray(node.props.children).join('') === text);
+  const change = (label, value) => { find(node => node.props?.['aria-label'] === label && typeof node.props.onChange === 'function').props.onChange({ target: { value, checked: value } }); refresh(); };
+  const click = text => { button(text).props.onClick(); refresh(); };
+  refresh(); return { refresh, find, field, input, button, change, click, patches, errors, all: () => nodes(tree) };
+}
+const source = fs.readFileSync(new URL('src/App.tsx', import.meta.url), 'utf8'), ast = ts.createSourceFile('App.tsx', source, ts.ScriptTarget.ES2022, true, ts.ScriptKind.TSX);
+const declarations = new Map(), expressions = [], inspectorEditors = new Map();
+function visit(node) {
+  if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) declarations.set(node.name.text, node.initializer.getText(ast));
+  if (ts.isJsxExpression(node) && node.expression) expressions.push(node.expression.getText(ast));
+  if (ts.isJsxSelfClosingElement(node) && ['PropertyBindingsEditor', 'DrawingEditor'].includes(node.tagName.getText(ast))) inspectorEditors.set(node.tagName.getText(ast), node.getText(ast));
+  ts.forEachChild(node, visit);
+}
+visit(ast);
+let checks = 0; function check(name, run) { run(); checks++; console.log(`PASS ${name}`); }
+
+check('actual sibling inspector editors have distinct stable identities through Apply, Undo and reselection', () => {
+  assert.equal(inspectorEditors.size, 2);
+  const code = ts.transpileModule(`return [${inspectorEditors.get('PropertyBindingsEditor')}, ${inspectorEditors.get('DrawingEditor')}];`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None, jsx: ts.JsxEmit.React } }).outputText;
+  const render = new Function('React', 'PropertyBindingsEditor', 'DrawingEditor', 'selected', 'screen', 'tags', 'editorParameters', 'currentPreviewInputs', 'connected', 'updateProps', 'updateComponent', 'notify', 'applicationState', 'editingTemplate', code);
+  const keys = component => render(React, 'bindings-editor', 'drawing-editor', component, { components: [component] }, [], {}, {}, true, noOp, noOp, noOp, { values: { session: {}, screen: {} } }, false).map(editor => editor.key);
+  const original = make(), selectedKeys = keys(original);
+  assert.equal(new Set(selectedKeys).size, 2, 'Sibling editors must not share a React key');
+  const applied = { ...original, props: { ...original.props, points: [{ x: 0, y: 25 }, { x: 100, y: 75 }] } };
+  assert.deepEqual(keys(applied), selectedKeys); assert.deepEqual(keys(structuredClone(original)), selectedKeys);
+  const otherKeys = keys({ ...original, id: 'another-drawing' }); assert.equal(new Set(otherKeys).size, 2);
+  assert.ok(otherKeys.every(key => !selectedKeys.includes(key)), 'Changing selection resets each editor independently');
+  assert.deepEqual(keys(original), selectedKeys, 'Reselecting the drawing preserves its two independent key identities');
+});
+
+check('actual palette factories create all six drawings with bounded dimensions, canonical defaults and distinct icons', () => {
+  const code = ts.transpileModule(`const processDimensions=${declarations.get('processDimensions')};const palettes=${declarations.get('palettes')};const typeIcon=${declarations.get('typeIcon')};const addComponent=${declarations.get('addComponent')};return {palettes,typeIcon,addComponent};`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
+  let screen = { id: 'main', width: 1000, height: 700, components: [] };
+  const factory = new Function('screen', 'project', 'editingTemplate', 'availableTemplates', 'notify', 'id', 'assets', 'queries', 'isInput', 'isTemplateInstance', 'updateScreen', 'setSelectedId', 'isProcessDisplay', code)(screen, { screens: [screen], templates: [] }, false, [], noOp, type => type, [], [], isInput, () => false, update => { screen = update(screen); }, noOp, isProcessDisplay);
+  for (const type of drawingTypes) {
+    assert.ok(factory.palettes.some(item => item.type === type)); assert.ok(iconNames.includes(factory.typeIcon[type])); factory.addComponent(type);
+    const component = screen.components.at(-1); assert.equal(validateDrawingProps(type, component.props), null);
+    const { text, ...props } = component.props; assert.ok(text); assert.deepEqual(props, drawingDefaults(type));
+    assert.ok(component.width >= 100 && component.height >= 60 && component.width <= screen.width && component.height <= screen.height);
+    assert.equal(isInput(type), false); assert.ok(!component.props.action && !component.props.tagPath && !component.props.fieldKey && !component.props.events);
+  }
+  assert.equal(new Set(drawingTypes.map(type => factory.typeIcon[type])).size, 6);
+});
+
+check('every supported drawing scalar appears once with an fx control and correct inert defaults', () => {
+  const fields = ['strokeColor', 'fillColor', 'strokeWidth', 'rotation', 'flowing', 'flowReverse', 'active'];
+  for (const type of drawingTypes) {
+    const component = make(type), html = renderToStaticMarkup(React.createElement(PropertyBindingsEditor, { component, components: [component], tags: [], parameters: {}, inputs: {}, onChange: noOp, onGeometryChange: noOp }));
+    const rows = [...html.matchAll(/data-property="([^"]+)"/g)].map(match => match[1]);
+    for (const field of fields) assert.equal(rows.filter(value => value === field).length, Number(supportsDrawingProperty(type, field)), `${type}.${field}`);
+    assert.equal((html.match(/class="property-bind-button"/g) || []).length, rows.length); assert.match(html, /Accessible label/);
+    for (const field of ['flowing', 'flowReverse', 'active']) assert.doesNotMatch(html, new RegExp(`property-${field}"[^>]*checked=""`));
+    if (type === 'rectangle' || type === 'ellipse') { assert.match(html, /property-fillColor"[^>]*value="none"/); assert.doesNotMatch(html, /role="alert"/); }
+    assert.ok(!rows.includes('tagPath') && !rows.includes('stateValue') && !rows.includes('value'));
+  }
+});
+
+check('moving, inserting and reordering points saves exact fractions as one undoable patch', () => {
+  const component = make(), before = structuredClone(component), original = { id: 'p', name: 'P', revision: 7, parameters: {}, screens: [{ id: 's', name: 'S', width: 1000, height: 700, components: [component] }] };
+  let project = structuredClone(original), history = { past: [], future: [] };
+  const ui = drive(component, Editor, patch => { history = checkpoint(history, project); project = { ...project, screens: [{ ...project.screens[0], components: [{ ...component, props: { ...component.props, ...patch } }] }] }; });
+  ui.click('Edit points'); ui.change('Point 1 X', '12.125'); ui.change('Point 1 Y', '90.75');
+  ui.field('Insert point after 1').props.onClick(); ui.refresh(); assert.equal(ui.field('Point 2 X').props.value, '31.0625');
+  ui.field('Move point 2 later').props.onClick(); ui.refresh(); ui.field('Remove point 5').props.onClick(); ui.refresh();
+  assert.deepEqual(ui.patches, []); ui.click('Apply points');
+  assert.deepEqual(ui.patches, [{ points: [{ x: 12.125, y: 90.75 }, { x: 50, y: 100 }, { x: 31.0625, y: 95.375 }, { x: 50, y: 0 }] }]);
+  assert.deepEqual(component, before); assert.equal(history.past.length, 1);
+  const undone = restoreHistory(history, project, 'undo'); assert.deepEqual(undone.project, original); assert.deepEqual(restoreHistory(undone.history, undone.project, 'redo').project, project);
+});
+
+check('Cancel and Escape discard local point edits; Ctrl+S applies the validated draft once', () => {
+  const component = make('pipe'), before = structuredClone(component), ui = drive(component);
+  ui.click('Edit points'); ui.change('Point 1 X', '12'); ui.click('Cancel'); ui.click('Edit points'); assert.equal(ui.field('Point 1 X').props.value, '0');
+  ui.change('Point 2 Y', '25'); ui.field('Edit drawing points').props.onKeyDown({ key: 'Escape', preventDefault() {}, stopPropagation() {} }); ui.refresh(); assert.deepEqual(ui.patches, []);
+  ui.click('Edit points'); ui.change('Point 2 Y', '75'); let stopped = 0, prevented = 0;
+  ui.field('Edit drawing points').props.onKeyDown({ key: 's', ctrlKey: true, preventDefault() { prevented++; }, stopPropagation() { stopped++; } }); ui.refresh();
+  assert.equal(stopped, 1); assert.equal(prevented, 1); assert.deepEqual(ui.patches, [{ points: [{ x: 0, y: 50 }, { x: 100, y: 75 }] }]); assert.deepEqual(component, before);
+});
+
+check('blank, out-of-range, nonfinite and duplicate point drafts cannot overwrite a valid route', () => {
+  const ui = drive(make('line')); ui.click('Edit points');
+  for (const value of ['', '-1', '100.001', '1e999', 'NaN']) { ui.change('Point 2 X', value); assert.equal(ui.button('Apply points').props.disabled, true); ui.click('Apply points'); }
+  ui.change('Point 2 X', '0'); ui.click('Apply points'); assert.match(ui.errors.at(-1), /different/); assert.deepEqual(ui.patches, []);
+  ui.change('Point 2 X', '0.00001'); ui.click('Apply points'); assert.equal(ui.patches[0].points[1].x, 0.00001);
+  assert.equal(ui.errors.length, 6);
+});
+
+check('lines keep two endpoints and route editors enforce the two-to-sixty-four point bounds', () => {
+  const line = drive(make('line')); line.click('Edit points'); assert.equal(line.all().filter(node => /^Point \d+ X$/.test(node.props?.['aria-label'] || '')).length, 2); assert.ok(!line.all().some(node => node.type === 'button' && /Add point|Remove|Insert/.test(String(node.props.children))));
+  const pipe = drive(make('pipe')); pipe.click('Edit points'); assert.equal(pipe.field('Remove point 1').props.disabled, true); pipe.click('Add point'); assert.equal(pipe.field('Point 3 X').props.value, '90'); assert.equal(pipe.field('Remove point 1').props.disabled, false);
+  const points = Array.from({ length: 64 }, (_, index) => ({ x: index, y: index % 2 ? 100 : 0 })), limited = drive(make('polyline', { points })); limited.click('Edit points');
+  assert.equal(limited.button('Add point').props.disabled, true); limited.click('Add point'); assert.equal(limited.all().filter(node => /^Point \d+ X$/.test(node.props?.['aria-label'] || '')).length, 64); assert.equal(limited.field('Insert point after 1').props.disabled, true);
+});
+
+check('rectangle radius and built-in symbol choices apply only their structural field', () => {
+  const rectangle = drive(make('rectangle')); rectangle.click('Edit corners');
+  for (const radius of ['', '-0.1', '50.1', '1e999']) { rectangle.change('Rectangle corner radius', radius); rectangle.click('Apply corners'); }
+  assert.deepEqual(rectangle.patches, []); rectangle.change('Rectangle corner radius', '12.125'); rectangle.click('Apply corners'); assert.deepEqual(rectangle.patches, [{ cornerRadius: 12.125 }]);
+  const symbol = drive(make('equipmentSymbol')); symbol.click('Choose symbol'); assert.deepEqual(symbol.all().filter(node => node.type === 'option').map(node => node.props.value), ['pump', 'valve', 'motor']);
+  symbol.change('Equipment symbol', 'motor'); symbol.click('Apply symbol'); assert.deepEqual(symbol.patches, [{ symbol: 'motor' }]);
+  const html = renderToStaticMarkup(React.createElement(DrawingEditor, { component: make(), onChange: noOp, notify: noOp })); assert.doesNotMatch(html, /<textarea|JSON|markup/); assert.match(html, /0 to 100%/);
+});
+
+check('stroke-width and rotation number inputs reject invalid drafts without rounding or clamping', () => {
+  const ui = drive(make('rectangle'), Bindings);
+  for (const [key, values] of [['strokeWidth', ['0', '32.1', '1e999']], ['rotation', ['-1', '360.1', 'NaN']]]) {
+    for (const value of values) { ui.input(key).props.onChange({ target: { value } }); ui.refresh(); ui.input(key).props.onBlur(); ui.refresh(); }
+    assert.deepEqual(ui.patches, []);
+  }
+  ui.input('strokeWidth').props.onChange({ target: { value: '2.125' } }); ui.refresh(); ui.input('strokeWidth').props.onBlur(); ui.refresh();
+  ui.input('rotation').props.onChange({ target: { value: '180.5' } }); ui.refresh(); ui.input('rotation').props.onBlur(); ui.refresh();
+  assert.deepEqual(ui.patches, [{ strokeWidth: 2.125 }, { rotation: 180.5 }]);
+});
+
+check('static pipe flow fields and symbol active values preserve Boolean types', () => {
+  const pipe = drive(make('pipe'), Bindings); assert.equal(pipe.input('flowing').props.checked, false); assert.equal(pipe.input('flowReverse').props.checked, false);
+  pipe.input('flowing').props.onChange({ target: { checked: true } }); pipe.input('flowReverse').props.onChange({ target: { checked: true } }); assert.deepEqual(pipe.patches, [{ flowing: true }, { flowReverse: true }]);
+  const symbol = drive(make('equipmentSymbol'), Bindings); assert.equal(symbol.input('active').props.checked, false); symbol.input('active').props.onChange({ target: { checked: true } }); assert.deepEqual(symbol.patches, [{ active: true }]);
+});
+
+const previousDocument = globalThis.document; globalThis.document = { body: {} };
+try {
+  check('binding dialogs enforce drawing scalar types, allow unfilled shapes and default state bindings to false', () => {
+    const ui = drive(make('rectangle'), Bindings); ui.field('Add Stroke width binding').props.onClick(); ui.refresh();
+    const expression = () => ui.find(node => node.type === 'textarea' && node.props.id?.endsWith('-expression'));
+    for (const value of ["'12'", '0', '33']) { expression().props.onChange({ target: { value } }); ui.refresh(); ui.click('Apply'); }
+    assert.deepEqual(ui.patches, []); expression().props.onChange({ target: { value: '12.25' } }); ui.refresh(); ui.click('Apply'); assert.equal(ui.patches[0].bindings.strokeWidth.expression, '12.25');
+    ui.field('Add Fill color binding').props.onClick(); ui.refresh(); expression().props.onChange({ target: { value: "'none'" } }); ui.refresh(); ui.click('Apply'); assert.equal(ui.patches[1].bindings.fillColor.expression, "'none'");
+    const symbol = drive(make('equipmentSymbol'), Bindings); symbol.field('Add Active binding').props.onClick(); symbol.refresh(); assert.equal(symbol.find(node => node.type === 'textarea').props.value, 'false'); symbol.click('Apply'); assert.equal(symbol.patches[0].bindings.active.expression, 'false');
+  });
+} finally { if (previousDocument === undefined) delete globalThis.document; else globalThis.document = previousDocument; }
+
+function actualControl(needle, selected, patches, project = { screens: [{ id: 'main', name: 'Main' }, { id: 'detail', name: 'Detail', kind: 'popup', parameters: { machine: '' } }] }) {
+  const expression = expressions.filter(value => value.includes(needle) && value.includes('selected.type === "equipmentSymbol"')).sort((a, b) => a.length - b.length)[0]; assert.ok(expression, needle);
+  const code = ts.transpileModule(`return (${expression});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None, jsx: ts.JsxEmit.React } }).outputText;
+  return new Function('React', 'Field', 'JsonEditor', 'selected', 'updateProps', 'screen', 'project', 'editingTemplate', 'textParameters', 'notify', code)(React, 'label', 'parameter-editor', selected, patch => patches.push(patch), { kind: 'screen' }, project, false, value => value, noOp);
+}
+check('actual equipment action controls offer None, navigation and popup, then clear old target and overrides', () => {
+  const patches = [], component = make('equipmentSymbol'), tree = actualControl('<Field label="On click">', component, patches), select = nodes(tree).find(node => node.type === 'select');
+  assert.equal(select.props.value, ''); assert.deepEqual(nodes(select).filter(node => node.type === 'option').map(node => node.props.value), ['', 'navigate', 'openPopup']);
+  select.props.onChange({ target: { value: 'openPopup' } }); select.props.onChange({ target: { value: '' } });
+  assert.deepEqual(patches, [{ action: 'openPopup', parameters: undefined, targetScreenId: undefined }, { action: undefined, parameters: undefined, targetScreenId: undefined }]);
+  assert.equal(actualControl('"Destination screen"', component, []), false);
+  for (const [action, expected] of [['navigate', 'main'], ['openPopup', 'detail']]) {
+    const target = actualControl('"Destination screen"', make('equipmentSymbol', { action }), []);
+    assert.deepEqual(nodes(target).filter(node => node.type === 'option').map(node => node.props.value), ['', expected]);
+  }
+  const parameters = actualControl('label="Popup parameter overrides"', make('equipmentSymbol', { action: 'openPopup', targetScreenId: 'detail' }), patches);
+  parameters.props.onSave({ machine: 'P-1' }); assert.deepEqual(patches.at(-1), { parameters: { machine: 'P-1' } });
+  assert.throws(() => parameters.props.onSave({ unknown: 'x' }), /declared/);
+});
+
+console.log(`${checks} drawing authoring checks passed.`);

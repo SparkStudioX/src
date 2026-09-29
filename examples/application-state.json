@@ -1,0 +1,73 @@
+{
+  "name": "Application state workshop",
+  "sessionState": {
+    "workshopStation": { "type": "string", "value": "Assembly" },
+    "workshopTarget": { "type": "number", "value": 24 },
+    "workshopDetails": { "type": "boolean", "value": false }
+  },
+  "screens": [
+    {
+      "id": "application-state", "name": "Application state", "width": 1040, "height": 660,
+      "state": { "screenChanges": { "type": "number", "value": 0 } },
+      "components": [
+        { "id": "title", "type": "label", "x": 32, "y": 24, "width": 900, "height": 46, "props": { "text": "Station desk", "fontSize": 32 } },
+        { "id": "intro", "type": "label", "x": 32, "y": 80, "width": 976, "height": 34, "props": { "text": "Make a choice here. Open Review to see what stays with your session.", "fontSize": 17 } },
+        { "id": "input-card", "type": "rectangle", "x": 32, "y": 132, "width": 480, "height": 334, "props": { "fillColor": "#edf1f8", "strokeColor": "#c4ccdc", "strokeWidth": 1, "cornerRadius": 3 } },
+        { "id": "input-heading", "type": "label", "x": 56, "y": 150, "width": 432, "height": 30, "props": { "text": "SHARED SESSION CHOICES", "fontSize": 14, "foregroundColor": "#52627c" } },
+        { "id": "station", "type": "select", "x": 56, "y": 194, "width": 432, "height": 78, "props": { "text": "Station", "fieldKey": "station", "defaultValue": "Assembly", "options": [{ "value": "Assembly", "label": "Assembly" }, { "value": "Packaging", "label": "Packaging" }, { "value": "Inspection", "label": "Inspection" }], "foregroundColor": "#24334b", "backgroundColor": "#edf1f8", "events": { "change": { "language": "javascript", "code": "app.state.set('session', 'workshopStation', event.value);\napp.state.set('screen', 'screenChanges', app.state.get('screen', 'screenChanges') + 1);" } } } },
+        { "id": "target", "type": "spinner", "x": 56, "y": 284, "width": 240, "height": 84, "props": { "text": "Target quantity", "fieldKey": "target", "defaultValue": 24, "min": 1, "max": 100, "step": 1, "foregroundColor": "#24334b", "backgroundColor": "#edf1f8", "events": { "change": { "language": "javascript", "code": "if (Number.isFinite(event.value) && event.value >= 1 && event.value <= 100) {\n  app.state.set('session', 'workshopTarget', event.value);\n  app.state.set('screen', 'screenChanges', app.state.get('screen', 'screenChanges') + 1);\n}" } } } },
+        { "id": "details", "type": "checkbox", "x": 56, "y": 382, "width": 432, "height": 60, "props": { "text": "Show the details note", "fieldKey": "details", "defaultValue": false, "foregroundColor": "#24334b", "events": { "change": { "language": "javascript", "code": "app.state.set('session', 'workshopDetails', event.value);\napp.state.set('screen', 'screenChanges', app.state.get('screen', 'screenChanges') + 1);" } } } },
+        { "id": "summary", "type": "template", "x": 544, "y": 132, "width": 464, "height": 252, "props": { "templateId": "application-state-summary", "parameters": {} } },
+        { "id": "inspect", "type": "button", "x": 544, "y": 402, "width": 464, "height": 54, "props": { "text": "Inspect station", "action": "openPopup", "targetScreenId": "application-state-inspect", "color": "#536bbb", "bindings": { "text": { "expression": "'Inspect ' + station", "references": { "station": { "kind": "sessionState", "key": "workshopStation" } } } } } },
+        { "id": "details-note", "type": "label", "x": 32, "y": 486, "width": 976, "height": 56, "props": { "text": "Details are visible because a Boolean session value is bound to this label's visibility.", "fontSize": 16, "backgroundColor": "#e1e8fb", "foregroundColor": "#354a86", "bindings": { "visible": { "expression": "show", "references": { "show": { "kind": "sessionState", "key": "workshopDetails" } } } } } },
+        { "id": "review", "type": "button", "x": 32, "y": 564, "width": 290, "height": 54, "props": { "text": "Open Review", "action": "navigate", "targetScreenId": "application-state-review", "color": "#536bbb" } },
+        { "id": "footer", "type": "label", "x": 348, "y": 562, "width": 660, "height": 62, "props": { "text": "Browser-only demo. The screen counter resets when you return; shared choices survive until the application reloads.", "fontSize": 14 } }
+      ]
+    },
+    {
+      "id": "application-state-review", "name": "State review", "width": 1040, "height": 660,
+      "state": { "screenChanges": { "type": "number", "value": 0 } },
+      "components": [
+        { "id": "title", "type": "label", "x": 32, "y": 24, "width": 940, "height": 46, "props": { "text": "Review station", "fontSize": 32 } },
+        { "id": "intro", "type": "label", "x": 32, "y": 80, "width": 976, "height": 34, "props": { "text": "Your session choices carried over. This screen has a fresh local change counter.", "fontSize": 17 } },
+        { "id": "review-card", "type": "rectangle", "x": 32, "y": 132, "width": 480, "height": 334, "props": { "fillColor": "#edf1f8", "strokeColor": "#c4ccdc", "strokeWidth": 1, "cornerRadius": 3 } },
+        { "id": "review-heading", "type": "label", "x": 56, "y": 150, "width": 432, "height": 30, "props": { "text": "LOCAL REVIEW", "fontSize": 14, "foregroundColor": "#52627c" } },
+        { "id": "check", "type": "checkbox", "x": 56, "y": 202, "width": 432, "height": 72, "props": { "text": "Check this screen", "fieldKey": "checked", "defaultValue": false, "foregroundColor": "#24334b", "events": { "change": { "language": "javascript", "code": "app.state.set('screen', 'screenChanges', app.state.get('screen', 'screenChanges') + 1);" } } } },
+        { "id": "local-help", "type": "label", "x": 56, "y": 286, "width": 432, "height": 68, "props": { "text": "Toggle the checkbox to change only this screen's counter. The reusable summary reads its containing screen.", "fontSize": 16, "foregroundColor": "#24334b" } },
+        { "id": "reset", "type": "checkbox", "x": 56, "y": 378, "width": 432, "height": 68, "props": { "text": "Reset all demo defaults", "fieldKey": "resetDemo", "defaultValue": false, "foregroundColor": "#24334b", "events": { "change": { "language": "javascript", "code": "if (event.value) {\n  app.state.reset('session');\n  app.state.reset('screen');\n  app.setInput('resetDemo', false);\n  app.setInput('checked', false);\n  app.notify('Demo defaults restored.');\n}" } } } },
+        { "id": "summary", "type": "template", "x": 544, "y": 132, "width": 464, "height": 252, "props": { "templateId": "application-state-summary", "parameters": {} } },
+        { "id": "inspect", "type": "button", "x": 544, "y": 402, "width": 464, "height": 54, "props": { "text": "Inspect station", "action": "openPopup", "targetScreenId": "application-state-inspect", "color": "#536bbb", "bindings": { "text": { "expression": "'Inspect ' + station", "references": { "station": { "kind": "sessionState", "key": "workshopStation" } } } } } },
+        { "id": "details-state", "type": "label", "x": 32, "y": 486, "width": 976, "height": 56, "props": { "text": "Details preference", "fontSize": 16, "bindings": { "text": { "expression": "show ? 'Details preference: ON — shared across screens and popups.' : 'Details preference: OFF — enable it at the Station desk.'", "references": { "show": { "kind": "sessionState", "key": "workshopDetails" } } } } } },
+        { "id": "home", "type": "button", "x": 32, "y": 564, "width": 290, "height": 54, "props": { "text": "Back to Station desk", "action": "navigate", "targetScreenId": "application-state", "color": "#536bbb" } },
+        { "id": "footer", "type": "label", "x": 348, "y": 562, "width": 660, "height": 62, "props": { "text": "Leave and return: the local counter starts at zero. Open Inspect twice: each popup gets its own fresh counter.", "fontSize": 14 } }
+      ]
+    },
+    {
+      "id": "application-state-inspect", "name": "Station inspection", "kind": "popup", "width": 760, "height": 500,
+      "parameters": {}, "state": { "screenChanges": { "type": "number", "value": 0 } },
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 20, "width": 710, "height": 44, "props": { "text": "Station inspection", "fontSize": 28 } },
+        { "id": "intro", "type": "label", "x": 24, "y": 72, "width": 710, "height": 46, "props": { "text": "This popup shares session choices and owns a fresh screen counter.", "fontSize": 16 } },
+        { "id": "inspection-check", "type": "checkbox", "x": 24, "y": 128, "width": 710, "height": 60, "props": { "text": "Mark inspection complete", "fieldKey": "inspectionChecked", "defaultValue": false, "events": { "change": { "language": "javascript", "code": "app.state.set('screen', 'screenChanges', app.state.get('screen', 'screenChanges') + 1);" } } } },
+        { "id": "summary", "type": "template", "x": 24, "y": 206, "width": 440, "height": 238, "props": { "templateId": "application-state-summary", "parameters": {} } },
+        { "id": "help", "type": "label", "x": 486, "y": 210, "width": 244, "height": 138, "props": { "text": "Close and reopen this popup. Its counter resets; the screen underneath keeps its own value.", "fontSize": 16 } },
+        { "id": "close", "type": "button", "x": 486, "y": 390, "width": 244, "height": 54, "props": { "text": "Close inspection", "action": "closePopup", "color": "#536bbb" } }
+      ]
+    }
+  ],
+  "templates": [
+    {
+      "id": "application-state-summary", "name": "State summary", "width": 420, "height": 224, "parameters": {},
+      "components": [
+        { "id": "card", "type": "rectangle", "x": 0, "y": 0, "width": 420, "height": 224, "props": { "fillColor": "#e8edf9", "strokeColor": "#b9c5e1", "strokeWidth": 1, "cornerRadius": 4 } },
+        { "id": "eyebrow", "type": "label", "x": 20, "y": 12, "width": 376, "height": 26, "props": { "text": "REUSABLE STATE SUMMARY", "fontSize": 12, "foregroundColor": "#52627c" } },
+        { "id": "station", "type": "label", "x": 20, "y": 45, "width": 376, "height": 44, "props": { "text": "Station", "fontSize": 28, "foregroundColor": "#273a68", "bindings": { "text": { "expression": "station", "references": { "station": { "kind": "sessionState", "key": "workshopStation" } } } } } },
+        { "id": "target-label", "type": "label", "x": 20, "y": 102, "width": 250, "height": 30, "props": { "text": "Shared target", "fontSize": 16, "foregroundColor": "#52627c" } },
+        { "id": "target-value", "type": "label", "x": 292, "y": 96, "width": 100, "height": 40, "props": { "text": "24", "fontSize": 26, "foregroundColor": "#273a68", "bindings": { "text": { "expression": "target", "references": { "target": { "kind": "sessionState", "key": "workshopTarget" } } } } } },
+        { "id": "changes-label", "type": "label", "x": 20, "y": 150, "width": 250, "height": 30, "props": { "text": "Changes in this screen", "fontSize": 16, "foregroundColor": "#52627c" } },
+        { "id": "changes-value", "type": "label", "x": 292, "y": 144, "width": 100, "height": 40, "props": { "text": "0", "fontSize": 26, "foregroundColor": "#273a68", "bindings": { "text": { "expression": "changes", "references": { "changes": { "kind": "screenState", "key": "screenChanges" } } } } } },
+        { "id": "footer", "type": "label", "x": 20, "y": 190, "width": 376, "height": 26, "props": { "text": "Shared choices · local screen counter", "fontSize": 12, "foregroundColor": "#52627c" } }
+      ]
+    }
+  ]
+}

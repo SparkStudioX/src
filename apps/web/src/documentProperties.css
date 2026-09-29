@@ -1,0 +1,71 @@
+.document-properties { min-width: 0; }
+.document-property-columns, .document-property-row { display: grid; grid-template-columns: minmax(76px, 36%) minmax(0, 1fr); align-items: center; }
+.document-property-columns { padding: 6px 8px; color: var(--muted); font-size: 10px; }
+.document-property-group { padding: 0; margin: 0 0 14px; }
+.document-property-group > h3 { margin: 0; padding: 8px; border-block: 1px solid var(--border); background: var(--surface-subtle); font-size: 11px; font-weight: 650; }
+.document-property-row { min-height: 33px; border-bottom: 1px solid var(--border); }
+.document-property-row > label { padding: 7px 8px; font-size: 11px; color: var(--text-secondary); }
+.document-property-value { min-width: 0; align-self: stretch; display: flex; align-items: center; padding: 3px; border-left: 1px solid var(--border); }
+.document-property-value > input, .document-property-value > select, .document-dimension-input > input { width: 100%; min-width: 0; height: 27px; padding: 4px 5px; border: 1px solid transparent; border-radius: 2px; background: transparent; color: var(--ink); font: inherit; font-size: 11px; }
+.document-property-value input:focus, .document-property-value select:focus { background: var(--panel); border-color: var(--accent); outline: 1px solid var(--accent); }
+.document-property-value input[readonly] { color: var(--muted); cursor: text; }
+.document-dimension-input { display: flex; align-items: center; min-width: 0; width: 100%; }
+.document-dimension-input > input { flex: 1; }
+.document-dimension-input > span { color: var(--muted); font-size: 10px; padding: 0 5px; }
+.document-property-help { margin: 0; padding: 8px; color: var(--muted); font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
+.document-property-help code { font-size: 10px; }
+.document-parameter-columns, .document-parameter-row { display: grid; grid-template-columns: minmax(0, 41%) minmax(0, 1fr) 26px; align-items: start; }
+.document-parameter-columns { padding: 6px 5px; gap: 6px; color: var(--muted); background: var(--surface-subtle); font-size: 10px; }
+.document-parameter-row { gap: 4px; padding: 4px; border-bottom: 1px solid var(--border); }
+.document-parameter-row > input, .document-parameter-row > textarea { min-width: 0; width: 100%; min-height: 28px; padding: 5px; border: 1px solid var(--border); border-radius: 3px; color: var(--ink); background: var(--panel); font: inherit; font-size: 11px; }
+.document-parameter-row > textarea { resize: vertical; line-height: 16px; }
+.document-parameter-row > input:focus, .document-parameter-row > textarea:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+.document-parameter-delete { min-width: 26px; width: 26px; height: 28px; padding: 0; border: 1px solid transparent; border-radius: 3px; background: transparent; color: var(--muted); font-size: 19px; cursor: pointer; }
+.document-parameter-delete:hover { color: var(--danger); background: var(--surface-subtle); }
+.document-parameter-delete:focus-visible { outline: 2px solid var(--accent); }
+.document-parameter-add { padding-top: 5px; }
+.document-parameter-add > .button { margin: 7px 4px 0; }
+.document-property-empty { margin: 0; padding: 12px 8px; color: var(--muted); font-size: 11px; }
+.navigation-menu-items { list-style: none; margin: 0; padding: 0; }
+.navigation-menu-items > li { display: flex; gap: 8px; align-items: flex-end; padding: 8px; border-bottom: 1px solid var(--border); }
+.navigation-menu-label { flex: 1; min-width: 0; }
+.navigation-menu-label > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10px; margin-bottom: 4px; }
+.navigation-menu-label > input, .navigation-menu-add > select { width: 100%; min-width: 0; height: 30px; border: 1px solid var(--border); border-radius: 3px; padding: 4px 6px; background: var(--panel); color: var(--ink); font: inherit; font-size: 11px; }
+.navigation-menu-actions { display: flex; gap: 2px; }
+.navigation-menu-actions > button { width: 25px; height: 30px; border: 1px solid var(--border); border-radius: 3px; color: var(--text-secondary); background: var(--surface-subtle); cursor: pointer; }
+.navigation-menu-actions > button:disabled { opacity: .4; cursor: default; }
+.navigation-menu-actions > button:focus-visible, .navigation-menu-label > input:focus, .navigation-menu-add > select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.navigation-menu-add { display: flex; flex-wrap: wrap; gap: 7px; padding: 9px 8px; }
+.navigation-menu-add > select { flex: 1 1 130px; }
+.project-settings-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
+.project-settings-dialog > header, .project-settings-dialog > footer { flex: 0 0 auto; }
+.project-settings-dialog > .project-dialog-body { min-height: 0; overflow-y: auto; }
+.project-settings-dialog > footer { align-items: center; }
+.project-settings-dialog > footer > span { flex: 1; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.project-settings-dialog .document-property-value > select { background: var(--panel); }
+.template-parameter-columns, .template-parameter-definition { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1fr) auto; gap: 7px; align-items: start; padding: 7px; border-bottom: 1px solid var(--border); }
+.template-parameter-columns { color: var(--muted); font-size: 10px; background: var(--surface-subtle); }
+.template-parameter-definition > div { min-width: 0; overflow-wrap: anywhere; }
+.template-parameter-definition strong, .template-parameter-override-header strong { font-size: 11px; }
+.template-parameter-definition small { display: block; padding-top: 4px; font-size: 10px; color: var(--muted); line-height: 1.45; }
+.template-parameter-definition code { white-space: pre-wrap; font-size: 11px; }
+.template-parameter-add { margin: 8px; }
+.template-parameter-draft { margin: 7px; padding: 8px; border: 1px solid var(--accent); border-radius: 4px; background: var(--surface-subtle); }
+.template-parameter-draft > label, .template-parameter-draft-value > span { display: block; margin-bottom: 7px; font-size: 11px; color: var(--text-secondary); }
+.template-parameter-draft input:not([type=checkbox]), .template-parameter-draft select, .template-parameter-value-input > input, .template-parameter-value-input > select, .template-parameter-value-input > textarea, .template-parameter-override-header > select { width: 100%; min-width: 0; min-height: 29px; padding: 5px; border: 1px solid var(--border); border-radius: 3px; background: var(--panel); color: var(--ink); font: inherit; font-size: 11px; }
+.template-parameter-value-input > textarea { resize: vertical; line-height: 1.5; }
+.template-parameter-draft > label > input, .template-parameter-draft > label > select { display: block; margin-top: 4px; }
+.template-parameter-draft input:focus-visible, .template-parameter-draft select:focus-visible, .template-parameter-value-input > input:focus-visible, .template-parameter-value-input > select:focus-visible, .template-parameter-value-input > textarea:focus-visible, .template-parameter-override-header > select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.template-parameter-reference { display: flex; gap: 5px; align-items: center; margin-top: 5px; color: var(--muted); font-size: 10px; }
+.template-parameter-reference > input { margin: 0; accent-color: var(--accent); }
+.template-parameter-actions { display: flex; flex-wrap: wrap; gap: 5px; padding-top: 7px; }
+.template-parameter-error, .template-parameter-definition small.template-parameter-error { margin: 0; padding: 7px 0; color: var(--danger); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.template-parameter-override { padding: 9px 0; border-top: 1px solid var(--border); }
+.template-parameter-override-header { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.template-parameter-override-header strong { flex: 1; overflow-wrap: anywhere; }
+.template-parameter-override-header > span { color: var(--muted); font-size: 10px; }
+.template-parameter-override-header > select { width: auto; max-width: 130px; }
+.template-parameter-override .document-property-help { padding: 6px 0; }
+.template-parameter-unknown { display: flex; gap: 8px; align-items: center; margin-top: 7px; color: var(--danger); font-size: 11px; overflow-wrap: anywhere; }
+.template-parameter-unknown > span { flex: 1; }
+.template-parameter-context-error { padding: 10px 14px; border-bottom: 1px solid var(--danger); color: var(--danger); background: var(--surface-subtle); font-size: 12px; line-height: 1.5; }

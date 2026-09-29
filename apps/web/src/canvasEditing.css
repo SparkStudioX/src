@@ -1,0 +1,30 @@
+.canvas-arrange-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.canvas-arrange-toolbar label { display: flex; align-items: center; gap: 6px; }
+.canvas-arrange-toolbar select { width: auto; max-width: 158px; height: 28px; padding: 3px 7px; font-size: 11px; background: var(--surface-subtle); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; }
+.canvas-arrange-toolbar button { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 4px; }
+.canvas-arrange-toolbar button.canvas-group-command { width: auto; padding: 3px 8px; gap: 5px; color: var(--text-secondary); font-size: 11px; }
+.canvas-arrange-toolbar select:disabled, .canvas-arrange-toolbar button:disabled { opacity: .4; }
+.canvas-arrange-toolbar > span { margin-left: auto; }
+.screen-canvas.snap-grid { background-image: radial-gradient(var(--grid-dot) .65px, transparent .65px); background-size: var(--edit-grid) var(--edit-grid); }
+.canvas-host:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.screen-canvas:not(.runtime) .canvas-component { touch-action: none; }
+.screen-canvas:not(.runtime) { touch-action: none; }
+.screen-canvas.runtime .canvas-component { touch-action: auto; }
+.canvas-marquee { position: absolute; border: 1px solid var(--accent); background: var(--accent-soft); opacity: .7; pointer-events: none; z-index: 1000; }
+.canvas-group-bounds { position: absolute; outline: 1.5px solid var(--accent); outline-offset: 2px; pointer-events: none; z-index: 3; }
+.canvas-group-bounds .group-resize-handle { pointer-events: auto; touch-action: none; width: 12px; height: 12px; }
+.layer-group-marker { display: inline-flex; flex: 0 0 auto; color: var(--muted); }
+.redo-icon { display: flex; transform: scaleX(-1); }
+.multi-selection-panel p { font-size: 11px; line-height: 1.65; color: var(--text-secondary); }
+.multi-selection-panel ul { padding-left: 18px; font-size: 11px; line-height: 1.8; max-height: 220px; overflow: auto; }
+.multi-selection-panel .button { width: 100%; margin: 10px 0; }

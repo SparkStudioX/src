@@ -1,0 +1,41 @@
+.table-editing-editor { border-top: 1px solid var(--border); padding-top: 14px; margin: 12px 0; }
+.table-editing-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.table-editing-heading > strong, .table-editing-heading > span { font-size: 11px; }
+.table-editing-help { color: var(--text-secondary); font-size: 11px; line-height: 1.6; margin: 8px 0; }
+.table-editing-error { color: var(--danger); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.table-editing-dialog { width: min(1100px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--panel); color: var(--ink); box-shadow: 0 20px 80px #0005; overflow: hidden; }
+.table-editing-dialog::backdrop { background: #11182777; }
+.table-editing-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 20px 22px 16px; border-bottom: 1px solid var(--border); }
+.table-editing-dialog > header small { color: var(--accent); letter-spacing: 1px; font-size: 10px; }
+.table-editing-dialog h2 { font-size: 20px; margin: 7px 0; }
+.table-editing-dialog header p { color: var(--text-secondary); margin: 0; font-size: 12px; line-height: 1.6; }
+.table-editing-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 22px; background: var(--surface-subtle); border-bottom: 1px solid var(--border); font-size: 11px; }
+.table-editing-toolbar label { display: flex; align-items: center; gap: 8px; font-weight: 650; }
+.table-editing-toolbar span { color: var(--text-secondary); overflow-wrap: anywhere; }
+.table-editing-body { display: grid; grid-template-columns: minmax(290px, .85fr) minmax(340px, 1.4fr); max-height: min(630px, calc(100vh - 270px)); overflow: auto; }
+.table-editing-fields { padding: 18px 20px; border-right: 1px solid var(--border); overflow: auto; }
+.table-editing-dialog h3 { margin: 0 0 12px; font-size: 12px; }
+.table-editing-fields > .table-editing-heading { margin-top: 18px; }
+.table-editing-fields label { display: grid; gap: 6px; font-size: 11px; color: var(--ink); }
+.table-editing-fields input:not([type=checkbox]), .table-editing-fields select { min-width: 0; width: 100%; padding: 8px; color: var(--ink); background: var(--panel); border: 1px solid var(--border-strong); border-radius: 4px; }
+.table-editing-dialog input[type=checkbox] { accent-color: var(--accent); }
+.table-editing-fields input:focus, .table-editing-fields select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.table-editing-field { display: grid; gap: 12px; margin: 0 0 14px; padding: 13px; min-width: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-subtle); }
+.table-editing-field legend { font-size: 10px; color: var(--muted); padding: 0 5px; }
+.table-editing-field .table-editing-heading { align-items: flex-end; }
+.table-editing-field .table-editing-heading > label { flex: 1; min-width: 0; }
+.table-editing-fields .table-editing-checkbox { display: flex; align-items: center; gap: 7px; }
+.table-editing-range { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.table-editing-handler { min-width: 0; padding: 18px 20px; }
+.table-editing-handler .source-editor { border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+.table-editing-dialog .source-editor-host { height: 290px; min-height: 180px; }
+.table-editing-context { font-size: 11px; line-height: 1.65; color: var(--text-secondary); margin-top: 14px; }
+.table-editing-context summary { cursor: pointer; font-weight: 650; color: var(--ink); }
+.table-editing-context dl { display: grid; grid-template-columns: minmax(130px, auto) 1fr; gap: 6px 12px; margin: 12px 0; }
+.table-editing-context dt, .table-editing-context dd { margin: 0; overflow-wrap: anywhere; }
+.table-editing-context code { font-size: 10px; }
+.table-editing-dialog > footer { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); }
+.table-editing-dialog > footer > p { flex: 1; margin: 0; font-size: 11px; line-height: 1.6; color: var(--muted); }
+.table-editing-dialog > footer > p.table-editing-error { color: var(--danger); }
+.table-editing-disabled { padding: 24px; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+@media (max-width: 760px) { .table-editing-body { display: block; max-height: calc(100vh - 310px); }.table-editing-fields { border-right: 0; border-bottom: 1px solid var(--border); }.table-editing-toolbar { align-items: flex-start; flex-direction: column; gap: 8px; }.table-editing-context dl { grid-template-columns: 1fr; }.table-editing-dialog > footer { flex-wrap: wrap; }.table-editing-dialog > footer > p { flex-basis: 100%; }.table-editing-dialog > header { padding: 16px; }.table-editing-handler,.table-editing-fields { padding: 16px; } }

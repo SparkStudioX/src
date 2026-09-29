@@ -1,0 +1,48 @@
+/* Each resource list owns its scroll area; Tags has a dedicated full-height tab. */
+.designer .project-panel { overflow: hidden; }
+.designer .panel-tabs { padding: 0 5px; }
+.designer .panel-tabs button { gap: 4px; font-size: 10px; }
+@media (max-width: 1050px) {
+  .designer .panel-tabs button > svg { display: none; }
+}
+.designer .project-navigation { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; }
+.designer .project-settings-button { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; padding: 11px 13px; border-bottom: 1px solid var(--border); color: var(--text-secondary); text-align: left; font-size: 11px; }
+.designer .project-settings-button:hover { color: var(--ink); background: var(--surface-subtle); }
+.designer .project-settings-button:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.designer .project-navigation-track { display: grid; min-width: 0; }
+.designer .project-navigation-pane { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
+.designer .project-navigation-pane > :is(.project-tree, .template-list, .component-tree) { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; max-height: none; overflow: hidden; padding-bottom: 7px; border-bottom: 0; }
+.designer .project-pane-separator { display: flex; justify-content: center; align-items: center; min-width: 0; background: var(--panel); border-block: 1px solid var(--border); cursor: ns-resize; touch-action: none; user-select: none; }
+.designer .project-pane-separator > span { width: 25px; height: 2px; border-radius: 2px; background: var(--muted); opacity: 0.6; pointer-events: none; }
+.designer .project-pane-separator:is(:hover, :focus-visible), .designer .project-navigation-resizing .project-pane-separator { background: var(--accent-soft); }
+.designer .project-pane-separator:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.designer .project-navigation-resizing, .designer .project-navigation-resizing * { cursor: ns-resize; user-select: none; }
+.designer .project-navigation .section-heading { flex-shrink: 0; min-height: 34px; padding: 8px 12px 5px; }
+.designer .project-document-list { min-height: 0; overflow: auto; scrollbar-width: thin; flex: 1; overscroll-behavior: contain; }
+.designer .project-document-list .tree-item { height: 29px; font-size: 10px; }
+.designer .project-navigation .project-actions { flex-shrink: 0; padding-top: 8px; padding-bottom: 1px; }
+.designer .standalone-tag-panel { flex: 1; min-height: 0; max-height: none; margin-top: 0; border-top: 0; overflow: hidden; }
+.designer .standalone-tag-panel .tag-panel-title { flex-shrink: 0; }
+.designer .standalone-tag-panel .search-box { flex-shrink: 0; }
+.designer .standalone-tag-panel .tag-list { flex: 1; min-height: 0; max-height: none; overflow: auto; overscroll-behavior: contain; }
+.designer .standalone-tag-panel .tag-detail, .designer .standalone-tag-panel .tag-hint { flex-shrink: 0; }
+.designer .document-tab { display: flex; align-items: stretch; flex-shrink: 0; border-right: 1px solid var(--border); border-top: 2px solid transparent; color: var(--text-secondary); }
+.designer .document-tab.active { border-top-color: var(--accent); background: var(--accent-soft); color: var(--accent-dark); }
+.designer .document-tab-label { display: flex; align-items: center; gap: 7px; padding: 0 8px 0 13px; font-size: 10px; white-space: nowrap; }
+.designer .document-tab-label > span:first-of-type { max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+.designer .document-tab-close { display: flex; align-items: center; justify-content: center; align-self: center; width: 23px; height: 25px; border-radius: 4px; margin-right: 5px; color: var(--muted); }
+.designer .document-tab-close:hover { background: var(--surface-hover); color: var(--ink); }
+.designer .document-tab :is(button:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+.designer-empty-document { display: flex; flex: 1; min-height: 200px; flex-direction: column; align-items: center; justify-content: center; padding: 40px; text-align: center; color: var(--muted); background: var(--canvas-bg, var(--surface-subtle)); }
+.designer-empty-document h2 { color: var(--ink); font-size: 20px; margin: 14px 0 8px; }
+.designer-empty-document p { max-width: 420px; font-size: 13px; line-height: 1.7; margin: 0 0 20px; }
+/* Pane preferences fit around a usable canvas; very narrow windows scroll the layout. */
+.designer:not(.is-preview) { overflow-x: auto; scrollbar-width: thin; }
+.designer > .project-panel { width: var(--designer-project-width, 244px); min-width: var(--designer-project-width, 244px); flex-shrink: 0; border-right: 0; }
+.designer > .inspector { width: var(--designer-properties-width, 280px); min-width: var(--designer-properties-width, 280px); flex-shrink: 0; border-left: 0; }
+.designer:not(.is-preview) > .canvas-workspace { min-width: 320px; }
+.designer-pane-separator { display: flex; justify-content: center; align-items: center; width: 7px; flex: 0 0 7px; background: var(--panel); border-inline: 1px solid var(--border); cursor: ew-resize; touch-action: none; user-select: none; }
+.designer-pane-separator > span { width: 2px; height: 28px; border-radius: 2px; background: var(--muted); opacity: 0.6; pointer-events: none; }
+.designer-pane-separator:is(:hover, :focus-visible), .designer-panes-resizing > .designer-pane-separator { background: var(--accent-soft); }
+.designer-pane-separator:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.designer-panes-resizing, .designer-panes-resizing * { cursor: ew-resize !important; user-select: none !important; }

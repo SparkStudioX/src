@@ -1,0 +1,69 @@
+.scripting-workspace { --script-keyword: #7950a6; --script-string: #236849; --script-number: #925318; }
+:root[data-theme="dark"] .scripting-workspace { --script-keyword: #c8a6ff; --script-string: #99d6b6; --script-number: #e6bd82; }
+.scripting-workspace .page-heading-actions { flex-wrap: wrap; }
+.scripting-statebar { display: flex; gap: 18px; flex-wrap: wrap; color: var(--text-secondary); font-size: 11px; margin: -8px 0 18px; }
+.scripting-alert, .scripting-confirm { border: 1px solid var(--danger-border); background: var(--danger-bg); color: var(--danger); padding: 12px 15px; border-radius: 6px; margin-bottom: 14px; font-size: 12px; }
+.scripting-confirm { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-color: var(--warning-border); background: var(--warning-bg); color: var(--ink); }
+.scripting-confirm > span { flex: 1; min-width: 200px; }
+.scripting-grid { display: grid; grid-template-columns: 210px minmax(300px, 1fr) 255px; gap: 14px; align-items: start; }
+.script-resource-tree, .script-editor-pane, .script-properties { background: var(--panel); border: 1px solid var(--border); border-radius: 7px; min-width: 0; overflow: hidden; }
+.script-resource-tree { padding: 10px 0; }
+.script-resource-tree section { padding-bottom: 12px; }
+.script-tree-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 10px 7px 13px; font-size: 10px; color: var(--text-secondary); font-weight: 600; }
+.script-tree-heading > span { display: flex; align-items: center; gap: 7px; }
+.script-resource-item { display: flex; align-items: center; width: 100%; gap: 8px; padding: 10px 13px; border: 0; text-align: left; background: transparent; color: var(--ink); font-size: 11px; }
+.script-resource-item:hover { background: var(--surface-hover); }
+.script-resource-item.active { background: var(--accent-soft); box-shadow: inset 2px 0 var(--accent); color: var(--accent); }
+.script-resource-item > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.script-resource-item small { display: block; font-size: 9px; color: var(--muted); margin-top: 3px; }
+.script-enabled-dot, .script-disabled-dot { display: block; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--success-dot); }
+.script-disabled-dot { background: var(--border-strong); }
+.script-tree-empty, .script-tree-note { padding: 6px 14px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.65; }
+.script-tree-note { padding-top: 16px; }
+.console-resource { border-top: 1px solid var(--border); }
+.script-open-tabs { display: flex; overflow-x: auto; background: var(--surface-subtle); border-bottom: 1px solid var(--border); }
+.script-open-tabs button { background: transparent; border: 0; border-right: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; padding: 11px 14px; white-space: nowrap; }
+.script-open-tabs button.active { color: var(--accent); background: var(--panel); box-shadow: inset 0 2px var(--accent); }
+.script-document-heading { padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); }
+.script-document-heading strong { display: block; font-size: 12px; overflow-wrap: anywhere; }
+.script-document-heading small { color: var(--muted); font-size: 10px; }
+.script-document-heading > div { display: flex; gap: 7px; flex-shrink: 0; align-items: center; }
+.script-document-heading .button { font-size: 10px; padding: 7px 10px; min-height: 30px; }
+.script-document-heading select { max-width: 130px; font-size: 10px; padding: 7px; background: var(--surface-subtle); color: var(--ink); border: 1px solid var(--border); border-radius: 4px; }
+.source-editor-host { height: 420px; }
+.source-editor .cm-editor { height: 100%; color: var(--ink); background: var(--panel); font-size: 12px; }
+.source-editor .cm-scroller { overflow: auto; font-family: "Cascadia Code", Consolas, monospace; line-height: 1.65; }
+.source-editor .cm-content { padding: 12px 0; caret-color: var(--ink); }
+.source-editor .cm-line { padding: 0 12px; }
+.source-editor .cm-gutters { background: var(--surface-subtle); color: var(--muted); border-right: 1px solid var(--border); }
+.source-editor .cm-activeLine, .source-editor .cm-activeLineGutter { background: var(--surface-hover); }
+.source-editor .cm-selectionBackground, .source-editor .cm-editor.cm-focused .cm-selectionBackground { background: var(--selection-bg); }
+.source-editor .cm-cursor { border-left-color: var(--ink); }
+.source-editor .cm-editor.cm-focused { outline: 1px solid var(--accent); outline-offset: -1px; }
+.source-editor .cm-panels { background: var(--surface-subtle); color: var(--ink); border-color: var(--border); }
+.source-editor .cm-search input, .source-editor .cm-search button { background: var(--panel); color: var(--ink); border: 1px solid var(--border); font-size: 11px; border-radius: 3px; }
+.source-editor .cm-search label { font-size: 11px; }
+.source-editor .cm-tooltip { background: var(--panel); color: var(--ink); border: 1px solid var(--border-strong); }
+.source-editor .cm-tooltip-autocomplete > ul > li[aria-selected] { background: var(--accent); color: var(--on-accent); }
+.source-editor-status { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; color: var(--muted); background: var(--surface-subtle); font-size: 9px; padding: 7px 12px; border-top: 1px solid var(--border); }
+.scripting-output { border-top: 1px solid var(--border); }
+.scripting-output .console { min-height: 140px; max-height: 290px; overflow: auto; margin: 0; }
+.script-event-output { padding: 14px; max-height: 350px; overflow: auto; font-size: 11px; background: var(--surface-subtle); }
+.script-event-output h3 { color: var(--text-secondary); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+.script-event-output pre { font: 10px/1.65 "Cascadia Code", Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.script-event-table { width: 100%; border-collapse: collapse; font-size: 10px; margin: 10px 0 16px; }
+.script-event-table th, .script-event-table td { border-bottom: 1px solid var(--border); padding: 7px; text-align: left; }
+.script-event-run { border-top: 1px solid var(--border); padding: 9px 0; }
+.script-event-run summary { cursor: pointer; display: flex; justify-content: space-between; gap: 10px; }
+.script-properties fieldset { margin: 0; padding: 16px; border: 0; min-width: 0; }
+.script-properties h2 { font-size: 11px; margin: 19px 0 11px; }
+.script-properties h2:first-child { margin-top: 0; }
+.script-properties label { display: block; font-size: 10px; color: var(--text-secondary); margin-top: 12px; }
+.script-properties input:not([type="checkbox"]), .script-properties select, .script-properties textarea { width: 100%; margin-top: 6px; padding: 8px 9px; border: 1px solid var(--border); border-radius: 4px; color: var(--ink); background: var(--surface-subtle); font-size: 11px; }
+.script-properties textarea { font: 10px/1.6 "Cascadia Code", Consolas, monospace; resize: vertical; }
+.script-properties .script-enabled-setting { display: flex; gap: 8px; align-items: center; line-height: 1.5; }
+.script-properties p { color: var(--text-secondary); font-size: 11px; line-height: 1.7; }
+.script-properties .script-property-note { font-size: 10px; color: var(--muted); margin: 7px 0 12px; }
+.script-properties .script-remove { color: var(--danger); width: 100%; margin: 12px 0 4px; font-size: 10px; }
+@media (max-width: 1400px) { .scripting-grid { grid-template-columns: 185px minmax(280px, 1fr); }.script-properties { grid-column: 1 / -1; }.script-properties fieldset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; }.script-properties h2 { grid-column: 1 / -1; }.script-properties .script-remove { max-width: 230px; } }
+@media (max-width: 800px) { .scripting-grid { display: flex; flex-direction: column; }.script-resource-tree, .script-editor-pane, .script-properties { width: 100%; }.script-resource-tree { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }.console-resource, .script-tree-note { grid-column: 1 / -1; }.script-document-heading { flex-wrap: wrap; }.script-properties fieldset { display: block; }.source-editor-host { height: 360px; }.script-tree-heading { font-size: 9px; padding-left: 8px; }.script-tree-heading > span { gap: 4px; }.script-resource-item { padding: 8px; } }

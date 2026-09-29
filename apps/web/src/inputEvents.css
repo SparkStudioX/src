@@ -1,0 +1,31 @@
+.component-input-event-status { position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 6px; font-size: 10px; line-height: 1.35; color: var(--ink); background: var(--surface-subtle); border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.component-input-event-status.error { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
+.input-events-dialog { width: min(1040px, calc(100vw - 40px)); max-width: none; max-height: calc(100dvh - 40px); margin: auto; padding: 0; color: var(--ink); background: var(--panel); border: 1px solid var(--border-strong); border-radius: 8px; }
+.input-events-dialog[open] { display: flex; flex-direction: column; }
+.input-events-dialog::backdrop { background: rgba(12, 21, 36, .5); }
+.input-events-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 18px 22px; border-bottom: 1px solid var(--border); }
+.input-events-heading small { color: var(--muted); font-size: 10px; letter-spacing: .6px; }
+.input-events-heading h2 { font-size: 17px; margin-top: 7px; }
+.input-events-heading p { color: var(--text-secondary); font-size: 11px; line-height: 1.6; margin-top: 7px; }
+.input-events-heading button { padding: 0 5px; font-size: 24px; color: var(--muted); }
+.input-events-tabs { display: flex; gap: 3px; padding: 10px 18px 0; border-bottom: 1px solid var(--border); background: var(--surface-subtle); }
+.input-events-tabs button { padding: 10px 14px; font-size: 12px; border-bottom: 2px solid transparent; }
+.input-events-tabs button.active { color: var(--accent); border-color: var(--accent); background: var(--panel); }
+.input-events-tabs button span { color: var(--muted); font-size: 10px; margin-left: 7px; }
+.input-events-body { display: grid; grid-template-columns: minmax(360px, 1fr) 275px; min-height: 0; overflow: auto; }
+.input-events-source { min-width: 0; padding: 14px; }
+.input-events-source .source-editor { border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.input-events-source .source-editor-host { height: 355px; }
+.input-events-description { margin: 0 0 12px; min-height: 35px; font-size: 11px; line-height: 1.6; color: var(--text-secondary); }
+.input-events-error { margin-top: 10px; padding: 9px 11px; border: 1px solid var(--danger-border); border-radius: 4px; font-size: 11px; color: var(--danger); background: var(--danger-bg); }
+.input-events-context { border-left: 1px solid var(--border); padding: 16px; background: var(--surface-subtle); font-size: 11px; line-height: 1.6; }
+.input-events-context h3 { font-size: 12px; margin: 0 0 10px; }
+.input-events-context h4 { font-size: 11px; margin: 16px 0 7px; }
+.input-events-context p { color: var(--text-secondary); margin-bottom: 8px; }
+.input-events-context ul { margin: 0; padding: 0; list-style: none; }
+.input-events-context li { margin: 7px 0; overflow-wrap: anywhere; }
+.input-events-context li small { display: block; color: var(--muted); font-size: 10px; }
+.input-events-context pre { padding: 9px; border: 1px solid var(--border); background: var(--panel); border-radius: 4px; white-space: pre-wrap; font-size: 10px; }
+.input-events-footer { display: flex; align-items: center; gap: 9px; border-top: 1px solid var(--border); padding: 13px 20px; background: var(--surface-subtle); }
+.input-events-footer span { flex: 1; color: var(--muted); font-size: 10px; }
+@media (max-width: 800px) { .input-events-body { grid-template-columns: 1fr; }.input-events-context { border-left: 0; border-top: 1px solid var(--border); }.input-events-source .source-editor-host { height: 280px; } }

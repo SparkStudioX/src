@@ -1,0 +1,88 @@
+{
+  "name": "Input state bindings workshop",
+  "tags": [],
+  "sessionState": {
+    "bindingQuantity": { "type": "number", "value": 24 },
+    "bindingStation": { "type": "string", "value": "Assembly" },
+    "bindingReady": { "type": "boolean", "value": false }
+  },
+  "screens": [
+    {
+      "id": "input-state-bindings", "name": "Input state bindings", "width": 1200, "height": 840,
+      "state": { "bindingNote": { "type": "string", "value": "" } },
+      "components": [
+        { "id": "background", "type": "rectangle", "x": 0, "y": 0, "width": 1200, "height": 840, "props": { "fillColor": "#f5f7fc", "strokeColor": "#f5f7fc", "strokeWidth": 1 } },
+        { "id": "title", "type": "label", "x": 28, "y": 20, "width": 1144, "height": 44, "props": { "text": "A shared form, without glue scripts", "fontSize": 32, "foregroundColor": "#182a45" } },
+        { "id": "intro", "type": "label", "x": 28, "y": 76, "width": 1144, "height": 42, "props": { "text": "Edit either quantity or the nested form. Bound controls share typed values immediately; each form submits its own fields.", "fontSize": 17, "foregroundColor": "#435c78" } },
+        { "id": "main-card", "type": "rectangle", "x": 28, "y": 136, "width": 546, "height": 594, "props": { "fillColor": "#ffffff", "strokeColor": "#c4d2e4", "strokeWidth": 1, "cornerRadius": 4 } },
+        { "id": "main-heading", "type": "label", "x": 50, "y": 154, "width": 500, "height": 34, "props": { "text": "SCREEN FORM", "fontSize": 14, "foregroundColor": "#435c78" } },
+        { "id": "quantity", "type": "spinner", "x": 50, "y": 204, "width": 238, "height": 82, "props": { "backgroundColor": "#ffffff", "text": "Quantity", "fieldKey": "quantity", "defaultValue": 24, "min": 1, "max": 1000, "step": 1, "stateBinding": { "scope": "session", "key": "bindingQuantity" }, "foregroundColor": "#182a45" } },
+        { "id": "quantity-mirror", "type": "numberInput", "x": 312, "y": 204, "width": 238, "height": 82, "props": { "backgroundColor": "#ffffff", "text": "Quantity mirror", "fieldKey": "quantityMirror", "defaultValue": 24, "min": 1, "max": 1000, "step": 1, "stateBinding": { "scope": "session", "key": "bindingQuantity" }, "foregroundColor": "#182a45" } },
+        { "id": "station", "type": "select", "x": 50, "y": 306, "width": 290, "height": 80, "props": { "backgroundColor": "#ffffff", "text": "Station", "fieldKey": "station", "defaultValue": "Assembly", "options": [{ "value": "Assembly", "label": "Assembly" }, { "value": "Packaging", "label": "Packaging" }, { "value": "Inspection", "label": "Inspection" }], "stateBinding": { "scope": "session", "key": "bindingStation" }, "foregroundColor": "#182a45" } },
+        { "id": "ready", "type": "checkbox", "x": 366, "y": 313, "width": 184, "height": 70, "props": { "backgroundColor": "#ffffff", "text": "Ready", "fieldKey": "ready", "defaultValue": false, "stateBinding": { "scope": "session", "key": "bindingReady" }, "foregroundColor": "#182a45" } },
+        { "id": "note", "type": "textArea", "x": 50, "y": 407, "width": 500, "height": 100, "props": { "backgroundColor": "#ffffff", "text": "Screen note", "fieldKey": "note", "defaultValue": "", "stateBinding": { "scope": "screen", "key": "bindingNote" }, "foregroundColor": "#182a45" } },
+        { "id": "preview", "type": "button", "x": 50, "y": 533, "width": 304, "height": 48, "props": { "backgroundColor": "#4165b0", "foregroundColor": "#ffffff", "text": "Preview screen submission", "color": "#4165b0", "action": "script", "script": "assert set(inputs) == {'quantity', 'quantityMirror', 'station', 'ready', 'note', 'resetWorkshop'}\nassert inputs['quantity'] == inputs['quantityMirror'], 'Both bound quantity fields should agree.'\nassert isinstance(inputs['quantity'], (int, float)) and not isinstance(inputs['quantity'], bool)\nassert isinstance(inputs['ready'], bool)\nresult = {'message': 'Screen form: quantity=' + str(inputs['quantity']) + ', mirror=' + str(inputs['quantityMirror']) + ', station=' + inputs['station'] + ', ready=' + str(inputs['ready']) + ', note=' + inputs['note'] + '. Only declared form inputs; nothing written.', 'inputs': dict(inputs)}" } },
+        { "id": "reset-workshop", "type": "toggle", "x": 50, "y": 601, "width": 500, "height": 64, "props": { "backgroundColor": "#ffffff", "text": "Reset workshop defaults", "fieldKey": "resetWorkshop", "defaultValue": false, "foregroundColor": "#182a45", "events": { "change": { "language": "javascript", "code": "if (event.value) {\n  app.state.reset('session', 'bindingQuantity');\n  app.state.reset('session', 'bindingStation');\n  app.state.reset('session', 'bindingReady');\n  app.state.reset('screen', 'bindingNote');\n  app.setInput('resetWorkshop', false);\n  app.notify('Shared choices and this screen note restored.');\n}" } } } },
+        { "id": "reset-note", "type": "label", "x": 50, "y": 678, "width": 500, "height": 32, "props": { "text": "Reset is the only browser handler in this workshop.", "fontSize": 13, "foregroundColor": "#526884" } },
+        { "id": "nested-card", "type": "template", "x": 598, "y": 136, "width": 574, "height": 520, "props": { "text": "Shared nested form", "templateId": "input-state-card", "parameters": { "title": "NESTED TEMPLATE FORM" }, "backgroundColor": "#e8eef9", "foregroundColor": "#182a45", "color": "#4165b0", "borderColor": "#c4d2e4", "borderWidth": 1 } },
+        { "id": "nested-note", "type": "label", "x": 598, "y": 676, "width": 574, "height": 52, "props": { "text": "This form sits two template levels deep. Its bound note shares this screen's state; its submission remains local to the inner form.", "fontSize": 15, "foregroundColor": "#435c78" } },
+        { "id": "review", "type": "button", "x": 28, "y": 762, "width": 250, "height": 48, "props": { "backgroundColor": "#4165b0", "foregroundColor": "#ffffff", "text": "Open Review", "action": "navigate", "targetScreenId": "input-state-review", "color": "#4165b0" } },
+        { "id": "inspect", "type": "button", "x": 302, "y": 762, "width": 250, "height": 48, "props": { "backgroundColor": "#4165b0", "foregroundColor": "#ffffff", "text": "Open inspection popup", "action": "openPopup", "targetScreenId": "input-state-inspection", "color": "#526784" } },
+        { "id": "footer", "type": "label", "x": 586, "y": 754, "width": 586, "height": 64, "props": { "text": "Local browser demo. No database or device writes. Session choices survive navigation; each screen or popup starts its own note.", "fontSize": 14, "foregroundColor": "#435c78" } }
+      ]
+    },
+    {
+      "id": "input-state-review", "name": "Bound state review", "width": 1200, "height": 840,
+      "state": { "bindingNote": { "type": "string", "value": "" } },
+      "components": [
+        { "id": "background", "type": "rectangle", "x": 0, "y": 0, "width": 1200, "height": 840, "props": { "fillColor": "#f5f7fc", "strokeColor": "#f5f7fc", "strokeWidth": 1 } },
+        { "id": "title", "type": "label", "x": 28, "y": 20, "width": 1144, "height": 44, "props": { "text": "Same choices. A fresh screen note.", "fontSize": 32, "foregroundColor": "#182a45" } },
+        { "id": "intro", "type": "label", "x": 28, "y": 76, "width": 1144, "height": 42, "props": { "text": "The nested form carries quantity, station and readiness across navigation. Its screen note starts empty on each visit.", "fontSize": 17, "foregroundColor": "#435c78" } },
+        { "id": "nested-card", "type": "template", "x": 28, "y": 136, "width": 574, "height": 520, "props": { "text": "Review nested form", "templateId": "input-state-card", "parameters": { "title": "REVIEW FORM" }, "backgroundColor": "#e8eef9", "foregroundColor": "#182a45", "color": "#4165b0", "borderColor": "#c4d2e4", "borderWidth": 1 } },
+        { "id": "summary-heading", "type": "label", "x": 638, "y": 154, "width": 534, "height": 34, "props": { "text": "LIVE SHARED STATE", "fontSize": 14, "foregroundColor": "#435c78" } },
+        { "id": "station-summary", "type": "label", "x": 638, "y": 206, "width": 534, "height": 48, "props": { "text": "Assembly", "fontSize": 32, "foregroundColor": "#243f6f", "bindings": { "text": { "expression": "station", "references": { "station": { "kind": "sessionState", "key": "bindingStation" } } } } } },
+        { "id": "quantity-caption", "type": "label", "x": 638, "y": 276, "width": 330, "height": 40, "props": { "text": "Shared quantity", "fontSize": 20, "foregroundColor": "#435c78" } },
+        { "id": "quantity-summary", "type": "label", "x": 986, "y": 268, "width": 186, "height": 52, "props": { "text": "24", "fontSize": 32, "foregroundColor": "#243f6f", "bindings": { "text": { "expression": "quantity", "references": { "quantity": { "kind": "sessionState", "key": "bindingQuantity" } } } } } },
+        { "id": "ready-summary", "type": "label", "x": 638, "y": 352, "width": 534, "height": 58, "props": { "text": "Awaiting readiness", "fontSize": 23, "bindings": { "text": { "expression": "ready ? 'Ready to preview' : 'Awaiting readiness'", "references": { "ready": { "kind": "sessionState", "key": "bindingReady" } } }, "foregroundColor": { "expression": "ready ? '#2a6e54' : '#805722'", "references": { "ready": { "kind": "sessionState", "key": "bindingReady" } } } } } },
+        { "id": "scope-help", "type": "label", "x": 638, "y": 440, "width": 534, "height": 132, "props": { "text": "Open inspection and change its quantity: this screen updates too. Write a popup note and close it: this screen's note is untouched. Reopen inspection to get a fresh popup note.", "fontSize": 18, "foregroundColor": "#435c78" } },
+        { "id": "draft-help", "type": "label", "x": 28, "y": 684, "width": 1144, "height": 48, "props": { "text": "Try clearing a quantity or entering 1001. That local invalid draft does not change the shared quantity, and it cannot be submitted.", "fontSize": 16, "foregroundColor": "#435c78" } },
+        { "id": "home", "type": "button", "x": 28, "y": 762, "width": 250, "height": 48, "props": { "backgroundColor": "#4165b0", "foregroundColor": "#ffffff", "text": "Back to shared form", "action": "navigate", "targetScreenId": "input-state-bindings", "color": "#4165b0" } },
+        { "id": "inspect", "type": "button", "x": 302, "y": 762, "width": 250, "height": 48, "props": { "backgroundColor": "#4165b0", "foregroundColor": "#ffffff", "text": "Open inspection popup", "action": "openPopup", "targetScreenId": "input-state-inspection", "color": "#526784" } },
+        { "id": "footer", "type": "label", "x": 586, "y": 754, "width": 586, "height": 64, "props": { "text": "Python preview receives ordinary validated form fields. The gateway does not receive the browser's state map.", "fontSize": 14, "foregroundColor": "#435c78" } }
+      ]
+    },
+    {
+      "id": "input-state-inspection", "name": "Bound state inspection", "kind": "popup", "width": 636, "height": 710,
+      "parameters": {}, "state": { "bindingNote": { "type": "string", "value": "" } },
+      "components": [
+        { "id": "background", "type": "rectangle", "x": 0, "y": 0, "width": 636, "height": 710, "props": { "fillColor": "#f5f7fc", "strokeColor": "#f5f7fc", "strokeWidth": 1 } },
+        { "id": "title", "type": "label", "x": 28, "y": 18, "width": 580, "height": 42, "props": { "text": "Inspection · shared choices, local note", "fontSize": 25, "foregroundColor": "#182a45" } },
+        { "id": "intro", "type": "label", "x": 28, "y": 70, "width": 580, "height": 50, "props": { "text": "Quantity, station and readiness remain shared. This popup starts a fresh note every time it opens.", "fontSize": 15, "foregroundColor": "#435c78" } },
+        { "id": "nested-card", "type": "template", "x": 31, "y": 130, "width": 574, "height": 520, "props": { "text": "Inspection nested form", "templateId": "input-state-card", "parameters": { "title": "POPUP FORM" }, "backgroundColor": "#e8eef9", "foregroundColor": "#182a45", "color": "#4165b0", "borderColor": "#c4d2e4", "borderWidth": 1 } },
+        { "id": "close", "type": "button", "x": 31, "y": 665, "width": 574, "height": 32, "props": { "backgroundColor": "#526784", "foregroundColor": "#ffffff", "text": "Close inspection", "action": "closePopup", "color": "#526784" } }
+      ]
+    }
+  ],
+  "templates": [
+    {
+      "id": "input-state-card", "name": "Shared choice card", "width": 574, "height": 520,
+      "parameters": { "title": "SHARED CHOICE FORM" },
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 14, "width": 526, "height": 34, "props": { "text": "{title}", "fontSize": 16 } },
+        { "id": "subtitle", "type": "label", "x": 24, "y": 54, "width": 526, "height": 32, "props": { "text": "Same bindings · separate inner form fields", "fontSize": 14 } },
+        { "id": "inner-form", "type": "template", "x": 24, "y": 98, "width": 526, "height": 402, "props": { "text": "Bound choice inner form", "templateId": "input-state-form", "parameters": {} } }
+      ]
+    },
+    {
+      "id": "input-state-form", "name": "Bound choice form", "width": 526, "height": 402,
+      "parameters": {},
+      "components": [
+        { "id": "quantity", "type": "spinner", "x": 8, "y": 8, "width": 214, "height": 82, "props": { "backgroundColor": "#ffffff", "foregroundColor": "#182a45", "text": "Nested quantity", "fieldKey": "quantity", "defaultValue": 24, "min": 1, "max": 1000, "step": 1, "stateBinding": { "scope": "session", "key": "bindingQuantity" } } },
+        { "id": "station", "type": "select", "x": 246, "y": 8, "width": 272, "height": 82, "props": { "backgroundColor": "#ffffff", "foregroundColor": "#182a45", "text": "Nested station", "fieldKey": "station", "defaultValue": "Assembly", "options": [{ "value": "Assembly", "label": "Assembly" }, { "value": "Packaging", "label": "Packaging" }, { "value": "Inspection", "label": "Inspection" }], "stateBinding": { "scope": "session", "key": "bindingStation" } } },
+        { "id": "ready", "type": "checkbox", "x": 8, "y": 110, "width": 510, "height": 60, "props": { "backgroundColor": "#ffffff", "foregroundColor": "#182a45", "text": "Nested ready", "fieldKey": "ready", "defaultValue": false, "stateBinding": { "scope": "session", "key": "bindingReady" } } },
+        { "id": "note", "type": "textArea", "x": 8, "y": 188, "width": 510, "height": 100, "props": { "backgroundColor": "#ffffff", "foregroundColor": "#182a45", "text": "Nested screen note", "fieldKey": "note", "defaultValue": "", "stateBinding": { "scope": "screen", "key": "bindingNote" } } },
+        { "id": "preview", "type": "button", "x": 8, "y": 318, "width": 510, "height": 48, "props": { "backgroundColor": "#4165b0", "foregroundColor": "#ffffff", "text": "Preview nested submission", "color": "#4165b0", "action": "script", "script": "assert set(inputs) == {'quantity', 'station', 'ready', 'note'}, 'Only the inner form may be submitted.'\nassert isinstance(inputs['quantity'], (int, float)) and not isinstance(inputs['quantity'], bool)\nassert isinstance(inputs['ready'], bool)\nresult = {'message': 'Nested form: quantity=' + str(inputs['quantity']) + ', station=' + inputs['station'] + ', ready=' + str(inputs['ready']) + ', note=' + inputs['note'] + '. Four local fields; nothing written.', 'inputs': dict(inputs)}" } }
+      ]
+    }
+  ]
+}

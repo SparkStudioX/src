@@ -1,0 +1,68 @@
+{
+  "tags": [
+    { "path": "[default]Workcenters/Line1/Target", "kind": "memory", "dataType": "Double", "value": 90, "enabled": true },
+    { "path": "[default]Workcenters/Line1/Mode", "kind": "memory", "dataType": "String", "value": "automatic", "enabled": true },
+    { "path": "[default]Workcenters/Line2/Target", "kind": "memory", "dataType": "Double", "value": 115, "enabled": true },
+    { "path": "[default]Workcenters/Line2/Mode", "kind": "memory", "dataType": "String", "value": "manual", "enabled": true },
+    { "path": "[default]Orders/1001/Status", "kind": "memory", "dataType": "String", "value": "Staged", "enabled": true },
+    { "path": "[default]Orders/1001/Priority", "kind": "memory", "dataType": "String", "value": "normal", "enabled": true },
+    { "path": "[default]Orders/1002/Status", "kind": "memory", "dataType": "String", "value": "Staged", "enabled": true },
+    { "path": "[default]Orders/1002/Priority", "kind": "memory", "dataType": "String", "value": "normal", "enabled": true },
+    { "path": "[default]Orders/1003/Status", "kind": "memory", "dataType": "String", "value": "Staged", "enabled": true },
+    { "path": "[default]Orders/1003/Priority", "kind": "memory", "dataType": "String", "value": "urgent", "enabled": true },
+    { "path": "[default]Orders/1004/Status", "kind": "memory", "dataType": "String", "value": "Staged", "enabled": true },
+    { "path": "[default]Orders/1004/Priority", "kind": "memory", "dataType": "String", "value": "normal", "enabled": true }
+  ],
+  "templates": [
+    {
+      "id": "workcenter-controls", "name": "Workcenter controls", "width": 500, "height": 510,
+      "parameters": { "machine": "Line1", "title": "Workcenter" },
+      "components": [
+        { "id": "heading", "type": "label", "x": 20, "y": 18, "width": 460, "height": 42, "props": { "text": "{title}", "fontSize": 27 } },
+        { "id": "machine-label", "type": "label", "x": 20, "y": 68, "width": 460, "height": 28, "props": { "text": "Machine {machine} · local application settings", "fontSize": 14 } },
+        { "id": "target", "type": "numberInput", "x": 20, "y": 123, "width": 220, "height": 76, "props": { "text": "Target rate", "fieldKey": "target", "tagPath": "[default]Workcenters/{machine}/Target", "min": 0, "max": 200, "defaultValue": 90 } },
+        { "id": "mode", "type": "select", "x": 260, "y": 123, "width": 220, "height": 76, "props": { "text": "Operating mode", "fieldKey": "mode", "tagPath": "[default]Workcenters/{machine}/Mode", "defaultValue": "automatic", "options": [{ "label": "Automatic", "value": "automatic" }, { "label": "Manual", "value": "manual" }] } },
+        { "id": "apply", "type": "button", "x": 20, "y": 226, "width": 220, "height": 48, "props": { "text": "Save {machine} settings", "action": "script", "script": "machine = parameters['machine']\npaths = ['[default]Workcenters/' + machine + '/Target', '[default]Workcenters/' + machine + '/Mode']\nqualities = system.tag.writeBlocking(paths, [inputs['target'], inputs['mode']])\nif not all(quality.isGood() for quality in qualities):\n    raise RuntimeError('Settings were not fully saved. Check the configured memory tags.')\nresult = {'message': machine + ' settings saved.'}" } },
+        { "id": "saved-target", "type": "value", "x": 20, "y": 314, "width": 220, "height": 155, "props": { "text": "Saved target", "tagPath": "[default]Workcenters/{machine}/Target", "unit": "units/min" } },
+        { "id": "saved-mode", "type": "value", "x": 260, "y": 314, "width": 220, "height": 155, "props": { "text": "Saved mode", "tagPath": "[default]Workcenters/{machine}/Mode" } }
+      ]
+    },
+    {
+      "id": "order-card", "name": "Order card", "width": 360, "height": 350,
+      "parameters": { "orderId": "1001", "product": "Assembly kit", "quantity": "48" },
+      "components": [
+        { "id": "heading", "type": "label", "x": 18, "y": 16, "width": 324, "height": 32, "props": { "text": "Order {orderId}", "fontSize": 24 } },
+        { "id": "details", "type": "label", "x": 18, "y": 55, "width": 324, "height": 24, "props": { "text": "{product} · {quantity} units", "fontSize": 14 } },
+        { "id": "status", "type": "value", "x": 18, "y": 91, "width": 324, "height": 110, "props": { "text": "Order status", "tagPath": "[default]Orders/{orderId}/Status" } },
+        { "id": "priority", "type": "select", "x": 18, "y": 215, "width": 324, "height": 64, "props": { "text": "Dispatch priority", "fieldKey": "priority", "tagPath": "[default]Orders/{orderId}/Priority", "defaultValue": "normal", "options": [{ "label": "Normal", "value": "normal" }, { "label": "Urgent", "value": "urgent" }] } },
+        { "id": "release", "type": "button", "x": 18, "y": 297, "width": 324, "height": 38, "props": { "text": "Release order", "action": "script", "script": "order = parameters['orderId']\npaths = ['[default]Orders/' + order + '/Priority', '[default]Orders/' + order + '/Status']\nqualities = system.tag.writeBlocking(paths, [inputs['priority'], 'Released'])\nif not all(quality.isGood() for quality in qualities):\n    raise RuntimeError('Order update was incomplete. Check the configured memory tags.')\nresult = {'message': 'Sample order ' + order + ' released with ' + inputs['priority'] + ' priority.'}" } }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "id": "workcenters", "name": "Workcenters", "width": 1200, "height": 760,
+      "components": [
+        { "id": "title", "type": "label", "x": 32, "y": 28, "width": 1100, "height": 52, "props": { "text": "Workcenter setup", "fontSize": 32 } },
+        { "id": "description", "type": "label", "x": 32, "y": 89, "width": 1136, "height": 34, "props": { "text": "One reusable form, two machine contexts. Each instance saves its own values.", "fontSize": 17 } },
+        { "id": "line-one", "type": "template", "x": 32, "y": 152, "width": 548, "height": 560, "props": { "templateId": "workcenter-controls", "parameters": { "machine": "Line1", "title": "Assembly A" } } },
+        { "id": "line-two", "type": "template", "x": 620, "y": 152, "width": 548, "height": 560, "props": { "templateId": "workcenter-controls", "parameters": { "machine": "Line2", "title": "Assembly B" } } },
+        { "id": "scope", "type": "label", "x": 32, "y": 724, "width": 1136, "height": 24, "props": { "text": "Sample workcenters · local memory tags · edit Workcenter controls to update both instances", "fontSize": 14 } }
+      ]
+    },
+    {
+      "id": "order-board", "name": "Order board", "width": 1200, "height": 760,
+      "components": [
+        { "id": "title", "type": "label", "x": 32, "y": 28, "width": 1100, "height": 52, "props": { "text": "Order dispatch", "fontSize": 32 } },
+        { "id": "description", "type": "label", "x": 32, "y": 89, "width": 1136, "height": 34, "props": { "text": "An interactive template repeated over a saved sample order list.", "fontSize": 17 } },
+        { "id": "orders", "type": "repeater", "x": 32, "y": 152, "width": 1136, "height": 550, "props": { "templateId": "order-card", "columns": 3, "gap": 20, "rows": [
+          { "id": "order-1001", "parameters": { "orderId": "1001", "product": "Assembly kit", "quantity": "48" } },
+          { "id": "order-1002", "parameters": { "orderId": "1002", "product": "Drive housing", "quantity": "24" } },
+          { "id": "order-1003", "parameters": { "orderId": "1003", "product": "Fixture plate", "quantity": "80" } },
+          { "id": "order-1004", "parameters": { "orderId": "1004", "product": "Service pack", "quantity": "12" } }
+        ] } },
+        { "id": "scope", "type": "label", "x": 32, "y": 724, "width": 1136, "height": 24, "props": { "text": "Sample orders · local memory writes · this example is independent of the supplied Ignition projects", "fontSize": 14 } }
+      ]
+    }
+  ]
+}

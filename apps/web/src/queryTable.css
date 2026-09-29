@@ -1,0 +1,30 @@
+.render-table .table-title { flex: 0 0 auto; flex-wrap: wrap; padding: 12px 14px; }
+.render-table .table-title .table-filter { flex: 1 1 120px; width: 120px; min-width: 64px; }
+.table-pagination { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--component-text-color, var(--muted)); }
+.table-pagination-actions { display: flex; align-items: center; gap: 7px; }
+.table-pagination button { padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--component-background, var(--surface-subtle)); color: var(--component-text-color, var(--ink)); font: inherit; cursor: pointer; }
+.table-pagination button:disabled { opacity: .45; cursor: default; }
+.table-pagination button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.render-table .inline-error { flex: 0 0 auto; }
+.render-table .configured-columns { table-layout: fixed; }
+.render-table .configured-columns th { text-transform: none; }
+.render-table .configured-columns th, .render-table .configured-columns td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.render-table .table-sort { max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-align: inherit; }
+.render-table .table-cell-error { color: var(--danger, #c43d4b); text-decoration: underline dotted; text-underline-offset: 3px; }
+.table-format-notice { flex: 0 0 auto; padding: 7px 12px; color: var(--danger, #c43d4b); font-size: 11px; border-top: 1px solid var(--border); }
+.table-edit-status { display:flex; flex:0 0 auto; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 12px; border-bottom:1px solid var(--border); font-size:11px; line-height:1.5; color:var(--component-text-color,var(--muted)); }
+.table-edit-status.error-text { color:var(--danger,#c43d4b); }
+.table-edit-status > span { flex:1 1 180px; overflow-wrap:anywhere; }
+.render-table .table-cell-edit { margin-left:8px; padding:2px 7px; border:1px solid var(--border); border-radius:4px; color:var(--component-text-color,var(--ink)); background:var(--component-background,var(--surface)); font:inherit; font-size:11px; cursor:pointer; }
+.render-table .table-cell-edit:disabled, .render-table .table-sort:disabled { opacity:.5; cursor:default; }
+.render-table .configured-columns td.table-cell-editing { overflow:visible; white-space:normal; }
+.table-cell-editor { position:relative; z-index:1; display:flex; flex-direction:column; gap:7px; min-width:140px; padding:7px; border:1px solid var(--component-accent,var(--accent)); border-radius:4px; background:var(--component-background,var(--surface)); text-align:left; }
+.table-cell-editor label { display:flex; flex-direction:column; gap:5px; }
+.table-editor-label { font-size:10px; font-weight:600; overflow-wrap:anywhere; color:var(--component-text-color,var(--muted)); }
+.table-cell-editor input, .table-cell-editor select { box-sizing:border-box; width:100%; min-width:0; padding:7px; border:1px solid var(--border); border-radius:4px; background:var(--component-background,var(--surface)); color:var(--component-text-color,var(--ink)); font:inherit; }
+.table-cell-editor input:focus, .table-cell-editor select:focus { outline:2px solid var(--component-accent,var(--accent)); outline-offset:1px; }
+.table-cell-edit-actions { display:flex; flex-wrap:wrap; gap:6px; }
+.table-cell-edit-actions button { padding:5px 9px; border:1px solid var(--border); border-radius:4px; font:inherit; font-size:11px; background:var(--component-background,var(--surface-subtle)); color:var(--component-text-color,var(--ink)); cursor:pointer; }
+.table-cell-edit-actions button:first-child:not(:disabled) { color:var(--on-accent); background:var(--component-accent,var(--accent)); border-color:var(--component-accent,var(--accent)); }
+.table-cell-edit-actions button:disabled { opacity:.5; cursor:default; }
+.table-edit-validation { font-size:11px; line-height:1.4; white-space:normal; color:var(--danger,#c43d4b); }

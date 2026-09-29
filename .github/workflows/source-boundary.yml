@@ -1,0 +1,27 @@
+name: Source boundary
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Official actions/checkout v4.2.2, pinned to its verified release commit.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Hosted Ubuntu runners include Node; no application dependencies are installed.
+      - name: Validate the checked-out source tree
+        run: node tools/check-source.mjs --tree HEAD
+      - name: Validate all reachable source history
+        run: node tools/check-source.mjs --history HEAD
+      - name: Exercise the source boundary with disposable Git fixtures
+        run: node tools/test-source-boundary.mjs

@@ -1,0 +1,11 @@
+services:
+  gateway:
+    build: .
+    image: sparkstudio:0.1.0
+    ports:
+      - "127.0.0.1:5090:8080"
+    volumes:
+      - sparkstudio-data:/data
+    restart: unless-stopped
+volumes:
+  sparkstudio-data:

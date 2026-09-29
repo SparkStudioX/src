@@ -1,0 +1,104 @@
+{
+  "name": "Nested forms workshop",
+  "tags": [],
+  "sessionState": {
+    "nestedLastMachine": { "type": "string", "value": "No edits yet" }
+  },
+  "templates": [
+    {
+      "id": "nested-setpoint-form", "name": "Nested setpoint form", "width": 440, "height": 238,
+      "parameters": { "machine": "M-01", "limit": "80", "permit": "true" },
+      "parameterTypes": { "machine": "string", "limit": "number", "permit": "boolean" },
+      "components": [
+        { "id": "setpoint", "type": "spinner", "x": 14, "y": 10, "width": 246, "height": 82, "props": { "text": "Setpoint · units/min", "fieldKey": "setpoint", "defaultValue": 30, "min": 0, "max": 200, "step": 1, "events": { "change": { "language": "javascript", "code": "if (Number.isFinite(event.value)) {\n  app.state.set('screen', 'nestedChanges', app.state.get('screen', 'nestedChanges') + 1);\n  app.state.set('session', 'nestedLastMachine', parameters.machine);\n}" } } } },
+        { "id": "acknowledged", "type": "checkbox", "x": 282, "y": 20, "width": 144, "height": 62, "props": { "text": "Ready to preview", "fieldKey": "acknowledged", "defaultValue": true } },
+        { "id": "local-status", "type": "label", "x": 14, "y": 104, "width": 412, "height": 38, "props": { "text": "Local draft · limit {limit} units/min", "fontSize": 14 } },
+        { "id": "preview", "type": "button", "x": 14, "y": 158, "width": 244, "height": 48, "props": { "backgroundColor": "#4165b0", "foregroundColor": "#ffffff", "text": "Preview submission", "action": "script", "script": "assert set(inputs) == {'setpoint', 'acknowledged'}, 'Only this inner form may be submitted.'\nassert isinstance(parameters['limit'], (int, float)) and not isinstance(parameters['limit'], bool)\nassert isinstance(parameters['permit'], bool)\nassert parameters['permit'] and inputs['acknowledged'] and inputs['setpoint'] <= parameters['limit']\nresult = {'message': parameters['machine'] + ': setpoint=' + str(inputs['setpoint']) + ', ready=' + str(inputs['acknowledged']) + '. Inner inputs only. Limit=' + str(parameters['limit']) + ' (number), permit=' + str(parameters['permit']) + ' (Boolean). Nothing written.', 'parameters': dict(parameters), 'inputs': dict(inputs)}", "bindings": { "enabled": { "expression": "permit && acknowledged && setpoint <= limit", "references": { "permit": { "kind": "parameter", "key": "permit" }, "acknowledged": { "kind": "input", "key": "acknowledged" }, "setpoint": { "kind": "input", "key": "setpoint" }, "limit": { "kind": "parameter", "key": "limit" } } } } } },
+        { "id": "inspect", "type": "button", "x": 274, "y": 158, "width": 152, "height": 48, "props": { "backgroundColor": "#526784", "foregroundColor": "#ffffff", "text": "Inspect machine", "action": "openPopup", "targetScreenId": "nested-inspection", "parameters": { "machine": "{machine}", "limit": "{limit}", "permit": "{permit}" }, "color": "#526784" } }
+      ]
+    },
+    {
+      "id": "nested-form-summary", "name": "Nested read-only summary", "width": 440, "height": 66,
+      "parameters": { "machine": "M-01", "limit": "80", "permit": "true" },
+      "parameterTypes": { "machine": "string", "limit": "number", "permit": "boolean" },
+      "components": [
+        { "id": "context", "type": "label", "x": 14, "y": 5, "width": 412, "height": 26, "props": { "text": "{machine} · limit {limit} · permit {permit}", "fontSize": 14, "foregroundColor": "#25405f" } },
+        { "id": "state-caption", "type": "label", "x": 14, "y": 34, "width": 100, "height": 26, "props": { "text": "Screen edits:", "fontSize": 13, "foregroundColor": "#435c78" } },
+        { "id": "state-count", "type": "label", "x": 114, "y": 34, "width": 54, "height": 26, "props": { "text": "0", "fontSize": 13, "foregroundColor": "#435c78", "bindings": { "text": { "expression": "changes", "references": { "changes": { "kind": "screenState", "key": "nestedChanges" } } } } } },
+        { "id": "last-edited", "type": "label", "x": 174, "y": 34, "width": 252, "height": 26, "props": { "text": "No edits yet", "fontSize": 13, "foregroundColor": "#435c78", "bindings": { "text": { "expression": "'Last edited: ' + machine", "references": { "machine": { "kind": "sessionState", "key": "nestedLastMachine" } } } } } }
+      ]
+    },
+    {
+      "id": "nested-machine-card", "name": "Nested machine card", "width": 484, "height": 430,
+      "parameters": { "machine": "M-01", "title": "Assembly cell", "limit": "80", "permit": "true" },
+      "parameterTypes": { "machine": "string", "title": "string", "limit": "number", "permit": "boolean" },
+      "components": [
+        { "id": "heading", "type": "label", "x": 22, "y": 15, "width": 440, "height": 40, "props": { "text": "{title}", "fontSize": 25 } },
+        { "id": "machine", "type": "label", "x": 22, "y": 56, "width": 440, "height": 26, "props": { "text": "{machine}  /  independent local draft", "fontSize": 14 } },
+        { "id": "setpoint-form", "type": "template", "x": 22, "y": 94, "width": 440, "height": 238, "props": { "text": "{machine} setpoint form", "templateId": "nested-setpoint-form", "parameters": { "machine": "{machine}", "limit": "{limit}", "permit": "{permit}" }, "bindings": { "enabled": { "expression": "permit", "references": { "permit": { "kind": "parameter", "key": "permit" } } } } } },
+        { "id": "summary", "type": "template", "x": 22, "y": 348, "width": 440, "height": 66, "props": { "text": "{machine} read-only summary", "templateId": "nested-form-summary", "parameters": { "machine": "{machine}", "limit": "{limit}", "permit": "{permit}" }, "backgroundColor": "#e4edf8", "foregroundColor": "#25405f" } }
+      ]
+    },
+    {
+      "id": "nested-inspection-form", "name": "Nested inspection form", "width": 596, "height": 266,
+      "parameters": { "machine": "M-01", "limit": "80", "permit": "true" },
+      "parameterTypes": { "machine": "string", "limit": "number", "permit": "boolean" },
+      "components": [
+        { "id": "context", "type": "label", "x": 20, "y": 14, "width": 556, "height": 32, "props": { "text": "Inspect {machine} · permitted limit {limit}", "fontSize": 19 } },
+        { "id": "inspection-note", "type": "textInput", "x": 20, "y": 66, "width": 556, "height": 76, "props": { "text": "Inspection note · popup draft only", "fieldKey": "inspectionNote", "defaultValue": "", "events": { "change": { "language": "javascript", "code": "app.state.set('screen', 'nestedChanges', app.state.get('screen', 'nestedChanges') + 1);" } } } },
+        { "id": "preview", "type": "button", "x": 20, "y": 172, "width": 340, "height": 48, "props": { "backgroundColor": "#4165b0", "foregroundColor": "#ffffff", "text": "Preview inspection", "action": "script", "script": "assert set(inputs) == {'inspectionNote'}, 'Only the nested popup form may be submitted.'\nassert isinstance(parameters['limit'], (int, float)) and not isinstance(parameters['limit'], bool)\nassert isinstance(parameters['permit'], bool)\nresult = {'message': parameters['machine'] + ': inspectionNote=' + inputs['inspectionNote'] + '. Only this popup form was submitted. Nothing written.', 'parameters': dict(parameters), 'inputs': dict(inputs)}" } },
+        { "id": "close", "type": "button", "x": 380, "y": 172, "width": 196, "height": 48, "props": { "backgroundColor": "#526784", "foregroundColor": "#ffffff", "text": "Close inspection", "action": "closePopup", "color": "#526784" } }
+      ]
+    },
+    {
+      "id": "nested-inspection-card", "name": "Nested inspection card", "width": 636, "height": 370,
+      "parameters": { "machine": "M-01", "limit": "80", "permit": "true" },
+      "parameterTypes": { "machine": "string", "limit": "number", "permit": "boolean" },
+      "components": [
+        { "id": "inspection-form", "type": "template", "x": 20, "y": 16, "width": 596, "height": 266, "props": { "text": "{machine} inspection form", "templateId": "nested-inspection-form", "parameters": { "machine": "{machine}", "limit": "{limit}", "permit": "{permit}" } } },
+        { "id": "summary", "type": "template", "x": 20, "y": 292, "width": 440, "height": 66, "props": { "text": "Popup state summary", "templateId": "nested-form-summary", "parameters": { "machine": "{machine}", "limit": "{limit}", "permit": "{permit}" }, "backgroundColor": "#e4edf8", "foregroundColor": "#25405f" } }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "id": "nested-forms", "name": "Nested forms", "width": 1040, "height": 700,
+      "state": { "nestedChanges": { "type": "number", "value": 0 } },
+      "components": [
+        { "id": "background", "type": "rectangle", "x": 0, "y": 0, "width": 1040, "height": 700, "props": { "fillColor": "#f5f7fc", "strokeColor": "#f5f7fc", "strokeWidth": 1 } },
+        { "id": "heading", "type": "label", "x": 24, "y": 20, "width": 992, "height": 44, "props": { "text": "Nested forms · machine desk", "fontSize": 30, "foregroundColor": "#182a45" } },
+        { "id": "intro", "type": "label", "x": 24, "y": 74, "width": 992, "height": 30, "props": { "text": "Same card. Same child IDs. Separate drafts and submissions for each machine.", "fontSize": 16, "foregroundColor": "#435c78" } },
+        { "id": "enabled", "type": "checkbox", "x": 24, "y": 116, "width": 292, "height": 54, "props": { "text": "Enable both cards", "fieldKey": "cardsEnabled", "defaultValue": true, "foregroundColor": "#182a45" } },
+        { "id": "visible", "type": "checkbox", "x": 350, "y": 116, "width": 292, "height": 54, "props": { "text": "Show Packaging cell", "fieldKey": "secondVisible", "defaultValue": true, "foregroundColor": "#182a45" } },
+        { "id": "machine-a", "type": "template", "x": 24, "y": 184, "width": 484, "height": 430, "props": { "text": "Assembly machine card", "templateId": "nested-machine-card", "parameters": { "machine": "M-01", "title": "Assembly cell", "limit": "80", "permit": "true" }, "backgroundColor": "#ffffff", "foregroundColor": "#182a45", "color": "#4165b0", "borderColor": "#c4d2e4", "borderWidth": 1, "bindings": { "enabled": { "expression": "enabled", "references": { "enabled": { "kind": "input", "key": "cardsEnabled" } } } } } },
+        { "id": "machine-b", "type": "template", "x": 532, "y": 184, "width": 484, "height": 430, "props": { "text": "Packaging machine card", "templateId": "nested-machine-card", "parameters": { "machine": "M-02", "title": "Packaging cell", "limit": "120", "permit": "true" }, "backgroundColor": "#ffffff", "foregroundColor": "#182a45", "color": "#4165b0", "borderColor": "#c4d2e4", "borderWidth": 1, "bindings": { "enabled": { "expression": "enabled", "references": { "enabled": { "kind": "input", "key": "cardsEnabled" } } }, "visible": { "expression": "visible", "references": { "visible": { "kind": "input", "key": "secondVisible" } } } } } },
+        { "id": "rows", "type": "button", "x": 24, "y": 642, "width": 266, "height": 42, "props": { "backgroundColor": "#4165b0", "foregroundColor": "#ffffff", "text": "Open saved-row forms", "action": "navigate", "targetScreenId": "nested-saved-rows", "color": "#4165b0" } },
+        { "id": "footer", "type": "label", "x": 318, "y": 638, "width": 698, "height": 48, "props": { "text": "Edits stay in your browser. Preview calls Python and writes no tags or records.", "fontSize": 14, "foregroundColor": "#435c78" } }
+      ]
+    },
+    {
+      "id": "nested-saved-rows", "name": "Nested saved rows", "width": 1040, "height": 700,
+      "state": { "nestedChanges": { "type": "number", "value": 0 } },
+      "components": [
+        { "id": "background", "type": "rectangle", "x": 0, "y": 0, "width": 1040, "height": 700, "props": { "fillColor": "#f5f7fc", "strokeColor": "#f5f7fc", "strokeWidth": 1 } },
+        { "id": "heading", "type": "label", "x": 24, "y": 20, "width": 992, "height": 44, "props": { "text": "Nested forms · saved rows", "fontSize": 30, "foregroundColor": "#182a45" } },
+        { "id": "intro", "type": "label", "x": 24, "y": 74, "width": 992, "height": 56, "props": { "text": "One saved repeater, two stable row IDs. Each row contains the same nested setpoint form.", "fontSize": 16, "foregroundColor": "#435c78" } },
+        { "id": "row-note", "type": "label", "x": 24, "y": 140, "width": 992, "height": 28, "props": { "text": "Change each setpoint, preview each submission, then inspect either row's machine.", "fontSize": 14, "foregroundColor": "#435c78" } },
+        { "id": "machine-rows", "type": "repeater", "x": 24, "y": 184, "width": 992, "height": 430, "props": { "text": "Saved machine rows", "templateId": "nested-machine-card", "columns": 2, "gap": 24, "rows": [ { "id": "bench-c", "parameters": { "machine": "M-03", "title": "Test bench C", "limit": "60", "permit": "true" } }, { "id": "bench-d", "parameters": { "machine": "M-04", "title": "Test bench D", "limit": "100", "permit": "true" } } ], "backgroundColor": "#ffffff", "foregroundColor": "#182a45", "color": "#4165b0", "borderColor": "#c4d2e4", "borderWidth": 1 } },
+        { "id": "back", "type": "button", "x": 24, "y": 642, "width": 266, "height": 42, "props": { "backgroundColor": "#4165b0", "foregroundColor": "#ffffff", "text": "Back to machine desk", "action": "navigate", "targetScreenId": "nested-forms", "color": "#4165b0" } },
+        { "id": "footer", "type": "label", "x": 318, "y": 638, "width": 698, "height": 48, "props": { "text": "Rows have independent drafts. The screen edit counter is shared deliberately.", "fontSize": 14, "foregroundColor": "#435c78" } }
+      ]
+    },
+    {
+      "id": "nested-inspection", "name": "Machine inspection", "kind": "popup", "width": 684, "height": 504,
+      "parameters": { "machine": "M-01", "limit": "80", "permit": "true" },
+      "state": { "nestedChanges": { "type": "number", "value": 0 } },
+      "components": [
+        { "id": "background", "type": "rectangle", "x": 0, "y": 0, "width": 684, "height": 504, "props": { "fillColor": "#f5f7fc", "strokeColor": "#f5f7fc", "strokeWidth": 1 } },
+        { "id": "heading", "type": "label", "x": 24, "y": 18, "width": 636, "height": 40, "props": { "text": "{machine} · contextual inspection", "fontSize": 27, "foregroundColor": "#182a45" } },
+        { "id": "intro", "type": "label", "x": 24, "y": 66, "width": 636, "height": 42, "props": { "text": "The gateway validates the full opener path. This popup starts a fresh form.", "fontSize": 15, "foregroundColor": "#435c78" } },
+        { "id": "inspection-card", "type": "template", "x": 24, "y": 116, "width": 636, "height": 370, "props": { "text": "{machine} inspection card", "templateId": "nested-inspection-card", "parameters": { "machine": "{machine}", "limit": "{limit}", "permit": "{permit}" }, "backgroundColor": "#ffffff", "foregroundColor": "#182a45", "color": "#4165b0", "borderColor": "#c4d2e4", "borderWidth": 1 } }
+      ]
+    }
+  ]
+}

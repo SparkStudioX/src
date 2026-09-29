@@ -1,0 +1,26 @@
+{
+  "tags": [
+    { "path": "[default]Application/Operator", "kind": "memory", "dataType": "String", "value": "Day shift", "enabled": true },
+    { "path": "[default]Application/Setpoint", "kind": "memory", "dataType": "Double", "value": 85, "enabled": true },
+    { "path": "[default]Application/Mode", "kind": "memory", "dataType": "String", "value": "automatic", "enabled": true },
+    { "path": "[default]Application/Enabled", "kind": "memory", "dataType": "Boolean", "value": true, "enabled": true }
+  ],
+  "screen": {
+    "id": "application-form", "name": "Operator setup", "width": 1200, "height": 760,
+    "components": [
+      { "id": "heading", "type": "label", "x": 40, "y": 28, "width": 1000, "height": 60, "props": { "text": "Operator setup", "fontSize": 32 } },
+      { "id": "description", "type": "label", "x": 40, "y": 98, "width": 1100, "height": 40, "props": { "text": "Edit the form, then save. Your settings persist in local memory tags.", "fontSize": 18 } },
+      { "id": "operator", "type": "textInput", "x": 40, "y": 170, "width": 520, "height": 80, "props": { "text": "Operator / shift", "fieldKey": "operatorName", "tagPath": "[default]Application/Operator", "defaultValue": "Day shift" } },
+      { "id": "setpoint", "type": "numberInput", "x": 40, "y": 275, "width": 520, "height": 80, "props": { "text": "Target rate (0–200 units/min)", "fieldKey": "setpoint", "tagPath": "[default]Application/Setpoint", "defaultValue": 85, "min": 0, "max": 200 } },
+      { "id": "mode", "type": "select", "x": 620, "y": 170, "width": 500, "height": 80, "props": { "text": "Operating mode", "fieldKey": "mode", "tagPath": "[default]Application/Mode", "defaultValue": "automatic", "options": [ { "label": "Automatic", "value": "automatic" }, { "label": "Manual", "value": "manual" } ] } },
+      { "id": "enabled", "type": "checkbox", "x": 620, "y": 290, "width": 500, "height": 55, "props": { "text": "Enable application", "fieldKey": "enabled", "tagPath": "[default]Application/Enabled", "defaultValue": true } },
+      { "id": "save-settings", "type": "button", "x": 40, "y": 392, "width": 270, "height": 56, "props": { "text": "Save settings", "action": "script", "script": "operator = inputs['operatorName'].strip()\nif not operator:\n    raise ValueError('Enter an operator or shift name before saving.')\npaths = ['[default]Application/Operator', '[default]Application/Setpoint', '[default]Application/Mode', '[default]Application/Enabled']\nvalues = [operator, inputs['setpoint'], inputs['mode'], inputs['enabled']]\nqualities = system.tag.writeBlocking(paths, values)\nif not all(quality.isGood() for quality in qualities):\n    raise RuntimeError('Some settings could not be saved. Check the memory tag configuration.')\nresult = {'message': 'Settings saved for ' + operator + '.', 'values': values}" } },
+      { "id": "saved-heading", "type": "label", "x": 40, "y": 485, "width": 1100, "height": 34, "props": { "text": "SAVED SETTINGS", "fontSize": 15 } },
+      { "id": "saved-operator", "type": "value", "x": 40, "y": 535, "width": 250, "height": 160, "props": { "text": "Operator / shift", "tagPath": "[default]Application/Operator" } },
+      { "id": "saved-setpoint", "type": "value", "x": 318, "y": 535, "width": 250, "height": 160, "props": { "text": "Target rate", "tagPath": "[default]Application/Setpoint", "unit": "units/min" } },
+      { "id": "saved-mode", "type": "value", "x": 596, "y": 535, "width": 250, "height": 160, "props": { "text": "Operating mode", "tagPath": "[default]Application/Mode" } },
+      { "id": "saved-enabled", "type": "value", "x": 874, "y": 535, "width": 250, "height": 160, "props": { "text": "Application enabled", "tagPath": "[default]Application/Enabled" } },
+      { "id": "scope", "type": "label", "x": 40, "y": 715, "width": 1100, "height": 28, "props": { "text": "Application example · writes local memory tags only", "fontSize": 14 } }
+    ]
+  }
+}

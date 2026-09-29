@@ -1,0 +1,652 @@
+{
+  "name": "Process graphics workshop",
+  "tags": [],
+  "screens": [
+    {
+      "id": "process-graphics",
+      "name": "Process graphics",
+      "width": 1200,
+      "height": 780,
+      "components": [
+        {
+          "id": "heading",
+          "type": "label",
+          "x": 32,
+          "y": 24,
+          "width": 760,
+          "height": 48,
+          "props": {
+            "text": "Transfer line / 01",
+            "fontSize": 32
+          }
+        },
+        {
+          "id": "description",
+          "type": "label",
+          "x": 32,
+          "y": 78,
+          "width": 1120,
+          "height": 28,
+          "props": {
+            "text": "A schematic built from editable shapes, pipe routes and equipment symbols.",
+            "fontSize": 16
+          }
+        },
+        {
+          "id": "running",
+          "type": "checkbox",
+          "x": 32,
+          "y": 122,
+          "width": 250,
+          "height": 76,
+          "props": {
+            "text": "Run sample process",
+            "fieldKey": "running",
+            "defaultValue": true
+          }
+        },
+        {
+          "id": "reverse",
+          "type": "checkbox",
+          "x": 310,
+          "y": 122,
+          "width": 250,
+          "height": 76,
+          "props": {
+            "text": "Reverse flow",
+            "fieldKey": "reverse",
+            "defaultValue": false
+          }
+        },
+        {
+          "id": "available",
+          "type": "checkbox",
+          "x": 588,
+          "y": 122,
+          "width": 250,
+          "height": 76,
+          "props": {
+            "text": "Signal available",
+            "fieldKey": "available",
+            "defaultValue": true
+          }
+        },
+        {
+          "id": "level",
+          "type": "spinner",
+          "x": 876,
+          "y": 122,
+          "width": 292,
+          "height": 82,
+          "props": {
+            "text": "Source level (%)",
+            "fieldKey": "level",
+            "defaultValue": 64,
+            "min": 0,
+            "max": 100,
+            "step": 1
+          }
+        },
+        {
+          "id": "process-zone",
+          "type": "rectangle",
+          "x": 32,
+          "y": 230,
+          "width": 1136,
+          "height": 360,
+          "props": {
+            "fillColor": "#0f172a",
+            "strokeColor": "#334155",
+            "strokeWidth": 1,
+            "cornerRadius": 4
+          }
+        },
+        {
+          "id": "zone-heading",
+          "type": "label",
+          "x": 56,
+          "y": 246,
+          "width": 720,
+          "height": 28,
+          "props": {
+            "text": "MATERIAL TRANSFER",
+            "fontSize": 14,
+            "foregroundColor": "#94a3b8"
+          }
+        },
+        {
+          "id": "source",
+          "type": "cylindricalTank",
+          "x": 76,
+          "y": 290,
+          "width": 154,
+          "height": 250,
+          "props": {
+            "text": "SOURCE TK-101",
+            "value": 64,
+            "min": 0,
+            "max": 100,
+            "unit": "%",
+            "color": "#38bdf8",
+            "foregroundColor": "#e2e8f0",
+            "showValue": true,
+            "showPercent": false,
+            "bindings": {
+              "value": {
+                "expression": "available ? level : missing",
+                "references": {
+                  "available": {
+                    "kind": "input",
+                    "key": "available"
+                  },
+                  "level": {
+                    "kind": "input",
+                    "key": "level"
+                  },
+                  "missing": {
+                    "kind": "tag",
+                    "path": "[default]Graphics/MissingSignal"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "Source outlet",
+          "type": "pipe",
+          "x": 218,
+          "y": 382,
+          "width": 150,
+          "height": 62,
+          "props": {
+            "text": "Source outlet",
+            "strokeColor": "#64748b",
+            "fillColor": "#1e293b",
+            "color": "#38bdf8",
+            "strokeWidth": 14,
+            "points": [
+              {
+                "x": 0,
+                "y": 50
+              },
+              {
+                "x": 100,
+                "y": 50
+              }
+            ],
+            "bindings": {
+              "flowing": {
+                "expression": "available ? running : missing",
+                "references": {
+                  "available": {
+                    "kind": "input",
+                    "key": "available"
+                  },
+                  "running": {
+                    "kind": "input",
+                    "key": "running"
+                  },
+                  "missing": {
+                    "kind": "tag",
+                    "path": "[default]Graphics/MissingSignal"
+                  }
+                }
+              },
+              "flowReverse": {
+                "expression": "reverse",
+                "references": {
+                  "reverse": {
+                    "kind": "input",
+                    "key": "reverse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "pump",
+          "type": "equipmentSymbol",
+          "x": 334,
+          "y": 348,
+          "width": 142,
+          "height": 142,
+          "props": {
+            "text": "P-101",
+            "symbol": "pump",
+            "color": "#38bdf8",
+            "strokeColor": "#94a3b8",
+            "fillColor": "#94a3b8",
+            "strokeWidth": 3,
+            "bindings": {
+              "active": {
+                "expression": "available ? running : missing",
+                "references": {
+                  "available": {
+                    "kind": "input",
+                    "key": "available"
+                  },
+                  "running": {
+                    "kind": "input",
+                    "key": "running"
+                  },
+                  "missing": {
+                    "kind": "tag",
+                    "path": "[default]Graphics/MissingSignal"
+                  }
+                }
+              }
+            },
+            "action": "openPopup",
+            "targetScreenId": "pump-details",
+            "parameters": {
+              "equipment": "Transfer pump P-101"
+            },
+            "foregroundColor": "#e2e8f0"
+          }
+        },
+        {
+          "id": "Pump outlet",
+          "type": "pipe",
+          "x": 446,
+          "y": 382,
+          "width": 127,
+          "height": 62,
+          "props": {
+            "text": "Pump outlet",
+            "strokeColor": "#64748b",
+            "fillColor": "#1e293b",
+            "color": "#38bdf8",
+            "strokeWidth": 14,
+            "points": [
+              {
+                "x": 0,
+                "y": 50
+              },
+              {
+                "x": 100,
+                "y": 50
+              }
+            ],
+            "bindings": {
+              "flowing": {
+                "expression": "available ? running : missing",
+                "references": {
+                  "available": {
+                    "kind": "input",
+                    "key": "available"
+                  },
+                  "running": {
+                    "kind": "input",
+                    "key": "running"
+                  },
+                  "missing": {
+                    "kind": "tag",
+                    "path": "[default]Graphics/MissingSignal"
+                  }
+                }
+              },
+              "flowReverse": {
+                "expression": "reverse",
+                "references": {
+                  "reverse": {
+                    "kind": "input",
+                    "key": "reverse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "valve",
+          "type": "equipmentSymbol",
+          "x": 550,
+          "y": 352,
+          "width": 126,
+          "height": 138,
+          "props": {
+            "text": "XV-101",
+            "symbol": "valve",
+            "color": "#38bdf8",
+            "strokeColor": "#94a3b8",
+            "fillColor": "#94a3b8",
+            "strokeWidth": 3,
+            "bindings": {
+              "active": {
+                "expression": "available ? running : missing",
+                "references": {
+                  "available": {
+                    "kind": "input",
+                    "key": "available"
+                  },
+                  "running": {
+                    "kind": "input",
+                    "key": "running"
+                  },
+                  "missing": {
+                    "kind": "tag",
+                    "path": "[default]Graphics/MissingSignal"
+                  }
+                }
+              }
+            },
+            "foregroundColor": "#e2e8f0"
+          }
+        },
+        {
+          "id": "Delivery line",
+          "type": "pipe",
+          "x": 658,
+          "y": 382,
+          "width": 356,
+          "height": 62,
+          "props": {
+            "text": "Delivery line",
+            "strokeColor": "#64748b",
+            "fillColor": "#1e293b",
+            "color": "#38bdf8",
+            "strokeWidth": 14,
+            "points": [
+              {
+                "x": 0,
+                "y": 50
+              },
+              {
+                "x": 100,
+                "y": 50
+              }
+            ],
+            "bindings": {
+              "flowing": {
+                "expression": "available ? running : missing",
+                "references": {
+                  "available": {
+                    "kind": "input",
+                    "key": "available"
+                  },
+                  "running": {
+                    "kind": "input",
+                    "key": "running"
+                  },
+                  "missing": {
+                    "kind": "tag",
+                    "path": "[default]Graphics/MissingSignal"
+                  }
+                }
+              },
+              "flowReverse": {
+                "expression": "reverse",
+                "references": {
+                  "reverse": {
+                    "kind": "input",
+                    "key": "reverse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "motor",
+          "type": "equipmentSymbol",
+          "x": 747,
+          "y": 282,
+          "width": 124,
+          "height": 106,
+          "props": {
+            "text": "M-101",
+            "symbol": "motor",
+            "color": "#38bdf8",
+            "strokeColor": "#94a3b8",
+            "fillColor": "#94a3b8",
+            "strokeWidth": 3,
+            "bindings": {
+              "active": {
+                "expression": "available ? running : missing",
+                "references": {
+                  "available": {
+                    "kind": "input",
+                    "key": "available"
+                  },
+                  "running": {
+                    "kind": "input",
+                    "key": "running"
+                  },
+                  "missing": {
+                    "kind": "tag",
+                    "path": "[default]Graphics/MissingSignal"
+                  }
+                }
+              }
+            },
+            "foregroundColor": "#e2e8f0"
+          }
+        },
+        {
+          "id": "drive-link",
+          "type": "line",
+          "x": 790,
+          "y": 369,
+          "width": 35,
+          "height": 48,
+          "props": {
+            "points": [
+              {
+                "x": 50,
+                "y": 0
+              },
+              {
+                "x": 50,
+                "y": 100
+              }
+            ],
+            "strokeColor": "#94a3b8",
+            "strokeWidth": 2
+          }
+        },
+        {
+          "id": "receiver",
+          "type": "ellipse",
+          "x": 1000,
+          "y": 308,
+          "width": 106,
+          "height": 206,
+          "props": {
+            "fillColor": "#172554",
+            "strokeColor": "#60a5fa",
+            "strokeWidth": 3
+          }
+        },
+        {
+          "id": "receiver-label",
+          "type": "label",
+          "x": 983,
+          "y": 525,
+          "width": 140,
+          "height": 28,
+          "props": {
+            "text": "TK-102",
+            "fontSize": 15,
+            "foregroundColor": "#e2e8f0"
+          }
+        },
+        {
+          "id": "return-route",
+          "type": "polyline",
+          "x": 443,
+          "y": 451,
+          "width": 543,
+          "height": 96,
+          "props": {
+            "points": [
+              {
+                "x": 100,
+                "y": 0
+              },
+              {
+                "x": 100,
+                "y": 100
+              },
+              {
+                "x": 0,
+                "y": 100
+              },
+              {
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "strokeColor": "#475569",
+            "strokeWidth": 2
+          }
+        },
+        {
+          "id": "state",
+          "type": "label",
+          "x": 378,
+          "y": 498,
+          "width": 510,
+          "height": 30,
+          "props": {
+            "text": "RUNNING",
+            "fontSize": 18,
+            "foregroundColor": "#7dd3fc",
+            "bindings": {
+              "text": {
+                "expression": "available ? (running ? (reverse ? \"RUNNING / REVERSE\" : \"RUNNING / FORWARD\") : \"STOPPED\") : \"SIGNAL UNAVAILABLE\"",
+                "references": {
+                  "available": {
+                    "kind": "input",
+                    "key": "available"
+                  },
+                  "running": {
+                    "kind": "input",
+                    "key": "running"
+                  },
+                  "reverse": {
+                    "kind": "input",
+                    "key": "reverse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "route-note",
+          "type": "label",
+          "x": 340,
+          "y": 551,
+          "width": 610,
+          "height": 25,
+          "props": {
+            "text": "Click P-101 to open its equipment popup.",
+            "fontSize": 14,
+            "foregroundColor": "#94a3b8"
+          }
+        },
+        {
+          "id": "demo-note",
+          "type": "label",
+          "x": 32,
+          "y": 618,
+          "width": 1110,
+          "height": 26,
+          "props": {
+            "text": "LOCAL DEMONSTRATION",
+            "fontSize": 14
+          }
+        },
+        {
+          "id": "demo-help",
+          "type": "label",
+          "x": 32,
+          "y": 654,
+          "width": 1120,
+          "height": 58,
+          "props": {
+            "text": "These controls change browser form values only. No device or database writes occur. Turn off Signal available to test the unavailable-state overlay.",
+            "fontSize": 16
+          }
+        },
+        {
+          "id": "author-note",
+          "type": "label",
+          "x": 32,
+          "y": 727,
+          "width": 1120,
+          "height": 26,
+          "props": {
+            "text": "Designer: add graphics from Components, then edit their property sheets and fx bindings.",
+            "fontSize": 14
+          }
+        }
+      ]
+    },
+    {
+      "id": "pump-details",
+      "name": "Equipment details",
+      "kind": "popup",
+      "width": 560,
+      "height": 340,
+      "parameters": {
+        "equipment": "Transfer pump"
+      },
+      "components": [
+        {
+          "id": "title",
+          "type": "label",
+          "x": 28,
+          "y": 24,
+          "width": 502,
+          "height": 50,
+          "props": {
+            "text": "{equipment}",
+            "fontSize": 25
+          }
+        },
+        {
+          "id": "symbol",
+          "type": "equipmentSymbol",
+          "x": 30,
+          "y": 98,
+          "width": 150,
+          "height": 164,
+          "props": {
+            "text": "P-101",
+            "symbol": "pump",
+            "strokeColor": "#64748b",
+            "strokeWidth": 3,
+            "active": false
+          }
+        },
+        {
+          "id": "info",
+          "type": "label",
+          "x": 202,
+          "y": 101,
+          "width": 320,
+          "height": 142,
+          "props": {
+            "text": "This popup belongs to the same published project. Bind state and measurements to equipment tags when a live connection is ready.",
+            "fontSize": 16
+          }
+        },
+        {
+          "id": "close",
+          "type": "button",
+          "x": 342,
+          "y": 268,
+          "width": 188,
+          "height": 48,
+          "props": {
+            "text": "Close details",
+            "action": "closePopup"
+          }
+        }
+      ]
+    }
+  ]
+}

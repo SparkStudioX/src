@@ -1,0 +1,189 @@
+/* Application chrome uses these tokens. Authored component colors remain inline. */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ink: #202735;
+  --text-secondary: #465266;
+  --muted: #5e697b;
+  --text-subtle: #616d80;
+  --page-bg: #f3f5f8;
+  --panel: #ffffff;
+  --surface-subtle: #f7f8fa;
+  --surface-hover: #edf0f5;
+  --surface-sunken: #e5e9f0;
+  --border: #dfe4ec;
+  --border-strong: #bcc6d5;
+  --accent: #3766d6;
+  --accent-dark: #254da8;
+  --accent-hover: #2b56be;
+  --accent-soft: #eaf0ff;
+  --accent-border: #bdcef8;
+  --on-accent: #ffffff;
+  --component-foreground: #ffffff;
+  --focus-ring: #3766d626;
+  --selection-bg: #cbdcff;
+  --workspace-bg: #e9edf3;
+  --grid-dot: #bdc7d5;
+  --canvas-bg: #f8fafc;
+  --nav: #222832;
+  --nav-text: #c7cfdd;
+  --nav-muted: #a0adbf;
+  --nav-heading: #f6f8fc;
+  --nav-hover: #303a49;
+  --nav-active: #3b485d;
+  --nav-border: #465268;
+  --nav-accent: #a9c1ff;
+  --nav-warning: #edc17a;
+  --code-bg: #202631;
+  --code-text: #dce5f4;
+  --code-muted: #9baac1;
+  --code-border: #3b475b;
+  --success: #237647;
+  --success-dot: #42a56c;
+  --success-bg: #edf7f0;
+  --success-border: #badbc6;
+  --warning: #946016;
+  --warning-dot: #c38a30;
+  --warning-bg: #fff7e8;
+  --warning-border: #e5cfa5;
+  --danger: #ad3546;
+  --danger-dot: #d55667;
+  --danger-bg: #fff0f2;
+  --danger-border: #e8bbc3;
+  --info: #315c9b;
+  --info-bg: #edf3fc;
+  --info-border: #c4d4ed;
+  --green: var(--success);
+  --shadow-soft: #1423380c;
+  --shadow-overlay: #14233829;
+  --toast-bg: #293444;
+  --toast-text: #f5f8ff;
+  --toast-error-bg: #793240;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #e4eaf3;
+  --text-secondary: #c0cada;
+  --muted: #a7b3c5;
+  --text-subtle: #98a6bc;
+  --page-bg: #111722;
+  --panel: #1c2431;
+  --surface-subtle: #202b3b;
+  --surface-hover: #2a3649;
+  --surface-sunken: #354259;
+  --border: #344054;
+  --border-strong: #53627a;
+  --accent: #8aafff;
+  --accent-dark: #abc5ff;
+  --accent-hover: #abc5ff;
+  --accent-soft: #293b61;
+  --accent-border: #486ba8;
+  --on-accent: #112444;
+  --focus-ring: #8aafff38;
+  --selection-bg: #36588c;
+  --workspace-bg: #111925;
+  --grid-dot: #34425a;
+  --canvas-bg: #17202d;
+  --nav: #0c121c;
+  --nav-text: #b9c6d9;
+  --nav-muted: #99aac2;
+  --nav-heading: #f1f5fc;
+  --nav-hover: #1d2a3c;
+  --nav-active: #2c3e58;
+  --nav-border: #34455d;
+  --nav-accent: #a9c1ff;
+  --code-bg: #0f1724;
+  --code-text: #d4e0f3;
+  --code-muted: #98a9c4;
+  --code-border: #33415a;
+  --success: #92d8aa;
+  --success-dot: #71c994;
+  --success-bg: #193728;
+  --success-border: #3d694e;
+  --warning: #edc17a;
+  --warning-dot: #dfaf62;
+  --warning-bg: #3d301c;
+  --warning-border: #765d34;
+  --danger: #f2a3b0;
+  --danger-dot: #eb879b;
+  --danger-bg: #432531;
+  --danger-border: #784252;
+  --info: #a7c8f5;
+  --info-bg: #20344f;
+  --info-border: #42618a;
+  --shadow-soft: #00000029;
+  --shadow-overlay: #00000066;
+  --toast-bg: #d6e2f5;
+  --toast-text: #17243a;
+  --toast-error-bg: #6e293a;
+}
+
+html {
+  background: var(--page-bg);
+  scrollbar-color: var(--border-strong) var(--surface-subtle);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-subtle);
+  opacity: 1;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
+}
+
+.theme-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.theme-picker select {
+  width: 82px;
+  min-width: 82px;
+  height: 31px;
+  padding: 0 7px;
+  color: var(--ink);
+  background: var(--panel);
+  border-color: var(--border-strong);
+  font-size: 11px;
+}
+
+.operator-header .theme-picker {
+  color: var(--nav-text);
+}
+
+.operator-header .theme-picker select {
+  color: var(--nav-heading);
+  background: var(--nav-hover);
+  border-color: var(--nav-border);
+  color-scheme: dark;
+}
+
+.operator-status.disconnected {
+  color: var(--nav-warning);
+}
+
+@media (max-width: 1200px) {
+  .theme-picker > span {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .theme-picker > svg {
+    display: none;
+  }
+  .theme-picker select {
+    width: 70px;
+    min-width: 70px;
+    font-size: 10px;
+  }
+}

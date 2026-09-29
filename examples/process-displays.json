@@ -1,0 +1,298 @@
+{
+  "name": "Process displays workshop",
+  "tags": [],
+  "screens": [
+    {
+      "id": "process-displays",
+      "name": "Process displays",
+      "width": 1180,
+      "height": 840,
+      "components": [
+        {
+          "id": "heading",
+          "type": "label",
+          "x": 32,
+          "y": 24,
+          "width": 1116,
+          "height": 52,
+          "props": {
+            "text": "Process values, at a glance",
+            "fontSize": 30
+          }
+        },
+        {
+          "id": "description",
+          "type": "label",
+          "x": 32,
+          "y": 88,
+          "width": 1116,
+          "height": 48,
+          "props": {
+            "text": "Five read-only displays share a local sample value. Try 0, 50 and 120, or turn off the sample source to see unavailable data.",
+            "fontSize": 16
+          }
+        },
+        {
+          "id": "reading",
+          "type": "spinner",
+          "x": 32,
+          "y": 162,
+          "width": 320,
+          "height": 84,
+          "props": {
+            "text": "Sample reading",
+            "fieldKey": "reading",
+            "defaultValue": 42.5,
+            "min": -100,
+            "max": 200,
+            "step": 5
+          }
+        },
+        {
+          "id": "available",
+          "type": "checkbox",
+          "x": 408,
+          "y": 170,
+          "width": 350,
+          "height": 64,
+          "props": {
+            "text": "Sample source available",
+            "fieldKey": "available",
+            "defaultValue": true
+          }
+        },
+        {
+          "id": "note",
+          "type": "label",
+          "x": 790,
+          "y": 162,
+          "width": 358,
+          "height": 84,
+          "props": {
+            "text": "Local demonstration only. These controls do not write to equipment.",
+            "fontSize": 14
+          }
+        },
+        {
+          "id": "led",
+          "type": "ledDisplay",
+          "x": 32,
+          "y": 278,
+          "width": 344,
+          "height": 166,
+          "props": {
+            "text": "Numeric LED display",
+            "value": 42.5,
+            "unit": "units",
+            "decimals": 1,
+            "color": "#5b8def",
+            "borderWidth": 1,
+            "borderColor": "#64748b",
+            "bindings": {
+              "value": {
+                "expression": "available ? reading : missing",
+                "references": {
+                  "available": {
+                    "kind": "input",
+                    "key": "available"
+                  },
+                  "reading": {
+                    "kind": "input",
+                    "key": "reading"
+                  },
+                  "missing": {
+                    "kind": "tag",
+                    "path": "[default]ProcessWorkshop/Unavailable"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "progress",
+          "type": "progressBar",
+          "x": 408,
+          "y": 278,
+          "width": 740,
+          "height": 166,
+          "props": {
+            "value": 42.5,
+            "min": 0,
+            "max": 100,
+            "decimals": 1,
+            "unit": "units",
+            "showValue": true,
+            "showPercent": true,
+            "borderWidth": 1,
+            "borderColor": "#64748b",
+            "text": "Batch progress",
+            "orientation": "horizontal",
+            "color": "#6366f1",
+            "bindings": {
+              "value": {
+                "expression": "available ? reading : missing",
+                "references": {
+                  "available": {
+                    "kind": "input",
+                    "key": "available"
+                  },
+                  "reading": {
+                    "kind": "input",
+                    "key": "reading"
+                  },
+                  "missing": {
+                    "kind": "tag",
+                    "path": "[default]ProcessWorkshop/Unavailable"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "tank",
+          "type": "cylindricalTank",
+          "x": 32,
+          "y": 474,
+          "width": 344,
+          "height": 284,
+          "props": {
+            "value": 42.5,
+            "min": 0,
+            "max": 100,
+            "decimals": 1,
+            "unit": "L",
+            "showValue": true,
+            "showPercent": true,
+            "borderWidth": 1,
+            "borderColor": "#64748b",
+            "text": "Storage tank",
+            "color": "#3b82f6",
+            "bindings": {
+              "value": {
+                "expression": "available ? reading : missing",
+                "references": {
+                  "available": {
+                    "kind": "input",
+                    "key": "available"
+                  },
+                  "reading": {
+                    "kind": "input",
+                    "key": "reading"
+                  },
+                  "missing": {
+                    "kind": "tag",
+                    "path": "[default]ProcessWorkshop/Unavailable"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "level",
+          "type": "levelIndicator",
+          "x": 408,
+          "y": 474,
+          "width": 344,
+          "height": 284,
+          "props": {
+            "value": 42.5,
+            "min": 0,
+            "max": 100,
+            "decimals": 1,
+            "unit": "mm",
+            "showValue": true,
+            "showPercent": true,
+            "borderWidth": 1,
+            "borderColor": "#64748b",
+            "text": "Process level",
+            "orientation": "vertical",
+            "color": "#0891b2",
+            "bindings": {
+              "value": {
+                "expression": "available ? reading : missing",
+                "references": {
+                  "available": {
+                    "kind": "input",
+                    "key": "available"
+                  },
+                  "reading": {
+                    "kind": "input",
+                    "key": "reading"
+                  },
+                  "missing": {
+                    "kind": "tag",
+                    "path": "[default]ProcessWorkshop/Unavailable"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "temperature",
+          "type": "thermometer",
+          "x": 784,
+          "y": 474,
+          "width": 364,
+          "height": 284,
+          "props": {
+            "value": 42.5,
+            "min": -20,
+            "max": 100,
+            "decimals": 1,
+            "unit": "°C",
+            "showValue": true,
+            "showPercent": false,
+            "borderWidth": 1,
+            "borderColor": "#64748b",
+            "text": "Temperature",
+            "color": "#d97706",
+            "bindings": {
+              "value": {
+                "expression": "available ? reading * 1.2 - 20 : missing",
+                "references": {
+                  "available": {
+                    "kind": "input",
+                    "key": "available"
+                  },
+                  "reading": {
+                    "kind": "input",
+                    "key": "reading"
+                  },
+                  "missing": {
+                    "kind": "tag",
+                    "path": "[default]ProcessWorkshop/Unavailable"
+                  }
+                }
+              },
+              "color": {
+                "expression": "reading > 80 ? \"#dc2626\" : \"#d97706\"",
+                "references": {
+                  "reading": {
+                    "kind": "input",
+                    "key": "reading"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "hint",
+          "type": "label",
+          "x": 32,
+          "y": 782,
+          "width": 1116,
+          "height": 36,
+          "props": {
+            "text": "Use the property sheet to bind Value, range, units, precision and presentation. Off-scale values retain their actual number; unavailable sources never become zero.",
+            "fontSize": 14
+          }
+        }
+      ]
+    }
+  ]
+}

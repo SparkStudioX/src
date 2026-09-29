@@ -1,0 +1,13 @@
+SparkStudio 0.1.0 - unsigned internal preview
+
+This offline package includes the gateway, .NET runtime, browser Designer and Runtime, and CPython. No runtime download is required on the target computer.
+
+Normal installation requires administrator approval. It creates the SparkStudio Windows service running as LocalService, listens only on 127.0.0.1, and keeps project data in C:\ProgramData\SparkStudio. The port can be changed in the wizard. No firewall rule or remote access is enabled.
+
+Existing data is retained during upgrades and uninstall. Back it up before upgrading. Connections use Windows account-specific encryption; configure credentials in the installed service rather than copying encrypted development data.
+
+The installer refuses to take ownership of an existing service created by another procedure. Stop development gateways yourself or choose a different port.
+
+The executable is unsigned. Verify the supplied SHA256 checksum through your trusted distribution channel. Do not disable Windows security or organization policy to run it.
+
+This is a prototype for internal evaluation. Service installation, upgrade, and uninstall still require acceptance testing on a disposable Windows machine before production deployment.

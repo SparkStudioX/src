@@ -1,0 +1,28 @@
+{
+  "tags": [
+    { "path": "[default]InputWorkshop/Notes", "kind": "memory", "dataType": "String", "value": "Inspect tooling before the next run.", "enabled": true },
+    { "path": "[default]InputWorkshop/Quantity", "kind": "memory", "dataType": "Double", "value": 25, "enabled": true },
+    { "path": "[default]InputWorkshop/Rate", "kind": "memory", "dataType": "Double", "value": 60, "enabled": true },
+    { "path": "[default]InputWorkshop/Mode", "kind": "memory", "dataType": "String", "value": "automatic", "enabled": true },
+    { "path": "[default]InputWorkshop/Scheduled", "kind": "memory", "dataType": "String", "value": "2026-10-01T08:30", "enabled": true },
+    { "path": "[default]InputWorkshop/Enabled", "kind": "memory", "dataType": "Boolean", "value": false, "enabled": true }
+  ],
+  "screen": {
+    "id": "operator-inputs", "name": "Input workshop", "width": 1200, "height": 900,
+    "components": [
+      { "id": "heading", "type": "label", "x": 40, "y": 28, "width": 1100, "height": 56, "props": { "text": "Input workshop", "fontSize": 32 } },
+      { "id": "description", "type": "label", "x": 40, "y": 92, "width": 1100, "height": 40, "props": { "text": "Prepare a work order. Save applies the form to local memory tags.", "fontSize": 17 } },
+      { "id": "notes", "type": "textArea", "x": 40, "y": 160, "width": 520, "height": 168, "props": { "text": "Work instructions", "fieldKey": "notes", "tagPath": "[default]InputWorkshop/Notes", "defaultValue": "" } },
+      { "id": "quantity", "type": "spinner", "x": 40, "y": 356, "width": 240, "height": 88, "props": { "text": "Batch quantity", "fieldKey": "quantity", "tagPath": "[default]InputWorkshop/Quantity", "defaultValue": 25, "min": 1, "max": 1000, "step": 1 } },
+      { "id": "rate", "type": "slider", "x": 320, "y": 356, "width": 240, "height": 100, "props": { "text": "Target rate (%)", "fieldKey": "rate", "tagPath": "[default]InputWorkshop/Rate", "defaultValue": 60, "min": 0, "max": 100, "step": 5 } },
+      { "id": "mode", "type": "radioGroup", "x": 620, "y": 160, "width": 520, "height": 168, "props": { "text": "Operating mode", "fieldKey": "mode", "tagPath": "[default]InputWorkshop/Mode", "defaultValue": "automatic", "options": [{ "label": "Automatic", "value": "automatic" }, { "label": "Manual", "value": "manual" }, { "label": "Setup", "value": "setup" }] } },
+      { "id": "scheduled", "type": "dateTimeInput", "x": 620, "y": 356, "width": 520, "height": 88, "props": { "text": "Scheduled start (local time)", "fieldKey": "scheduled", "tagPath": "[default]InputWorkshop/Scheduled", "defaultValue": "2026-10-01T08:30" } },
+      { "id": "enabled", "type": "toggle", "x": 40, "y": 488, "width": 520, "height": 64, "props": { "text": "Release this work order", "fieldKey": "enabled", "tagPath": "[default]InputWorkshop/Enabled", "defaultValue": false } },
+      { "id": "save-inputs", "type": "button", "x": 620, "y": 488, "width": 520, "height": 64, "props": { "text": "Save work order", "action": "script", "script": "names = ['Notes', 'Quantity', 'Rate', 'Mode', 'Scheduled', 'Enabled']\nfields = ['notes', 'quantity', 'rate', 'mode', 'scheduled', 'enabled']\nqualities = system.tag.writeBlocking(['[default]InputWorkshop/' + name for name in names], [inputs[field] for field in fields])\nif not all(quality.isGood() for quality in qualities):\n    raise RuntimeError('One or more local values could not be saved')\nresult = {'message': 'Work order saved to local memory tags.'}" } },
+      { "id": "saved-quantity", "type": "value", "x": 40, "y": 596, "width": 340, "height": 180, "props": { "text": "Saved quantity", "tagPath": "[default]InputWorkshop/Quantity", "unit": "parts" } },
+      { "id": "saved-rate", "type": "value", "x": 420, "y": 596, "width": 340, "height": 180, "props": { "text": "Saved rate", "tagPath": "[default]InputWorkshop/Rate", "unit": "%" } },
+      { "id": "saved-enabled", "type": "value", "x": 800, "y": 596, "width": 340, "height": 180, "props": { "text": "Released", "tagPath": "[default]InputWorkshop/Enabled" } },
+      { "id": "scope-note", "type": "label", "x": 40, "y": 806, "width": 1100, "height": 40, "props": { "text": "Local memory example. Date/time values keep their local meaning; no device commands are sent.", "fontSize": 14 } }
+    ]
+  }
+}

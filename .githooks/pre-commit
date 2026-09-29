@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+repository=$(git rev-parse --show-toplevel)
+exec node "$repository/tools/check-source.mjs" --staged
