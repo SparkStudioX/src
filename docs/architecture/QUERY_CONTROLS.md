@@ -173,6 +173,8 @@ The [loader](../../tools/load-data-controls-example.mjs) creates and immediately
 
 Only an optional plain local gateway URL on port 5090 or 5091 is accepted. Existing projects stay unchanged, reserved project/connection/database configuration causes a refusal, and database creation never overwrites an existing file. There is no `--publish` switch: this loader publishes its new project automatically. It is a one-time example creator, not an updater or cross-resource transaction; an interrupted run can leave resources already created.
 
+Use the same disposable example for the [connection operations exercise](CONNECTION_OPERATIONS.md): inspect saved test timestamps and draft/published dependencies, disable its connection and observe read failures, then re-enable and test. Gateway connections are shared resources; changes affect every referencing project. The separate [Read query workshop](QUERY_TESTING.md) exercises typed parameters, explicit cancellation and bounded deadlines with its own managed SQLite database.
+
 ## Indirect display tags
 
 The **Tag path** binding on a value or gauge accepts a text expression. For example:

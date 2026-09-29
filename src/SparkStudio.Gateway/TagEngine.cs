@@ -40,7 +40,11 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             InvalidateWatches(watch => watch.Plan.Bindings.Any(binding => binding.Path == path));
             configurationGeneration++;
             if (ProjectStore.Required(saved, "kind") == "memory") values[path] = MemoryValue(saved, DateTimeOffset.UtcNow);
-            else SetUnavailable(path, saved["enabled"]?.GetValue<bool>() == false ? "Bad_Disabled" : "Bad_WaitingForInitialData");
+            else
+            {
+                var disabled = store.GetConnections().OfType<JsonObject>().Any(item => ProjectStore.Optional(item, "id") == ProjectStore.Optional(saved, "connectionId") && item["enabled"]?.GetValue<bool>() == false);
+                SetUnavailable(path, saved["enabled"]?.GetValue<bool>() == false || disabled ? "Bad_Disabled" : "Bad_WaitingForInitialData");
+            }
             return saved;
         }
     }
@@ -60,7 +64,10 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
         lock (stateGate)
         {
             var saved = store.SaveConnection(connection);
-            InvalidateWatches(watch => watch.Plan.Connection.Id == ProjectStore.Required(saved, "id"));
+            var id = ProjectStore.Required(saved, "id");
+            InvalidateWatches(watch => watch.Plan.Connection.Id == id);
+            foreach (var definition in store.GetTagDefinitions().OfType<JsonObject>().Where(item => ProjectStore.Optional(item, "connectionId") == id))
+                SetUnavailable(ProjectStore.Required(definition, "path"), saved["enabled"]?.GetValue<bool>() == false || definition["enabled"]?.GetValue<bool>() == false ? "Bad_Disabled" : "Bad_WaitingForInitialData");
             configurationGeneration++;
             return saved;
         }
@@ -161,11 +168,14 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             while (!stoppingToken.IsCancellationRequested)
             {
                 JsonObject[] definitions;
+                HashSet<string> disabledConnections;
                 long generation;
                 lock (stateGate)
                 {
                     generation = configurationGeneration;
                     definitions = store.GetTagDefinitions().OfType<JsonObject>().ToArray();
+                    disabledConnections = store.GetConnections().OfType<JsonObject>().Where(item => item["enabled"]?.GetValue<bool>() == false)
+                        .Select(item => ProjectStore.Required(item, "id")).ToHashSet(StringComparer.Ordinal);
                     foreach (var definition in definitions.Where(definition => ProjectStore.Optional(definition, "kind") == "memory"))
                     {
                         var next = MemoryValue(definition, DateTimeOffset.UtcNow);
@@ -176,9 +186,10 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                         values[next.Path] = next;
                     }
                 }
-                var plans = definitions.Where(definition => ProjectStore.Optional(definition, "kind") != "memory" && definition["enabled"]?.GetValue<bool>() != false)
+                var plans = definitions.Where(definition => ProjectStore.Optional(definition, "kind") != "memory" && definition["enabled"]?.GetValue<bool>() != false
+                        && !disabledConnections.Contains(ProjectStore.Required(definition, "connectionId")))
                     .GroupBy(definition => (ConnectionId: ProjectStore.Required(definition, "connectionId"), Interval: definition["publishingIntervalMs"]?.GetValue<int>() ?? 1000))
-                    .Select(group => new WatchPlan($"{group.Key.ConnectionId}\n{group.Key.Interval}", store.GetConnection(group.Key.ConnectionId), group.Key.Interval,
+                    .Select(group => new WatchPlan($"{group.Key.ConnectionId}\n{group.Key.Interval}", store.GetConnection(group.Key.ConnectionId, allowDisabled: true), group.Key.Interval,
                         group.Select(definition => new Binding(ProjectStore.Required(definition, "path"), ProjectStore.Required(definition, "nodeId"))).OrderBy(binding => binding.Path, StringComparer.Ordinal).ToArray()))
                     .ToDictionary(plan => plan.Key, StringComparer.Ordinal);
 
@@ -195,7 +206,8 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                     var definedPaths = definitions.Select(definition => ProjectStore.Required(definition, "path")).ToHashSet(StringComparer.Ordinal);
                     foreach (var path in values.Keys.Where(path => !path.StartsWith("[default]Line/") && !path.StartsWith("[default]Setpoints/") && !definedPaths.Contains(path)))
                         values.TryRemove(path, out _);
-                    foreach (var definition in definitions.Where(definition => ProjectStore.Optional(definition, "kind") != "memory" && definition["enabled"]?.GetValue<bool>() == false))
+                    foreach (var definition in definitions.Where(definition => ProjectStore.Optional(definition, "kind") != "memory" && (definition["enabled"]?.GetValue<bool>() == false
+                        || disabledConnections.Contains(ProjectStore.Required(definition, "connectionId")))))
                         SetUnavailable(ProjectStore.Required(definition, "path"), "Bad_Disabled");
                     foreach (var plan in plans.Values)
                     {

@@ -1,0 +1,20 @@
+{
+  "name": "Read query workshop",
+  "connection": { "id": "sqlite-query-workshop", "name": "Read query workshop SQLite", "type": "sqlite", "database": "query-workshop.db" },
+  "queries": [
+    { "id": "query-workshop-records", "name": "Read workshop / Production records", "kind": "query", "connectionId": "sqlite-query-workshop", "sql": "SELECT id, work_order, machine, quantity, status FROM production_records ORDER BY id", "parameters": [] },
+    { "id": "query-workshop-typed", "name": "Read workshop / Typed quantity", "kind": "query", "connectionId": "sqlite-query-workshop", "sql": "SELECT id, machine, quantity FROM production_records WHERE quantity >= @minimum ORDER BY id", "parameters": [{ "name": "minimum", "type": "int", "defaultValue": 0 }] },
+    { "id": "query-workshop-slow", "name": "Read workshop / Slow read for cancellation", "kind": "query", "connectionId": "sqlite-query-workshop", "sql": "WITH RECURSIVE sequence(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM sequence WHERE n < 500000000) SELECT SUM(n) AS total FROM sequence", "parameters": [] }
+  ],
+  "screens": [{
+    "id": "query-workshop", "name": "Read query workshop", "width": 1100, "height": 700,
+    "components": [
+      { "id": "heading", "type": "label", "x": 32, "y": 24, "width": 1020, "height": 54, "props": { "text": "Read query workshop", "fontSize": 28 } },
+      { "id": "instructions", "type": "label", "x": 32, "y": 92, "width": 1020, "height": 130, "props": { "text": "Open Named queries in Designer. Run Typed quantity with minimum 45, then try invalid text. Run Slow read with a 1-second deadline; repeat with 30 seconds and press Cancel read query. Finally run Production records again to verify recovery.", "fontSize": 17 } },
+      { "id": "records", "type": "table", "x": 32, "y": 248, "width": 1020, "height": 320, "props": { "text": "Synthetic production records", "queryId": "query-workshop-records", "rowKey": "id", "pageSize": 10 } },
+      { "id": "scope", "type": "label", "x": 32, "y": 592, "width": 1020, "height": 72, "props": { "text": "LOCAL SQLITE EXAMPLE · Slow reads are run deliberately in Designer only. No timer, runtime binding or update query runs the slow operation.", "fontSize": 14 } }
+    ]
+  }],
+  "templates": [],
+  "navigation": { "mode": "none", "startupScreenId": "query-workshop", "items": [] }
+}

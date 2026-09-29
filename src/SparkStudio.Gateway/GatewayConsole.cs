@@ -62,7 +62,7 @@ public static class GatewayConsole
             var start = Stopwatch.GetTimestamp(); observations.Enter();
             var status = 500;
             try { await next(); status = context.Response.StatusCode; }
-            catch (Exception error) { status = error is BadHttpRequestException bad ? bad.StatusCode : error is OperationCanceledException ? 499 : error is ArgumentException or System.Text.Json.JsonException ? 400 : error is InvalidOperationException ? 409 : error is KeyNotFoundException ? 404 : 502; throw; }
+            catch (Exception error) { status = error is BadHttpRequestException bad ? bad.StatusCode : error is OperationCanceledException ? 499 : error is ArgumentException or System.Text.Json.JsonException ? 400 : error is InvalidOperationException ? 409 : error is KeyNotFoundException ? 404 : error is ReadQueryTimeoutException ? 504 : 502; throw; }
             finally
             {
                 var route = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "unmatched";

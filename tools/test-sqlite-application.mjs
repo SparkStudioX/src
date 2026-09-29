@@ -124,6 +124,7 @@ try {
   ].join('\n');
   const project = {
     ...structuredClone(original), name: 'Disposable SQLite application', parameters: {}, templates: [],
+    navigation: { mode: 'none', startupScreenId: id, items: [] },
     screens: [{ id, name: 'SQLite form', width: 900, height: 600, components: [
       component('quantity', 'numberInput', { fieldKey: 'quantity', min: 0, max: 5000, defaultValue: 10 }),
       component('useLate', 'checkbox', { fieldKey: 'useLate', defaultValue: false }, 50),

@@ -355,6 +355,9 @@ export interface Connection {
   id: string;
   name: string;
   type: "opcua" | "sqlserver" | "sqlite";
+  revision?: number;
+  enabled?: boolean;
+  lastTest?: { success: boolean; message: string; startedAt: string; completedAt: string; durationMs: number; revision: number; accepted: boolean };
   endpoint?: string;
   server?: string;
   database?: string;

@@ -74,6 +74,7 @@ const toolFiles = new Set([
   'test-preview-communication.mjs', 'test-preview-session-store.mjs',
   'test-publication-history.mjs', 'test-publication-history-store.mjs',
   'test-gateway-console.mjs', 'test-gateway-deployment.mjs',
+  'test-deployment-settings.mjs', 'test-gateway-connections.mjs', 'test-query-cancellation.mjs', 'load-query-testing-example.mjs',
   'test-visual-styles.mjs', 'test-visual-styles-rendering.mjs', 'test-visual-styles-api.mjs',
   'test-localization.mjs', 'test-localization-rendering.mjs', 'test-localization-api.mjs',
   'test-runtime.mjs', 'test-tag-definitions.mjs', 'test-template-runtime.mjs',
@@ -131,6 +132,7 @@ const architectureDocs = new Set([
   'LOCALIZATION.md', 'AUTHORING_DEFAULTS.md', 'GATEWAY_CONSOLE.md',
   'QUERY_CONTROLS.md', 'DRAWING.md',
   'SECURITY.md',
+  'DEPLOYMENT_SETTINGS.md', 'CONNECTION_OPERATIONS.md', 'QUERY_TESTING.md',
 ]);
 const explicitFiles = new Set([
   '.githooks/pre-commit', '.githooks/pre-push', '.github/workflows/source-boundary.yml',
@@ -152,6 +154,7 @@ const explicitFiles = new Set([
   'examples/state-controls.json',
   'examples/process-displays.json', 'examples/process-graphics.json',
   'examples/data-controls.json',
+  'examples/query-testing.json',
   'examples/application-state.json',
   'examples/nested-forms.json',
   'examples/input-state-bindings.json',

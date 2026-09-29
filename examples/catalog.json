@@ -223,7 +223,8 @@
         "reviewed session revocation",
         "timestamped diagnostic snapshots",
         "local allowlisted support export",
-        "deployment configuration provenance and observed transport"
+        "deployment configuration provenance and observed transport",
+        "listener validation preview without saving"
       ],
       "prerequisites": [
         "Use the companion build and a gateway administrator for Gateway Settings in Designer or Settings in Projects.",
@@ -238,7 +239,7 @@
         "Compare engineering and operator sessions. If testing revocation, identify and revoke only a disposable session, leaving the current and other sessions active.",
         "Open Diagnostics and refresh twice at least one second apart. Inspect CPU, memory, disk and bounded route observations.",
         "Wait over 30 seconds to verify the stale snapshot indicator, then refresh.",
-        "Open Deployment. Compare actual listeners with startup settings and their sources, inspect the current transport and saved operator URL, and distinguish unavailable certificate details from valid TLS.",
+        "Open Deployment. Compare actual listeners, startup values and saved settings. Edit a loopback HTTP port, Validate draft, then Discard draft and reload. Verify the saved revision and actual listeners remain unchanged. Saving/restart/recovery requires the separate disposable-gateway exercise in the guide.",
         "Download and inspect the local support snapshot; it excludes credentials, identities, authored project content and tag values. Ordinary Designer/operator users cannot open the console."
       ]
     },
@@ -554,6 +555,24 @@
       ]
     },
     {
+      "id": "query-testing",
+      "title": "Read query operations",
+      "summary": "A synthetic SQLite project demonstrates typed parameters, read deadlines, cancellation and recovery.",
+      "source": "examples/query-testing.json",
+      "distribution": "setup-required",
+      "features": ["typed read parameters", "Designer read deadlines", "explicit read cancellation", "SQLite interruption and recovery"],
+      "prerequisites": ["Use a disposable gateway with an administrator and create the declared managed SQLite connection/database using the guide. Project packages do not carry database files or connections.", "Load the three named reads and workshop screen as described in the guide; no Python runtime, external equipment or SQL Server is needed.", "Run the intentionally slow read only from Designer. The operator table uses the fast records query."],
+      "gatewayWrites": "sqlite-setup",
+      "entryScreenId": "query-workshop",
+      "guide": "docs/architecture/QUERY_TESTING.md",
+      "walkthrough": [
+        "Set up the synthetic SQLite database, load the workshop and explicitly publish its draft.",
+        "Run Typed quantity with minimum 45, then invalid text; verify invalid typed values fail before database execution.",
+        "Run Slow read with a 1-second deadline, then with 30 seconds and Cancel read query. No cancelled result should appear.",
+        "Run Production records again and open the operator screen. The three synthetic records remain available; no update query was executed."
+      ]
+    },
+    {
       "id": "application-form",
       "title": "Operator form with memory-tag persistence",
       "summary": "An operator form explicitly saves a shift name, target rate, mode and enabled flag into synthetic gateway memory tags.",
@@ -644,7 +663,7 @@
       "summary": "Synthetic SQLite records drive query-backed list and tree selections, table paging and independent station forms.",
       "source": "examples/data-controls.json",
       "distribution": "setup-required",
-      "features": ["managed SQLite database", "named read queries", "query list and tree controls", "table paging and row-to-form selection", "published Python button actions"],
+      "features": ["managed SQLite database", "named read queries", "query list and tree controls", "table paging and row-to-form selection", "published Python button actions", "connection test history, dependencies and enable/disable"],
       "prerequisites": ["Use tools/load-data-controls-example.mjs with authenticated administrator access on an isolated development gateway. It creates a separate project, sqlite-data-controls connection and data-controls.db with synthetic production_records.", "The reserved project name, connection ID and database path must be unused; the loader refuses existing configured resources and publishes the new project immediately.", "The bundled Python runtime and operator Operate permission are needed for read-only form previews. Runtime actions do not update the database."],
       "gatewayWrites": "sqlite-setup",
       "entryScreenId": "data-controls",
@@ -652,6 +671,7 @@
       "walkthrough": [
         "Run the dedicated setup loader and open the newly created Data workshop operator application.",
         "Select a list item, tree item or table row to fill the local form; page, sort and filter the loaded table result.",
+        "On the isolated gateway only, test Data workshop SQLite and inspect the saved time plus draft/published query dependencies. Disable and save it, verify reads fail, then re-enable, save and test again. Changing the connection invalidates its earlier test result.",
         "Preview the selected form values, then open Independent station forms to compare isolated list and tree choices."
       ]
     }

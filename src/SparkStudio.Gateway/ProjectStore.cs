@@ -16,6 +16,7 @@ public sealed class ProjectStore
     private JsonArray connections;
     private JsonArray queries;
     private JsonArray definitions;
+    private readonly Dictionary<string, string> connectionTests = new(StringComparer.Ordinal);
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
     public ProjectStore(string directory, IDataProtectionProvider protection, ProjectStore? gatewayStore = null, string? projectId = null, bool gatewayOnly = false)
@@ -76,6 +77,8 @@ public sealed class ProjectStore
             var safe = (JsonArray)connections.DeepClone();
             foreach (var item in safe.OfType<JsonObject>())
             {
+                item["revision"] ??= 0;
+                item["enabled"] ??= true;
                 item["hasPassword"] = item.ContainsKey("protectedPassword");
                 item.Remove("protectedPassword");
                 item.Remove("password");
@@ -93,43 +96,98 @@ public sealed class ProjectStore
             if (type is not ("opcua" or "sqlserver" or "sqlite")) throw new ArgumentException("Choose an OPC UA, SQL Server, or SQLite connection.");
             var next = (JsonArray)connections.DeepClone();
             var old = next.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "id") == id);
-            var node = new JsonObject { ["id"] = id, ["name"] = Required(value, "name"), ["type"] = type, ["status"] = "configured" };
+            var revision = old?["revision"]?.GetValue<int>() ?? 0;
+            if (value.ContainsKey("revision") && (value["revision"] is not JsonValue supplied || !supplied.TryGetValue<int>(out var suppliedRevision) || suppliedRevision < 0))
+                throw new ArgumentException("Connection revision must be a nonnegative integer.");
+            if (old is not null && value["revision"]?.GetValue<int>() != revision)
+                throw new InvalidOperationException("The connection changed since it was loaded. Reload before saving.");
+            if (old is not null && Optional(old, "type") != type)
+                throw new ArgumentException("Create a new connection to change its type.");
+            if (value.ContainsKey("enabled") && (value["enabled"] is not JsonValue flag || !flag.TryGetValue<bool>(out _)))
+                throw new ArgumentException("Connection enabled must be true or false.");
+            var enabled = value["enabled"]?.GetValue<bool>() ?? true;
+            var node = new JsonObject { ["id"] = id, ["name"] = ProjectCatalog.ValidateName(Required(value, "name")), ["type"] = type,
+                ["revision"] = revision + 1, ["enabled"] = enabled, ["status"] = enabled ? "configured" : "disabled" };
             foreach (var key in new[] { "endpoint", "server", "database", "username", "securityMode", "serverCertificateSha256" })
                 if (value[key] is { } item) node[key] = item.DeepClone();
             node["trustServerCertificate"] = value["trustServerCertificate"]?.DeepClone() ?? JsonValue.Create(false);
             var password = Optional(value, "password");
             if (password is not null && password.Length > 0) node["protectedPassword"] = protector.Protect(password);
             else if (password is null && old?["protectedPassword"] is { } secret) node["protectedPassword"] = secret.DeepClone();
-            if (type == "opcua" && !Uri.TryCreate(Required(node, "endpoint"), UriKind.Absolute, out _)) throw new ArgumentException("An OPC UA endpoint URL is required.");
+            if (type == "opcua" && (!Uri.TryCreate(Required(node, "endpoint"), UriKind.Absolute, out var endpoint) || endpoint.Scheme != "opc.tcp" || !string.IsNullOrEmpty(endpoint.UserInfo)))
+                throw new ArgumentException("An opc.tcp endpoint URL without embedded credentials is required.");
             if (type == "sqlserver") { Required(node, "server"); Required(node, "database"); }
             if (type == "sqlite") node["database"] = ConnectorService.ValidateSqliteDatabaseName(Required(node, "database"));
             if (old is not null) next.Remove(old);
             next.Add(node);
             Persist("connections.json", next);
             connections = next;
+            connectionTests.Remove(id);
             return (JsonObject)GetConnections().OfType<JsonObject>().Single(x => Optional(x, "id") == id).DeepClone();
         }
     }
-    public ConnectionDefinition GetConnection(string id)
+    public ConnectionDefinition GetConnection(string id, bool allowDisabled = false)
     {
-        if (gatewayStore is not null) return gatewayStore.GetConnection(id);
+        if (gatewayStore is not null) return gatewayStore.GetConnection(id, allowDisabled);
         lock (gate)
         {
             var value = connections.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "id") == id) ?? throw new KeyNotFoundException("Connection not found.");
+            if (!allowDisabled && value["enabled"]?.GetValue<bool>() == false)
+                throw new InvalidOperationException("This connection is disabled. Enable and save it before starting an operation.");
             var encrypted = Optional(value, "protectedPassword");
             return new ConnectionDefinition(id, Required(value, "name"), Required(value, "type"), Optional(value, "endpoint"), Optional(value, "server"), Optional(value, "database"), Optional(value, "username"), encrypted is null ? null : protector.Unprotect(encrypted), Optional(value, "securityMode"), value["trustServerCertificate"]?.GetValue<bool>() ?? false, Optional(value, "serverCertificateSha256"));
         }
     }
-    public void SetConnectionStatus(string id, bool good, string? message)
+    public ConnectionTestCapture BeginConnectionTest(string id)
     {
-        if (gatewayStore is not null) { gatewayStore.SetConnectionStatus(id, good, message); return; }
+        if (gatewayStore is not null) return gatewayStore.BeginConnectionTest(id);
         lock (gate)
         {
-            var value = connections.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "id") == id);
-            if (value is null) return;
-            value["status"] = good ? "connected" : "error";
-            value["lastError"] = good ? null : message;
+            var connection = GetConnection(id);
+            var value = connections.OfType<JsonObject>().Single(x => Optional(x, "id") == id);
+            var token = Guid.NewGuid().ToString("N");
+            connectionTests[id] = token;
+            return new(connection, value["revision"]?.GetValue<int>() ?? 0, token, DateTimeOffset.UtcNow);
         }
+    }
+    public JsonObject CompleteConnectionTest(ConnectionTestCapture capture, bool success, double durationMs, string? connectorMessage = null)
+    {
+        if (gatewayStore is not null) return gatewayStore.CompleteConnectionTest(capture, success, durationMs, connectorMessage);
+        lock (gate)
+        {
+            // Store fixed messages only: connector exception details can include credentials or remote data.
+            var result = new JsonObject { ["success"] = success, ["message"] = SafeConnectionTestMessage(success, connectorMessage),
+                ["startedAt"] = capture.StartedAt.ToString("O"), ["completedAt"] = DateTimeOffset.UtcNow.ToString("O"),
+                ["durationMs"] = Math.Round(Math.Max(0, durationMs), 1), ["revision"] = capture.Revision };
+            var next = (JsonArray)connections.DeepClone();
+            var value = next.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "id") == capture.Connection.Id);
+            var accepted = value is not null && (value["revision"]?.GetValue<int>() ?? 0) == capture.Revision
+                && value["enabled"]?.GetValue<bool>() != false && connectionTests.GetValueOrDefault(capture.Connection.Id) == capture.Token;
+            result["accepted"] = accepted;
+            if (accepted)
+            {
+                value!["lastTest"] = result.DeepClone();
+                value["status"] = success ? "tested" : "error";
+                value["lastError"] = success ? null : result["message"]!.DeepClone();
+                Persist("connections.json", next);
+                connections = next;
+                connectionTests.Remove(capture.Connection.Id);
+            }
+            return result;
+        }
+    }
+    private static string SafeConnectionTestMessage(bool success, string? message)
+    {
+        const string missingDatabase = "Managed SQLite database does not exist. Create it explicitly before testing or querying this connection.";
+        if (success) return "Connection and read check succeeded.";
+        if (message == missingDatabase) return missingDatabase;
+        if (new[] { "BadSecurityChecksFailed", "BadCertificateUntrusted", "BadCertificateHostNameInvalid", "BadCertificateTimeInvalid", "BadCertificateIssuerTimeInvalid", "BadCertificateUriInvalid" }
+            .Any(status => message?.StartsWith($"OPC UA failed ({status}, ", StringComparison.Ordinal) == true))
+            return "OPC UA certificate or security validation failed. Check certificate trust, validity, hostname and endpoint security mode.";
+        if (new[] { "BadIdentityTokenInvalid", "BadIdentityTokenRejected", "BadUserAccessDenied" }
+            .Any(status => message?.StartsWith($"OPC UA failed ({status}, ", StringComparison.Ordinal) == true))
+            return "OPC UA authentication failed. Check the account credentials and server permissions.";
+        return "Connection check failed. Verify the address, authentication and certificate settings.";
     }
     public JsonArray GetQueries() { lock (gate) return (JsonArray)queries.DeepClone(); }
     public JsonObject GetQuery(string id) { lock (gate) return (JsonObject)(queries.OfType<JsonObject>().FirstOrDefault(q => Optional(q, "id") == id)?.DeepClone() ?? throw new KeyNotFoundException("Named query not found.")); }
@@ -179,7 +237,7 @@ public sealed class ProjectStore
             {
                 var connectionId = TagDefinitionValidator.Text(value, "connectionId");
                 ConnectionDefinition connection;
-                try { connection = GetConnection(connectionId); }
+                try { connection = GetConnection(connectionId, allowDisabled: true); }
                 catch (KeyNotFoundException error) { throw new ArgumentException("An existing OPC UA connection is required.", error); }
                 if (connection.Type != "opcua") throw new ArgumentException("Tag bindings require an OPC UA connection.");
                 node["connectionId"] = connectionId;
@@ -238,3 +296,5 @@ public sealed class ProjectStore
     public static string? Optional(JsonObject value, string key) => value[key] is null ? null
         : value[key] is JsonValue scalar && scalar.TryGetValue<string>(out var text) ? text : throw new ArgumentException($"{key} must be text.");
 }
+
+public sealed record ConnectionTestCapture(ConnectionDefinition Connection, int Revision, string Token, DateTimeOffset StartedAt);

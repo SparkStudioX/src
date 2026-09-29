@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import GatewayDeploymentSettings from "./GatewayDeploymentSettings";
 import "./gatewayDeployment.css";
 
 interface ConfigurationValues { values: string[]; source: string; omittedEntries: number }
@@ -68,6 +69,7 @@ export default function GatewayDeployment() {
     <div className="gateway-deployment-heading"><div><h2 id="gateway-deployment-title">Deployment &amp; HTTPS</h2><p>Inspect the running gateway and the configuration captured when it started.</p></div><button type="button" className="button" disabled={busy} onClick={() => void refresh()}>{busy ? "Refreshing…" : "Refresh deployment"}</button></div>
     {error && <p className="gateway-error" role="alert">{error}</p>}
     {snapshot && <p className={stale ? "gateway-stale" : "gateway-observation"} role="status">{stale ? "Stale observation — refresh before relying on this status." : "Snapshot"} · Observed <time dateTime={snapshot.observedAt}>{date(snapshot.observedAt)}</time></p>}
+    <GatewayDeploymentSettings />
     {!snapshot ? <p role="status">{busy ? "Loading deployment status…" : "Deployment status is unavailable. Use Refresh deployment to retry."}</p> : <>
       <div className="gateway-deployment-summary">
         <article><span>Hosting</span><strong>{hostingNames[snapshot.hosting.kind]}</strong><small>{snapshot.hosting.description}</small></article>

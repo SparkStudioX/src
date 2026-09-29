@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api, id } from "./api";
 import { Field } from "./App";
 import Icon from "./Icon";
 import type { BrowseNode, Connection } from "./types";
+import ConnectionDiagnostics from "./ConnectionDiagnostics";
 
 interface DiscoveredEndpoint {
   endpointUrl: string;
@@ -30,10 +31,14 @@ export default function Connections({
       "",
   );
   const [draft, setDraft] = useState<Connection | null>(null);
+  const generation = useRef(0);
   const [busy, setBusy] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
     message: string;
+    completedAt?: string;
+    durationMs?: number;
+    accepted?: boolean;
   } | null>(null);
   const [nodes, setNodes] = useState<BrowseNode[]>([]);
   const [browsePath, setBrowsePath] = useState<
@@ -48,40 +53,50 @@ export default function Connections({
   const [discovering, setDiscovering] = useState(false);
   const [schema, setSchema] = useState<{ name: string; columns: {name:string; dataType:string; primaryKey:boolean}[] }[]>([]);
   const databaseAction = async (create: boolean) => {
-    if (!selected || draft) return;
+    if (!selected || draft || selected.enabled === false) return;
+    const stamp = generation.current;
     setBusy(true);
     try {
       if (create) {
         const result = await api<{success:boolean;message:string}>(`/connections/${encodeURIComponent(selected.id)}/database`, "POST", {initializeSampleData:false});
+        if (stamp !== generation.current) return;
         setTestResult(result);
         if (!result.success) return;
       }
-      setSchema(await api(`/connections/${encodeURIComponent(selected.id)}/schema`));
-    } catch (error) { notify(error instanceof Error ? error.message : String(error), true); }
-    finally { setBusy(false); }
+      const result = await api<typeof schema>(`/connections/${encodeURIComponent(selected.id)}/schema`);
+      if (stamp === generation.current) setSchema(result);
+    } catch (error) { if (stamp === generation.current) notify(error instanceof Error ? error.message : String(error), true); }
+    finally { if (stamp === generation.current) setBusy(false); }
   };
   const selected = connections.find((item) => item.id === selectedId);
   const current = draft || selected;
   const isSample = current?.id === "sample";
   const edit = (patch: Partial<Connection>) => {
-    if (current) setDraft({ ...current, ...patch });
+    if (current) {
+      generation.current++;
+      setBusy(false); setBrowseBusy(false); setDiscovering(false); setTestResult(null);
+      setNodes([]); setBrowsePath([]); setSchema([]); setMappingNode(null); setMapBusy(false); setEndpoints([]);
+      setDraft({ ...current, ...patch });
+    }
   };
   const discover = async () => {
     if (!current?.endpoint) return;
+    const stamp = generation.current;
     setDiscovering(true);
     try {
-      setEndpoints(
-        await api<DiscoveredEndpoint[]>(
+      const result = await api<DiscoveredEndpoint[]>(
           `/opcua/endpoints?endpoint=${encodeURIComponent(current.endpoint)}`,
-        ),
-      );
+        );
+      if (stamp === generation.current) setEndpoints(result);
     } catch (error) {
-      notify(error instanceof Error ? error.message : String(error), true);
+      if (stamp === generation.current) notify(error instanceof Error ? error.message : String(error), true);
     } finally {
-      setDiscovering(false);
+      if (stamp === generation.current) setDiscovering(false);
     }
   };
   const select = (connection: Connection) => {
+    generation.current++;
+    setBusy(false); setBrowseBusy(false); setDiscovering(false); setMapBusy(false);
     setSelectedId(connection.id);
     setDraft(null);
     setTestResult(null);
@@ -93,6 +108,8 @@ export default function Connections({
     setSchema([]);
   };
   const add = (type: Connection["type"]) => {
+    generation.current++;
+    setBusy(false); setBrowseBusy(false); setDiscovering(false); setMapBusy(false);
     setDraft({
       id: id(type),
       name:
@@ -100,6 +117,7 @@ export default function Connections({
           ? "New OPC UA connection"
           : type === "sqlite" ? "New SQLite database" : "New SQL Server connection",
       type,
+      enabled: true,
       ...(type === "opcua"
         ? {
             endpoint: "opc.tcp://localhost:4840",
@@ -112,40 +130,48 @@ export default function Connections({
     setNodes([]);
     setBrowsePath([]);
     setEndpoints([]);
+    setSchema([]); setMappingNode(null);
   };
   const save = async () => {
     if (!current) return;
+    const stamp = generation.current;
     setBusy(true);
     try {
       const saved = await api<Connection>("/connections", "POST", current);
-      onChange([...connections.filter((item) => item.id !== saved.id), saved]);
+      const refreshed = await api<Connection[]>("/connections");
+      if (stamp !== generation.current) return;
+      onChange(refreshed);
       setSelectedId(saved.id);
       setDraft(null);
-      notify("Connection saved. Test it to check connectivity.");
+      setTestResult(null); setNodes([]); setSchema([]);
+      notify(saved.enabled === false ? "Connection disabled. New operations are blocked and tag subscriptions are stopped." : "Connection saved. Test it to check connectivity.");
     } catch (error) {
-      notify(error instanceof Error ? error.message : String(error), true);
+      if (stamp === generation.current) notify(error instanceof Error ? error.message : String(error), true);
     } finally {
-      setBusy(false);
+      if (stamp === generation.current) setBusy(false);
     }
   };
   const test = async () => {
-    if (!selected || draft) return;
+    if (!selected || draft || selected.enabled === false) return;
+    const stamp = generation.current;
     setBusy(true);
     setTestResult(null);
     try {
-      const result = await api<{ success: boolean; message: string }>(
+      const result = await api<NonNullable<Connection["lastTest"]>>(
         `/connections/${encodeURIComponent(selected.id)}/test`,
         "POST",
       );
-      setTestResult(result);
-      onChange(await api<Connection[]>("/connections"));
+      const refreshed = await api<Connection[]>("/connections");
+      if (stamp !== generation.current) return;
+      setTestResult(result.accepted ? result : { success: false, message: "This test was superseded by a newer test or a configuration change. Refresh before testing again." });
+      onChange(refreshed);
     } catch (error) {
-      setTestResult({
+      if (stamp === generation.current) setTestResult({
         success: false,
         message: error instanceof Error ? error.message : String(error),
       });
     } finally {
-      setBusy(false);
+      if (stamp === generation.current) setBusy(false);
     }
   };
   const browse = async (
@@ -153,24 +179,26 @@ export default function Connections({
     name = "Root",
     history?: { nodeId: string; name: string }[],
   ) => {
-    if (!selected || draft) return;
+    if (!selected || draft || selected.enabled === false) return;
+    const stamp = generation.current;
     setBrowseBusy(true);
     setBrowseError("");
     try {
-      setNodes(
-        await api<BrowseNode[]>(
+      const result = await api<BrowseNode[]>(
           `/connections/${encodeURIComponent(selected.id)}/browse?nodeId=${encodeURIComponent(nodeId)}`,
-        ),
-      );
+        );
+      if (stamp !== generation.current) return;
+      setNodes(result);
       setBrowsePath(history || [...browsePath, { nodeId, name }]);
     } catch (error) {
-      setBrowseError(error instanceof Error ? error.message : String(error));
+      if (stamp === generation.current) setBrowseError(error instanceof Error ? error.message : String(error));
     } finally {
-      setBrowseBusy(false);
+      if (stamp === generation.current) setBrowseBusy(false);
     }
   };
   const mapTag = async () => {
-    if (!selected || !mappingNode || !mappingPath) return;
+    if (!selected || draft || selected.enabled === false || !mappingNode || !mappingPath) return;
+    const stamp = generation.current;
     setMapBusy(true);
     try {
       await api("/tags", "POST", {
@@ -179,14 +207,29 @@ export default function Connections({
         nodeId: mappingNode.nodeId,
       });
       onTagsChanged();
+      if (stamp !== generation.current) return;
       notify("Tag added. It is now available in the Designer.");
       setMappingNode(null);
     } catch (error) {
-      notify(error instanceof Error ? error.message : String(error), true);
+      if (stamp === generation.current) notify(error instanceof Error ? error.message : String(error), true);
     } finally {
-      setMapBusy(false);
+      if (stamp === generation.current) setMapBusy(false);
     }
   };
+  const reload = async () => {
+    const stamp = ++generation.current;
+    setBusy(true);
+    try {
+      const result = await api<Connection[]>("/connections");
+      if (stamp !== generation.current) return;
+      onChange(result);
+      const next = result.find(item => item.id === selectedId);
+      if (next) select(next);
+      else { setDraft(null); setSelectedId(""); }
+    } catch (error) { if (stamp === generation.current) notify(error instanceof Error ? error.message : String(error), true); }
+    finally { if (stamp === generation.current) setBusy(false); }
+  };
+  const displayedTest = testResult || (!draft ? current?.lastTest : null);
   return (
     <div className="management-page">
       <div className="page-heading">
@@ -267,7 +310,8 @@ export default function Connections({
                 </small>
               </span>
               <span
-                className={`quality-dot ${connection.status?.toLowerCase().includes("connect") || connection.id === "sample" ? "" : "neutral"}`}
+                className={`quality-dot ${connection.enabled !== false && (connection.lastTest?.success || connection.id === "sample") ? "" : "neutral"}`}
+                title={connection.enabled === false ? "Disabled" : connection.lastTest ? `Last test ${connection.lastTest.success ? "passed" : "failed"}; this is not continuous health monitoring` : "Not tested"}
               />
             </button>
           ))}
@@ -306,9 +350,10 @@ export default function Connections({
                   <span className="soft-badge">SIMULATED</span>
                 ) : (
                   <div className="editor-actions">
+                    <button className="button" disabled={busy} onClick={() => void reload()} title="Reload saved configuration and discard local edits">Reload</button>
                     <button
                       className="button"
-                      disabled={busy || Boolean(draft) || !selected}
+                      disabled={busy || Boolean(draft) || !selected || selected.enabled === false}
                       onClick={() => void test()}
                     >
                       <Icon name="activity" size={15} />
@@ -339,6 +384,8 @@ export default function Connections({
                 </div>
               ) : (
                 <div className="connection-form">
+                  <label className="checkbox-field"><input type="checkbox" checked={current.enabled !== false} onChange={event => edit({enabled: event.target.checked})} /><span>Connection enabled</span></label>
+                  <p className="muted">Disabling stops tag subscriptions and blocks new operations. Operations already in progress may finish. Save to apply.</p>
                   <div className="form-two-col">
                     <Field label="Connection name">
                       <input
@@ -483,7 +530,7 @@ export default function Connections({
               )}
               {current.type === "sqlite" && <div className="browse-section">
                 <div className="browse-section-heading"><div><h3>Local database</h3><p>Save the connection, then create an empty database or inspect an existing one.</p></div>
-                  <div className="editor-actions"><button className="button" disabled={busy || !!draft || !selected} onClick={() => void databaseAction(true)}>Create database</button><button className="button" disabled={busy || !!draft || !selected} onClick={() => void databaseAction(false)}>Browse schema</button></div></div>
+                  <div className="editor-actions"><button className="button" disabled={busy || !!draft || !selected || selected.enabled === false} onClick={() => void databaseAction(true)}>Create database</button><button className="button" disabled={busy || !!draft || !selected || selected.enabled === false} onClick={() => void databaseAction(false)}>Browse schema</button></div></div>
                 {schema.map(table => <div key={table.name}><h4>{table.name}</h4><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Column</th><th>Type</th><th>Key</th></tr></thead><tbody>{table.columns.map(column => <tr key={column.name}><td>{column.name}</td><td>{column.dataType}</td><td>{column.primaryKey ? "Primary" : ""}</td></tr>)}</tbody></table></div></div>)}
               </div>}
               {current.type === "opcua" && !isSample && (
@@ -558,21 +605,22 @@ export default function Connections({
                   ))}
                 </div>
               )}
-              {testResult && (
+              {displayedTest && (
                 <div
-                  className={`test-result ${testResult.success ? "success" : "failed"}`}
+                  className={`test-result ${displayedTest.success ? "success" : "failed"}`}
                 >
                   <Icon
-                    name={testResult.success ? "check" : "info"}
+                    name={displayedTest.success ? "check" : "info"}
                     size={20}
                   />
                   <div>
                     <strong>
-                      {testResult.success
-                        ? "Connection successful"
-                        : "Connection failed"}
+                      {displayedTest.success
+                        ? "Last connection test passed"
+                        : "Connection test did not pass"}
                     </strong>
-                    <p>{testResult.message}</p>
+                    <p>{displayedTest.message}</p>
+                    {displayedTest.completedAt && <small>{new Date(displayedTest.completedAt).toLocaleString()} · {displayedTest.durationMs} ms · A test result is a point-in-time observation.</small>}
                   </div>
                 </div>
               )}
@@ -587,7 +635,7 @@ export default function Connections({
                     </div>
                     <button
                       className="button"
-                      disabled={Boolean(draft) || !selected || browseBusy}
+                      disabled={Boolean(draft) || !selected || browseBusy || selected.enabled === false}
                       onClick={() =>
                         void browse("", "Root", [{ nodeId: "", name: "Root" }])
                       }
@@ -703,6 +751,7 @@ export default function Connections({
                   )}
                 </div>
               )}
+              {selected && !isSample && !draft && <ConnectionDiagnostics key={`${selected.id}:${selected.revision ?? 0}`} connection={selected} />}
             </>
           )}
         </section>

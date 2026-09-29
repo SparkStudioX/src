@@ -12,9 +12,19 @@ public sealed class QueryExecutor(ProjectStore store, ConnectorService connector
     public Task<object> ExecuteScriptAsync(string id, Dictionary<string, JsonElement>? supplied, CancellationToken cancellation)
         => ExecuteScriptDefinitionAsync(store.GetQuery(id), supplied, cancellation);
 
-    public async Task<object> ExecuteScriptDefinitionAsync(JsonObject query, Dictionary<string, JsonElement>? supplied, CancellationToken cancellation)
+    public async Task<object> ExecuteScriptDefinitionAsync(JsonObject query, Dictionary<string, JsonElement>? supplied, CancellationToken cancellation, int? timeoutMs = null)
     {
-        if (ProjectStore.Optional(query, "kind") != "update") return await ExecuteDefinitionAsync(query, supplied, cancellation);
+        if (ProjectStore.Optional(query, "kind") != "update")
+        {
+            if (timeoutMs is null) return await ExecuteDefinitionAsync(query, supplied, cancellation);
+            if (timeoutMs is < 250 or > 30_000) throw new ArgumentException("Read-query test deadline must be between 250 and 30,000 milliseconds.");
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+            deadline.CancelAfter(timeoutMs.Value);
+            try { return await ExecuteDefinitionAsync(query, supplied, deadline.Token); }
+            catch (OperationCanceledException) when (!cancellation.IsCancellationRequested && deadline.IsCancellationRequested)
+            { throw new ReadQueryTimeoutException($"Read-query test exceeded its {timeoutMs.Value:N0} ms gateway deadline. No result was returned."); }
+        }
+        if (timeoutMs is not null) throw new ArgumentException("Read-query test deadlines cannot be applied to updates. An interrupted update can have an uncertain outcome.");
         var connection = store.GetConnection(ProjectStore.Required(query, "connectionId"));
         var result = await connectors.ExecuteAsync(connection, ProjectStore.Required(query, "sql"), Parameters(query, supplied), cancellation);
         return result.RowsAffected;
@@ -22,7 +32,10 @@ public sealed class QueryExecutor(ProjectStore store, ConnectorService connector
 
     public async Task<QueryResult> ExecuteDefinitionAsync(JsonObject query, Dictionary<string, JsonElement>? supplied, CancellationToken cancellation)
     {
+        cancellation.ThrowIfCancellationRequested();
         if (ProjectStore.Optional(query, "kind") == "update") throw new ArgumentException("Update queries cannot be used as a table data source.");
+        var boundParameters = Parameters(query, supplied);
+        ConnectorService.ValidateReadParameters(boundParameters);
         var id = ProjectStore.Required(query, "id");
         var parameters = new Dictionary<string, JsonElement>(supplied ?? [], StringComparer.Ordinal);
         foreach (var item in (query["parameters"] as JsonArray ?? []).OfType<JsonObject>())
@@ -44,7 +57,7 @@ public sealed class QueryExecutor(ProjectStore store, ConnectorService connector
             }.Where(row => string.IsNullOrEmpty(line) || (string)row["Line"]! == line).ToArray();
             return new QueryResult(["Line", "Product", "Produced", "Target"], rows, 0);
         }
-        return await connectors.QueryAsync(store.GetConnection(connectionId), ProjectStore.Required(query, "sql"), Parameters(query, supplied), cancellation);
+        return await connectors.QueryAsync(store.GetConnection(connectionId), ProjectStore.Required(query, "sql"), boundParameters, cancellation);
     }
 
     private static QueryParameter[] Parameters(JsonObject query, Dictionary<string, JsonElement>? supplied)
@@ -65,3 +78,5 @@ public sealed class QueryExecutor(ProjectStore store, ConnectorService connector
         }).ToArray();
     }
 }
+
+public sealed class ReadQueryTimeoutException(string message) : TimeoutException(message);

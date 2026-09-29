@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, displayValue, id } from "./api";
 import { Field } from "./App";
 import Icon from "./Icon";
+import { prepareQueryTestParameters } from "./queryTestParameters";
 import type { Connection, NamedQuery, QueryResult, RuntimeParameters } from "./types";
 
 export default function Queries({
@@ -32,6 +33,10 @@ export default function Queries({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<QueryResult | number | null>(null);
   const [error, setError] = useState("");
+  const [testDeadline, setTestDeadline] = useState(15_000);
+  const [runNotice, setRunNotice] = useState("");
+  const activeRun = useRef<{ controller: AbortController | null } | null>(null);
+  useEffect(() => () => { activeRun.current?.controller?.abort(); activeRun.current = null; }, []);
   const [parameterValues, setParameterValues] =
     useState<RuntimeParameters>(parameters);
   const selected = queries.find((query) => query.id === selectedId);
@@ -55,6 +60,7 @@ export default function Queries({
     setDraft(null);
     setResult(null);
     setError("");
+    setRunNotice("");
   }, [current?.id, dirty, queries, notify]);
   useEffect(() => {
     if (!navigationRequest || handledNavigation.current === navigationRequest.token || busy) return;
@@ -73,7 +79,7 @@ export default function Queries({
       connection.type === "sqlserver" || connection.type === "sqlite" || connection.id === "sample",
   );
   const edit = (patch: Partial<NamedQuery>) => {
-    if (current) setDraft({ ...current, ...patch });
+    if (current && !busy) setDraft({ ...current, ...patch });
   };
   const save = async () => {
     if (!current) return;
@@ -97,33 +103,30 @@ export default function Queries({
     }
   };
   const run = async () => {
-    if (!current || draft || current.kind === "update" && !canRunUpdates) return;
+    if (!current || busy || draft || current.kind === "update" && !canRunUpdates) return;
+    let typedValues: Record<string, unknown>;
+    try { typedValues = prepareQueryTestParameters(current.parameters, parameterValues); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setResult(null); setRunNotice(""); return; }
+    const execution = { controller: current.kind === "update" ? null : new AbortController() };
+    activeRun.current = execution;
     setBusy(true);
     setError("");
-    const typedValues: Record<string, unknown> = {};
-    for (const parameter of current.parameters) {
-      const raw = parameterValues[parameter.name] ?? parameter.defaultValue;
-      typedValues[parameter.name] =
-        parameter.type.toLowerCase().includes("int") ||
-        parameter.type.toLowerCase().includes("float") ||
-        parameter.type.toLowerCase().includes("double") ||
-        parameter.type.toLowerCase().includes("number")
-          ? Number(raw)
-          : raw;
-    }
+    setRunNotice("");
+    setResult(null);
     try {
-      setResult(
-        await api<QueryResult | number>(
+      const response = await api<QueryResult | number>(
           `/queries/${encodeURIComponent(current.id)}/execute`,
           "POST",
-          { parameters: typedValues },
-        ),
-      );
+          { parameters: typedValues, ...(execution.controller ? { timeoutMs: testDeadline } : {}) },
+          execution.controller?.signal,
+        );
+      if (activeRun.current === execution && !execution.controller?.signal.aborted) setResult(response);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-      setResult(null);
+      if (activeRun.current !== execution) return;
+      if (execution.controller?.signal.aborted) setRunNotice("Cancellation requested. No result was applied. The gateway was asked to stop this read query.");
+      else setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      setBusy(false);
+      if (activeRun.current === execution) { activeRun.current = null; setBusy(false); }
     }
   };
   return (
@@ -208,6 +211,8 @@ export default function Queries({
                   </div>
                 </div>
                 <div className="editor-actions">
+                  {current.kind !== "update" && <label>Read deadline <select aria-label="Read-query test deadline" value={testDeadline} disabled={busy} onChange={event => setTestDeadline(Number(event.target.value))}>{[1000, 5000, 15000, 30000].map(value => <option key={value} value={value}>{value / 1000} seconds</option>)}</select></label>}
+                  {busy && activeRun.current?.controller && <button className="button" onClick={() => activeRun.current?.controller?.abort()}>Cancel read query</button>}
                   {draft && <button className="button" disabled={busy} onClick={() => { setDraft(null); setResult(null); setError(""); }}>Discard changes</button>}
                   <button
                     className="button"
@@ -402,6 +407,7 @@ export default function Queries({
                 )}
               </div>
               <div className="query-results">
+                {runNotice && <div className="info-banner" role="status">{runNotice}</div>}
                 <div className="code-editor-heading">
                   <span>
                     <Icon name="table" size={14} />

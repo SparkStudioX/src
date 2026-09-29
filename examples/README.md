@@ -2,7 +2,7 @@
 
 Each major user-facing feature should ship with an independently authored workshop project, a short exercise guide, compatibility information and a verified import/publish/runtime check. Workshops serve as both learning material and reproducible acceptance examples. Use synthetic data and make any gateway setup or writes explicit.
 
-[catalog.json](catalog.json) is the machine-readable inventory of all 31 source examples. Twenty-four are portable project workshops; seven require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
+[catalog.json](catalog.json) is the machine-readable inventory of all 32 source examples. Twenty-four are portable project workshops; eight require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
 
 ## Use a downloaded workshop
 
@@ -49,7 +49,7 @@ The catalog records a common verified feature baseline by source commit rather t
 
 ## Examples that require gateway setup
 
-These remain useful authored source fixtures, but are excluded from the standalone portable collection. A raw example JSON file is not a `.sparkproj` import file. The seven examples below require deliberate setup because their gateway resources or chosen image files are not supplied by these source fixtures.
+These remain useful authored source fixtures, but are excluded from the standalone portable collection. A raw example JSON file is not a `.sparkproj` import file. The eight examples below require deliberate setup because their gateway resources or chosen image files are not supplied by these source fixtures.
 
 | Source example | Additional setup | Runtime writes |
 | --- | --- | --- |
@@ -60,6 +60,7 @@ These remain useful authored source fixtures, but are excluded from the standalo
 | [Reusable applications](reusable-applications.json) | Twelve synthetic `Workcenters` and `Orders` memory tags. | Explicit save/release actions write those tags. |
 | [Images and popups](assets-popups.json) | Eight synthetic memory tags and the local drawing in `examples/assets/assembly-cell.png`. | Explicit popup save/release actions write those tags. |
 | [SQLite data controls](data-controls.json) | Separate managed SQLite connection and synthetic database initialized by its dedicated loader. | None during the exercise; setup creates and seeds the database. |
+| [Read query operations](query-testing.json) | Managed SQLite connection and synthetic database; follow the [setup and cancellation guide](../docs/architecture/QUERY_TESTING.md). | None during reads; setup creates and seeds the database. |
 
 The generic `tools/load-example.mjs <id>` loader is a development tool for an authenticated local gateway on port 5090 or 5091. It backs up and adds missing resources to the **default project**, preserves existing resource IDs and tag values, and leaves the draft unpublished unless `--publish` is supplied. It cannot retarget an arbitrary project. Prefer portable imports for the collection above. The [security verification guide](../docs/architecture/SECURITY.md#verification-commands) describes authentication for an isolated test gateway; there is no unauthenticated loader bypass.
 

@@ -11,6 +11,7 @@ builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
 var dataDir = Path.GetFullPath(Environment.GetEnvironmentVariable("SPARKSTUDIO_DATA_DIR") ?? builder.Configuration["DataDirectory"] ?? Path.Combine(AppContext.BaseDirectory, "data"));
 Directory.CreateDirectory(dataDir);
+DeploymentSettings.Configure(builder, dataDir);
 var protection = builder.Services.AddDataProtection().SetApplicationName("SparkStudio").PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir, "keys")));
 if (OperatingSystem.IsWindows()) protection.ProtectKeysWithDpapi();
 builder.Services.AddGatewaySecurity(dataDir);
@@ -51,7 +52,7 @@ app.Use(async (context, next) =>
     try { await next(); }
     catch (Exception ex) when (!context.Response.HasStarted && ex is not OperationCanceledException)
     {
-        context.Response.StatusCode = ex switch { BadHttpRequestException bad => bad.StatusCode, KeyNotFoundException => 404, ArgumentException or JsonException or FormatException => 400, InvalidOperationException => 409, _ => 502 };
+        context.Response.StatusCode = ex switch { BadHttpRequestException bad => bad.StatusCode, KeyNotFoundException => 404, ArgumentException or JsonException or FormatException => 400, InvalidOperationException => 409, ReadQueryTimeoutException => 504, _ => 502 };
         await context.Response.WriteAsJsonAsync(new { error = ex.Message });
     }
 });
@@ -62,6 +63,7 @@ app.UsePreviewCommunication();
 app.MapGatewaySecurityEndpoints();
 app.MapGatewayConsoleEndpoints();
 app.MapGatewayDeploymentEndpoints();
+app.MapDeploymentSettingsEndpoints();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapGet("/api/projects", (HttpContext context, ProjectCatalog catalog, SecurityStore security) => GatewayAccess.Catalog(context, catalog, security)).Access("signedIn", "context");
@@ -164,12 +166,7 @@ routes.MapDelete("/tag-definitions", (string path, TagEngine tags) => tags.Delet
 routes.MapGet("/connections", (ProjectStore store) => store.GetConnections()).Access("admin");
 routes.MapGet("/opcua/endpoints", (string endpoint, ConnectorService connector, CancellationToken cancellation) => connector.DiscoverEndpointsAsync(endpoint, cancellation)).Access("admin");
 routes.MapPost("/connections", (JsonObject connection, TagEngine tags) => tags.SaveConnection(connection)).Access("admin", audit: true);
-routes.MapPost("/connections/{id}/test", async (string id, ProjectStore store, ConnectorService connector, CancellationToken cancellation) =>
-{
-    var result = await connector.TestAsync(store.GetConnection(id), cancellation);
-    store.SetConnectionStatus(id, result.Success, result.Message);
-    return result;
-}).Access("admin", audit: true);
+routes.MapGatewayConnectionEndpoints();
 routes.MapGet("/connections/{id}/browse", (string id, string? nodeId, ProjectStore store, ConnectorService connector, CancellationToken cancellation) => connector.BrowseAsync(store.GetConnection(id), nodeId, cancellation)).Access("admin");
 routes.MapPost("/connections/{id}/database", (string id, CreateDatabaseRequest request, ProjectStore store, ConnectorService connector, CancellationToken cancellation)
     => connector.CreateSqliteDatabaseAsync(store.GetConnection(id), request.InitializeSampleData, cancellation)).Access("admin", audit: true);
@@ -181,7 +178,7 @@ routes.MapPost("/queries/{id}/execute", (string id, QueryRequest request, QueryE
 {
     var definition = store.GetQuery(id);
     if (ProjectStore.Optional(definition, "kind") == "update") GatewayAccess.RequireAdmin(context);
-    return queries.ExecuteScriptDefinitionAsync(definition, request.Parameters, cancellation);
+    return queries.ExecuteScriptDefinitionAsync(definition, request.Parameters, cancellation, request.TimeoutMs);
 }).Access("design");
 routes.MapGet("/scripts/resources", (ScriptResourceStore scripts) => scripts.GetDraft()).Access("design");
 routes.MapPut("/scripts/resources", (JsonObject draft, ScriptResourceStore scripts) => scripts.SaveDraft(draft)).Access("design", audit: true);
@@ -214,7 +211,7 @@ public record TagReadRequest(string[] Paths, Dictionary<string, JsonElement>? Pa
 public record CreateProjectRequest(string Name);
 public record RenameProjectRequest(string Name, int Revision);
 public record ArchiveProjectRequest(bool Archived);
-public record QueryRequest(Dictionary<string, JsonElement>? Parameters, string? PublishedAt = null);
+public record QueryRequest(Dictionary<string, JsonElement>? Parameters, string? PublishedAt = null, int? TimeoutMs = null);
 public record CreateDatabaseRequest(bool InitializeSampleData = false);
 public record ScriptRequest(string Code, Dictionary<string, JsonElement>? Parameters, Dictionary<string, JsonElement>? Inputs);
 public record PublishRequest(int Revision);

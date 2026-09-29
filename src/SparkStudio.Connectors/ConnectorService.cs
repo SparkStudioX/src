@@ -145,6 +145,8 @@ public sealed partial class ConnectorService : IDisposable
 
     public async Task<QueryResult> QueryAsync(ConnectionDefinition connection, string sql, IReadOnlyList<QueryParameter> parameters, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        ValidateReadParameters(parameters);
         if (IsSqlite(connection)) return await QuerySqliteAsync(connection, sql, parameters, cancellationToken);
         RequireSql(connection);
         SqlQueryGuard.Validate(sql);
@@ -189,6 +191,11 @@ public sealed partial class ConnectorService : IDisposable
                 rows.Add(row);
             }
             return new(columns, rows, stopwatch.Elapsed.TotalMilliseconds);
+        }
+        catch (SqlException) when (timeout.IsCancellationRequested)
+        {
+            if (cancellationToken.IsCancellationRequested) throw new OperationCanceledException(cancellationToken);
+            throw new TimeoutException("SQL query exceeded the 30 second operation limit.");
         }
         catch (SqlException error) { throw new InvalidOperationException(SafeError(error)); }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)

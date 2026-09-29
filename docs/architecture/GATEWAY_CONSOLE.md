@@ -1,5 +1,7 @@
 # Gateway console workshop
 
+The Deployment tab also provides [staged listener configuration and recovery](DEPLOYMENT_SETTINGS.md). Its optional save/restart exercise requires a disposable gateway; the portable Gateway operations walkthrough uses validation and discards its draft. [Connection operations](CONNECTION_OPERATIONS.md) and [read query testing](QUERY_TESTING.md) have separate setup exercises and acceptance limits.
+
 Open **Gateway Settings** in the Designer sidebar or **Settings** in the Projects header as a gateway administrator. The console has bookmarked Overview, Sessions, Diagnostics, Deployment, Security and Audit sections. Security contains Users & access and Operator settings; Audit shows recent security activity. Existing `/security` bookmarks open `/gateway#security`. The header sign-out icon retains its accessible name and tooltip. Observations are explicit snapshots, marked stale after 30 seconds or a failed refresh. A saved connection status does not imply a fresh successful connection test.
 
 Projects and Gateway Settings share a centered header with the lowercase sparkstudio brand. Settings is a plain navigation link on Projects; the gateway header links back to Projects. Select your username on either page to open **Account settings**, where Appearance changes this browser's theme and Change password uses your current password. Closing the dialog returns focus to the username. A successful password change signs you out on all devices; the separate sign-out icon signs out the current audience.
