@@ -18,6 +18,8 @@ Browser checks on the isolated self-contained Windows gateway at port 5091 verif
 
 All 38 source-boundary regression groups and nine offline workshop-build groups passed. The updated independently authored **Gateway operations** example includes the deployment exercise; the catalog still contains 24 portable projects and seven setup-required examples. This increment does not complete G04: trusted-proxy configuration, remote HTTPS/certificate renewal, Windows service lifecycle and rollback, container persistence/recovery and offline deployment acceptance remain open. The public installer has not been refreshed.
 
+Port 5090 now serves the tested self-contained Windows build and browser bundle `index-B3Xc3Q-S.js`. A protected backup covered all 50 existing gateway data files; all 50 remained byte-identical after restart, with all seven projects and the existing account store preserved. The implementation is committed as `05fc17612e21b3d4323d55eabbbc23cb00f0c2db`, now the workshop catalog baseline. Live verification remains under ignored `.data/test-evidence/deployment-live-verification.json`.
+
 ## Previous Gateway Settings navigation: local verification, 2026-09-29
 
 Designer and Projects now expose one **Gateway Settings** entry. The existing console contains Overview, Sessions, Diagnostics, Security and Audit; Security retains Users & access and Operator settings. Legacy `/security` links resolve to `/gateway#security` under the same administrator gate. Engineering headers use an accessible icon-only sign-out button. Account name and password field pairs align despite unequal helper text and stack on narrow screens.
