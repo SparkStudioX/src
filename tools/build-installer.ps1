@@ -99,11 +99,43 @@ try {
     New-Item -ItemType Directory -Path $notices | Out-Null
     foreach ($entry in @(
         @('.tools\dotnet\LICENSE.txt', 'dotnet-LICENSE.txt'),
-        @('.tools\dotnet\ThirdPartyNotices.txt', 'dotnet-ThirdPartyNotices.txt'),
-        @('apps\web\node_modules\react\LICENSE', 'react-LICENSE.txt'),
-        @('apps\web\node_modules\react-dom\LICENSE', 'react-dom-LICENSE.txt'),
-        @('apps\web\node_modules\scheduler\LICENSE', 'scheduler-LICENSE.txt')
+        @('.tools\dotnet\ThirdPartyNotices.txt', 'dotnet-ThirdPartyNotices.txt')
     )) { Copy-Item -LiteralPath (Join-Path $root $entry[0]) -Destination (Join-Path $notices $entry[1]) }
+    # Inventory installed production dependencies, including transitive editor packages.
+    # Only license/notice texts are copied; never package JavaScript or other source files.
+    $web = Join-Path $root 'apps\web'
+    $browserLock = Get-Content -LiteralPath (Join-Path $web 'package-lock.json') -Raw | ConvertFrom-Json
+    $browserDirectories = @(& npm.cmd --prefix $web ls --omit=dev --all --parseable)
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate installed browser production dependencies.' }
+    $browserPackages = @()
+    foreach ($packageDirectory in ($browserDirectories | Where-Object { $_ -ne $web } | Sort-Object -Unique)) {
+        $packageDirectory = [IO.Path]::GetFullPath($packageDirectory)
+        if (!$packageDirectory.StartsWith($web + '\node_modules\', [StringComparison]::OrdinalIgnoreCase)) { throw 'A browser production dependency is outside the installed dependency directory.' }
+        if (((Get-Item -LiteralPath $packageDirectory).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Browser production dependency links are not supported in release packaging.' }
+        $metadata = Get-Content -LiteralPath (Join-Path $packageDirectory 'package.json') -Raw | ConvertFrom-Json
+        if ($metadata.name -notmatch '^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$' -or $metadata.version -notmatch '^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.+-]+)?$') { throw 'Invalid browser package identity.' }
+        $lockPath = $packageDirectory.Substring($web.Length + 1).Replace('\', '/')
+        $lockedPackage = $browserLock.packages.PSObject.Properties[$lockPath].Value
+        if (!$lockedPackage -or $lockedPackage.version -ne $metadata.version) { throw "Installed browser dependency does not match the lockfile: $($metadata.name)" }
+        $licenseFiles = @(Get-ChildItem -LiteralPath $packageDirectory -File -Recurse | Where-Object {
+            $relative = $_.FullName.Substring($packageDirectory.Length + 1)
+            $_.Name -match '^(LICENSE|LICENCE|COPYING|NOTICE|ThirdPartyNotices)([.-]|$)' -and
+                $_.Extension -in @('', '.txt', '.md') -and $relative -notmatch '(^|\\)node_modules(\\|$)'
+        })
+        if (!$licenseFiles.Count) { throw "No distributable license/notice text found for browser dependency $($metadata.name)." }
+        $copiedNotices = @()
+        foreach ($notice in $licenseFiles) {
+            if (($notice.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Browser license files cannot be links.' }
+            $relative = $notice.FullName.Substring($packageDirectory.Length + 1)
+            $destination = Join-Path $notices (Join-Path 'browser' (Join-Path $metadata.name (Join-Path $metadata.version $relative)))
+            New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent) | Out-Null
+            Copy-Item -LiteralPath $notice.FullName -Destination $destination
+            $copiedNotices += $destination.Substring($notices.Length + 1).Replace('\', '/')
+        }
+        $browserPackages += [ordered]@{ name = $metadata.name; version = $metadata.version; license = $metadata.license; integrity = $lockedPackage.integrity; notices = $copiedNotices }
+    }
+    if (!$browserPackages.Count) { throw 'The browser production dependency inventory is empty.' }
+    $browserPackages | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $notices 'browser-package-inventory.json') -Encoding utf8
     Copy-Item -LiteralPath (Join-Path $root 'installer\INSTALL-NOTES.txt') -Destination $stage
     if (Test-Path -LiteralPath (Join-Path $root 'docs\architecture\WINDOWS_INSTALLER.md')) {
         Copy-Item -LiteralPath (Join-Path $root 'docs\architecture\WINDOWS_INSTALLER.md') -Destination $stage
