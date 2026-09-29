@@ -26,10 +26,23 @@ internal static class Program
             var options = ParseOptions(args);
             options.TryGetValue("report", out report);
             var action = options.GetValueOrDefault("action") ?? throw new ArgumentException("Missing --action.");
-            if (action == "self-test") { SelfTest(); return 0; }
+            if (action != "probe" && options.ContainsKey("process-id")) throw new ArgumentException("--process-id is supported only by the read-only probe action.");
+            if (action == "self-test") { await SelfTestAsync(); return 0; }
             var directory = ValidateDirectory(options.GetValueOrDefault("install-dir") ?? throw new ArgumentException("Missing --install-dir."));
             if (!int.TryParse(options.GetValueOrDefault("port", "5090"), out var port) || port is < 1 or > 65535)
                 throw new ArgumentException("Port must be an integer between 1 and 65535.");
+            if (action == "probe")
+            {
+                if (!int.TryParse(options.GetValueOrDefault("process-id"), out var processId) || processId <= 0)
+                    throw new ArgumentException("The read-only probe requires a positive --process-id.");
+                using var process = Process.GetProcessById(processId);
+                var expected = Path.GetFullPath(Path.Combine(directory, "SparkStudio.Gateway.exe"));
+                if (process.HasExited || process.MainModule?.FileName is not { } executable || !Path.GetFullPath(executable).Equals(expected, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("The requested process is not the gateway executable in the supplied installation directory.");
+                await WaitForReadinessAsync(port, () => process.HasExited ? 0 : (uint)process.Id);
+                WriteReport(report, "PASS the expected gateway process and its bundled Python readiness endpoint responded without authentication; no service or registration was changed.");
+                return 0;
+            }
             if (action is not ("preflight" or "prepare" or "install" or "resume" or "remove"))
                 throw new ArgumentException("Unknown lifecycle action.");
             if (action != "preflight") RequireAdministrator();
@@ -95,7 +108,7 @@ internal static class Program
     {
         if (args.Length % 2 != 0) throw new ArgumentException("Arguments must be --name value pairs.");
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        var allowed = new HashSet<string>(["action", "install-dir", "port", "report"]);
+        var allowed = new HashSet<string>(["action", "install-dir", "port", "report", "process-id"]);
         for (var index = 0; index < args.Length; index += 2)
         {
             var key = args[index].StartsWith("--", StringComparison.Ordinal) ? args[index][2..] : "";
@@ -207,41 +220,95 @@ internal static class Program
             new DirectoryInfo(DataDirectory).SetAccessControl(acl);
             SaveRegistration(new Registration(ProductId, directory, DataDirectory, port));
             Native.StartAndWait(service);
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-            var deadline = Stopwatch.StartNew();
-            while (deadline.Elapsed < TimeSpan.FromSeconds(45))
-            {
-                try
-                {
-                    using var response = await client.GetAsync($"http://127.0.0.1:{port}/api/health");
-                    using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-                    if (response.IsSuccessStatusCode && json.RootElement.TryGetProperty("pythonAvailable", out var python) && python.GetBoolean()) return;
-                }
-                catch (Exception error) when (error is HttpRequestException or TaskCanceledException or JsonException) { }
-                await Task.Delay(500);
-            }
-            throw new InvalidOperationException("The service did not become healthy with bundled Python within 45 seconds. Inspect Windows Event Viewer before retrying. Existing data has been retained.");
+            await WaitForReadinessAsync(port, () => Native.RunningProcessId(service));
         }
-        catch
+        catch (Exception failure)
         {
-            if (created is not null)
+            try
             {
-                Native.StopAndWait(created);
-                Native.DeleteChecked(created);
-                if (previous is null) Registry.LocalMachine.DeleteSubKeyTree(RegistryPath, false); else SaveRegistration(previous);
+                if (created is not null)
+                {
+                    Native.StopAndWait(created);
+                    Native.DeleteChecked(created);
+                    if (previous is null) Registry.LocalMachine.DeleteSubKeyTree(RegistryPath, false); else SaveRegistration(previous);
+                }
+                else if (existing is not null && previous is not null)
+                {
+                    Native.StopAndWait(existing);
+                    Native.Configure(existing, Command(previous.InstallDirectory, previous.Port));
+                    SaveRegistration(previous);
+                }
             }
-            else if (existing is not null && previous is not null)
+            catch (Exception cleanup)
             {
-                Native.StopAndWait(existing);
-                Native.Configure(existing, Command(previous.InstallDirectory, previous.Port));
-                SaveRegistration(previous);
+                throw new InvalidOperationException($"{failure.Message} Installer service cleanup also failed: {cleanup.Message} Gateway data was retained. Inspect the owned service before retrying.", failure);
             }
             throw;
         }
         finally { created?.Dispose(); }
     }
 
-    private static void SelfTest()
+    private static async Task WaitForReadinessAsync(int port, Func<uint> runningProcessId)
+    {
+        using var handler = new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false, UseCookies = false };
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(2) };
+        using var readinessDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+        var lastObservation = "No readiness response was received.";
+        while (!readinessDeadline.IsCancellationRequested)
+        {
+            try
+            {
+                var processId = runningProcessId();
+                if (processId == 0) throw new InvalidOperationException("The SparkStudio gateway process stopped before readiness completed. Inspect Windows Event Viewer before retrying. Existing data has been retained.");
+                var readiness = await ProbeReadinessAsync(client, port, processId, readinessDeadline.Token);
+                lastObservation = readiness.Message;
+                if (readiness.Ready && runningProcessId() == processId) return;
+                await Task.Delay(500, readinessDeadline.Token);
+            }
+            catch (OperationCanceledException) when (readinessDeadline.IsCancellationRequested) { break; }
+        }
+        throw new InvalidOperationException($"The gateway did not become ready with bundled Python within 45 seconds. {lastObservation} Inspect Windows Event Viewer before retrying. Existing data has been retained.");
+    }
+
+    internal static async Task<ReadinessProbe> ProbeReadinessAsync(HttpClient client, int port, uint expectedProcessId, CancellationToken cancellation)
+    {
+        if (port is < 1 or > 65535 || expectedProcessId == 0) throw new ArgumentException("Readiness requires a local port and a running service process ID.");
+        try
+        {
+            using var response = await client.GetAsync($"http://127.0.0.1:{port}/api/ready", HttpCompletionOption.ResponseHeadersRead, cancellation);
+            if (response.StatusCode != HttpStatusCode.OK)
+                return new(false, response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
+                    ? $"The local readiness endpoint returned HTTP {(int)response.StatusCode}; it must not require an administrator login. Verify that installer and gateway versions match."
+                    : $"The local readiness endpoint returned HTTP {(int)response.StatusCode} instead of a ready response.");
+            if (!string.Equals(response.Content.Headers.ContentType?.MediaType, "application/json", StringComparison.OrdinalIgnoreCase))
+                return new(false, "The local readiness response was not JSON.");
+            if (response.Content.Headers.ContentLength > 4096) return new(false, "The local readiness response was larger than expected.");
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellation);
+            var bytes = new byte[4097]; var length = 0;
+            while (length < bytes.Length)
+            {
+                var count = await stream.ReadAsync(bytes.AsMemory(length), cancellation);
+                if (count == 0) break;
+                length += count;
+            }
+            if (length > 4096) return new(false, "The local readiness response was larger than expected.");
+            using var json = JsonDocument.Parse(bytes.AsMemory(0, length));
+            var value = json.RootElement;
+            if (value.ValueKind != JsonValueKind.Object ||
+                !value.TryGetProperty("product", out var product) || product.ValueKind != JsonValueKind.String || product.GetString() != "SparkStudio" ||
+                !value.TryGetProperty("status", out var status) || status.ValueKind != JsonValueKind.String || status.GetString() != "ready" ||
+                !value.TryGetProperty("pythonAvailable", out var python) || python.ValueKind != JsonValueKind.True)
+                return new(false, "The local gateway has not reported bundled Python readiness.");
+            if (!value.TryGetProperty("processId", out var process) || process.ValueKind != JsonValueKind.Number || !process.TryGetUInt32(out var processId) || processId != expectedProcessId)
+                return new(false, "The local readiness response did not identify the owned service process.");
+            return new(true, "The owned SparkStudio service and bundled Python are ready.");
+        }
+        catch (OperationCanceledException) when (!cancellation.IsCancellationRequested) { return new(false, "The local readiness request timed out."); }
+        catch (Exception error) when (error is HttpRequestException or IOException or JsonException)
+        { return new(false, "The local readiness endpoint has not returned a usable response."); }
+    }
+
+    private static async Task SelfTestAsync()
     {
         var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "SparkStudio");
         var registration = new Registration(ProductId, dir, DataDirectory, 5090);
@@ -250,6 +317,7 @@ internal static class Program
         void Accepted(Action action) { action(); checks++; }
         void Rejected(Action action) { try { action(); } catch (Exception error) when (error is ArgumentException or InvalidOperationException) { checks++; return; } throw new Exception("Expected ownership/path rejection."); }
         Accepted(() => ValidateOwnership(dir, null, null));
+        Accepted(() => ValidateOwnership(dir, registration, null)); // A retained registration can be retried after owned-service cleanup.
         Accepted(() => ValidateOwnership(dir, registration, good));
         Accepted(() => ValidateOwnership(dir.ToUpperInvariant(), registration, good));
         Rejected(() => ValidateOwnership(dir, null, good));
@@ -274,7 +342,67 @@ internal static class Program
         try { Rejected(() => ProbePort(((IPEndPoint)listener.LocalEndpoint).Port, null, null)); }
         finally { listener.Stop(); }
         Console.WriteLine($"PASS {checks} installer ownership, path, argument and occupied-port checks; no service or registration was changed.");
+        await ReadinessSelfTestAsync();
     }
+
+    private static async Task ReadinessSelfTestAsync()
+    {
+        const uint processId = 1234;
+        const string ready = "{\"product\":\"SparkStudio\",\"status\":\"ready\",\"pythonAvailable\":true,\"processId\":1234}";
+        var checks = 0;
+        async Task Check(HttpStatusCode code, string body, bool expected, string contentType = "application/json")
+        {
+            using var client = new HttpClient(new ReadinessFixtureHandler(request =>
+            {
+                if (request.RequestUri?.AbsoluteUri != "http://127.0.0.1:5092/api/ready") throw new InvalidOperationException("The installer readiness probe used the wrong endpoint.");
+                return new HttpResponseMessage(code) { Content = new StringContent(body, System.Text.Encoding.UTF8, contentType) };
+            }));
+            if ((await ProbeReadinessAsync(client, 5092, processId, CancellationToken.None)).Ready != expected)
+                throw new InvalidOperationException("Installer readiness regression failed.");
+            checks++;
+        }
+        await Check(HttpStatusCode.OK, ready, true);
+        await Check(HttpStatusCode.Unauthorized, ready, false);
+        await Check(HttpStatusCode.Forbidden, ready, false);
+        await Check(HttpStatusCode.ServiceUnavailable, ready, false);
+        await Check(HttpStatusCode.Redirect, ready, false);
+        await Check(HttpStatusCode.OK, "<html>Sign in</html>", false, "text/html");
+        await Check(HttpStatusCode.OK, "{invalid", false);
+        await Check(HttpStatusCode.OK, "[]", false);
+        await Check(HttpStatusCode.OK, ready.Replace("true", "false", StringComparison.Ordinal), false);
+        await Check(HttpStatusCode.OK, ready.Replace("1234", "4321", StringComparison.Ordinal), false);
+        await Check(HttpStatusCode.OK, ready.Replace("1234", "\"1234\"", StringComparison.Ordinal), false);
+        await Check(HttpStatusCode.OK, ready.Replace("SparkStudio", "Unrelated", StringComparison.Ordinal), false);
+        await Check(HttpStatusCode.OK, ready.Replace("\"ready\"", "\"not-ready\"", StringComparison.Ordinal), false);
+        await Check(HttpStatusCode.OK, new string('x', 4097), false);
+        using (var client = new HttpClient(new ReadinessFixtureHandler(_ => throw new HttpRequestException("fixture connection failure"))))
+        {
+            if ((await ProbeReadinessAsync(client, 5092, processId, CancellationToken.None)).Ready) throw new InvalidOperationException("A failed connection was accepted as ready.");
+            checks++;
+        }
+        using (var client = new HttpClient(new ReadinessFixtureHandler(_ => throw new TaskCanceledException("fixture request timeout"))))
+        {
+            if ((await ProbeReadinessAsync(client, 5092, processId, CancellationToken.None)).Ready) throw new InvalidOperationException("A timed-out request was accepted as ready.");
+            checks++;
+        }
+        using (var deadline = new CancellationTokenSource())
+        using (var client = new HttpClient(new ReadinessFixtureHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))))
+        {
+            deadline.Cancel();
+            try { await ProbeReadinessAsync(client, 5092, processId, deadline.Token); throw new InvalidOperationException("The readiness deadline was ignored."); }
+            catch (OperationCanceledException) { checks++; }
+            try { await ProbeReadinessAsync(client, 5092, 0, CancellationToken.None); throw new InvalidOperationException("A missing process identity was accepted."); }
+            catch (ArgumentException) { checks++; }
+        }
+        Console.WriteLine($"PASS {checks} installer readiness endpoint, authentication, response and process-identity checks; no service or registration was changed.");
+    }
+}
+
+internal sealed record ReadinessProbe(bool Ready, string Message);
+internal sealed class ReadinessFixtureHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    { cancellationToken.ThrowIfCancellationRequested(); return Task.FromResult(respond(request)); }
 }
 
 internal sealed record Registration(string ProductId, string InstallDirectory, string DataDirectory, int Port);
@@ -378,6 +506,12 @@ internal static class Native
         return status;
     }
 
+    internal static uint RunningProcessId(ServiceHandle service)
+    {
+        if (!QueryServiceStatusEx(service, 0, out var status, Marshal.SizeOf<ServiceStatusProcess>(), out _)) throw new Win32Exception();
+        return status.State == Running ? status.ProcessId : 0;
+    }
+
     internal static void DeleteChecked(ServiceHandle service) { if (!DeleteService(service)) throw new Win32Exception(); }
 
     [StructLayout(LayoutKind.Sequential)] private struct ServiceConfiguration
@@ -391,10 +525,15 @@ internal static class Native
     {
         public uint Type, State, AcceptedControls, Win32ExitCode, SpecificExitCode, CheckPoint, WaitHint;
     }
+    [StructLayout(LayoutKind.Sequential)] private struct ServiceStatusProcess
+    {
+        public uint Type, State, AcceptedControls, Win32ExitCode, SpecificExitCode, CheckPoint, WaitHint, ProcessId, ServiceFlags;
+    }
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] private static extern ServiceHandle OpenSCManager(string? machine, string? database, uint access);
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] private static extern ServiceHandle OpenService(ServiceHandle manager, string name, uint access);
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] private static extern bool QueryServiceConfig(ServiceHandle service, IntPtr buffer, uint size, out uint required);
     [DllImport("advapi32.dll", SetLastError = true)] private static extern bool QueryServiceStatus(ServiceHandle service, out ServiceStatus status);
+    [DllImport("advapi32.dll", SetLastError = true)] private static extern bool QueryServiceStatusEx(ServiceHandle service, int infoLevel, out ServiceStatusProcess status, int bufferSize, out int required);
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] private static extern ServiceHandle CreateService(ServiceHandle manager, string name, string displayName, uint access, uint type, uint start, uint error, string path, string? group, IntPtr tag, string? dependencies, string account, string? password);
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] private static extern bool ChangeServiceConfig(ServiceHandle service, uint type, uint start, uint error, string path, string? group, IntPtr tag, string? dependencies, string account, string? password, string displayName);
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] private static extern bool ChangeServiceConfig2(ServiceHandle service, uint level, IntPtr info);

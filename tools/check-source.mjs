@@ -64,7 +64,7 @@ const webFiles = new Set([
 ]);
 const toolFiles = new Set([
   'bootstrap.ps1', 'build.ps1', 'dev.ps1', 'publish-windows.ps1', 'install-service.ps1',
-  'build-installer.ps1', 'test-installer.ps1', 'test-installer-auth.mjs', 'generate-example-assets.ps1',
+  'build-installer.ps1', 'test-installer.ps1', 'test-installer-auth.mjs', 'test-gateway-readiness.mjs', 'generate-example-assets.ps1',
   'load-example.mjs', 'test-assets-popups.mjs', 'test-gateway.mjs', 'test-runtime-actions.mjs',
   'workshop-packages.mjs', 'build-workshops.mjs', 'test-workshop-build.mjs', 'test-workshop-packages.mjs',
   'test-project-search.mjs',

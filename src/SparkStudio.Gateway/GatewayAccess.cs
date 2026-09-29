@@ -28,6 +28,10 @@ public static class GatewayAccess
             var endpoint = context.GetEndpoint();
             // These concrete endpoints own bootstrap/login/admin policy internally.
             var route = (endpoint as RouteEndpoint)?.RoutePattern.RawText;
+            // Readiness exposes only the local process startup result; it owns a raw-peer
+            // loopback check and does not grant access to health, accounts or project APIs.
+            if (route == "/api/ready" && HttpMethods.IsGet(context.Request.Method))
+            { await next(); return; }
             if (route?.StartsWith("/api/auth/", StringComparison.Ordinal) == true ||
                 route?.StartsWith("/api/security/", StringComparison.Ordinal) == true)
             { await next(); return; }

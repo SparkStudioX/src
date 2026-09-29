@@ -2,7 +2,7 @@
 
 SparkStudio is an early-preview industrial application builder with a browser designer, a published operator runtime and a self-hosted gateway. The application uses ASP.NET Core/.NET 10, React/TypeScript and CPython 3; it does not require Java or Jython.
 
-[Website](https://sparkstudiox.com/) · [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.1) · [Product scope](docs/architecture/PRODUCT.md) · [Verification and roadmap](docs/architecture/PARITY.md)
+[Website](https://sparkstudiox.com/) · [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.2) · [Product scope](docs/architecture/PRODUCT.md) · [Verification and roadmap](docs/architecture/PARITY.md)
 
 The current source includes **local accounts, separate engineering/operator sessions, server-enforced project permissions and a bounded audit trail**. First run requires administrator setup on the gateway computer. Remote account/API access requires HTTPS; network deployment and service lifecycle acceptance remain separate gates. Python scripts run with the gateway account's operating-system access; worker processes are not a security sandbox. See the [security guide](docs/architecture/SECURITY.md).
 
@@ -36,7 +36,7 @@ The current source includes query-backed forms and scalar properties, single-sel
 
 ## Run on Windows
 
-For a prepared package, download the installer and checksum from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.1). It bundles .NET, Python and browser assets. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md): extraction and application execution are verified; actual elevated service installation, upgrade and uninstall are not yet verified.
+For a prepared package, download the installer and checksum from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.2). It bundles .NET, Python and browser assets. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md): extraction and application execution are verified; actual elevated service installation, upgrade and uninstall are not yet verified.
 
 For development, use Windows x64 with Node/npm available. Node 22.17.1 was used for the recorded checks. Run from the repository root in PowerShell:
 

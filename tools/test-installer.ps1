@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet(5091)][int]$Port = 5091,
-    [string]$ExpectedVersion = '0.2.0-preview.1',
+    [string]$ExpectedVersion = '0.2.0-preview.2',
     [string]$BuildResultPath,
     [string]$WorkshopDirectory
 )
@@ -120,7 +120,13 @@ try {
     if (!$ready) { throw 'Extracted self-contained gateway did not reach fresh local setup.' }
     $modules = @($process.Modules | Where-Object { $_.ModuleName -in @('coreclr.dll', 'hostfxr.dll') })
     if ($modules.Count -ne 2 -or @($modules | Where-Object { !$_.FileName.StartsWith($program + '\', [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) { throw 'The gateway did not load its .NET runtime entirely from the extracted package.' }
-    NodeCheck 'installer-auth-python' @((Join-Path $PSScriptRoot 'test-installer-auth.mjs'), $testRoot)
+    # Exercise the actual installer poll before setup or authentication, against this exact process.
+    $probeStarted = [DateTime]::UtcNow
+    $probeLog = Join-Path $testRoot 'installer-readiness-probe.log'
+    & (Join-Path $program 'SparkStudio.ServiceHelper.exe') --action probe --install-dir $program --port $Port --process-id $process.Id 2>&1 | Tee-Object -FilePath $probeLog | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw 'The installer readiness probe failed before gateway setup. See the isolated probe log.' }
+    $checks.Add([ordered]@{ name = 'installer-readiness-probe'; passed = $true; seconds = [Math]::Round(([DateTime]::UtcNow - $probeStarted).TotalSeconds, 2); log = $probeLog })
+    NodeCheck 'installer-auth-python' @((Join-Path $PSScriptRoot 'test-installer-auth.mjs'), $testRoot, [string]$process.Id)
     $env:SPARKSTUDIO_TEST_AUTH_FILE = $authFile
     # Node's --import treats a Windows drive-qualified path as a URL scheme.
     # The verifier runs from $root, so use a portable relative module specifier.

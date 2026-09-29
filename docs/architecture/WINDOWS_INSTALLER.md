@@ -1,15 +1,17 @@
 # SparkStudio Windows preview installation guide
 
-Download the installer, checksum and optional workshops from the [v0.2.0-preview.1 release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.1). The Windows x64 package includes the gateway, .NET runtime, CPython, browser Designer/operator application and dependency notices. Running it requires no separate .NET SDK, Python or Node.js installation.
+Download the installer, checksum and optional workshops from the [v0.2.0-preview.2 release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.2). The Windows x64 package includes the gateway, .NET runtime, CPython, browser Designer/operator application and dependency notices. Running it requires no separate .NET SDK, Python or Node.js installation.
 
 This is an **unsigned preview for local evaluation**. The verified deployment path is current-user extraction and execution on loopback. Actual elevated service installation, LocalService execution, upgrade recovery and uninstall still require acceptance testing on a disposable Windows machine. Docker and macOS are not part of this release.
 
+Preview.2 fixes a startup-check error in preview.1: the installer anonymously polled the protected `/api/health` endpoint and could report a 45-second timeout even when the gateway had started. The corrected check uses `/api/ready`, described below.
+
 ## Verify the download
 
-The installer is `SparkStudio-Setup-0.2.0-preview.1-windows-x64-unsigned.exe`. Download its adjacent `.exe.sha256` from the same release and compare it with:
+The installer is `SparkStudio-Setup-0.2.0-preview.2-windows-x64-unsigned.exe`. Download its adjacent `.exe.sha256` from the same release and compare it with:
 
 ```powershell
-Get-FileHash .\SparkStudio-Setup-0.2.0-preview.1-windows-x64-unsigned.exe -Algorithm SHA256
+Get-FileHash .\SparkStudio-Setup-0.2.0-preview.2-windows-x64-unsigned.exe -Algorithm SHA256
 ```
 
 The published checksum identifies that executable; a rebuild can differ. Do not disable Windows security or organizational policy to run an unsigned package. Release notes record the tested source revision and package verification. The extracted `package-manifest.json` records bundled file hashes and build provenance.
@@ -19,7 +21,7 @@ The published checksum identifies that executable; a rebuild can differ. Do not 
 Run the downloaded installer with:
 
 ```powershell
-.\SparkStudio-Setup-0.2.0-preview.1-windows-x64-unsigned.exe /PORTABLE=1 /CURRENTUSER
+.\SparkStudio-Setup-0.2.0-preview.2-windows-x64-unsigned.exe /PORTABLE=1 /CURRENTUSER
 ```
 
 Choose an empty writable directory. This mode extracts files without creating a service, installation registration, Start-menu shortcuts or an uninstaller. From that directory, start the gateway using an unused loopback port and a separate writable data directory:
@@ -58,7 +60,7 @@ On Projects, **Settings** opens Gateway Settings. Designer has a **Gateway Setti
 
 ## Workshop examples
 
-Download `SparkStudio-Workshops-0.2.0-preview.1.zip` and verify its adjacent `.sha256`. It contains **24 portable `.sparkproj` workshops**, walkthroughs and compatibility metadata. Import a file from `projects/` through **Import .sparkproj** on Projects. Each import creates a new unpublished draft; review and explicitly publish it before opening its operator application.
+Download `SparkStudio-Workshops-0.2.0-preview.2.zip` and verify its adjacent `.sha256`. It contains **24 portable `.sparkproj` workshops**, walkthroughs and compatibility metadata. Import a file from `projects/` through **Import .sparkproj** on Projects. Each import creates a new unpublished draft; review and explicitly publish it before opening its operator application.
 
 Portable workshops use synthetic data and need no OPC UA server, SQL Server or internet connection. Python exercises use the bundled interpreter. Follow each guide's action permissions and unavailable-data exercises. Eight additional authored source examples need gateway resources or user-supplied assets; the catalog identifies them separately and they are not portable imports. See the [workshop guide](https://github.com/SparkStudioX/src/blob/main/examples/README.md).
 
@@ -84,6 +86,8 @@ Get-Content "$env:ProgramData\SparkStudio\security\setup-code.txt"
 
 The helper rejects conflicting/unowned services, occupied ports and machine-level runtime/data overrides. It does not stop an unrelated development gateway. Choose another port or deliberately stop that gateway first. Effective service-account access and ACL propagation still need acceptance testing.
 
+The installer checks `GET /api/ready` from the local machine and verifies the gateway process ID and bundled Python startup result. This minimal endpoint returns only `product`, `status`, `pythonAvailable` and `processId`, with caching disabled; it accepts only direct loopback requests. `/api/health` and gateway diagnostics still require authentication. A successful readiness probe confirms startup, not elevated installation, service permissions or upgrade recovery.
+
 Credentials encrypted for a development user cannot be assumed readable by LocalService. Configure and verify connections in the target deployment context; copying development data is not a verified service migration.
 
 ## Upgrade, recovery and removal
@@ -91,6 +95,8 @@ Credentials encrypted for a development user cannot be assumed readable by Local
 Stop the gateway and back up its complete data directory before upgrading. Back up external databases separately and retain the previous installer. For portable use, extract into a new empty application directory and point the replacement at existing data only after backup. For rollback, restore a compatible data backup with the previous application; do not assume older software can read newer data.
 
 For service upgrades, use the same program directory. The helper attempts to preserve configuration and resume a previously running service if preparation fails, but provides no transactional rollback of replaced application files. Actual upgrade/recovery acceptance is pending.
+
+If preview.1 reported the 45-second startup timeout, retry with the preview.2 installer in the same program directory after backing up `%ProgramData%\SparkStudio`. The failed startup check retains that data, and retrying does not require deleting it. Use the installer to start the service; launching the executable directly from Program Files without an explicit writable `--DataDirectory` is a different startup path and can fail with access denied.
 
 Service uninstall is designed to remove the owned service after confirmation and abort file removal if the helper fails. Persistent data is retained. Portable removal consists of stopping the process and removing only the extracted application directory; retain or deliberately remove the separate data directory. Actual service uninstall is unverified.
 

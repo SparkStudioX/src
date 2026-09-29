@@ -6,7 +6,15 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
-## Windows preview 0.2.0 release verification, 2026-09-29
+## Windows installer readiness correction, 2026-09-29
+
+The actual `0.2.0-preview.1` service installation failed its 45-second readiness check: the helper polled authenticated `/api/health` without a session. Windows recorded service creation without a corresponding startup crash; the helper removed the newly created service after the timeout and retained `%ProgramData%\SparkStudio`. The earlier extraction tests did not exercise this installation check.
+
+The `0.2.0-preview.2` correction introduces a separate anonymous, raw-loopback-only `/api/ready` endpoint with four fields and no cached responses. One bounded startup check exercises the bundled Python worker with fixed empty inputs; polling cannot execute project code. The installer checks this endpoint against the running service PID, without redirects or a proxy. Health diagnostics and all other API permissions remain protected. The extraction verifier now invokes the actual helper probe before first-administrator setup and checks readiness and denied anonymous health access both before and after setup.
+
+Six readiness model/Kestrel groups passed, including the real bundled interpreter, failed and hanging workers, cancellation, cached observations and raw-peer enforcement despite rewritten request addresses. The helper passed 21 ownership/path checks and 18 readiness protocol/PID/failure checks. Source-boundary tests passed 38 groups and workshop-build checks passed nine groups. Package verification and elevated service lifecycle acceptance are recorded separately; these unit/model results alone do not establish a successful service installation.
+
+## Previous Windows preview 0.2.0 release verification, 2026-09-29
 
 The [v0.2.0-preview.1 release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.1) packages clean source commit `a32a9994d1416d31d16590337c1ffe5e5515d888`, including the G04–G06 increment below. The installer, standalone installation guide, 24-project workshop ZIP, payload manifest and checksums are public release assets. The website links directly to this version. Source policy and its CI passed; no private reference material or saved gateway data entered the payload. Production browser source maps are excluded, and notices cover all 22 browser production dependencies.
 
