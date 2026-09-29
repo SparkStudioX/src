@@ -105,6 +105,11 @@ export function buildProjectSearch(project: Project, queries: NamedQuery[], scri
       }
       if (componentProperty && path.at(-1) === "queryId" && ((path.length === 3 && (path[1] === "optionsSource" || path[1] === "rowsSource")) || (path.length === 4 && path[1] === "queryBindings")))
         reference = { kind: "query", id: value };
+      if (componentProperty && path.length === 3 && path[1] === "selectionFields" && source?.component
+        && ["table", "select", "list", "treeView"].includes(source.component.type)) {
+        const input = source.document.components.find(component => inputTypes.has(component.type) && (component.props.fieldKey || component.id) === path[2]);
+        if (input) reference = { kind: "component", id: input.id, ownerKind: source.kind, ownerId: source.document.id };
+      }
       if (target.kind === "project" && path[0] === "navigation" && ((path.length === 4 && path[1] === "items" && path[3] === "screenId") || (path.length === 2 && path[1] === "startupScreenId")))
         reference = { kind: "screen", id: value };
     }

@@ -43,7 +43,7 @@ import { resolveTemplateParameters, templatePlacementError } from "./templateMod
 import Tags from "./Tags";
 import { isInput, validateInputs } from "./inputs";
 import { useFormInputs } from "./inputStateBindings";
-import { alignSelected, arrangementCount, checkpoint, deleteSelected, distributeSelected, duplicateSelected, expandGroupSelection, groupSelected, marqueeBounds, marqueeSelection, moveSelected, projectContent, resizeComponent, resizeGroup, restoreHistory, selectionBounds, toggleGroupSelection, ungroupSelected } from "./canvasEditing";
+import { alignSelected, arrangementCount, checkpoint, distributeSelected, duplicateSelected, expandGroupSelection, groupSelected, marqueeBounds, marqueeSelection, moveSelected, projectContent, resizeComponent, resizeGroup, restoreHistory, selectionBounds, toggleGroupSelection, ungroupSelected } from "./canvasEditing";
 import type { ProjectHistory, SelectionBounds } from "./canvasEditing";
 import ComponentEventEditor from "./ComponentEventEditor";
 import ComponentLifecycleEditor from "./ComponentLifecycleEditor";
@@ -67,6 +67,9 @@ import ProjectNavigation from "./ProjectNavigation";
 import ProjectSearch from "./ProjectSearchDialog";
 import { buildProjectSearch } from "./projectSearch";
 import type { ScriptSearchResource, SearchTarget } from "./projectSearch";
+import ResourceChangeDialog from "./ResourceChangeDialog";
+import { applyResourceChange, planResourceChange } from "./resourceChanges";
+import type { ResourceChangeRequest } from "./resourceChanges";
 import { useDesignerPanes } from "./useDesignerPanes";
 import "./canvasEditing.css";
 import "./designerDocuments.css";
@@ -188,6 +191,7 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQueries, setSearchQueries] = useState<NamedQuery[] | null>(null);
   const [searchScripts, setSearchScripts] = useState<ScriptSearchResource[]>([]);
+  const [scriptsEditorReady, setScriptsEditorReady] = useState(false);
   const [searchScriptsLoading, setSearchScriptsLoading] = useState(false);
   const [searchScriptsError, setSearchScriptsError] = useState("");
   const [queryNavigation, setQueryNavigation] = useState<{ id: string; token: number }>();
@@ -195,6 +199,10 @@ export default function App() {
   const [searchNavigation, setSearchNavigation] = useState<SearchTarget | null>(null);
   const [searchLocation, setSearchLocation] = useState<SearchTarget | null>(null);
   const searchNavigationToken = useRef(0);
+  const [resourceChangeContext, setResourceChangeContext] = useState<{ project: Project; queries: NamedQuery[]; scripts: ScriptSearchResource[]; request: ResourceChangeRequest } | null>(null);
+  const [resourceChangeLoading, setResourceChangeLoading] = useState(false);
+  const [resourceChangeError, setResourceChangeError] = useState("");
+  const resourceChangeEpoch = useRef(0);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const discardNavigation = useRef(false);
   useEffect(() => {
@@ -262,8 +270,11 @@ export default function App() {
   const receiveSearchScripts = useCallback((resources: ScriptSearchResource[]) => {
     setSearchScripts(resources); setSearchScriptsLoading(false); setSearchScriptsError("");
   }, []);
+  const receiveScriptDraft = useCallback((resources: ScriptSearchResource[]) => {
+    setScriptsEditorReady(true); receiveSearchScripts(resources);
+  }, [receiveSearchScripts]);
   useEffect(() => {
-    if (!searchOpen || scriptsVisited) return;
+    if (!searchOpen || scriptsEditorReady) return;
     let active = true;
     setSearchScriptsLoading(true); setSearchScriptsError("");
     void api<{ resources: ScriptSearchResource[] }>("/scripts/resources")
@@ -271,8 +282,28 @@ export default function App() {
       .catch(reason => { if (active) { setSearchScripts([]); setSearchScriptsError(reason instanceof Error ? reason.message : String(reason)); } })
       .finally(() => { if (active) setSearchScriptsLoading(false); });
     return () => { active = false; };
-  }, [searchOpen, scriptsVisited]);
+  }, [searchOpen, scriptsEditorReady]);
   const searchEntries = useMemo(() => project ? buildProjectSearch(project, searchQueries ?? queries, searchScripts) : [], [project, queries, searchQueries, searchScripts]);
+  const resourceChangePlan = useMemo(() => resourceChangeContext ? planResourceChange(resourceChangeContext.project, resourceChangeContext.queries, resourceChangeContext.scripts, resourceChangeContext.request) : null, [resourceChangeContext]);
+  const closeResourceChange = () => { resourceChangeEpoch.current++; setResourceChangeContext(null); setResourceChangeLoading(false); setResourceChangeError(""); };
+  const previewResourceChange = (request: ResourceChangeRequest) => {
+    const current = projectRef.current;
+    if (!current || previewActionBusy) return;
+    const epoch = ++resourceChangeEpoch.current;
+    const context = { project: current, queries: searchQueries ?? queries, scripts: searchScripts, request };
+    setResourceChangeContext(context); setResourceChangeError("");
+    if (scriptsEditorReady) { setResourceChangeLoading(false); return; }
+    // Load the script inventory without mounting or executing the scripting workspace.
+    setResourceChangeLoading(true);
+    void api<{ resources: ScriptSearchResource[] }>("/scripts/resources")
+      .then(value => {
+        if (resourceChangeEpoch.current !== epoch) return;
+        receiveSearchScripts(value.resources);
+        setResourceChangeContext(previous => previous && ({ ...previous, scripts: value.resources }));
+      })
+      .catch(reason => { if (resourceChangeEpoch.current === epoch) setResourceChangeError(reason instanceof Error ? reason.message : String(reason)); })
+      .finally(() => { if (resourceChangeEpoch.current === epoch) setResourceChangeLoading(false); });
+  };
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "f" && project && !previewActionBusy && !document.querySelector("dialog[open]")) {
@@ -596,8 +627,19 @@ export default function App() {
   };
   const deleteSelection = () => {
     if (!screen || !selection.length) return;
-    replaceComponents(deleteSelected(screen.components, selectedIds));
-    setSelectedIds([]);
+    previewResourceChange({ action: "delete", target: { kind: "components", ownerKind: editingTemplate ? "template" : "screen", ownerId: screen.id, ids: selectedIds } });
+  };
+  const commitResourceChange = () => {
+    if (!resourceChangePlan || resourceChangeLoading || scriptsEditorReady && (searchScriptsLoading || searchScriptsError)) return;
+    try {
+      const request = resourceChangePlan.request;
+      change(current => applyResourceChange(resourceChangePlan, current, searchQueries ?? queries, searchScripts));
+      closeResourceChange(); setSelectedId(null);
+      if (request.action === "delete" && request.target.kind !== "components") closeDocument(request.target);
+      notify(`${request.action === "rename" ? "Rename" : "Deletion"} applied to the draft. Undo is available; save and publish when ready.`);
+    } catch (reason) {
+      setResourceChangeError(reason instanceof Error ? reason.message : String(reason));
+    }
   };
   const duplicateSelection = () => {
     if (!screen || !selection.length) return;
@@ -1777,16 +1819,7 @@ export default function App() {
                         className="icon-button"
                         title={selection.length > 1 ? "Delete selected group" : "Delete component"}
                         aria-label={selection.length > 1 ? "Delete selected group" : "Delete component"}
-                        onClick={() => {
-                          if (selection.length > 1) { deleteSelection(); return; }
-                          updateScreen((current) => ({
-                            ...current,
-                            components: current.components.filter(
-                              (item) => item.id !== selected.id,
-                            ),
-                          }));
-                          setSelectedId(null);
-                        }}
+                        onClick={deleteSelection}
                       >
                         <Icon name="trash" size={15} />
                       </button>
@@ -2458,6 +2491,7 @@ export default function App() {
                       parentParameters={project.parameters}
                       canChangeToPopup={screen.kind === "popup" || project.screens.filter(item => item.kind !== "popup").length > 1}
                       onChange={patch => updateScreen(current => ({ ...current, ...patch }))}
+                      onRename={() => previewResourceChange({ action: "rename", target: { kind: editingTemplate ? "template" : "screen", id: screen.id }, name: screen.name })}
                       notify={notify}
                     />}
                     {screen && <div className="inspector-section">
@@ -2470,39 +2504,7 @@ export default function App() {
                             (item) => item.kind !== "popup",
                           ).length < 2
                         }
-                        onClick={() => {
-                          if (editingTemplate) {
-                            const references = [...project.screens, ...(project.templates || []).filter(item => item.id !== editingTemplate.id)]
-                              .flatMap((item) => item.components)
-                              .filter(
-                                (item) =>
-                                  isTemplateInstance(item.type) &&
-                                  item.props.templateId === editingTemplate.id,
-                              );
-                            if (references.length) {
-                              notify(
-                                `Remove ${references.length} instance${references.length === 1 ? "" : "s"} from screens and templates before deleting this template.`,
-                                true,
-                              );
-                              return;
-                            }
-                            change((current) => ({
-                              ...current,
-                              templates: (current.templates || []).filter(
-                                (item) => item.id !== editingTemplate.id,
-                              ),
-                            }));
-                            closeDocument({ kind: "template", id: editingTemplate.id });
-                            return;
-                          }
-                          change((current) => ({
-                            ...current,
-                            screens: current.screens.filter(
-                              (item) => item.id !== screen?.id,
-                            ),
-                          }));
-                          if (screen) closeDocument({ kind: "screen", id: screen.id });
-                        }}
+                        onClick={() => previewResourceChange({ action: "delete", target: { kind: editingTemplate ? "template" : "screen", id: screen.id } })}
                       >
                         <Icon name="trash" size={15} />
                         {editingTemplate ? "Delete template" : "Delete screen"}
@@ -2571,7 +2573,7 @@ export default function App() {
             onDirtyChange={setScriptsDirty}
             navigationRequest={scriptNavigation}
             onNavigationHandled={() => setScriptNavigation(undefined)}
-            onSearchResources={receiveSearchScripts}
+            onSearchResources={receiveScriptDraft}
             onSearchError={setSearchScriptsError}
             onSearchLoading={setSearchScriptsLoading}
           />
@@ -2637,6 +2639,16 @@ export default function App() {
       {gatewayAdmin && projectImportOpen && <ProjectImportDialog onClose={() => setProjectImportOpen(false)} />}
       {accountSettingsOpen && <AccountSettingsDialog hasUnsavedChanges={dirty || queriesDirty || scriptsDirty} onClose={() => setAccountSettingsOpen(false)} />}
       {searchOpen && project && <ProjectSearch entries={searchEntries} onOpen={navigateSearch} onClose={() => setSearchOpen(false)} scriptsLoading={searchScriptsLoading} scriptsError={searchScriptsError} />}
+      {resourceChangePlan && <ResourceChangeDialog plan={resourceChangePlan}
+        onNameChange={name => setResourceChangeContext(previous => previous && previous.request.action === "rename" ? { ...previous, request: { ...previous.request, name } } : previous)}
+        onApply={commitResourceChange} onClose={closeResourceChange} onOpenReference={navigateSearch}
+        loading={resourceChangeLoading || scriptsEditorReady && searchScriptsLoading}
+        loadError={resourceChangeError || (scriptsEditorReady ? searchScriptsError : "")}
+        retryLabel={scriptsEditorReady && searchScriptsError ? "Open script workspace" : "Refresh preview"}
+        onRetry={() => {
+          if (scriptsEditorReady && searchScriptsError) { closeResourceChange(); setWorkspace("scripts"); notify("Reload script resources to check references again. Your current drafts are retained until you choose to reload.", true); }
+          else if (resourceChangeContext) previewResourceChange(resourceChangeContext.request);
+        }} />}
       {projectSettingsOpen && project && <ProjectSettingsDialog project={project} canRename={gatewayAdmin} notify={notify}
         onChange={patch => change(current => ({ ...current, ...patch }))} onClose={() => setProjectSettingsOpen(false)} />}
       {pendingNavigation && <UnsavedProjectNavigation onStay={() => setPendingNavigation(null)} onDiscard={() => {

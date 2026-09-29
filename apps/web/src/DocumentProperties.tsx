@@ -5,12 +5,14 @@ import { defaultNavigationLabel, navigationLabelError, projectNavigationSettings
 import { TemplateParametersEditor } from "./TemplateParametersEditor";
 import { StateDefinitionsEditor } from "./StateDefinitionsEditor";
 import "./documentProperties.css";
+import "./resourceChanges.css";
 
 type Notify = (message: string, error?: boolean) => void;
 interface DocumentPropertiesProps {
   document: Screen | Template;
   isTemplate: boolean;
   onChange: (patch: Partial<Template>) => void;
+  onRename?: () => void;
   parentParameters?: RuntimeParameters;
   notify: Notify;
   canChangeToPopup?: boolean;
@@ -134,7 +136,7 @@ export function stateDefinitionReferences(documents: (Screen | Template)[], scop
 }
 
 /** Saved document properties use the caller's normal history/save pipeline. */
-export function DocumentProperties({ document, isTemplate, onChange, notify, canChangeToPopup = true, parentParameters = {}, templates = [] }: DocumentPropertiesProps) {
+export function DocumentProperties({ document, isTemplate, onChange, onRename, notify, canChangeToPopup = true, parentParameters = {}, templates = [] }: DocumentPropertiesProps) {
   const scope = isTemplate ? "Template" : "Screen";
   const stateReferences = stateDefinitionReferences([document], isTemplate ? "instance" : "screen", templates);
   return <div className="document-properties" aria-label={`${scope} properties`}>
@@ -142,7 +144,9 @@ export function DocumentProperties({ document, isTemplate, onChange, notify, can
     <section className="document-property-group" aria-label={`${scope} general properties`}>
       <h3>General</h3>
       <PropertyRow label="ID">{id => <input id={id} aria-label={`${scope} ID`} readOnly value={document.id} title={document.id} />}</PropertyRow>
-      <PropertyRow label="Name">{id => <input id={id} aria-label={`${scope} name`} value={document.name} onChange={event => onChange({ name: event.target.value })} />}</PropertyRow>
+      <PropertyRow label="Name">{id => onRename
+        ? <div className="document-resource-name"><input id={id} aria-label={`${scope} name`} value={document.name} readOnly title={document.name} /><button type="button" className="button small" aria-label={`Rename ${scope.toLowerCase()}`} onClick={onRename}>Rename</button></div>
+        : <input id={id} aria-label={`${scope} name`} value={document.name} onChange={event => onChange({ name: event.target.value })} />}</PropertyRow>
       <PropertyRow label="Kind">{id => isTemplate
         ? <input id={id} aria-label="Template kind" readOnly value="Shared template" />
         : <select id={id} aria-label="Screen kind" value={document.kind || "screen"} onChange={event => {

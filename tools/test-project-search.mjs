@@ -102,6 +102,23 @@ check('only complete known resource sets produce missing-reference diagnostics',
   const loading = buildProjectSearch(project, [], scripts, { queriesLoaded: false });
   assert.ok(loading.filter(entry => entry.reference?.kind === 'query').every(entry => entry.missing === undefined));
 });
+check('row-selection field mappings reference only local inputs on supported controls', () => {
+  const changed = structuredClone(project);
+  changed.screens[0].components.find(item => item.id === 'table').props.selectionFields = { quantity: 'amount', unknown: 'missing' };
+  changed.screens[0].components.find(item => item.id === 'select').props.selectionFields = { quantity: 'amount' };
+  changed.screens[0].components.find(item => item.id === 'logo').props.selectionFields = { quantity: 'not-a-selection-control' };
+  changed.screens[0].components.find(item => item.id === 'logo').props.metadata.selectionFields = { quantity: 'metadata' };
+  changed.templates[0].components.push(component('list', 'list', { fieldKey: 'selected', selectionFields: { qty: 'amount' } }));
+  const changedEntries = buildProjectSearch(changed, queries, scripts);
+  const uses = findProjectReferences(changedEntries, { kind: 'component', id: 'qty', ownerKind: 'screen', ownerId: 'home' })
+    .filter(entry => entry.target.property.startsWith('props.selectionFields.'));
+  assert.deepEqual(uses.map(entry => entry.target.componentId), ['table', 'select']);
+  assert.ok(uses.every(entry => entry.target.property === 'props.selectionFields.quantity'));
+  assert.equal(changedEntries.find(entry => entry.target.property === 'props.selectionFields.unknown').reference, undefined);
+  const templateUses = findProjectReferences(changedEntries, { kind: 'component', id: 'qty', ownerKind: 'template', ownerId: 'machine-card' });
+  assert.ok(templateUses.some(entry => entry.target.componentId === 'list'));
+  assert.ok(!uses.some(entry => entry.target.componentId === 'logo'));
+});
 check('script and SQL matches stay text-only and are never executed or promoted to dependencies', () => {
   const code = searchProject(entries, 'orders').filter(entry => entry.textOnly);
   assert.ok(code.some(entry => entry.target.kind === 'script'));

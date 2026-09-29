@@ -1,0 +1,50 @@
+.document-resource-name { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; }
+.document-resource-name > input { flex: 1; width: 0; min-width: 0; height: 27px; padding: 4px 5px; border: 1px solid transparent; border-radius: 2px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; }
+.document-resource-name > .button { flex-shrink: 0; padding: 4px 6px; min-height: 25px; font-size: 10px; }
+.resource-change-dialog { width: min(730px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--panel); color: var(--ink); box-shadow: 0 20px 80px #0005; overflow: hidden; }
+.resource-change-dialog[open] { display: flex; flex-direction: column; }
+.resource-change-dialog::backdrop { background: #11182777; }
+.resource-change-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 20px 22px 17px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.resource-change-heading h2 { margin: 0 0 7px; font-size: 19px; overflow-wrap: anywhere; }
+.resource-change-heading p, .resource-change-body p { margin: 0; font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+.resource-change-body { min-height: 180px; overflow: auto; overscroll-behavior: contain; padding: 18px 22px 22px; }
+.resource-change-name dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 14px; margin: 0 0 18px; font-size: 12px; line-height: 1.5; }
+.resource-change-name dt { color: var(--muted); }
+.resource-change-name dd { margin: 0; overflow-wrap: anywhere; }
+.resource-change-name > label { display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 12px; }
+.resource-change-name > input { width: 100%; }
+.resource-change-name > p { margin-top: 8px; }
+.resource-change-load { min-height: 20px; margin-top: 12px; }
+.resource-change-load .button { margin-top: 8px; }
+.resource-change-body .resource-change-error, .resource-change-body .resource-change-error p { color: var(--danger); }
+div.resource-change-error { padding: 11px 13px; border: 1px solid var(--danger); border-radius: 5px; background: var(--danger-bg); font-size: 12px; line-height: 1.6; }
+.resource-change-error ul { margin: 5px 0 0; padding-left: 18px; }
+.resource-change-notices { margin: 0; padding: 0 0 0 18px; color: var(--text-secondary); font-size: 12px; line-height: 1.65; }
+.resource-change-notices > li + li { margin-top: 4px; }
+.resource-change-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+.resource-change-section h3 { display: flex; align-items: center; gap: 9px; margin: 0 0 9px; font-size: 13px; }
+.resource-change-section h3 > span { min-width: 20px; border-radius: 4px; padding: 2px 5px; background: var(--surface-sunken); color: var(--text-secondary); text-align: center; font-size: 10px; }
+.resource-change-references { list-style: none; margin: 11px 0 0; padding: 0; max-height: 220px; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: 5px; }
+.resource-change-references li + li { border-top: 1px solid var(--border); }
+.resource-change-references button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 10px 12px; text-align: left; color: var(--ink); background: var(--surface-subtle); cursor: pointer; }
+.resource-change-references button:hover { background: var(--surface-hover); }
+.resource-change-references button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.resource-change-references button > span { display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.resource-change-references strong { font-size: 11px; line-height: 1.5; }
+.resource-change-references button > span > span, .resource-change-references code { color: var(--muted); font-size: 10px; line-height: 1.5; }
+.resource-change-references button > span > .resource-change-text-preview { margin-top: 4px; white-space: pre-wrap; color: var(--text-secondary); }
+.resource-change-references button > svg { flex-shrink: 0; color: var(--accent); }
+.resource-change-acknowledgement { display: flex; align-items: flex-start; gap: 9px; padding: 12px; margin-top: 12px; border: 1px solid var(--border-strong); border-radius: 5px; background: var(--surface-subtle); font-size: 12px; line-height: 1.6; cursor: pointer; }
+.resource-change-acknowledgement > input { flex-shrink: 0; margin: 3px 0 0; width: 15px; height: 15px; accent-color: var(--accent); }
+.resource-change-body .resource-change-no-matches { margin-top: 9px; color: var(--muted); }
+.resource-change-footer { display: flex; justify-content: flex-end; align-items: center; gap: 9px; padding: 14px 18px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.resource-change-footer > span { flex: 1; margin-right: auto; max-width: 410px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.resource-change-footer > .button { flex-shrink: 0; }
+.resource-change-footer > .button.danger { color: var(--danger); border-color: var(--danger); background: var(--danger-bg); }
+@media (max-width: 600px) {
+  .resource-change-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
+  .resource-change-heading { padding: 15px; }
+  .resource-change-body { padding: 14px 15px; }
+  .resource-change-footer { flex-wrap: wrap; padding: 12px 15px; }
+  .resource-change-footer > span { flex-basis: 100%; max-width: none; }
+}
