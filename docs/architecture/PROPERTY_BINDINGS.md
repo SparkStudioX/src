@@ -38,6 +38,8 @@ Bad or missing tag quality, lost gateway communication for a tag source, missing
 
 An input can separately use a [two-way state binding](INPUT_STATE_BINDINGS.md) to connect its value to a declared session or screen key. That direct typed connection updates shared state from valid edits and reflects state changes in the input. It does not change the expression grammar, add expression writeback or change the published gateway action contract.
 
+Template and repeater **Template parameters** rows now have their own fx buttons. These [parameter expressions](TEMPLATE_PARAMETER_BINDINGS.md) use parent inputs, parameters and custom properties; their results feed child form context and are reconstructed by the gateway for published actions. They are separate from the wrapper's presentation bindings and do not directly support tag or browser-state sources.
+
 ## Component events and canvas history
 
 For a button with **Run Python event**, choose **Edit onClick event**. The expanded editor provides syntax highlighting, line numbers, find, completion, form/parameter context, and saved library names. Apply creates one project history step; Cancel discards the event draft. Save and Publish the project to release the action. Python runs on the gateway with `inputs`, `parameters`, and `result`, not a browser component object. Libraries retain their separate script publication. Test an action in Preview after applying it.

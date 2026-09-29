@@ -137,8 +137,8 @@ try {
     assert.equal(sibling.parameters.machine, 'Press03'); assert.equal(sibling.parameters.limit, 66);
     for (const extra of [{ parentNote: 'forged' }, { rootNote: 'forged' }, { popupNote: 'forged' }]) await action({ inputs: { ...localInputs(), ...extra }, status: 400 });
     await action({ parameters: { machine: 'forged' }, status: 400 });
-    assert.deepEqual(successful(await action({ sessionState: { selected: 'forged' } })).inputs, localInputs(5));
-    assert.equal(successful(await action({ script: "result='forged'" })).marker, 'published');
+    await action({ sessionState: { selected: 'forged' }, status: 400 });
+    await action({ script: "result='forged'", status: 400 });
   });
   await test('saved rows at outer and nested levels form distinct parameter chains', async () => {
     for (const [id, machine, limit] of [['saved-a', 'Press02', 41], ['saved-b', 'Press03', 51]]) {
@@ -182,7 +182,7 @@ try {
     await popupAction({ popupOrigin: { ...origin(), extra: 'forged' }, status: 400 });
     await popupAction({ popupOrigin: { ...origin(), instancePath: [step('first'), step('missing')] }, status: 404 });
     await popupAction({ popupOrigin: { screenId: 'main', componentId: 'wrong-popup' }, status: 400 });
-    assert.equal(successful(await popupAction({ popupParameters: { machine: 'forged' } })).parameters.machine, 'Press01');
+    await popupAction({ popupParameters: { machine: 'forged' }, status: 400 });
     await action({ popupOrigin: origin(), status: 400 });
   });
   await test('nested table edit uses reconstructed context and fixed server cell inputs', async () => {

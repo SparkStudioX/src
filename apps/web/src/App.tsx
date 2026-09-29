@@ -46,11 +46,12 @@ import { useFormInputs } from "./inputStateBindings";
 import { alignSelected, arrangementCount, checkpoint, deleteSelected, distributeSelected, duplicateSelected, expandGroupSelection, groupSelected, marqueeBounds, marqueeSelection, moveSelected, projectContent, resizeComponent, resizeGroup, restoreHistory, selectionBounds, toggleGroupSelection, ungroupSelected } from "./canvasEditing";
 import type { ProjectHistory, SelectionBounds } from "./canvasEditing";
 import ComponentEventEditor from "./ComponentEventEditor";
+import ComponentLifecycleEditor from "./ComponentLifecycleEditor";
+import { ComponentEventDiagnostics } from "./ComponentEvents";
 import InputEventsEditor from "./InputEventsEditor";
 import { componentGeometry } from "./propertyBindings";
 import { PropertyBindingsEditor } from "./PropertyBindingsEditor";
 import { DocumentProperties, ProjectSettingsDialog } from "./DocumentProperties";
-import { TemplateParameterOverrides } from "./TemplateParametersEditor";
 import { StateControlEditor } from "./StateControlEditor";
 import { ListTreeOptionsEditor, TablePageSizeEditor } from "./ListTreeOptionsEditor";
 import { TableColumnsEditor } from "./TableColumnsEditor";
@@ -232,6 +233,7 @@ export default function App() {
   const savingRef = useRef(false);
   const [eventEditorId, setEventEditorId] = useState<string | null>(null);
   const [inputEventEditorId, setInputEventEditorId] = useState<string | null>(null);
+  const [lifecycleEventEditorId, setLifecycleEventEditorId] = useState<string | null>(null);
   const projectRef = useRef(project);
   projectRef.current = project;
   const updateHistory = useCallback((next: ProjectHistory) => {
@@ -277,6 +279,8 @@ export default function App() {
       setDirty(false);
       updateHistory({ past: [], future: [] });
       setEventEditorId(null);
+      setInputEventEditorId(null);
+      setLifecycleEventEditorId(null);
       setSelectedId(null);
     } catch (error) {
       setLoadError(
@@ -369,7 +373,8 @@ export default function App() {
     editingTemplate ||
     project?.screens.find((item) => item.id === screenId);
   const applicationState = useApplicationState(project, screen,
-    JSON.stringify([project?.id, project?.revision, preview, workspace === "designer"]));
+    JSON.stringify([project?.id, project?.revision, preview, workspace === "designer"]),
+    editingTemplate ? editingTemplate.instanceState ?? {} : undefined);
   const templateContext = editingTemplate && project ? resolveTemplateParameters(editingTemplate, project.parameters) : undefined;
   const editorParameterError = templateContext?.error;
   // Keep authored parameter names available to repair a broken template. This
@@ -389,7 +394,7 @@ export default function App() {
   const selection = screen?.components.filter((component) => selectedIds.includes(component.id)) || [];
   const selectedUnitCount = arrangementCount(screen?.components || [], selectedIds);
   const selectedGroupId = selection.length > 1 && selection[0].groupId && selection.every(component => component.groupId === selection[0].groupId) ? selection[0].groupId : null;
-  useEffect(() => { setSelectedIds([]); setEventEditorId(null); }, [screen?.id, editingTemplateId, preview]);
+  useEffect(() => { setSelectedIds([]); setEventEditorId(null); setInputEventEditorId(null); setLifecycleEventEditorId(null); }, [screen?.id, editingTemplateId, preview]);
   const previewForm = useFormInputs({ document: screen, tags, parameters: editorParameters,
     edits: screen ? previewInputs[screen.id] : undefined, communicationLost: !connected,
     state: applicationState, active: preview && !previewActionBusy && !editorParameterError,
@@ -402,6 +407,7 @@ export default function App() {
     component: CanvasComponent,
     instance?: InstanceAction,
   ) => {
+    if (instance?.isCurrent?.() === false) return;
     if (!gatewayAdmin) { notify("A gateway administrator must sign in to run draft Python code.", true); return; }
     if (!screen || !project || previewActionBusy || editorParameterError) return;
     const actionParameters = instance?.parameters || editorParameters;
@@ -422,6 +428,7 @@ export default function App() {
         parameters: actionParameters,
         inputs: actionInputs,
       });
+      if (instance?.isCurrent?.() === false) return;
       const resultMessage =
         typeof execution.result === "object" &&
         execution.result !== null &&
@@ -439,6 +446,7 @@ export default function App() {
       );
       if (execution.success) window.dispatchEvent(new Event("sparkstudio:refresh-data"));
     } catch (error) {
+      if (instance?.isCurrent?.() === false) return;
       notify(error instanceof Error ? error.message : String(error), true);
     } finally {
       setPreviewActionBusy("");
@@ -623,7 +631,7 @@ export default function App() {
   const redo = useCallback(() => travelHistory("redo"), [travelHistory]);
   useEffect(() => {
     const handle = (event: KeyboardEvent) => {
-      if (workspace !== "designer" || eventEditorId || inputEventEditorId) return;
+      if (workspace !== "designer" || eventEditorId || inputEventEditorId || lifecycleEventEditorId) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
         void save();
@@ -641,7 +649,7 @@ export default function App() {
     };
     window.addEventListener("keydown", handle);
     return () => window.removeEventListener("keydown", handle);
-  }, [save, undo, redo, workspace, eventEditorId, inputEventEditorId]);
+  }, [save, undo, redo, workspace, eventEditorId, inputEventEditorId, lifecycleEventEditorId]);
 
   const addComponent = (type: ComponentType, tagPath?: string) => {
     if (!screen) return;
@@ -1091,7 +1099,7 @@ export default function App() {
             )}
           </div>
         </header>
-
+        {preview && <ComponentEventDiagnostics state={applicationState} />}
         {loadError && (
           <div className="gateway-error">
             <Icon name="info" />
@@ -1564,6 +1572,7 @@ export default function App() {
                   preview={preview}
                   inputs={currentPreviewInputs}
                   onInputChange={previewForm.assign}
+                  onAutomaticInputChange={previewForm.assignAutomatic}
                   onAction={(component, instance) =>
                     void runPreviewAction(component, instance)
                   }
@@ -1716,9 +1725,18 @@ export default function App() {
                       state={applicationState.values}
                       allowUnresolvedScreenState={Boolean(editingTemplate)}
                       communicationLost={!connected}
+                      parameterTemplate={project.templates?.find(item => item.id === selected.props.templateId)}
+                      notify={notify}
                       onChange={updateProps}
                       onGeometryChange={patch => updateComponent(selected.id, patch)}
                     />
+                    <div className="inspector-section">
+                      <h3>Component events</h3>
+                      <button type="button" className="button component-lifecycle-open" onClick={() => setLifecycleEventEditorId(selected.id)}>
+                        Edit lifecycle &amp; property events ({Object.values(selected.props.componentEvents || {}).filter(event => event?.code?.trim()).length})
+                      </button>
+                      <p className="component-lifecycle-hint">Automatic browser scripts for mounted, watched property changes and cleanup. User input events remain separate.</p>
+                    </div>
                     {isDrawingComponent(selected.type) && <DrawingEditor key={`drawing:${selected.id}`} component={selected} onChange={updateProps} notify={notify} />}
                     {isTemplateInstance(selected.type) && (
                       <div className="inspector-section">
@@ -1730,6 +1748,7 @@ export default function App() {
                               updateProps({
                                 templateId: event.target.value,
                                 parameters: {},
+                                parameterBindings: {},
                                 ...(selected.type === "repeater"
                                   ? { rows: [], rowsSource: selected.props.rowsSource ? { ...selected.props.rowsSource, parameterMap: {} } : undefined }
                                   : {}),
@@ -1755,14 +1774,6 @@ export default function App() {
                             template
                           </button>
                         )}
-                        <TemplateParameterOverrides
-                          key={`${selected.id}:${selected.props.templateId || ""}`}
-                          template={project.templates?.find(item => item.id === selected.props.templateId)}
-                          parameters={selected.props.parameters || {}}
-                          parentParameters={editorParameters}
-                          onChange={parameters => updateProps({ parameters })}
-                          notify={notify}
-                        />
                         {selected.type === "repeater" && (
                           <>
                             <Field label="Row source">
@@ -2497,12 +2508,27 @@ export default function App() {
           <span className="statusbar-version">EARLY PREVIEW</span>
         </footer>
       </div>
+      {lifecycleEventEditorId && screen?.components.find(component => component.id === lifecycleEventEditorId) && <ComponentLifecycleEditor
+        key={lifecycleEventEditorId}
+        component={screen.components.find(component => component.id === lifecycleEventEditorId)!}
+        components={screen.components}
+        inputs={currentPreviewInputs}
+        parameters={editorParameters}
+        instanceStateAvailable={Boolean(editingTemplate)}
+        onApply={events => {
+          const component = screen.components.find(item => item.id === lifecycleEventEditorId);
+          if (component && JSON.stringify(events) !== JSON.stringify(component.props.componentEvents || {})) updateComponent(component.id, { props: { ...component.props, componentEvents: Object.keys(events).length ? events : undefined } });
+          setLifecycleEventEditorId(null);
+        }}
+        onClose={() => setLifecycleEventEditorId(null)}
+      />}
       {inputEventEditorId && screen?.components.find(component => component.id === inputEventEditorId) && <InputEventsEditor
         key={inputEventEditorId}
         component={screen.components.find(component => component.id === inputEventEditorId)!}
         components={screen.components}
         inputs={currentPreviewInputs}
         parameters={editorParameters}
+        instanceStateAvailable={Boolean(editingTemplate)}
         onApply={events => {
           const component = screen.components.find(item => item.id === inputEventEditorId);
           if (component && JSON.stringify(events || {}) !== JSON.stringify(component.props.events || {})) updateComponent(component.id, {props:{...component.props,events}});
@@ -2553,13 +2579,17 @@ export default function App() {
               openDocument({ kind: "screen", id: target });
             }
           }}
-          onExecute={(action) =>
-            gatewayAdmin ? api<ScriptResult>("/scripts/run", "POST", {
+          onExecute={async (action) => {
+            if (action.instance?.isCurrent?.() === false) throw new Error("The template parameters changed before this action could run.");
+            if (!gatewayAdmin) throw new Error("A gateway administrator must sign in to run draft Python code.");
+            const result = await api<ScriptResult>("/scripts/run", "POST", {
               code: action.component.props.script || "",
               parameters: action.instance?.parameters || action.parameters,
               inputs: action.inputs,
-            }) : Promise.reject(new Error("A gateway administrator must sign in to run draft Python code."))
-          }
+            });
+            if (action.instance?.isCurrent?.() === false) throw new Error("The template parameters changed while this action was running.");
+            return result;
+          }}
         />
       )}
       {toast && (
@@ -2660,6 +2690,7 @@ function Canvas({
   onBind,
   inputs,
   onInputChange,
+  onAutomaticInputChange,
   onAction,
   onOpenPopup,
   onClosePopup,
@@ -2684,6 +2715,7 @@ function Canvas({
   onBind: (id: string, path: string) => void;
   inputs: InputValues;
   onInputChange: (fieldKey: string, value: InputValue) => void;
+  onAutomaticInputChange: (fieldKey: string, value: InputValue) => void;
   onAction: (component: CanvasComponent, instance?: InstanceAction) => void;
   onOpenPopup: (component: CanvasComponent, instance?: InstanceAction) => void;
   onClosePopup: () => void;
@@ -2910,6 +2942,7 @@ function Canvas({
                 onNavigate={onNavigate}
                 inputs={inputs}
                 onInputChange={onInputChange}
+                onAutomaticInputChange={onAutomaticInputChange}
                 onAction={onAction}
                 onOpenPopup={onOpenPopup}
                 onClosePopup={onClosePopup}

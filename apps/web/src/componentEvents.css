@@ -1,0 +1,6 @@
+.component-event-diagnostics { display: grid; gap: 5px; padding: 8px 12px; max-height: 180px; overflow: auto; flex: 0 0 auto; border-block-end: 1px solid var(--border); background: var(--panel); }
+.component-event-diagnostic { display: flex; gap: 10px; align-items: start; color: var(--ink); font-size: 12px; }
+.component-event-diagnostic strong { flex: 0 0 auto; max-width: 180px; overflow-wrap: anywhere; }
+.component-event-diagnostic span { flex: 1; white-space: pre-wrap; overflow-wrap: anywhere; }
+.component-event-diagnostic.error, .component-event-diagnostic.breaker { color: var(--danger, #c74b56); }
+.component-event-diagnostic button { font: inherit; color: inherit; background: none; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }

@@ -163,7 +163,8 @@ try {
     const action = (body = {}, status = 200) => api(route('/runtime/screens/main/components/apply/action'), { method: 'POST', status, body: { publishedAt, ...body } });
     const expected = { parameters: { area: 'Demo' }, inputs: { reading: 37 }, state_names: [] };
     assert.deepEqual((await action()).result, expected);
-    assert.deepEqual((await action({ sessionState: { selected: 'forged' }, screenState: { count: 99 } })).result, expected);
+    await action({ sessionState: { selected: 'forged' }, screenState: { count: 99 } }, 400);
+    assert.deepEqual((await action()).result, expected);
     await action({ parameters: { area: 'Demo', selected: 'forged' } }, 400);
     await action({ inputs: { reading: 37, count: 99 } }, 400);
     assert.deepEqual(await api(route('/project')), draft, 'Runtime actions must not persist browser state into the project defaults.');

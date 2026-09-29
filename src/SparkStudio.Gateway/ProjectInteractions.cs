@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace SparkStudio.Gateway;
@@ -8,7 +9,7 @@ public sealed record InstancePathStep(string InstanceId, string? RowId = null);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PopupOrigin(string ScreenId, string ComponentId, string? InstanceId = null, string? RowId = null,
-    IReadOnlyList<InstancePathStep>? InstancePath = null);
+    IReadOnlyList<InstancePathStep>? InstancePath = null, IReadOnlyList<Dictionary<string, JsonElement>>? BindingInputs = null);
 
 internal static class ProjectInteractions
 {
@@ -82,6 +83,7 @@ internal static class ProjectInteractions
         var visited = new HashSet<string>(StringComparer.Ordinal);
         foreach (var step in path)
         {
+            var parent = scope;
             if (step is null || string.IsNullOrWhiteSpace(step.InstanceId)) throw new ArgumentException("Every instance path step needs a nonempty template instance ID.");
             var instance = scope["components"]!.AsArray().OfType<JsonObject>().FirstOrDefault(component => ProjectStore.Optional(component, "id") == step.InstanceId)
                 ?? throw new KeyNotFoundException("Published template instance not found.");
@@ -109,13 +111,16 @@ internal static class ProjectInteractions
                 }
             }
             else if (step.RowId is not null) throw new ArgumentException("A row ID is valid only for a repeater action.");
-            scopes.Add(new JsonObject
+            var captured = new JsonObject
             {
-                ["templateParameters"] = ProjectTemplates.MergeParameters(scope, instance, row),
+                ["templateParameters"] = ProjectTemplates.MergeParameters(scope, instance, null),
+                ["rowParameters"] = row?["parameters"]?.DeepClone(),
                 ["templateParameterTypes"] = scope["parameterTypes"]?.DeepClone(),
                 ["rowsSource"] = rowsSource,
                 ["rowId"] = rowsSource is null ? null : step.RowId
-            });
+            };
+            TemplateParameterBindings.Capture(captured, parent, instance);
+            scopes.Add(captured);
         }
         var leaf = scope["components"]!.AsArray().OfType<JsonObject>().FirstOrDefault(component => ProjectStore.Optional(component, "id") == componentId)
             ?? throw new KeyNotFoundException("Published component not found.");

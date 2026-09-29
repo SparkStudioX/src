@@ -4,6 +4,7 @@ import { ApiError, resolvePath, scriptFailureMessage } from "./api";
 import Icon from "./Icon";
 import { validateInputs } from "./inputs";
 import { useFormInputs } from "./inputStateBindings";
+import { ComponentEventDiagnostics } from "./ComponentEvents";
 import { actionKey, ProjectComponentView } from "./templates";
 import { componentGeometry } from "./propertyBindings";
 import { ApplicationStateProvider, useApplicationStateContext, usePopupApplicationState } from "./applicationState";
@@ -119,7 +120,7 @@ export default function Popup({
     if (!busy) onClose();
   };
   const run = async (component: CanvasComponent, instance?: InstanceAction) => {
-    if (busy || sourceLocked || readOnly) return;
+    if (busy || sourceLocked || readOnly || instance?.isCurrent?.() === false) return;
     const values = instance?.inputs || inputs;
     const invalid = validateInputs(
       instance?.template || screen,
@@ -142,6 +143,7 @@ export default function Popup({
         instance,
         popup,
       });
+      if (!active.current || instance?.isCurrent?.() === false) return;
       const resultMessage =
         typeof execution.result === "object" &&
         execution.result !== null &&
@@ -160,6 +162,7 @@ export default function Popup({
       });
       if (execution.success) window.dispatchEvent(new Event("sparkstudio:refresh-data"));
     } catch (error) {
+      if (!active.current || instance?.isCurrent?.() === false) return;
       if (error instanceof ApiError && error.status === 409) {
         onStale?.();
         if (popup.querySourceParameters) setInvalidSource("The application version changed. Close this popup and load the new version before continuing.");
@@ -174,15 +177,18 @@ export default function Popup({
           message: error instanceof Error ? error.message : String(error),
         });
     } finally {
-      setBusy("");
-      onBusyChange(false);
+      if (active.current) { setBusy(""); onBusyChange(false); }
     }
   };
   const editTable = async (component: CanvasComponent, edit: TableCellEdit, instance?: InstanceAction): Promise<ScriptResult> => {
-    if (busy || sourceLocked || readOnly || queryScope !== "runtime" || !onTableEdit) throw new Error("Table editing is unavailable in this popup.");
+    if (busy || sourceLocked || readOnly || queryScope !== "runtime" || !onTableEdit || instance?.isCurrent?.() === false) throw new Error("Table editing is unavailable in this popup.");
     setBusy(actionKey(component.id, instance));
     onBusyChange(true);
-    try { return await onTableEdit(component, edit, instance); }
+    try {
+      const result = await onTableEdit(component, edit, instance);
+      if (!active.current || instance?.isCurrent?.() === false) throw new Error("The template parameters changed while the edit was running. Reload its data before continuing.");
+      return result;
+    }
     catch (error) {
       if (active.current && error instanceof ApiError && error.status === 409) onStale?.();
       throw error;
@@ -265,6 +271,7 @@ export default function Popup({
           <Icon name="close" size={19} />
         </button>
       </header>
+      <ComponentEventDiagnostics state={applicationState} errorsOnly />
       {sourceLocked && <div className="popup-source-status" role="status">
         <Icon name="info" size={16} />
         <span>{feedback?.success && (invalidSource || sourceState.stale)
@@ -314,6 +321,7 @@ export default function Popup({
                   publishedAt={queryScope === "runtime" ? project.publishedAt : undefined}
                   communicationLost={communicationLost}
                   onInputChange={form.assign}
+                  onAutomaticInputChange={form.assignAutomatic}
                   onScopedInputChange={(scope, field, value) =>
                     setEdits((previous) => ({
                       ...previous,

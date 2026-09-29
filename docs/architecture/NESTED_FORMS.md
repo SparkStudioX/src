@@ -25,9 +25,13 @@ At each boundary, the child resolves its declared defaults, instance overrides a
 
 Substitution is one pass per authored boundary. Literal braces inside a replacement value are not recursively interpreted. A child receives parameter context, but never copies the parent's editable inputs into its own form. Field names such as `setpoint` can be reused by different nested instances and rows. Input bindings, input-event `inputs`, `app.setInput` and gateway submission validation operate on the immediate leaf form only.
 
+Instance parameters also support [fx expressions](TEMPLATE_PARAMETER_BINDINGS.md) from the immediate parent's parameters, non-password inputs and custom properties. Binding results overlay static overrides before row values and are never re-interpolated. The gateway reconstructs these expressions using captured published definitions and explicitly validated parent-input snapshots. Parent inputs used by a binding do not become fields in the child's submitted form.
+
 The complete sequence of instance IDs and optional row IDs identifies a draft. Changing a relevant context invalidates that draft and its pending helpers. Identical child IDs beneath different outer instances or saved rows remain distinct. Hiding an unchanged wrapper preserves its draft, while hidden and disabled descendants cannot dispatch input events or interactions.
 
 Templates share their containing screen's declared browser state. A regular screen and its popup have different screen-state instances; both share session state. Templates cannot declare their own `state` block. Every containing screen must declare the screen-state keys required by its descendants. Browser state is not included in a Python action's trusted inputs or parameters merely because a template reads it. See [APPLICATION_STATE.md](APPLICATION_STATE.md).
+
+Templates can additionally declare `instanceState` for private mutable values. Each placement and repeater row owns a separate map; a nested template replaces the private scope instead of inheriting its parent's keys. Component fx, two-way inputs and browser input handlers can use the local scope. See [INSTANCE_STATE.md](INSTANCE_STATE.md) for reset, row identity and disposal rules.
 
 ## Wrappers and interaction
 

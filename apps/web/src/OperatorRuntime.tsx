@@ -6,6 +6,7 @@ import { SessionIdentity } from "./OperatorAccess";
 import { runtimePresentation } from "./operatorAccessModel";
 import { ApplicationStateProvider, useApplicationState } from "./applicationState";
 import { useFormInputs } from "./inputStateBindings";
+import { ComponentEventDiagnostics } from "./ComponentEvents";
 import {
   actionKey,
   componentContexts,
@@ -253,7 +254,7 @@ export default function OperatorRuntime() {
     component: CanvasComponent,
     instance?: InstanceAction,
   ) => {
-    if (!canOperate || !screen || !project || actionBusyId) return;
+    if (!canOperate || !screen || !project || actionBusyId || instance?.isCurrent?.() === false) return;
     const localInputs = instance?.inputs || currentInputs;
     const invalid = validateInputs(
       instance?.template || screen,
@@ -277,7 +278,7 @@ export default function OperatorRuntime() {
           ...instanceRequestScope(instance),
         },
       );
-      if (currentProject.current !== project) return;
+      if (currentProject.current !== project || instance?.isCurrent?.() === false) return;
       const resultMessage =
         typeof execution.result === "object" &&
         execution.result !== null &&
@@ -296,7 +297,7 @@ export default function OperatorRuntime() {
       });
       if (execution.success) window.dispatchEvent(new Event("sparkstudio:refresh-data"));
     } catch (reason) {
-      if (currentProject.current !== project) return;
+      if (currentProject.current !== project || instance?.isCurrent?.() === false) return;
       if (reason instanceof ApiError && reason.status === 404) clearUnavailableProject();
       else if (reason instanceof ApiError && reason.status === 409) {
         setNextPublication({ published: true });
@@ -312,7 +313,7 @@ export default function OperatorRuntime() {
   };
   const editTable = async (component: CanvasComponent, edit: TableCellEdit, instance?: InstanceAction, popupContext?: PopupState): Promise<ScriptResult> => {
     const targetScreen = popupContext?.screenId || screen?.id;
-    if (!canOperate || !project || !targetScreen || !popupContext && actionBusyId)
+    if (!canOperate || !project || !targetScreen || !popupContext && actionBusyId || instance?.isCurrent?.() === false)
       throw new Error("Table editing is unavailable in this session.");
     if (!popupContext) setActionBusyId(actionKey(component.id, instance));
     try {
@@ -324,6 +325,7 @@ export default function OperatorRuntime() {
         ...instanceRequestScope(instance),
       });
       if (currentProject.current !== project) throw new Error("The application changed while the edit was running. Reload its data before continuing.");
+      if (instance?.isCurrent?.() === false) throw new Error("The template parameters changed while the edit was running. Reload its data before continuing.");
       if (result.success) window.dispatchEvent(new Event("sparkstudio:refresh-data"));
       return result;
     } catch (reason) {
@@ -636,6 +638,7 @@ export default function OperatorRuntime() {
                       communicationLost={!connected}
                       inputs={currentInputs}
                       onInputChange={form.assign}
+                      onAutomaticInputChange={form.assignAutomatic}
                       onAction={(component, instance) =>
                         void runAction(component, instance)
                       }
@@ -731,6 +734,7 @@ export default function OperatorRuntime() {
           }
         />
       )}
+      <ComponentEventDiagnostics state={applicationState} />
       {showRuntimeControls && <footer className="operator-footer">
         {(gatewayAdmin || permissions.design) && <span className="operator-project-links"><a href={projectPage("designer")} title="Open a separate engineering session">Engineering sign-in</a></span>}
         <span>

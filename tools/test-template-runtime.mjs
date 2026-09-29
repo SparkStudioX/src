@@ -86,6 +86,7 @@ try {
       ],
     }],
   };
+  delete fixtureProject.navigation;
   let draft = await api('/api/project', { method: 'PUT', body: fixtureProject });
   changed = true;
   await publish(draft.revision);
@@ -175,7 +176,9 @@ try {
       [{ instanceId: 'orders', rowId: 'row-one', inputs: { otherRowField: 'forged' } }, 'apply', 400],
     ]) await action(body, { componentId, status });
     assert.deepEqual(await values(), baseline);
-    const result = await action({ instanceId: 'first', inputs: { setpoint: 13 }, templateParameters: { target: paths[1] }, code: "raise Exception('Never execute caller code')" });
+    await action({ instanceId: 'first', inputs: { setpoint: 13 }, templateParameters: { target: paths[1] }, code: "raise Exception('Never execute caller code')" }, { status: 400 });
+    assert.deepEqual(await values(), baseline);
+    const result = await action({ instanceId: 'first', inputs: { setpoint: 13 } });
     assert.equal(result.success, true, result.stderr);
     assert.equal(result.result.parameters.target, paths[0]);
     assert.deepEqual(await values(), [13, 22, 33, 44]);

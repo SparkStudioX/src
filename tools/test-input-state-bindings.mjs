@@ -183,7 +183,8 @@ try {
   await test('forged state never supplies omitted inputs or becomes gateway-authoritative data', async () => {
     const forged = { sessionState: { globalText: 'Forged' }, screenState: { count: 999 }, state: { count: 999 } };
     await action('main', 'apply', forged, 400);
-    assert.deepEqual((await action('main', 'apply', { ...forged, inputs: submitted })).result.inputs, { ...submitted, legacy: 7 });
+    await action('main', 'apply', { ...forged, inputs: submitted }, 400);
+    assert.deepEqual((await action('main', 'apply', { inputs: submitted })).result.inputs, { ...submitted, legacy: 7 });
     assert.deepEqual(await api(route('/project')), draft, 'Actions must not write browser state into project defaults.');
     const runtime = await api(route('/runtime/project')); assert.deepEqual(runtime.sessionState, draft.sessionState);
     assert.deepEqual(runtime.screens[0].state, draft.screens[0].state);

@@ -171,6 +171,7 @@ try {
       ] },
     ],
   };
+  delete project.navigation;
   let draft = await request('/api/project', { method: 'PUT', body: { ...project, revision: (await request('/api/project')).revision } });
   changed = true;
   await publish(draft.revision);
@@ -235,7 +236,9 @@ try {
     ];
     for (const [body, target, status] of cases) await action(body, { ...target, status });
     assert.deepEqual(await readValues(), baseline);
-    const result = await action({ popupOrigin: origin(), popupParameters: { target: paths[1] }, inputs: { setpoint: 12 }, code: "raise Exception('untrusted code')" });
+    await action({ popupOrigin: origin(), popupParameters: { target: paths[1] }, inputs: { setpoint: 12 }, code: "raise Exception('untrusted code')" }, { status: 400 });
+    assert.deepEqual(await readValues(), baseline);
+    const result = await action({ popupOrigin: origin(), inputs: { setpoint: 12 } });
     assert.equal(result.success, true, result.stderr);
     assert.deepEqual(await readValues(), [12, 33]);
   });

@@ -2,7 +2,7 @@
 
 This repository holds independently authored SparkStudio source. The marketing website is maintained in `SparkStudioX/www`; installer binaries and installation guides are published through `SparkStudioX/releases`.
 
-**Never commit Ignition artifacts.** This includes gateway backups, native project exports, downloaded documentation, Java archives or classes, decompiled code, extraction output, reference-project analysis, artifact manifests and acquisition tools. Keep all such material outside this checkout, including its ignored directories. Reference material is not a test fixture.
+**Never commit Ignition artifacts.** This includes gateway backups, native project exports, downloaded documentation, extraction output, reference-project analysis, artifact manifests and acquisition tools. Keep all such material outside this checkout, including its ignored directories. Reference material is not a test fixture.
 
 Do not commit credentials, connection stores, runtime projects, certificates, keys, downloaded runtimes, package caches or generated builds. The ignored `.tools`, `.data`, `artifacts` and embedded-runtime folders are for local operation only. Examples in this repository must be independently authored synthetic examples.
 

@@ -82,6 +82,9 @@ try {
       ],
     }],
   };
+  delete form.navigation;
+  // Unrelated saved templates may reference parameters absent from this fixture.
+  form.templates = [];
   let draft = await request('/api/project', { method: 'PUT', body: form });
   savedFixture = true;
   await publish(draft.revision);
@@ -177,7 +180,8 @@ try {
     draft.screens[0].components.find(item => item.id === componentId).props.script = source.replace('published-v1', 'published-v2');
     draft.screens[0].components.find(item => item.id === 'setpoint').props.defaultValue = 99;
     draft = await request('/api/project', { method: 'PUT', body: draft });
-    const response = await execute({ inputs: { note: 'Still v1' }, code: "raise Exception('Caller source must never execute')" });
+    await execute({ inputs: { note: 'Still v1' }, code: "raise Exception('Caller source must never execute')" }, 400);
+    const response = await execute({ inputs: { note: 'Still v1' } });
     assert.equal(response.success, true, response.stderr);
     assert.equal(response.result.marker, 'published-v1');
     assert.equal(response.result.inputs.setpoint, 10);

@@ -47,7 +47,7 @@ function drive(Component, props) {
 }
 let checks = 0; function check(name, run) { run(); checks++; console.log(`PASS ${name}`); }
 
-check('project and screen property sheets expose distinct typed state scopes, templates declare none', () => {
+check('project, screen and template property sheets expose their separate state scopes', () => {
   const screen = { id: 'main', name: 'Main', width: 1000, height: 700, components: [], state: definitions };
   const project = { id: 'p', name: 'P', revision: 1, parameters: {}, screens: [screen], sessionState: definitions };
   const screenHtml = renderToStaticMarkup(React.createElement(DocumentProperties, { document: screen, isTemplate: false, onChange: noOp, notify: noOp }));
@@ -55,7 +55,7 @@ check('project and screen property sheets expose distinct typed state scopes, te
   const templateHtml = renderToStaticMarkup(React.createElement(DocumentProperties, { document: { ...screen, parameters: {} }, isTemplate: true, onChange: noOp, notify: noOp }));
   assert.match(screenHtml, /Screen state defaults/); assert.match(screenHtml, /Edit screen state \(3\)/);
   assert.match(projectHtml, /Session state defaults/); assert.match(projectHtml, /Edit session state \(3\)/);
-  assert.doesNotMatch(templateHtml, /state-definitions/); assert.match(screenHtml + projectHtml, /Number/); assert.match(screenHtml, /false/);
+  assert.match(templateHtml, /Private instance state defaults/); assert.match(templateHtml, /Edit instance state \(0\)/); assert.doesNotMatch(templateHtml, /Screen state defaults/); assert.match(screenHtml + projectHtml, /Number/); assert.match(screenHtml, /false/);
 });
 
 check('multiple typed default changes Apply as one undoable patch without mutating the original', () => {

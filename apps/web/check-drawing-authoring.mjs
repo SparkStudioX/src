@@ -67,8 +67,8 @@ let checks = 0; function check(name, run) { run(); checks++; console.log(`PASS $
 check('actual sibling inspector editors have distinct stable identities through Apply, Undo and reselection', () => {
   assert.equal(inspectorEditors.size, 2);
   const code = ts.transpileModule(`return [${inspectorEditors.get('PropertyBindingsEditor')}, ${inspectorEditors.get('DrawingEditor')}];`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None, jsx: ts.JsxEmit.React } }).outputText;
-  const render = new Function('React', 'PropertyBindingsEditor', 'DrawingEditor', 'selected', 'screen', 'tags', 'editorParameters', 'currentPreviewInputs', 'connected', 'updateProps', 'updateComponent', 'notify', 'applicationState', 'editingTemplate', code);
-  const keys = component => render(React, 'bindings-editor', 'drawing-editor', component, { components: [component] }, [], {}, {}, true, noOp, noOp, noOp, { values: { session: {}, screen: {} } }, false).map(editor => editor.key);
+  const render = new Function('React', 'PropertyBindingsEditor', 'DrawingEditor', 'selected', 'screen', 'tags', 'editorParameters', 'currentPreviewInputs', 'connected', 'updateProps', 'updateComponent', 'notify', 'applicationState', 'editingTemplate', 'project', code);
+  const keys = component => render(React, 'bindings-editor', 'drawing-editor', component, { components: [component] }, [], {}, {}, true, noOp, noOp, noOp, { values: { session: {}, screen: {} } }, false, { templates: [] }).map(editor => editor.key);
   const original = make(), selectedKeys = keys(original);
   assert.equal(new Set(selectedKeys).size, 2, 'Sibling editors must not share a React key');
   const applied = { ...original, props: { ...original.props, points: [{ x: 0, y: 25 }, { x: 100, y: 75 }] } };

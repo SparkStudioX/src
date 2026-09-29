@@ -109,6 +109,14 @@ function ParametersSheet({ scope, parameters, onChange, notify, project = false 
 /** Saved document properties use the caller's normal history/save pipeline. */
 export function DocumentProperties({ document, isTemplate, onChange, notify, canChangeToPopup = true, parentParameters = {} }: DocumentPropertiesProps) {
   const scope = isTemplate ? "Template" : "Screen";
+  const instanceReferences: Record<string, string[]> = Object.create(null);
+  if (isTemplate) for (const component of document.components) {
+    const add = (key: string, property: string) => { (instanceReferences[key] ??= []).push(`${component.props.text || component.id} · ${property}`); };
+    for (const [target, binding] of Object.entries(component.props.bindings || {}))
+      for (const reference of Object.values(binding?.references || {}))
+        if (reference.kind === "instanceState") add(reference.key, target);
+    if (component.props.stateBinding?.scope === "instance") add(component.props.stateBinding.key, "Value");
+  }
   return <div className="document-properties" aria-label={`${scope} properties`}>
     <div className="document-property-columns" aria-hidden="true"><span>Property</span><span>Value</span></div>
     <section className="document-property-group" aria-label={`${scope} general properties`}>
@@ -133,7 +141,9 @@ export function DocumentProperties({ document, isTemplate, onChange, notify, can
     {isTemplate
       ? <TemplateParametersEditor key={document.id} template={document as Template} parentParameters={parentParameters} notify={notify} onChange={onChange} />
       : <ParametersSheet key={document.id} scope={scope} parameters={document.parameters || {}} notify={notify} onChange={parameters => onChange({ parameters })} />}
-    {!isTemplate && <StateDefinitionsEditor key={`state:${document.id}`} scope="screen" definitions={document.state} onChange={state => onChange({ state })} />}
+    {isTemplate
+      ? <StateDefinitionsEditor key={`instance-state:${document.id}`} scope="instance" definitions={(document as Template).instanceState} references={instanceReferences} onChange={instanceState => onChange({ instanceState })} />
+      : <StateDefinitionsEditor key={`state:${document.id}`} scope="screen" definitions={document.state} onChange={state => onChange({ state })} />}
   </div>;
 }
 

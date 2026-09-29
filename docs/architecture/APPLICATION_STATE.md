@@ -34,8 +34,9 @@ This fragment shows the state fields only; normal project and screen fields are 
 | Session | All screens, templates and popups in this project run and tab | Application reload, project/publication replacement, sign-out or user change |
 | Screen | The active screen and its templates/repeater rows | Leaving that screen; returning creates fresh defaults |
 | Popup screen | That popup opening and its templates/repeater rows | Closing the popup; reopening creates fresh defaults |
+| Template instance | Only that placed template or repeater row | Effective form-context change, removal or closure of its containing screen/popup |
 
-Opening a popup does not reset the underlying screen. Popup state is separate from the opener even when both declare the same key. Templates and repeater rows inherit their containing screen or popup state; they do not declare independent `state` maps in this version. Their form inputs remain independent per instance or row unless an input explicitly binds its value to shared state.
+Opening a popup does not reset the underlying screen. Popup state is separate from the opener even when both declare the same key. Templates and repeater rows inherit their containing screen or popup state. They may also declare `instanceState` for private values; a nested template gets its own private map. Templates still cannot declare screen `state` maps. See [private instance state](INSTANCE_STATE.md) for the separate authoring and lifetime contract.
 
 State is in memory only. It is not written to `localStorage`, a gateway file or a database, and is not shared between browser tabs, browsers or users. Designer Preview has its own transient state, separate from the operator runtime. Returning to a screen restores its authored defaults rather than retaining the state of the previous visit.
 
@@ -75,7 +76,7 @@ app.state.reset("screen", "selectionCount"); // Restore one authored default.
 app.state.reset("session");                 // Restore every session default.
 ```
 
-Only `"session"` and `"screen"` scopes are supported. Keys must already be declared, and assignments must match their declared type and bounds. Invalid live calls throw an error for the existing script diagnostic path. State changes update bindings without firing input change/commit events. Stale helpers from a screen, popup, publication or input context that has ended cannot update the replacement context.
+Resource startup/screen-open scripts support `"session"` and `"screen"` scopes. Input handlers inside a template also support its own `"instance"` scope. Keys must already be declared, and assignments must match their declared type and bounds. Invalid live calls throw an error for the existing script diagnostic path. State changes update bindings without firing input change/commit events. Stale helpers from a screen, popup, instance, publication or input context that has ended cannot update the replacement context.
 
 Input handlers retain their existing gates: disabled, hidden, read-only or interaction-locked inputs do not dispatch user events. They retain ordered per-control execution and stale-context invalidation. The browser resource lifecycle can still update local state for a viewer during startup or screen-open; such a change grants no gateway privileges. State-based Enabled or Visible bindings are presentation behavior, never authorization.
 

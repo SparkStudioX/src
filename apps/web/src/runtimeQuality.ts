@@ -5,7 +5,9 @@ import { evaluateComponentBindings } from "./propertyBindings";
 import { resolveIndicatorState } from "./stateControls";
 import { isProcessDisplay, resolveProcessDisplay } from "./processDisplays";
 import { isDrawingComponent, resolveDrawingComponent } from "./drawingComponents";
-import { instanceInputKey, isTemplateInstance, resolveTemplateParameters, templateExpansion } from "./templateModel";
+import { instanceInputKey, isTemplateInstance, templateParameters, templateExpansion } from "./templateModel";
+import { resolveParameterBindings } from "./templateParameterBindings";
+import { stateDefaults } from "./applicationStateModel";
 import type { InputValues, InstancePathStep, Screen, Tag, Template } from "./types";
 
 /** Summarize the same resolved forms and tag paths that the operator renders. */
@@ -22,27 +24,37 @@ export function runtimeBindingHealth(
   if (!screen) return health;
   const limitError = templateExpansion(screen.components, templates).error?.includes("expansion exceeds");
   let limitReported = false;
-  const inspect = (document: Screen, context: RuntimeParameters, inputs: InputValues, instanceSteps: InstancePathStep[] = [], ancestors: string[] = []) => {
+  const inspect = (document: Screen, context: RuntimeParameters, inputs: InputValues, instanceSteps: InstancePathStep[] = [], ancestors: string[] = [], localState = state) => {
     for (const component of document.components) {
-      const resolved = evaluateComponentBindings(component, { components: document.components, tags, parameters: context, inputs, communicationLost, state });
-      const errors = Object.keys(resolved.errors).length > 0 || Boolean(stateInputError(component, state));
+      const resolved = evaluateComponentBindings(component, { components: document.components, tags, parameters: context, inputs, communicationLost, state: localState });
+      const errors = Object.keys(resolved.errors).length > 0 || Boolean(stateInputError(component, localState));
       if (resolved.simulated) health.simulated = true;
       if (isTemplateInstance(component.type)) {
         const graphError = templateExpansion([component], templates, ancestors).error;
-        if (errors || graphError || limitError && !limitReported) health.badCount++;
+        const template = templates.find(item => item.id === component.props.templateId);
+        let boundValues: RuntimeParameters = {}, parameterError = false;
+        try {
+          if (template) boundValues = resolveParameterBindings(component, template, { components: document.components, tags, parameters: context, inputs });
+        } catch { parameterError = true; }
+        if (errors || parameterError || graphError || limitError && !limitReported) health.badCount++;
         if (limitError) limitReported = true;
         // Live query rows remain outside this saved-graph summary.
-        if (limitError || graphError || component.props.rowsSource) continue;
-        const template = templates.find(item => item.id === component.props.templateId);
+        if (limitError || parameterError || graphError || component.props.rowsSource) continue;
         if (!template) continue;
         const rows = component.type === "repeater" ? component.props.rows ?? [] : [undefined];
         for (const row of rows) {
-          const child = resolveTemplateParameters(template, context, component.props.parameters, row?.parameters);
-          if (child.error) { health.badCount++; continue; }
-          const parameters = child.parameters!;
+          let parameters: RuntimeParameters;
+          try { parameters = templateParameters(template, context, component.props.parameters, row?.parameters, boundValues); }
+          catch { health.badCount++; continue; }
+          // Bound forms own live edits, just like query rows. Saved scoped edits
+          // are not their current inputs and must not make a stale health claim.
+          if (Object.keys(component.props.parameterBindings ?? {}).length || Object.keys(template.instanceState ?? {}).length) continue;
           const childPath = [...instanceSteps, { instanceId: component.id, ...(row ? { rowId: row.id } : {}) }];
           const scope = instanceInputKey(screen.id, childPath);
-          inspect(template, parameters, resolveInputs(template, tags, parameters, edits[scope], communicationLost, state), childPath, [...ancestors, template.id]);
+          let childState: import("./types").RuntimeStateValues;
+          try { childState = { session: localState?.session ?? {}, screen: localState?.screen ?? {}, instance: stateDefaults(template.instanceState) }; }
+          catch { health.badCount++; continue; }
+          inspect(template, parameters, resolveInputs(template, tags, parameters, edits[scope], communicationLost, childState), childPath, [...ancestors, template.id], childState);
         }
         continue;
       }

@@ -9,7 +9,7 @@ namespace SparkStudio.Gateway;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record TableEditRequest(string? PublishedAt, Dictionary<string, JsonElement>? Parameters, JsonElement Key,
     JsonElement Version, string? Column, JsonElement Value, string? InstanceId = null, string? RowId = null, PopupOrigin? PopupOrigin = null,
-    IReadOnlyList<InstancePathStep>? InstancePath = null);
+    IReadOnlyList<InstancePathStep>? InstancePath = null, IReadOnlyList<Dictionary<string, JsonElement>>? BindingInputs = null);
 
 /// <summary>Authoring bounds and fresh published-row preflight; the authored script owns the atomic database write.</summary>
 internal static class TableEditValidator

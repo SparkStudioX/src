@@ -1,0 +1,92 @@
+{
+  "name": "Component event workshop",
+  "tags": [],
+  "sessionState": { "popupMounts": { "type": "number", "value": 0 }, "cleanupWrites": { "type": "number", "value": 0 } },
+  "templates": [
+    {
+      "id": "event-machine", "name": "Event machine panel", "width": 520, "height": 450,
+      "parameters": { "machine": "A" },
+      "instanceState": {
+        "quantity": { "type": "number", "value": 2 }, "userChanges": { "type": "number", "value": 0 },
+        "propertyChanges": { "type": "number", "value": 0 }, "phase": { "type": "string", "value": "Waiting" },
+        "lastEvent": { "type": "string", "value": "No property change yet" }
+      },
+      "components": [
+        { "id": "title", "type": "label", "x": 22, "y": 16, "width": 315, "height": 40, "props": { "text": "Machine {machine}", "fontSize": 27 } },
+        { "id": "phase", "type": "label", "x": 355, "y": 22, "width": 143, "height": 32, "props": { "text": "Waiting", "fontSize": 17, "bindings": { "text": { "expression": "phase", "references": { "phase": { "kind": "instanceState", "key": "phase" } } } } } },
+        { "id": "quantity", "type": "spinner", "x": 22, "y": 72, "width": 228, "height": 78, "props": {
+          "text": "Quantity", "fieldKey": "quantity", "defaultValue": 2, "min": 1, "max": 20, "step": 1,
+          "stateBinding": { "scope": "instance", "key": "quantity" },
+          "events": { "change": { "language": "javascript", "code": "app.state.set('instance', 'userChanges', app.state.get('instance', 'userChanges') + 1);" } },
+          "componentEvents": {
+            "mount": { "language": "javascript", "code": "app.state.set('instance', 'phase', 'Mounted');\napp.onCleanup(() => console.info('Released machine ' + parameters.machine));" },
+            "propertyChange": { "language": "javascript", "properties": ["value"], "code": "if (event.available) {\n  if (event.value === 9) await new Promise(resolve => setTimeout(resolve, 750));\n  app.state.set('instance', 'propertyChanges', app.state.get('instance', 'propertyChanges') + 1);\n  app.state.set('instance', 'lastEvent', String(event.previousValue) + ' → ' + String(event.value));\n}" },
+            "unmount": { "language": "javascript", "code": "if (!app.signal.aborted) throw new Error('Cleanup must have an aborted signal.');\napp.state.set('session', 'cleanupWrites', 999);\nconsole.info('Unmounted machine ' + parameters.machine + '; cleanup writes are revoked.');" }
+          }
+        } },
+        { "id": "mirror", "type": "numberInput", "x": 274, "y": 72, "width": 224, "height": 78, "props": { "text": "Quantity mirror", "fieldKey": "mirror", "defaultValue": 2, "min": 1, "max": 20, "step": 1, "stateBinding": { "scope": "instance", "key": "quantity" } } },
+        { "id": "assign", "type": "toggle", "x": 22, "y": 174, "width": 476, "height": 53, "props": { "text": "Assign 7 from a script", "fieldKey": "assign", "defaultValue": false, "events": { "change": { "language": "javascript", "code": "if (event.value) { app.setInput('quantity', 7); app.setInput('assign', false); }" } } } },
+        { "id": "user-caption", "type": "label", "x": 22, "y": 246, "width": 180, "height": 34, "props": { "text": "User edit events", "fontSize": 17 } },
+        { "id": "user-count", "type": "label", "x": 206, "y": 246, "width": 42, "height": 34, "props": { "text": "0", "fontSize": 22, "bindings": { "text": { "expression": "count", "references": { "count": { "kind": "instanceState", "key": "userChanges" } } } } } },
+        { "id": "property-caption", "type": "label", "x": 274, "y": 246, "width": 180, "height": 34, "props": { "text": "Property events", "fontSize": 17 } },
+        { "id": "property-count", "type": "label", "x": 459, "y": 246, "width": 39, "height": 34, "props": { "text": "0", "fontSize": 22, "bindings": { "text": { "expression": "count", "references": { "count": { "kind": "instanceState", "key": "propertyChanges" } } } } } },
+        { "id": "last-event", "type": "label", "x": 22, "y": 295, "width": 476, "height": 42, "props": { "text": "No property change yet", "fontSize": 20, "bindings": { "text": { "expression": "last", "references": { "last": { "kind": "instanceState", "key": "lastEvent" } } } } } },
+        { "id": "help", "type": "label", "x": 22, "y": 348, "width": 476, "height": 42, "props": { "text": "Script assignments trigger property events, without pretending to be operator edits.", "fontSize": 14 } },
+        { "id": "popup", "type": "button", "x": 22, "y": 400, "width": 476, "height": 36, "props": { "text": "Open lifecycle inspection", "action": "openPopup", "targetScreenId": "event-inspection", "parameters": { "machine": "{machine}" } } }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "id": "component-events", "name": "Component event panels", "width": 1160, "height": 750,
+      "state": { "showRight": { "type": "boolean", "value": true }, "wrapperChanges": { "type": "number", "value": 0 } },
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 18, "width": 1112, "height": 44, "props": { "text": "React to changes. Keep the right context.", "fontSize": 31 } },
+        { "id": "intro", "type": "label", "x": 24, "y": 73, "width": 640, "height": 58, "props": { "text": "Each panel mounts once, watches its own quantity, and cleans up when it closes. Quantity 9 waits briefly; switch machine to test cancellation.", "fontSize": 16 } },
+        { "id": "machine", "type": "select", "x": 704, "y": 70, "width": 208, "height": 76, "props": { "text": "Left machine", "fieldKey": "machine", "defaultValue": "A", "options": [{ "value": "A", "label": "Machine A" }, { "value": "C", "label": "Machine C" }] } },
+        { "id": "show", "type": "checkbox", "x": 932, "y": 76, "width": 204, "height": 60, "props": { "text": "Show right panel", "fieldKey": "show", "defaultValue": true, "stateBinding": { "scope": "screen", "key": "showRight" } } },
+        { "id": "left", "type": "template", "x": 24, "y": 170, "width": 538, "height": 470, "props": { "text": "Left event panel", "templateId": "event-machine", "parameters": {}, "parameterBindings": { "machine": { "expression": "machine", "references": { "machine": { "kind": "input", "key": "machine" } } } }, "backgroundColor": "#f3f6fc", "foregroundColor": "#1f3559", "borderColor": "#8299c0", "borderWidth": 1 } },
+        { "id": "right", "type": "template", "x": 598, "y": 170, "width": 538, "height": 470, "props": { "text": "Right event panel", "templateId": "event-machine", "parameters": { "machine": "B" }, "backgroundColor": "#f3f6fc", "foregroundColor": "#1f3559", "borderColor": "#8299c0", "borderWidth": 1,
+          "bindings": { "visible": { "expression": "show", "references": { "show": { "kind": "screenState", "key": "showRight" } } } },
+          "componentEvents": { "propertyChange": { "language": "javascript", "properties": ["visible"], "code": "app.state.set('screen', 'wrapperChanges', app.state.get('screen', 'wrapperChanges') + 1);" } }
+        } },
+        { "id": "faults", "type": "button", "x": 24, "y": 672, "width": 286, "height": 46, "props": { "text": "Open event diagnostics lab", "action": "navigate", "targetScreenId": "event-lab" } },
+        { "id": "wrapper-caption", "type": "label", "x": 344, "y": 672, "width": 206, "height": 42, "props": { "text": "Visibility changes", "fontSize": 16 } },
+        { "id": "wrapper-count", "type": "label", "x": 552, "y": 672, "width": 54, "height": 42, "props": { "text": "0", "fontSize": 22, "bindings": { "text": { "expression": "count", "references": { "count": { "kind": "screenState", "key": "wrapperChanges" } } } } } },
+        { "id": "cleanup-caption", "type": "label", "x": 658, "y": 672, "width": 390, "height": 42, "props": { "text": "Cleanup writes (must remain zero)", "fontSize": 16 } },
+        { "id": "cleanup-count", "type": "label", "x": 1082, "y": 672, "width": 54, "height": 42, "props": { "text": "0", "fontSize": 22, "bindings": { "text": { "expression": "count", "references": { "count": { "kind": "sessionState", "key": "cleanupWrites" } } } } } }
+      ]
+    },
+    {
+      "id": "event-lab", "name": "Event diagnostics lab", "width": 1060, "height": 680,
+      "state": { "loopEnabled": { "type": "boolean", "value": false }, "loopCount": { "type": "number", "value": 0 }, "lateWrites": { "type": "number", "value": 0 } },
+      "components": [
+        { "id": "title", "type": "label", "x": 32, "y": 24, "width": 996, "height": 44, "props": { "text": "Event diagnostics lab", "fontSize": 31 } },
+        { "id": "intro", "type": "label", "x": 32, "y": 88, "width": 996, "height": 72, "props": { "text": "These deliberate browser-only failures test handler timeouts and feedback-loop limits. No tag, database or equipment writes. Test the timeout before starting the loop.", "fontSize": 18 } },
+        { "id": "timeout", "type": "toggle", "x": 32, "y": 190, "width": 470, "height": 64, "props": { "text": "Start timeout test", "fieldKey": "timeout", "defaultValue": false,
+          "componentEvents": { "propertyChange": { "language": "javascript", "properties": ["value"], "code": "if (event.value === true) { await new Promise(resolve => setTimeout(resolve, 2500)); app.state.set('screen', 'lateWrites', 1); }" } }
+        } },
+        { "id": "late-caption", "type": "label", "x": 540, "y": 202, "width": 394, "height": 40, "props": { "text": "Late writes (must remain zero)", "fontSize": 18 } },
+        { "id": "late", "type": "label", "x": 957, "y": 202, "width": 65, "height": 40, "props": { "text": "0", "fontSize": 24, "bindings": { "text": { "expression": "count", "references": { "count": { "kind": "screenState", "key": "lateWrites" } } } } } },
+        { "id": "loop", "type": "toggle", "x": 32, "y": 310, "width": 470, "height": 64, "props": { "text": "Start feedback loop test", "fieldKey": "loop", "defaultValue": false, "stateBinding": { "scope": "screen", "key": "loopEnabled" }, "events": { "change": { "language": "javascript", "code": "if (event.value) app.state.set('screen', 'loopCount', 1);" } } } },
+        { "id": "loop-caption", "type": "label", "x": 540, "y": 322, "width": 394, "height": 40, "props": { "text": "Loop count (stops at the limit)", "fontSize": 18 } },
+        { "id": "loop-value", "type": "label", "x": 957, "y": 322, "width": 65, "height": 40, "props": { "text": "0", "fontSize": 24, "bindings": { "text": { "expression": "count", "references": { "count": { "kind": "screenState", "key": "loopCount" } } } },
+          "componentEvents": { "propertyChange": { "language": "javascript", "properties": ["text"], "code": "if (app.state.get('screen', 'loopEnabled')) app.state.set('screen', 'loopCount', app.state.get('screen', 'loopCount') + 1);" } }
+        } },
+        { "id": "help", "type": "label", "x": 32, "y": 430, "width": 996, "height": 94, "props": { "text": "Timeouts revoke late helper writes. The shared loop breaker pauses automatic handlers until a new screen visit or Preview run. Existing user navigation stays available so you can recover.", "fontSize": 19 } },
+        { "id": "home", "type": "button", "x": 32, "y": 566, "width": 996, "height": 54, "props": { "text": "Back to machine panels", "action": "navigate", "targetScreenId": "component-events" } }
+      ]
+    },
+    {
+      "id": "event-inspection", "name": "Lifecycle inspection", "kind": "popup", "width": 620, "height": 260,
+      "parameters": { "machine": "A" },
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 20, "width": 572, "height": 40, "props": { "text": "Inspection for {machine}", "fontSize": 26, "componentEvents": { "mount": { "language": "javascript", "code": "app.state.set('session', 'popupMounts', app.state.get('session', 'popupMounts') + 1);" }, "unmount": { "language": "javascript", "code": "app.state.set('session', 'cleanupWrites', 999);" } } } },
+        { "id": "caption", "type": "label", "x": 24, "y": 86, "width": 460, "height": 40, "props": { "text": "Popup mounts in this browser session", "fontSize": 18 } },
+        { "id": "count", "type": "label", "x": 502, "y": 86, "width": 94, "height": 40, "props": { "text": "0", "fontSize": 27, "bindings": { "text": { "expression": "count", "references": { "count": { "kind": "sessionState", "key": "popupMounts" } } } } } },
+        { "id": "help", "type": "label", "x": 24, "y": 140, "width": 572, "height": 40, "props": { "text": "Closing runs cleanup with revoked writes; reopening mounts once again.", "fontSize": 15 } },
+        { "id": "close", "type": "button", "x": 24, "y": 202, "width": 572, "height": 38, "props": { "text": "Close inspection", "action": "closePopup" } }
+      ]
+    }
+  ]
+}

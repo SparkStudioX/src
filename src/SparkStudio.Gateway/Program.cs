@@ -129,7 +129,7 @@ routes.MapPost("/runtime/queries/{id}/execute", (string id, QueryRequest request
     => queries.ExecuteDefinitionAsync(publication.GetQuery(id, request.PublishedAt), request.Parameters, cancellation)).Access("view", "operator");
 routes.MapPost("/runtime/screens/{screenId}/components/{componentId}/action", async (string screenId, string componentId, RuntimeActionRequest request, RuntimeActions actions, HttpContext context, CancellationToken cancellation) =>
 {
-    var result = await actions.ExecuteAsync(screenId, componentId, request.Parameters, request.Inputs, request.PublishedAt, cancellation, request.InstanceId, request.RowId, request.PopupOrigin, request.InstancePath);
+    var result = await actions.ExecuteAsync(screenId, componentId, request.Parameters, request.Inputs, request.PublishedAt, cancellation, request.InstanceId, request.RowId, request.PopupOrigin, request.InstancePath, request.BindingInputs);
     context.Items["spark.actionOutcome"] = result["success"]?.GetValue<bool>() == true ? "Completed" : "Action failed";
     return result;
 }).Access("operate", "operator", audit: true);
@@ -208,5 +208,6 @@ public record QueryRequest(Dictionary<string, JsonElement>? Parameters, string? 
 public record CreateDatabaseRequest(bool InitializeSampleData = false);
 public record ScriptRequest(string Code, Dictionary<string, JsonElement>? Parameters, Dictionary<string, JsonElement>? Inputs);
 public record PublishRequest(int Revision);
+[System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
 public record RuntimeActionRequest(Dictionary<string, JsonElement>? Parameters, Dictionary<string, JsonElement>? Inputs, string? PublishedAt, string? InstanceId = null, string? RowId = null, PopupOrigin? PopupOrigin = null,
-    IReadOnlyList<InstancePathStep>? InstancePath = null);
+    IReadOnlyList<InstancePathStep>? InstancePath = null, IReadOnlyList<Dictionary<string, JsonElement>>? BindingInputs = null);

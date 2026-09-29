@@ -10,7 +10,7 @@ export interface FormInputOptions {
   edits?: InputValues;
   communicationLost?: boolean;
   state?: StateContext;
-  onEdit: (field: string, value: InputValue) => void;
+  onEdit: (field: string, value: InputValue, automatic?: boolean) => void;
   active: boolean;
   /** Changes when an otherwise identical authoring/row form must expire. */
   contextKey?: string;
@@ -52,15 +52,19 @@ export class InputStateBindingForm {
     }
     return inputs;
   }
-  assignment(): (field: string, value: InputValue) => void {
+  assignment(automatic = false): (field: string, value: InputValue) => void {
     const generation = this.generation;
     return (field, value) => {
       const options = this.options;
-      if (!this.active || generation !== this.generation || !options?.active || !options.document) return;
+      if (!this.active || generation !== this.generation || !options || !automatic && !options.active || !options.document || options.state?.isCurrent?.() === false) return;
       const component = options.document.components.find(item => isInput(item.type) && (item.props.fieldKey || item.id) === field);
       if (!component) return;
       const binding = component.props.stateBinding;
-      if (binding === undefined) { options.onEdit(field, value); return; }
+      if (binding === undefined) {
+        if (automatic) options.onEdit(field, value, true);
+        else options.onEdit(field, value);
+        return;
+      }
       if (!options.state || stateInputError(component, options.state.values)) return;
       // A dead scope can no longer write even before React unmounts its form.
       if (options.state.api.get(binding.scope, binding.key) === undefined) return;
@@ -76,12 +80,12 @@ export class InputStateBindingForm {
 }
 
 /** Used by root screens, popups and every nested template form. */
-export function useFormInputs(options: FormInputOptions): { inputs: InputValues; assign: (field: string, value: InputValue) => void } {
+export function useFormInputs(options: FormInputOptions): { inputs: InputValues; assign: (field: string, value: InputValue) => void; assignAutomatic: (field: string, value: InputValue) => void } {
   const [, refresh] = useState(0);
   const ref = useRef<InputStateBindingForm | null>(null);
   if (!ref.current) ref.current = new InputStateBindingForm(() => refresh(value => value + 1));
   const form = ref.current;
   form.update(options);
   useEffect(() => { form.activate(); refresh(value => value + 1); return () => form.deactivate(); }, [form]);
-  return { inputs: form.values(), assign: form.assignment() };
+  return { inputs: form.values(), assign: form.assignment(), assignAutomatic: form.assignment(true) };
 }

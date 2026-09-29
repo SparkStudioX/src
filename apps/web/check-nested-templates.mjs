@@ -14,7 +14,7 @@ const url = code => 'data:text/javascript;base64,' + Buffer.from(code).toString(
 const reactUrl = pathToFileURL(require.resolve('react')).href;
 const hookUrl = url(`export * from ${JSON.stringify(reactUrl)}; export const useState=v=>globalThis.__nestedHooks.useState(v); export const useRef=v=>globalThis.__nestedHooks.useRef(v); export const useEffect=(run,deps)=>globalThis.__nestedHooks.useEffect(run,deps);`);
 const leafUrl = url(`import React from ${JSON.stringify(reactUrl)}; export default function BoundComponent(props) { return React.createElement('bound-leaf', props); }`);
-const stateUrl = url('export const useApplicationStateContext=()=>globalThis.__nestedState;');
+const stateUrl = url('export const useApplicationStateContext=()=>globalThis.__nestedState; export const useInstanceApplicationState=parent=>parent; export const ApplicationStateProvider=({children})=>children;');
 const queryUrl = url('export const useQueryRepeater=(source)=>source ? globalThis.__nestedQuery : {rows:[],key:"none",loading:false,error:""};');
 function load(name, harness = false) {
   const key = `${harness}:${name}`;
@@ -26,7 +26,7 @@ function load(name, harness = false) {
   }}).outputText.replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
     .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, dependency) => {
       const stub = harness && name === 'inputStateBindings' && dependency === 'react' ? hookUrl : harness && name === 'templates' ? ({react: hookUrl, './BoundComponent': leafUrl,
-        './applicationState': stateUrl, './useQueryRepeater': queryUrl})[dependency] : undefined;
+        './applicationState': stateUrl, './useQueryRepeater': queryUrl, './ComponentEvents': url('export const useComponentEvents=()=>{};')})[dependency] : undefined;
       return prefix + JSON.stringify(stub ?? (dependency.startsWith('./') ? load(dependency.slice(2), harness) : pathToFileURL(require.resolve(dependency)).href));
     });
   const result = url(code); modules.set(key, result); return result;
@@ -259,5 +259,61 @@ await check('invalid recursive graphs render explicit diagnostics without action
   const h = harness({component: root, components: [root], templates: [cycle]}); try {
     h.render(); assert.equal(h.leaves().length, 0); assert.ok(h.nodes.some(node => node.type === 'span' && String(node.props.children).includes('cycle')));
   } finally { h.stop(); }
+});
+await check('parent input parameter bindings resolve before rows and capture only referenced inputs at every boundary', () => {
+  const chooser = c('choice', 'textInput', {fieldKey:'choice', defaultValue:'Root'});
+  const boundHost = {...host, props:{...host.props, parameterBindings:{title:{expression:'selected',references:{selected:{kind:'input',key:'choice'}}}}}};
+  const boundOuter = structuredClone(outer);
+  boundOuter.components[1].props.parameterBindings = {title:{expression:'text',references:{text:{kind:'input',key:'note'}}}};
+  const h = harness({component:boundHost, components:[chooser,boundHost], templates:[boundOuter,detail], inputs:{choice:'Machine {title}',secret:'do not capture'}});
+  try {
+    h.render(); assert.equal(h.leaves('note')[0].props.parameters.title,'Machine {title}');
+    h.leaves('note')[0].props.onInputChange('note','Nested {title}'); h.render();
+    assert.equal(h.leaves('save')[0].props.parameters.title,'Nested {title}');
+    h.leaves('save')[0].props.onAction(); const action=h.actions[0].instance;
+    assert.deepEqual(action.bindingInputs,[{choice:'Machine {title}'},{note:'Nested {title}'}]);
+    assert.deepEqual(instanceRequestScope(action),{instancePath:action.instancePath,bindingInputs:action.bindingInputs});
+  } finally { h.stop(); }
+});
+await check('changed bound context resets descendant edits, rejects expired callbacks and never restores saved scoped drafts', async () => {
+  const chooser=c('choice','textInput',{fieldKey:'choice'});
+  const boundHost={...host,props:{...host.props,parameterBindings:{title:{expression:'selected',references:{selected:{kind:'input',key:'choice'}}}}}};
+  const oldScope=instanceInputKey('screen',[{instanceId:'machines',rowId:'a'},{instanceId:'children',rowId:'x'}]);
+  const h=harness({component:boundHost,components:[chooser,boundHost],inputs:{choice:'A'},scopedInputs:{[oldScope]:{note:'expired saved draft'}}});
+  try {
+    h.render(); assert.equal(h.leaves('note')[1].props.inputs.note,'default');
+    h.leaves('note')[1].props.onInputChange('note','typed for A'); h.render();
+    const expired=h.leaves('save')[0], table=h.leaves('table')[0], popup=h.leaves('popup')[0]; expired.props.onAction();
+    const instance=h.actions[0].instance; assert.equal(instance.isCurrent(),true);
+    h.props.inputs={choice:'B'};h.render(); assert.equal(instance.isCurrent(),false);
+    assert.equal(h.leaves('note')[1].props.inputs.note,'default'); expired.props.onAction();popup.props.onOpenPopup();
+    await assert.rejects(table.props.onTableEdit({}),/no longer interactive/); assert.equal(h.actions.length,1);assert.equal(h.popups.length,0);
+    h.props.inputs={choice:'A'};h.render();assert.equal(h.leaves('note')[1].props.inputs.note,'default');assert.equal(h.edits.length,0);
+  } finally {h.stop();}
+});
+await check('unchanged bound values preserve drafts, while bad bindings hide every row even when a row overrides the target', () => {
+  const chooser=c('choice','numberInput',{fieldKey:'choice',min:0,max:10});
+  const boundHost={...host,props:{...host.props,rows:[{id:'a',parameters:{count:'4'}},{id:'b',parameters:{}}],parameterBindings:{count:{expression:'selected',references:{selected:{kind:'input',key:'choice'}}}}}};
+  const h=harness({component:boundHost,components:[chooser,boundHost],inputs:{choice:3,unrelated:'a'}});
+  try {
+    h.render();assert.equal(h.leaves('save')[0].props.parameters.count,4); assert.equal(h.leaves('save')[2].props.parameters.count,3);
+    h.leaves('note')[1].props.onInputChange('note','keep');h.render();
+    h.props.inputs={choice:3,unrelated:'changed'};h.render();assert.equal(h.leaves('note')[1].props.inputs.note,'keep');
+    h.props.inputs={choice:11};h.render();assert.equal(h.leaves().length,0);
+    assert.ok(h.nodes.some(node=>node.type==='div'&&String(node.props.className).includes('query-repeater-error')));
+  } finally{h.stop();}
+});
+await check('a nested binding pads unbound ancestor snapshots and query row parameters still override bindings literally', () => {
+  const boundOuter=structuredClone(outer);
+  boundOuter.components[1].props.parameterBindings={title:{expression:'text',references:{text:{kind:'input',key:'note'}}}};
+  const h=harness({templates:[boundOuter,detail]});try{
+    h.render();h.leaves('save')[0].props.onAction();assert.deepEqual(h.actions[0].instance.bindingInputs,[{},{note:'default'}]);
+  }finally{h.stop();}
+  const dynamic={...host,props:{...host.props,rows:[],rowsSource:{queryId:'machines',rowKey:'id',parameterMap:{}},parameterBindings:{title:{expression:"'bound'",references:{}}}}};
+  globalThis.__nestedQuery={rows:[{id:'a',parameters:{title:'Query {title}'}}],key:'q',loading:false,error:''};
+  const query=harness({component:dynamic,components:[dynamic]});try{
+    query.render();assert.equal(query.leaves('save')[0].props.parameters.title,'Child Query {title}');
+    query.leaves('save')[0].props.onAction();assert.deepEqual(query.actions[0].instance.bindingInputs,[{},{}]);
+  }finally{query.stop();}
 });
 console.log(`${passed} nested-template checks passed.`);

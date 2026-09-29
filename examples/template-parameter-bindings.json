@@ -1,0 +1,83 @@
+{
+  "name": "Template parameter bindings",
+  "templates": [
+    {
+      "id": "parameter-fx-form", "name": "Parameter fx · inner form", "width": 520, "height": 210,
+      "parameters": { "machine": "A", "count": "1", "permit": "true" },
+      "parameterTypes": { "count": "number", "permit": "boolean" },
+      "components": [
+        { "id": "context", "type": "label", "x": 16, "y": 12, "width": 488, "height": 35,
+          "props": { "text": "Machine {machine} · Requested quantity {count}", "fontSize": 18 } },
+        { "id": "note", "type": "textInput", "x": 16, "y": 58, "width": 300, "height": 64,
+          "props": { "text": "Local note", "fieldKey": "note", "defaultValue": "" } },
+        { "id": "preview", "type": "button", "x": 16, "y": 140, "width": 220, "height": 48,
+          "props": { "text": "Preview resolved form", "action": "script", "bindings": { "enabled": { "expression": "permit", "references": { "permit": { "kind": "parameter", "key": "permit" } } } },
+            "script": "assert isinstance(parameters['count'], (int, float))\nassert isinstance(parameters['permit'], bool)\nassert set(inputs) == {'note'}\nresult = {'message': 'Machine ' + parameters['machine'] + ' / quantity ' + str(parameters['count']) + ' / note: ' + inputs['note'], 'parameters': parameters, 'inputs': inputs}" } },
+        { "id": "inspect", "type": "button", "x": 252, "y": 140, "width": 252, "height": 48,
+          "props": { "text": "Open inspection", "action": "openPopup", "targetScreenId": "parameter-fx-inspection", "parameters": { "machine": "{machine}", "quantity": "{count}" } } }
+      ]
+    },
+    {
+      "id": "parameter-fx-card", "name": "Parameter fx · machine card", "width": 560, "height": 360,
+      "parameters": { "machine": "A", "batch": "1", "permit": "true" },
+      "parameterTypes": { "batch": "number", "permit": "boolean" },
+      "components": [
+        { "id": "title", "type": "label", "x": 20, "y": 12, "width": 510, "height": 38,
+          "props": { "text": "Machine {machine}", "fontSize": 24 } },
+        { "id": "offset", "type": "spinner", "x": 20, "y": 58, "width": 235, "height": 64,
+          "props": { "text": "Extra quantity (this card)", "fieldKey": "offset", "defaultValue": 1, "min": 0, "max": 10 } },
+        { "id": "details", "type": "template", "x": 20, "y": 136, "width": 520, "height": 210,
+          "props": { "templateId": "parameter-fx-form", "parameters": { "machine": "{machine}", "permit": "{permit}" },
+            "parameterBindings": { "count": { "expression": "batch + offset", "references": { "batch": { "kind": "parameter", "key": "batch" }, "offset": { "kind": "input", "key": "offset" } } } } } }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "id": "parameter-fx-workshop", "name": "Parameter binding workshop", "width": 1240, "height": 1060,
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 18, "width": 1190, "height": 40,
+          "props": { "text": "One template. Live parent context.", "fontSize": 28 } },
+        { "id": "machine", "type": "select", "x": 24, "y": 78, "width": 260, "height": 70,
+          "props": { "text": "Machine", "fieldKey": "selectedMachine", "defaultValue": "A", "options": [ { "value": "A", "label": "Assembly cell" }, { "value": "B", "label": "Packaging cell" } ] } },
+        { "id": "batch", "type": "spinner", "x": 310, "y": 78, "width": 240, "height": 70,
+          "props": { "text": "Batch quantity", "fieldKey": "batchSize", "defaultValue": 2, "min": 1, "max": 20 } },
+        { "id": "permit", "type": "checkbox", "x": 580, "y": 91, "width": 260, "height": 48,
+          "props": { "text": "Allow preview actions", "fieldKey": "permit", "defaultValue": true } },
+        { "id": "card", "type": "template", "x": 24, "y": 176, "width": 560, "height": 360,
+          "props": { "templateId": "parameter-fx-card", "backgroundColor": "#243044", "foregroundColor": "#eff4ff", "customProperties": { "multiplier": { "type": "number", "value": 2 } },
+            "parameterBindings": {
+              "machine": { "expression": "selection", "references": { "selection": { "kind": "input", "key": "selectedMachine" } } },
+              "batch": { "expression": "quantity * multiplier", "references": { "quantity": { "kind": "input", "key": "batchSize" }, "multiplier": { "kind": "custom", "key": "multiplier" } } },
+              "permit": { "expression": "permission", "references": { "permission": { "kind": "input", "key": "permit" } } }
+            } } },
+        { "id": "help", "type": "label", "x": 626, "y": 204, "width": 570, "height": 190,
+          "props": { "text": "Choose a machine and batch quantity. The card receives twice the batch, then its nested form adds the card's extra quantity.\n\nType a note, then change machine: the old note clears. Preview returns the gateway's reconstructed parameters and only the inner form's note.", "fontSize": 17 } },
+        { "id": "rows-title", "type": "label", "x": 24, "y": 562, "width": 1190, "height": 44,
+          "props": { "text": "Saved rows keep their machine identity; shared batch and permission remain reactive.", "fontSize": 19 } },
+        { "id": "rows", "type": "repeater", "x": 24, "y": 626, "width": 1190, "height": 384,
+          "props": { "templateId": "parameter-fx-card", "columns": 2, "gap": 24, "rows": [ { "id": "assembly", "parameters": { "machine": "A" } }, { "id": "packaging", "parameters": { "machine": "B" } } ],
+            "parameterBindings": {
+              "batch": { "expression": "quantity", "references": { "quantity": { "kind": "input", "key": "batchSize" } } },
+              "permit": { "expression": "permission", "references": { "permission": { "kind": "input", "key": "permit" } } }
+            } } },
+        { "id": "footer", "type": "label", "x": 24, "y": 1020, "width": 1180, "height": 28,
+          "props": { "text": "Synthetic workshop · Read-only Python previews · No database or equipment writes", "fontSize": 13 } }
+      ]
+    },
+    {
+      "id": "parameter-fx-inspection", "name": "Parameter inspection", "kind": "popup", "width": 560, "height": 300,
+      "parameters": { "machine": "A", "quantity": "1" },
+      "components": [
+        { "id": "heading", "type": "label", "x": 24, "y": 20, "width": 512, "height": 50,
+          "props": { "text": "Inspect machine {machine} · Quantity {quantity}", "fontSize": 22 } },
+        { "id": "note", "type": "textInput", "x": 24, "y": 92, "width": 512, "height": 70,
+          "props": { "text": "Inspection note", "fieldKey": "inspectionNote", "defaultValue": "" } },
+        { "id": "preview", "type": "button", "x": 24, "y": 205, "width": 330, "height": 50,
+          "props": { "text": "Preview inspection", "action": "script", "script": "assert set(inputs) == {'inspectionNote'}\nresult = {'message': 'Inspection ' + parameters['machine'] + ' / quantity ' + parameters['quantity'] + ' / note: ' + inputs['inspectionNote'], 'parameters': parameters, 'inputs': inputs}" } },
+        { "id": "close", "type": "button", "x": 374, "y": 205, "width": 162, "height": 50,
+          "props": { "text": "Close", "action": "closePopup" } }
+      ]
+    }
+  ]
+}

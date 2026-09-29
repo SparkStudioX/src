@@ -48,10 +48,10 @@ export type TemplateParameterType = "string" | "number" | "boolean";
 export type ParameterValue = string | number | boolean;
 export type RuntimeParameters = Record<string, ParameterValue>;
 export type InputValues = Record<string, InputValue | null>;
-export type StateScope = "session" | "screen";
+export type StateScope = "session" | "screen" | "instance";
 export interface InputStateBinding { scope: StateScope; key: string }
 export type StateDefinitions = Record<string, CustomProperty>;
-export interface RuntimeStateValues { session: RuntimeParameters; screen: RuntimeParameters }
+export interface RuntimeStateValues { session: RuntimeParameters; screen: RuntimeParameters; instance?: RuntimeParameters }
 export interface RuntimeStateApi {
   get: (scope: StateScope, key: string) => InputValue | undefined;
   set: (scope: StateScope, key: string, value: unknown) => void;
@@ -61,6 +61,13 @@ export type InputEventType = "change" | "commit";
 export interface InputEventScript {
   language: "javascript";
   code: string;
+}
+export type ComponentEventProperty = BindingTarget;
+export interface ComponentEventScript { language: "javascript"; code: string }
+export interface ComponentEvents {
+  mount?: ComponentEventScript;
+  unmount?: ComponentEventScript;
+  propertyChange?: ComponentEventScript & { properties: ComponentEventProperty[] };
 }
 export type BindingTarget = "text" | "enabled" | "visible" | "color"
   | "x" | "y" | "width" | "height" | "fontSize"
@@ -74,6 +81,7 @@ export type BindingReference =
   | { kind: "parameter"; key: string }
   | { kind: "sessionState"; key: string }
   | { kind: "screenState"; key: string }
+  | { kind: "instanceState"; key: string }
   | { kind: "tag"; path: string };
 export interface PropertyBinding {
   expression: string;
@@ -135,6 +143,7 @@ export interface CanvasComponent {
   height: number;
   props: {
     stateBinding?: InputStateBinding;
+    componentEvents?: ComponentEvents;
     events?: Partial<Record<InputEventType, InputEventScript>>;
     customProperties?: Record<string, CustomProperty>;
     enabled?: boolean;
@@ -188,6 +197,7 @@ export interface CanvasComponent {
     script?: string;
     templateId?: string;
     parameters?: Record<string, string>;
+    parameterBindings?: Record<string, PropertyBinding>;
     rows?: TemplateRow[];
     rowsSource?: QueryRepeaterSource;
     columns?: number;
@@ -223,6 +233,8 @@ export interface ProjectNavigationSettings {
 export interface Template extends Screen {
   parameters: Record<string, string>;
   parameterTypes?: Record<string, TemplateParameterType>;
+  /** Private defaults; each rendered instance owns its mutable values. */
+  instanceState?: StateDefinitions;
 }
 export interface TemplateRow {
   id: string;
@@ -240,6 +252,10 @@ export interface InstanceAction {
   instanceId: string;
   rowId?: string;
   instancePath?: InstancePathStep[];
+  /** Referenced parent input snapshots, one per instance boundary. */
+  bindingInputs?: InputValues[];
+  /** Local lifecycle guard; never serialized in action requests. */
+  isCurrent?: () => boolean;
   querySourceParameters?: RuntimeParameters;
   template: Template;
   parameters: RuntimeParameters;
@@ -251,6 +267,7 @@ export interface PopupOrigin {
   instanceId?: string;
   rowId?: string;
   instancePath?: InstancePathStep[];
+  bindingInputs?: InputValues[];
 }
 export interface PopupState {
   id: string;

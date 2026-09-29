@@ -7,17 +7,21 @@ type StateRow = { id: number; name: string; type: CustomProperty["type"]; value:
 const labels: Record<CustomProperty["type"], string> = { string: "Text", number: "Number", boolean: "Boolean" };
 
 /** Keep a whole declaration edit local until Apply creates one history entry. */
-export function StateDefinitionsEditor({ scope, definitions = {}, onChange }: {
-  scope: StateScope; definitions?: StateDefinitions; onChange: (definitions: StateDefinitions) => void;
+export function StateDefinitionsEditor({ scope, definitions = {}, references = {}, onChange }: {
+  scope: StateScope; definitions?: StateDefinitions; references?: Record<string, string[]>; onChange: (definitions: StateDefinitions) => void;
 }) {
   const [draft, setDraft] = useState<StateRow[] | null>(null);
   const [applyError, setApplyError] = useState("");
   const rowId = useRef(0);
+  const draftSource = useRef("");
   const helpId = useId();
-  const title = scope === "session" ? "Session state" : "Screen state";
-  const entries = Object.entries(definitions);
+  const title = scope === "instance" ? "Private instance state" : scope === "session" ? "Session state" : "Screen state";
+  const sourceError = stateDefinitionsError(definitions);
+  const entries = sourceError ? [] : Object.entries(definitions);
 
   function begin() {
+    if (sourceError) return;
+    draftSource.current = JSON.stringify(definitions);
     setApplyError("");
     setDraft(entries.map(([name, entry]) => ({ id: rowId.current++, name, type: entry.type, value: String(entry.value) })));
   }
@@ -35,11 +39,18 @@ export function StateDefinitionsEditor({ scope, definitions = {}, onChange }: {
     const next = Object.fromEntries(draft.map(row => [row.name, {
       type: row.type, value: row.type === "number" ? Number(row.value) : row.type === "boolean" ? row.value === "true" : row.value,
     }])) as StateDefinitions;
-    return { definitions: next, error: stateDefinitionsError(next) || undefined };
+    const error = stateDefinitionsError(next);
+    if (error) return { error };
+    for (const [name, uses] of Object.entries(references)) {
+      if (uses.length && Object.hasOwn(definitions, name) && (!Object.hasOwn(next, name) || next[name].type !== definitions[name].type))
+        return { error: `Update bindings that use '${name}' before renaming, removing, or changing its type: ${uses.join(", ")}.` };
+    }
+    return { definitions: next };
   }
   const parsed = parse();
   function apply() {
     if (!draft) return;
+    if (JSON.stringify(definitions) !== draftSource.current) { setApplyError("These declarations changed while you were editing. Cancel and reopen the editor to keep the current changes."); return; }
     if (parsed.error || !parsed.definitions) { setApplyError(parsed.error || "Review these state defaults."); return; }
     if (JSON.stringify(parsed.definitions) !== JSON.stringify(definitions)) onChange(parsed.definitions);
     setDraft(null); setApplyError("");
@@ -48,7 +59,9 @@ export function StateDefinitionsEditor({ scope, definitions = {}, onChange }: {
 
   return <section className="document-property-group state-definitions" aria-label={`${title} defaults`}>
     <h3>{title}</h3>
-    <p id={helpId} className="document-property-help">{scope === "session"
+    <p id={helpId} className="document-property-help">{scope === "instance"
+      ? "Each template placement and repeater row owns separate values. They reset when its bound context changes or it closes. Nested templates have their own state; their parent's private values are not inherited. Only these defaults are saved."
+      : scope === "session"
       ? "Values are shared by this project's screens and popups in one browser tab. They survive screen navigation and reset when the application reloads or the user changes."
       : "Values belong to each open screen or popup. They reset when you leave the screen or close the popup. Templates use their containing screen's state."} Define typed defaults here, read them with fx bindings, and update them from browser scripts.</p>
     {!draft && <>
@@ -58,7 +71,8 @@ export function StateDefinitionsEditor({ scope, definitions = {}, onChange }: {
         </div>)}
         {!entries.length && <p className="document-property-empty">No state properties defined.</p>}
       </div>
-      <button type="button" className="button small state-definitions-edit" onClick={begin}>Edit {scope} state ({entries.length})</button>
+      {sourceError && <p className="state-definition-error" role="alert">{sourceError}</p>}
+      <button type="button" className="button small state-definitions-edit" disabled={Boolean(sourceError)} onClick={begin}>Edit {scope} state ({entries.length})</button>
     </>}
     {draft && <div className="state-definitions-draft" role="group" aria-label={`Edit ${scope} state`} onKeyDown={event => {
       event.stopPropagation();
@@ -80,6 +94,7 @@ export function StateDefinitionsEditor({ scope, definitions = {}, onChange }: {
             : row.type === "string" ? <textarea aria-label={`${title} property ${index + 1} default value`} rows={2} maxLength={4096} value={row.value} onChange={event => changeRow(row.id, { value: event.target.value })} />
             : <input aria-label={`${title} property ${index + 1} default value`} inputMode="decimal" value={row.value} onChange={event => changeRow(row.id, { value: event.target.value })} />}</label>
           <button type="button" className="button small subtle" aria-label={`Remove ${scope} state property ${index + 1}`} onClick={() => update(draft.filter(item => item.id !== row.id))}>Remove</button>
+          {Object.hasOwn(references, row.name) && references[row.name].length > 0 && <p className="document-property-help">Used by {references[row.name].join(", ")}.</p>}
         </fieldset>)}
       </div>
       <button type="button" className="button small" disabled={draft.length >= 64} onClick={() => {

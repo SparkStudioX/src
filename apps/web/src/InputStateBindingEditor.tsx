@@ -6,6 +6,7 @@ import type { CanvasComponent, InputStateBinding, RuntimeStateValues } from "./t
 
 export function inputStateBindingDraftError(component: CanvasComponent, binding: InputStateBinding, state?: RuntimeStateValues, allowScreen = false): string | null {
   if (!stateKeyValid(binding.key)) return "Choose a declared state name with 1–64 letters, digits or underscores.";
+  if (binding.scope === "instance" && state?.instance === undefined) return "Private instance state is available only inside a shared template.";
   const candidate = { ...component, props: { ...component.props, stateBinding: binding } };
   const problem = stateInputError(candidate, state);
   // Template authors may name a property on a future containing screen. Only
@@ -46,7 +47,7 @@ export function InputStateBindingEditor({ component, state, allowUnresolvedScree
       }}>ƒx</button>
       {binding && <small className={problem ? "property-sheet-error" : "property-sheet-expression"}>{problem || "Two-way · accepted edits update state"}</small>}
     </div>
-    <p className="binding-note">{binding ? "State supplies the value; the local default is inactive. Inputs using the same state property stay synchronized." : "The form starts from its configured default or tag source. Use ƒx to synchronize with a session or screen property."}</p>
+    <p className="binding-note">{binding ? "State supplies the value; the local default is inactive. Inputs using the same state property stay synchronized." : state?.instance !== undefined ? "The form starts from its configured default or tag source. Use ƒx to synchronize with session, screen or this template's private instance state." : "The form starts from its configured default or tag source. Use ƒx to synchronize with a session or screen property."}</p>
     {draft && createPortal(<dialog ref={dialog} className="property-binding-dialog" aria-labelledby={`${id}-title`} onCancel={event => { event.preventDefault(); close(); }} onClose={close} onKeyDown={event => {
       event.stopPropagation();
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); apply(); }
@@ -55,10 +56,10 @@ export function InputStateBindingEditor({ component, state, allowUnresolvedScree
       <div className="binding-dialog-body">
         <label>Source<select aria-label="Value binding scope" value={draft.scope} onChange={event => {
           const scope = event.target.value as InputStateBinding["scope"]; setError(""); setDraft({ scope, key: compatibleKeys(scope)[0] ?? "" });
-        }}><option value="session">Session state</option><option value="screen">Screen state</option></select></label>
+        }}><option value="session">Session state</option><option value="screen">Screen state</option>{state?.instance !== undefined && <option value="instance">Private instance state</option>}{state?.instance === undefined && draft.scope === "instance" && <option value="instance" disabled>Unavailable: private instance state</option>}</select></label>
         <label>State property<input autoFocus aria-label="Value binding state property" list={`${id}-keys`} maxLength={64} value={draft.key} onChange={event => { setError(""); setDraft({ ...draft, key: event.target.value }); }} /></label>
         <datalist id={`${id}-keys`}>{compatibleKeys(draft.scope).map(key => <option key={key} value={key} />)}</datalist>
-        <p className="binding-note">{draft.scope === "session" ? "Declare session properties in Project settings. Their values are shared by this project's screens and popups in one browser tab." : allowUnresolvedScreenState ? "Enter a property declared by every screen or popup using this template. Publication checks each placement's type and default value." : "Declare screen properties in this screen's property sheet. Each screen and popup opening has its own state."}</p>
+        <p className="binding-note">{draft.scope === "instance" ? "Declare private instance state on this shared template's property sheet. Each placement and repeater row gets its own values. Nested templates own separate private state." : draft.scope === "session" ? "Declare session properties in Project settings. Their values are shared by this project's screens and popups in one browser tab." : allowUnresolvedScreenState ? "Enter a property declared by every screen or popup using this template. Publication checks each placement's type and default value." : "Declare screen properties in this screen's property sheet. Each screen and popup opening has its own state."}</p>
         <p className="binding-note">Accepted edits update the state property immediately. Invalid entries remain in this input until corrected or the source changes. State updates and resets refresh bound inputs without firing their change/commit handlers. This binding does not write a tag or database.</p>
         <div className="binding-preview" role="status"><strong>Direction</strong><output>Two-way · input ↔ {draft.scope}.{draft.key || "…"}</output></div>
         {error && <p className="binding-apply-error" role="alert">{error}</p>}

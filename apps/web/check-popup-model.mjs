@@ -5,11 +5,13 @@ import ts from 'typescript';
 const source = name => fs.readFileSync(new URL(`./src/${name}.ts`, import.meta.url), 'utf8');
 const asModule = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
 const compile = code => ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-const authSessionUrl = asModule(compile(source('authSession')));
-const apiUrl = asModule(compile(source('api')).replaceAll('"./authSession"', JSON.stringify(authSessionUrl)));
-const modelUrl = asModule(compile(source('templateModel')).replaceAll('"./api"', JSON.stringify(apiUrl)));
-const listTreeUrl = asModule(compile(source('listTreeModel')));
-const load = name => import(asModule(compile(source(name)).replaceAll('"./api"', JSON.stringify(apiUrl)).replaceAll('"./templateModel"', JSON.stringify(modelUrl)).replaceAll('"./listTreeModel"', JSON.stringify(listTreeUrl))));
+const modules = new Map();
+const moduleUrl = name => {
+  if (modules.has(name)) return modules.get(name);
+  const result = asModule(compile(source(name)).replace(/from "\.\/([^"\n]+)"/g, (_, dependency) => `from ${JSON.stringify(moduleUrl(dependency))}`));
+  modules.set(name, result); return result;
+};
+const load = name => import(moduleUrl(name));
 const { createPopup, screenParameters, popupQuerySource, popupSourceStatus } = await load('popupModel');
 const { templateParameters, queryTemplateParameters, instanceInputKey, projectInputContext } = await load('templateModel');
 const { resolveInputs } = await load('inputs');

@@ -1,0 +1,74 @@
+{
+  "name": "Private instance state workshop",
+  "tags": [],
+  "sessionState": { "shift": { "type": "string", "value": "Day" } },
+  "templates": [
+    {
+      "id": "private-note", "name": "Private nested note", "width": 510, "height": 100,
+      "parameters": {},
+      "instanceState": { "note": { "type": "string", "value": "Inner default" } },
+      "components": [
+        { "id": "note", "type": "textInput", "x": 8, "y": 8, "width": 280, "height": 74, "props": { "text": "Nested private note", "fieldKey": "note", "defaultValue": "Inner default", "stateBinding": { "scope": "instance", "key": "note" } } },
+        { "id": "summary", "type": "label", "x": 305, "y": 33, "width": 195, "height": 44, "props": { "text": "Inner default", "fontSize": 15, "bindings": { "text": { "expression": "note", "references": { "note": { "kind": "instanceState", "key": "note" } } } } } }
+      ]
+    },
+    {
+      "id": "private-machine", "name": "Private machine panel", "width": 560, "height": 540,
+      "parameters": { "machine": "A" },
+      "instanceState": {
+        "quantity": { "type": "number", "value": 2 },
+        "note": { "type": "string", "value": "" },
+        "ready": { "type": "boolean", "value": false },
+        "edits": { "type": "number", "value": 0 }
+      },
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 15, "width": 340, "height": 38, "props": { "text": "Machine {machine}", "fontSize": 26 } },
+        { "id": "shift", "type": "label", "x": 385, "y": 23, "width": 150, "height": 30, "props": { "text": "Day shift", "fontSize": 15, "bindings": { "text": { "expression": "shift + ' shift'", "references": { "shift": { "kind": "sessionState", "key": "shift" } } } } } },
+        { "id": "quantity", "type": "spinner", "x": 24, "y": 66, "width": 238, "height": 76, "props": { "text": "Private quantity", "fieldKey": "quantity", "defaultValue": 2, "min": 1, "max": 20, "step": 1, "stateBinding": { "scope": "instance", "key": "quantity" }, "events": { "change": { "language": "javascript", "code": "app.state.set('instance', 'edits', app.state.get('instance', 'edits') + 1);" } } } },
+        { "id": "mirror", "type": "numberInput", "x": 286, "y": 66, "width": 250, "height": 76, "props": { "text": "Quantity mirror", "fieldKey": "mirror", "defaultValue": 2, "min": 1, "max": 20, "step": 1, "stateBinding": { "scope": "instance", "key": "quantity" } } },
+        { "id": "note", "type": "textInput", "x": 24, "y": 164, "width": 512, "height": 76, "props": { "text": "Private note", "fieldKey": "note", "defaultValue": "", "stateBinding": { "scope": "instance", "key": "note" } } },
+        { "id": "ready", "type": "checkbox", "x": 24, "y": 256, "width": 250, "height": 52, "props": { "text": "Private ready flag", "fieldKey": "ready", "defaultValue": false, "stateBinding": { "scope": "instance", "key": "ready" } } },
+        { "id": "inspect", "type": "button", "x": 306, "y": 259, "width": 230, "height": 44, "props": { "text": "Open fresh inspection", "action": "openPopup", "targetScreenId": "private-inspection", "parameters": { "machine": "{machine}" } } },
+        { "id": "edit-caption", "type": "label", "x": 24, "y": 318, "width": 52, "height": 38, "props": { "text": "Edits", "fontSize": 15 } },
+        { "id": "edit-count", "type": "label", "x": 80, "y": 318, "width": 55, "height": 38, "props": { "text": "0", "fontSize": 15, "bindings": { "text": { "expression": "edits", "references": { "edits": { "kind": "instanceState", "key": "edits" } } } } } },
+        { "id": "summary", "type": "label", "x": 142, "y": 318, "width": 140, "height": 38, "props": { "text": "Not ready", "fontSize": 15, "bindings": { "text": { "expression": "ready ? 'Ready' : 'Not ready'", "references": { "ready": { "kind": "instanceState", "key": "ready" } } } } } },
+        { "id": "preview", "type": "button", "x": 306, "y": 317, "width": 230, "height": 44, "props": { "text": "Preview local submission", "action": "script", "script": "assert set(inputs) == {'quantity', 'mirror', 'note', 'ready', 'reset'}\nassert inputs['quantity'] == inputs['mirror']\nassert isinstance(inputs['ready'], bool)\nassert 'instanceState' not in parameters\nresult = {'message': 'Machine ' + parameters['machine'] + ' / quantity ' + str(inputs['quantity']) + ' / note: ' + inputs['note'] + '. Only validated form fields; nothing written.'}" } },
+        { "id": "reset", "type": "toggle", "x": 24, "y": 375, "width": 512, "height": 48, "props": { "text": "Reset this panel only", "fieldKey": "reset", "defaultValue": false, "events": { "change": { "language": "javascript", "code": "if (event.value) { app.state.reset('instance'); app.setInput('reset', false); app.notify('This panel restored. Its nested note has its own state.'); }" } } } },
+        { "id": "inner", "type": "template", "x": 24, "y": 435, "width": 512, "height": 96, "props": { "text": "Independent nested note", "templateId": "private-note", "parameters": {}, "backgroundColor": "#e8edf7", "foregroundColor": "#1f3559", "borderColor": "#c1ccdf", "borderWidth": 1 } }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "id": "private-panels", "name": "Private equipment panels", "width": 1220, "height": 820,
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 18, "width": 1172, "height": 44, "props": { "text": "One template. Independent machine panels.", "fontSize": 31 } },
+        { "id": "intro", "type": "label", "x": 24, "y": 72, "width": 660, "height": 62, "props": { "text": "Change a panel's quantity or note. Its sibling and nested note stay independent. Switching the left machine starts fresh private state.", "fontSize": 16 } },
+        { "id": "machine", "type": "select", "x": 714, "y": 61, "width": 228, "height": 79, "props": { "text": "Left machine context", "fieldKey": "machine", "defaultValue": "A", "options": [{ "value": "A", "label": "Machine A" }, { "value": "C", "label": "Machine C" }] } },
+        { "id": "shift", "type": "select", "x": 968, "y": 61, "width": 228, "height": 79, "props": { "text": "Shared session shift", "fieldKey": "shift", "defaultValue": "Day", "options": [{ "value": "Day", "label": "Day" }, { "value": "Night", "label": "Night" }], "stateBinding": { "scope": "session", "key": "shift" } } },
+        { "id": "left", "type": "template", "x": 24, "y": 164, "width": 568, "height": 548, "props": { "text": "Left machine panel", "templateId": "private-machine", "parameters": {}, "parameterBindings": { "machine": { "expression": "machine", "references": { "machine": { "kind": "input", "key": "machine" } } } }, "backgroundColor": "#f3f6fc", "foregroundColor": "#1f3559", "borderColor": "#8299c0", "borderWidth": 1 } },
+        { "id": "right", "type": "template", "x": 628, "y": 164, "width": 568, "height": 548, "props": { "text": "Right machine panel", "templateId": "private-machine", "parameters": { "machine": "B" }, "backgroundColor": "#f3f6fc", "foregroundColor": "#1f3559", "borderColor": "#8299c0", "borderWidth": 1 } },
+        { "id": "rows", "type": "button", "x": 24, "y": 744, "width": 270, "height": 48, "props": { "text": "Open repeated panels", "action": "navigate", "targetScreenId": "private-rows" } },
+        { "id": "footer", "type": "label", "x": 320, "y": 737, "width": 876, "height": 60, "props": { "text": "Local demonstration. Private values live only in this browser run. Saved projects contain declarations and defaults, never operator edits.", "fontSize": 15 } }
+      ]
+    },
+    {
+      "id": "private-rows", "name": "Private repeated panels", "width": 1220, "height": 800,
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 18, "width": 1172, "height": 44, "props": { "text": "Each row owns its state.", "fontSize": 31 } },
+        { "id": "intro", "type": "label", "x": 24, "y": 75, "width": 1172, "height": 52, "props": { "text": "The same two templates now run in saved rows. Reset a row or open its inspection; other rows keep their values. Returning to a screen starts fresh instances.", "fontSize": 17 } },
+        { "id": "rows", "type": "repeater", "x": 24, "y": 150, "width": 1172, "height": 565, "props": { "text": "Repeated machine panels", "templateId": "private-machine", "columns": 2, "gap": 36, "rows": [{ "id": "north", "parameters": { "machine": "North" } }, { "id": "south", "parameters": { "machine": "South" } }], "backgroundColor": "#f3f6fc", "foregroundColor": "#1f3559", "borderColor": "#8299c0", "borderWidth": 1 } },
+        { "id": "home", "type": "button", "x": 24, "y": 734, "width": 270, "height": 48, "props": { "text": "Back to equipment panels", "action": "navigate", "targetScreenId": "private-panels" } }
+      ]
+    },
+    {
+      "id": "private-inspection", "name": "Private inspection", "kind": "popup", "width": 620, "height": 215,
+      "parameters": { "machine": "A" },
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 16, "width": 572, "height": 38, "props": { "text": "Inspection for {machine}", "fontSize": 25 } },
+        { "id": "inner", "type": "template", "x": 24, "y": 62, "width": 572, "height": 100, "props": { "text": "Popup private note", "templateId": "private-note", "parameters": {}, "backgroundColor": "#f3f6fc", "foregroundColor": "#1f3559" } },
+        { "id": "close", "type": "button", "x": 24, "y": 175, "width": 572, "height": 32, "props": { "text": "Close inspection", "action": "closePopup" } }
+      ]
+    }
+  ]
+}

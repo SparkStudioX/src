@@ -5,19 +5,21 @@ import { evaluateComponentBindings } from "./propertyBindings";
 import { initialInput, isInput, stateInputError } from "./inputs";
 import { InputEventLifecycle } from "./inputEvents";
 import { useApplicationStateContext } from "./applicationState";
+import { useComponentEvents } from "./ComponentEvents";
 import type { ComponentProps } from "react";
-import type { CanvasComponent } from "./types";
+import type { CanvasComponent, InputValue } from "./types";
 import "./boundComponent.css";
 import "./inputEvents.css";
 
 export type BoundComponentProps = ComponentProps<typeof ComponentView> & {
   components?: CanvasComponent[];
   inheritedAppearance?: InheritedComponentAppearance;
+  onAutomaticInputChange?: (field: string, value: InputValue) => void;
 };
 export type InheritedComponentAppearance = Pick<CanvasComponent["props"], "color" | "backgroundColor" | "foregroundColor" | "fontSize">;
 
 /** Evaluate in the current form scope; retain the authored component for actions. */
-export default function BoundComponent({ components, inheritedAppearance, ...props }: BoundComponentProps) {
+export default function BoundComponent({ components, inheritedAppearance, onAutomaticInputChange, ...props }: BoundComponentProps) {
   const applicationState = useApplicationStateContext();
   const [eventStatus, setEventStatus] = useState<{ message: string; error: boolean } | null>(null);
   const lifecycle = useRef<InputEventLifecycle | null>(null);
@@ -47,6 +49,9 @@ export default function BoundComponent({ components, inheritedAppearance, ...pro
   const currentInput = props.inputs && Object.hasOwn(props.inputs, fieldKey)
     ? props.inputs[fieldKey]
     : initialInput(props.component, props.tags, props.parameters, props.communicationLost, applicationState?.values);
+  useComponentEvents({ component: props.component, evaluated: result.component, components: scope, errors: result.errors,
+    parameters: props.parameters, inputs: props.inputs ?? {}, inputValue: currentInput, inputError: stateError,
+    preview: props.preview, scopeKey: props.queryScope, onAutomaticInputChange });
   const inputActive = props.preview && enabled && visible && !props.interactionLocked && !props.readOnly && isInput(props.component.type);
   const contextKey = inputActive ? JSON.stringify([
     props.queryScope,

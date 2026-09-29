@@ -135,6 +135,15 @@ await check('static popup actions keep their existing interaction behavior and a
   fields.submit.onAction(target.components[1]); await flush();
   assert.deepEqual(h.dispatched, ['sparkstudio:refresh-data']); assert.equal(h.closed.length, 0); h.stop();
 });
+await check('a template parameter change fences an in-flight popup result without leaving the popup busy', async () => {
+  let finish, current = true;
+  const h = harness({execute: () => new Promise(resolve => {finish = resolve;})});
+  const instance = {instanceId:'embedded',template:target,parameters:h.props.popup.parameters,inputs:{note:''},isCurrent:()=>current,bindingInputs:[{}]};
+  h.fields(h.render()).submit.onAction(target.components[1],instance);h.commit();await flush();
+  assert.equal(h.executions.length,1);current=false;finish({success:true,result:{message:'stale result'}});await flush();
+  const tree=h.render();assert.doesNotMatch(content(tree),/stale result/);assert.deepEqual(h.dispatched,[]);
+  assert.equal(h.fields(tree).submit.interactionLocked,false);h.stop();
+});
 
 delete globalThis.__popupHooks; delete globalThis.__popupRows; delete globalThis.__popupQueryCalls;
 delete globalThis.window; delete globalThis.document;

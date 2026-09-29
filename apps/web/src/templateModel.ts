@@ -61,15 +61,17 @@ export function templateParameters(
   root: RuntimeParameters,
   overrides: Record<string, string> = {},
   row: Record<string, string> = {},
+  boundValues: RuntimeParameters = {},
 ): RuntimeParameters {
-  const saved = { ...template.parameters, ...overrides, ...row };
+  const saved = { ...template.parameters, ...overrides };
   // Only root context is substituted, once, before template keys shadow it.
-  return resolvedTemplateParameters(template, root, saved);
+  const rowValues = Object.fromEntries(Object.entries(row).map(([name, value]) => [name, resolvePath(value, root)]));
+  return resolvedTemplateParameters(template, root, saved, { ...boundValues, ...rowValues });
 }
 
-export function resolveTemplateParameters(template: Template, root: RuntimeParameters, overrides: Record<string, string> = {}, row: Record<string, string> = {}):
+export function resolveTemplateParameters(template: Template, root: RuntimeParameters, overrides: Record<string, string> = {}, row: Record<string, string> = {}, boundValues: RuntimeParameters = {}):
   { parameters: RuntimeParameters; error?: undefined } | { parameters?: undefined; error: string } {
-  try { return { parameters: templateParameters(template, root, overrides, row) }; }
+  try { return { parameters: templateParameters(template, root, overrides, row, boundValues) }; }
   catch (reason) { return { error: reason instanceof Error ? reason.message : String(reason) }; }
 }
 
@@ -84,7 +86,7 @@ export function instanceInputKey(
     : JSON.stringify([screenId, path.map(step => [step.instanceId, step.rowId ?? null])]);
 }
 
-type InstanceIdentity = Pick<InstanceAction, "instanceId" | "rowId" | "instancePath">;
+type InstanceIdentity = Pick<InstanceAction, "instanceId" | "rowId" | "instancePath" | "bindingInputs">;
 
 /** Legacy identities remain the first step, while nested requests carry the complete path. */
 export function instancePath(instance?: InstanceIdentity): InstancePathStep[] {
@@ -92,17 +94,19 @@ export function instancePath(instance?: InstanceIdentity): InstancePathStep[] {
   return instance.instancePath ?? [{ instanceId: instance.instanceId, ...(instance.rowId === undefined ? {} : { rowId: instance.rowId }) }];
 }
 
-export function instanceRequestScope(instance?: InstanceIdentity): { instancePath?: InstancePathStep[]; instanceId?: string; rowId?: string } {
+export function instanceRequestScope(instance?: InstanceIdentity): { instancePath?: InstancePathStep[]; instanceId?: string; rowId?: string; bindingInputs?: InstanceAction["bindingInputs"] } {
   if (!instance) return {};
   const path = instancePath(instance);
-  return path.length > 1 ? { instancePath: path } : { ...path[0] };
+  return { ...(path.length > 1 ? { instancePath: path } : { ...path[0] }),
+    ...(instance.bindingInputs ? { bindingInputs: instance.bindingInputs } : {}) };
 }
 
 /** Database row parameters overlay resolved saved defaults without a second substitution pass. */
 export function queryTemplateParameters(
   template: Template, root: RuntimeParameters, overrides: Record<string, string> = {}, row: RuntimeParameters = {},
+  boundValues: RuntimeParameters = {},
 ): RuntimeParameters {
-  return resolvedTemplateParameters(template, root, { ...template.parameters, ...overrides }, row);
+  return resolvedTemplateParameters(template, root, { ...template.parameters, ...overrides }, { ...boundValues, ...row });
 }
 
 export function actionKey(
@@ -206,7 +210,9 @@ export function componentContexts(
     const template = templates.find(
       (item) => item.id === component.props.templateId,
     );
-    if (!template || component.props.rowsSource) return [];
+    // This static helper enumerates authored parameter choices; a live parent
+    // input is unavailable here, so do not advertise an authored fallback.
+    if (!template || component.props.rowsSource || Object.keys(component.props.parameterBindings ?? {}).length) return [];
     const rows =
       component.type === "repeater" ? component.props.rows || [] : [undefined];
     return rows.flatMap((row) => {
@@ -237,6 +243,7 @@ export function projectInputContext(project: Project): string {
       defaultValue: component.props.defaultValue,
       templateId: component.props.templateId,
       parameters: component.props.parameters,
+      parameterBindings: component.props.parameterBindings,
       rows: component.props.rows,
       rowsSource: component.props.rowsSource,
     }));

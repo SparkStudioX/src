@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { ApplicationStateStore } from "./applicationStateModel";
+import { ApplicationStateStore, stateDefaults } from "./applicationStateModel";
 import type { StateContext, StateScopeHandle } from "./applicationStateModel";
 import type { Project, Screen, StateDefinitions } from "./types";
 
@@ -9,7 +9,7 @@ export const ApplicationStateProvider = Context.Provider;
 export const useApplicationStateContext = () => useContext(Context);
 
 /** Runtime tab or Designer preview: a fresh owner is created after auth unmount. */
-export function useApplicationState(project: Project | null, screen: Screen | undefined, runKey: string): ApplicationStateContext {
+export function useApplicationState(project: Project | null, screen: Screen | undefined, runKey: string, instanceDefinitions?: StateDefinitions): ApplicationStateContext {
   const ref = useRef<ApplicationStateStore | null>(null);
   if (!ref.current) ref.current = new ApplicationStateStore();
   const store = ref.current;
@@ -24,7 +24,32 @@ export function useApplicationState(project: Project | null, screen: Screen | un
   }, [store]);
   store.configure(runKey, project?.sessionState);
   const scope = store.activateScreen(screen?.id ?? "", screen?.state);
-  return { ...store.context(scope), store };
+  const parent = { ...store.context(scope), store };
+  return useInstanceApplicationState(parent, "template-preview", instanceDefinitions, instanceDefinitions !== undefined) ?? parent;
+}
+
+/** Each template replaces the private scope while keeping the same screen/session. */
+export function useInstanceApplicationState(parent: ApplicationStateContext | undefined, id: string, definitions?: StateDefinitions,
+  enabled = true): ApplicationStateContext | undefined {
+  const ref = useRef<{ parentKey: string; source: string; store: ApplicationStateStore; scope: StateScopeHandle } | null>(null);
+  const source = JSON.stringify([id, definitions ?? {}]);
+  const available = enabled && parent?.store && parent.screenScope;
+  if (available && (ref.current?.parentKey !== parent.key || ref.current?.source !== source || ref.current?.store !== parent.store)) {
+    // Invalid declarations must not expire a previously valid form.
+    stateDefaults(definitions);
+    if (ref.current) ref.current.store.closeScope(ref.current.scope);
+    ref.current = { parentKey: parent.key, source, store: parent.store, scope: parent.store.createScope(id, definitions) };
+  }
+  if (!available && ref.current) { ref.current.store.closeScope(ref.current.scope); ref.current = null; }
+  const scope = ref.current?.scope, store = ref.current?.store;
+  useEffect(() => {
+    if (!store || !scope) return;
+    store.resumeScope(scope);
+    return () => store.closeScope(scope);
+  }, [store, scope]);
+  if (!enabled || !parent) return undefined;
+  if (!scope || !store) return { ...parent, values: { ...parent.values, instance: stateDefaults(definitions) } };
+  return { ...store.context(parent.screenScope, scope, parent.ownerScopes), store };
 }
 
 /** Popup state is local to that opening; its templates share this same scope. */

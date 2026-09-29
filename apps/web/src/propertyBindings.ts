@@ -160,9 +160,9 @@ function validateDefinition(binding: PropertyBinding): Node {
     const ref = raw as unknown as BindingReference;
     const allowed = ref.kind === "custom" ? ["kind", "key", "componentId"] : ref.kind === "tag" ? ["kind", "path"] : ["kind", "key"];
     if (Object.keys(raw).some(key => !allowed.includes(key))) fail(`Reference '${name}' has unsupported fields.`);
-    if (ref.kind === "custom" || ref.kind === "input" || ref.kind === "parameter" || ref.kind === "sessionState" || ref.kind === "screenState") {
+    if (ref.kind === "custom" || ref.kind === "input" || ref.kind === "parameter" || ref.kind === "sessionState" || ref.kind === "screenState" || ref.kind === "instanceState") {
       if (!safeKey(ref.key)) fail(`Reference '${name}' needs a valid key.`);
-      if ((ref.kind === "sessionState" || ref.kind === "screenState") && (ref.key.trim() !== ref.key || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(ref.key))) fail(`Reference '${name}' needs a declared state name.`);
+      if ((ref.kind === "sessionState" || ref.kind === "screenState" || ref.kind === "instanceState") && (ref.key.trim() !== ref.key || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(ref.key))) fail(`Reference '${name}' needs a declared state name.`);
       if (ref.kind === "custom" && (!alias(ref.key) || (own(ref, "componentId") && !safeKey(ref.componentId)))) fail(`Reference '${name}' needs a valid custom property and component ID.`);
     } else if (ref.kind === "tag") {
       if (typeof ref.path !== "string" || !ref.path.trim() || ref.path.length > 1024) fail(`Reference '${name}' needs a tag path up to 1024 characters.`);
@@ -253,9 +253,9 @@ function evaluate(node: Node, resolve: (name: string) => Scalar): Scalar {
 
 type ResolvedReference = { value: Scalar; simulated?: true };
 function resolveReference(ref: BindingReference, component: CanvasComponent, context: BindingContext): ResolvedReference {
-  if (ref.kind === "sessionState" || ref.kind === "screenState") {
-    const values = ref.kind === "sessionState" ? context.state?.session : context.state?.screen;
-    if (!values || !own(values, ref.key)) return fail(`${ref.kind === "sessionState" ? "Session" : "Screen"} state '${ref.key}' is not declared in this scope.`);
+  if (ref.kind === "sessionState" || ref.kind === "screenState" || ref.kind === "instanceState") {
+    const values = ref.kind === "sessionState" ? context.state?.session : ref.kind === "screenState" ? context.state?.screen : context.state?.instance;
+    if (!values || !own(values, ref.key)) return fail(`${ref.kind === "sessionState" ? "Session" : ref.kind === "screenState" ? "Screen" : "Instance"} state '${ref.key}' is not declared in this scope.`);
     return { value: scalar(values[ref.key]) };
   }
   if (ref.kind === "custom") {
@@ -281,6 +281,23 @@ function resolveReference(ref: BindingReference, component: CanvasComponent, con
   if (!tag) return fail(`Tag '${path}' was not found.`);
   if (!/^good(?:$|[_ (])/i.test(tag.quality)) return fail(`Tag '${path}' quality is ${tag.quality || "unknown"}.`);
   return { value: scalar(tag.value), ...(tag.source === "simulated" ? { simulated: true as const } : {}) };
+}
+
+/** Shared bounded expression evaluator; the caller validates its target type. */
+export function constantPropertyBinding(binding: PropertyBinding): { constant: false } | { constant: true; value: Scalar } {
+  const node = validateDefinition(binding);
+  return parse(binding.expression).names.size ? { constant: false } : { constant: true, value: evaluate(node, () => fail("A reference is missing.")) };
+}
+
+/** Shared bounded expression evaluator; the caller validates its target type. */
+export function evaluatePropertyBinding(binding: PropertyBinding, component: CanvasComponent, context: BindingContext): { value: Scalar; simulated?: true } {
+  let simulated = false;
+  const value = evaluate(validateDefinition(binding), name => {
+    const reference = resolveReference(binding.references[name], component, context);
+    simulated ||= reference.simulated === true;
+    return reference.value;
+  });
+  return { value, ...(simulated ? { simulated: true as const } : {}) };
 }
 
 /** Pure evaluation: a failure affects one target; saved definitions are never mutated. */

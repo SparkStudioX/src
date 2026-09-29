@@ -26,6 +26,12 @@ const health = (changes = {}) => {
 };
 let passed = 0;
 const test = (name, run) => { run(); passed++; console.log(`PASS ${name}`); };
+test('template parameter failures block descendants and count once without consulting an authored fallback', () => {
+  const parent=component('choice','numberInput',{fieldKey:'choice',defaultValue:3,min:0,max:10});
+  const template={id:'bound-form',name:'Bound',width:200,height:100,parameters:{target:'1'},parameterTypes:{target:'number'},components:[component('display','value',{tagPath:'[default]bad'})]};
+  const bound=component('bound','repeater',{templateId:template.id,rows:[{id:'a',parameters:{target:'1'}},{id:'b',parameters:{}}],parameterBindings:{target:{expression:'choice',references:{choice:{kind:'input',key:'choice'}}}}});
+  assert.equal(health({screen:{...screen,components:[parent,bound]},templates:[template],edits:{main:{choice:20}}}).badCount,1);
+});
 test('selected display tag replaces authored fallback in health and simulated status', () => {
   assert.deepEqual(health(), {badCount: 0, simulated: false});
   assert.deepEqual(health({edits: {main: {machine: 'Press02'}}}), {badCount: 0, simulated: true});

@@ -23,6 +23,7 @@ internal static class ProjectTemplates
 
     public static void ValidateStructure(JsonObject project)
     {
+        ComponentEventValidator.RejectMisplaced(project);
         if (project["screens"] is not JsonArray screens || screens.Count is < 1 or > 100)
             throw new ArgumentException("A project needs 1 to 100 screens.");
         ProjectStateValidator.ValidateProject(project);
@@ -34,6 +35,7 @@ internal static class ProjectTemplates
             ValidateDocuments(templates, "Template", project["parameters"] as JsonObject, project["sessionState"] as JsonObject);
         }
         TemplateParameterTypes.ValidateProject(project);
+        TemplateParameterBindings.ValidateProject(project);
         QueryRepeaterSource.ValidateStructure(project);
         ProjectNavigation.Validate(project, screens);
         ProjectInteractions.ValidateDrawingActions(project);

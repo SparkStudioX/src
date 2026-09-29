@@ -14,14 +14,34 @@ internal static class ProjectStateValidator
 
     public static void ValidateProject(JsonObject project)
     {
+        RejectInstanceDeclarations(project);
         if (project.ContainsKey("sessionState")) ValidateDefinitions(project["sessionState"], "Session state");
     }
 
     public static void ValidateDocument(JsonObject document, bool template)
     {
-        if (!document.ContainsKey("state")) return;
-        if (template) throw new ArgumentException("Templates inherit their containing screen state and cannot declare state.");
-        ValidateDefinitions(document["state"], "Screen state");
+        if (document.ContainsKey("state"))
+        {
+            if (template) throw new ArgumentException("Templates inherit their containing screen state and cannot declare state; use instanceState for private instance defaults.");
+            ValidateDefinitions(document["state"], "Screen state");
+        }
+        if (!template) RejectInstanceDeclarations(document);
+        else if (document.ContainsKey("instanceState")) ValidateDefinitions(document["instanceState"], "Instance state");
+        // A declaration belongs to the reusable template schema, never to an
+        // instance wrapper, saved row, input properties or browser submission.
+        foreach (var component in (document["components"] as JsonArray ?? []).OfType<JsonObject>())
+        {
+            RejectInstanceDeclarations(component);
+            if (component["props"] is not JsonObject props) continue;
+            RejectInstanceDeclarations(props);
+            if (props["rows"] is JsonArray rows)
+                foreach (var row in rows.OfType<JsonObject>()) RejectInstanceDeclarations(row);
+        }
+    }
+
+    private static void RejectInstanceDeclarations(JsonObject owner)
+    {
+        if (owner.ContainsKey("instanceState")) throw new ArgumentException("Private instance state declarations belong only to template definitions.");
     }
 
     private static void ValidateDefinitions(JsonNode? node, string description)
@@ -53,6 +73,11 @@ internal static class ProjectStateValidator
             if (sessionState?.ContainsKey(key) != true)
                 throw new ArgumentException($"Session state '{key}' is not declared by the project.");
         }
+        else if (kind == "instanceState")
+        {
+            if (!template || (document["instanceState"] as JsonObject)?.ContainsKey(key) != true)
+                throw new ArgumentException($"Instance state '{key}' must be declared by the immediately containing template.");
+        }
         else if (!template && (document["state"] as JsonObject)?.ContainsKey(key) != true)
             throw new ArgumentException($"Screen state '{key}' is not declared by its screen.");
     }
@@ -64,6 +89,11 @@ internal static class ProjectStateValidator
             if (component["props"] is not JsonObject props || !props.ContainsKey("stateBinding")) continue;
             var (scope, key, expectedType) = InputBinding(component);
             if (scope == "session") ValidateBoundDeclaration(component, sessionState, key, expectedType, "Session");
+            else if (scope == "instance")
+            {
+                if (!template) throw new ArgumentException("Only inputs inside template definitions can bind to instance state.");
+                ValidateBoundDeclaration(component, document["instanceState"] as JsonObject, key, expectedType, "Instance");
+            }
             else if (!template) ValidateBoundDeclaration(component, document["state"] as JsonObject, key, expectedType, "Screen");
         }
     }
@@ -73,9 +103,9 @@ internal static class ProjectStateValidator
         var props = component["props"]!.AsObject();
         if (props["stateBinding"] is not JsonObject binding || binding.Count != 2 ||
             binding.Any(pair => pair.Key is not ("scope" or "key")) ||
-            binding["scope"] is not JsonValue scopeNode || !scopeNode.TryGetValue<string>(out var scope) || scope is not ("session" or "screen") ||
+            binding["scope"] is not JsonValue scopeNode || !scopeNode.TryGetValue<string>(out var scope) || scope is not ("session" or "screen" or "instance") ||
             binding["key"] is not JsonValue keyNode || !keyNode.TryGetValue<string>(out var key) || !ValidKey(key))
-            throw new ArgumentException("Input state bindings need only scope (session or screen) and a valid state key.");
+            throw new ArgumentException("Input state bindings need only scope (session, screen or instance) and a valid state key.");
         var expectedType = ProjectStore.Required(component, "type") switch
         {
             "textInput" or "textArea" or "dateTimeInput" or "select" or "list" or "treeView" or "radioGroup" or "multiStateButton" => "string",

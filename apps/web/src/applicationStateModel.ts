@@ -1,4 +1,5 @@
 import type { InputValue, RuntimeParameters, RuntimeStateApi, RuntimeStateValues, StateDefinitions, StateScope } from "./types";
+import { ComponentEventCoordinator } from "./componentEventModel";
 
 const own = (value: object, key: string) => Object.hasOwn(value, key);
 const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -32,6 +33,10 @@ export interface StateScopeHandle {
 }
 export interface StateContext {
   key: string; values: RuntimeStateValues; api: RuntimeStateApi;
+  screenScope: StateScopeHandle;
+  instanceScope?: StateScopeHandle;
+  ownerScopes: StateScopeHandle[];
+  isCurrent: () => boolean;
   /** Internal binding stamp, including an explicit reset to an unchanged value. */
   revision: (scope: StateScope, key: string) => number | undefined;
 }
@@ -40,6 +45,7 @@ let storeSequence = 0;
 
 /** One browser project run; no storage, gateway writes or user identity is held here. */
 export class ApplicationStateStore {
+  readonly componentEvents = new ComponentEventCoordinator();
   private readonly id = ++storeSequence;
   private generation = 0;
   private screenGeneration = 0;
@@ -51,7 +57,9 @@ export class ApplicationStateStore {
   private session: RuntimeParameters = {};
   private sessionRevisions: Record<string, number> = {};
   private main: StateScopeHandle | undefined;
-  private scopes = new Set<StateScopeHandle>();
+  // React may abandon a render before its cleanup exists. Scope owners retain
+  // committed handles; the store must not strongly retain discarded rows.
+  private scopes = new WeakSet<StateScopeHandle>();
   private handles = new WeakMap<StateScopeHandle, ScopeLifetime>();
   private listeners = new Set<() => void>();
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
@@ -62,7 +70,8 @@ export class ApplicationStateStore {
     const key = JSON.stringify([projectKey, definitions ?? {}]);
     if (key === this.projectKey) return;
     const defaults = stateDefaults(definitions);
-    this.projectKey = key; this.generation++; this.scopes.clear(); this.main = undefined;
+    this.projectKey = key; this.generation++; this.scopes = new WeakSet(); this.main = undefined;
+    this.componentEvents.reset();
     this.definitions = structuredClone(definitions ?? {}); this.session = Object.freeze(defaults);
     this.sessionRevisions = {};
   }
@@ -72,7 +81,8 @@ export class ApplicationStateStore {
     // Validate first so a malformed draft does not destroy the active screen.
     stateDefaults(definitions);
     this.screenGeneration++;
-    this.scopes.clear();
+    this.componentEvents.reset();
+    this.scopes = new WeakSet();
     this.main = this.createScope(documentId, definitions);
     return this.main;
   }
@@ -95,41 +105,47 @@ export class ApplicationStateStore {
     }
   }
 
-  context(scope: StateScopeHandle): StateContext {
+  context(scope: StateScopeHandle, instance?: StateScopeHandle, ancestors: StateScopeHandle[] = []): StateContext {
     const lifetime = this.lifetime;
-    const handle = this.handles.get(scope);
-    const epoch = handle?.epoch;
-    const live = () => this.active && this.lifetime === lifetime && handle?.epoch === epoch &&
-      handle?.screenGeneration === this.screenGeneration && scope.generation === this.generation && this.scopes.has(scope);
+    const ownerScopes = [...new Set([scope, ...ancestors, ...(instance ? [instance] : [])])];
+    const captures = ownerScopes.map(owner => ({ owner, handle: this.handles.get(owner), epoch: this.handles.get(owner)?.epoch }));
+    // Every helper, including writes to shared screen/session state, expires
+    // when any owning template or popup is disposed. A child never revives it.
+    const live = () => this.active && this.lifetime === lifetime && captures.every(({ owner, handle, epoch }) =>
+      handle?.epoch === epoch && handle?.screenGeneration === this.screenGeneration && owner.generation === this.generation && this.scopes.has(owner));
+    const local = (target: StateScope): StateScopeHandle => {
+      if (target === "instance" && !instance) throw new Error("Instance state is unavailable outside a template instance.");
+      return target === "instance" ? instance! : scope;
+    };
     const definitions = (target: StateScope) => {
-      if (target !== "session" && target !== "screen") throw new Error("State scope must be session or screen.");
-      return target === "session" ? this.definitions : scope.definitions;
+      if (target !== "session" && target !== "screen" && target !== "instance") throw new Error("State scope must be session, screen or instance.");
+      return target === "session" ? this.definitions : local(target).definitions;
     };
     const declared = (target: StateScope, key: string) => {
       const values = definitions(target);
-      if (!stateKeyValid(key) || !own(values, key)) throw new Error(`${target === "session" ? "Session" : "Screen"} state '${String(key)}' is not declared.`);
+      if (!stateKeyValid(key) || !own(values, key)) throw new Error(`${target === "session" ? "Session" : target === "screen" ? "Screen" : "Instance"} state '${String(key)}' is not declared.`);
       return values[key];
     };
     const publish = (target: StateScope, values: RuntimeParameters) => {
-      if (target === "session") this.session = Object.freeze(values); else scope.values = Object.freeze(values);
+      if (target === "session") this.session = Object.freeze(values); else local(target).values = Object.freeze(values);
       for (const listener of [...this.listeners]) listener();
     };
     const touch = (target: StateScope, keys: string[]) => {
-      const revisions = target === "session" ? this.sessionRevisions : scope.revisions;
+      const revisions = target === "session" ? this.sessionRevisions : local(target).revisions;
       for (const key of keys) revisions[key] = (revisions[key] ?? 0) + 1;
     };
     const api: RuntimeStateApi = {
-      get: (target, key) => { if (!live()) return undefined; declared(target, key); return (target === "session" ? this.session : scope.values)[key]; },
+      get: (target, key) => { if (!live()) return undefined; declared(target, key); return (target === "session" ? this.session : local(target).values)[key]; },
       set: (target, key, value) => {
         if (!live()) return;
         const declaration = declared(target, key);
         if (!scalarValid(declaration.type, value)) throw new Error(`State '${key}' requires ${declaration.type === "number" ? "an exact finite number" : declaration.type === "boolean" ? "true or false" : "text up to 4096 characters"}.`);
-        const values = target === "session" ? this.session : scope.values;
+        const values = target === "session" ? this.session : local(target).values;
         if (!Object.is(values[key], value)) { touch(target, [key]); publish(target, { ...values, [key]: value as InputValue }); }
       },
       reset: (target, key) => {
         if (!live()) return;
-        const values = target === "session" ? this.session : scope.values;
+        const values = target === "session" ? this.session : local(target).values;
         const next = key === undefined ? stateDefaults(definitions(target)) : { ...values, [key]: declared(target, key).value };
         // Reset also discards invalid bound-input drafts whose last accepted
         // value already equals the default. Ordinary equal sets remain silent.
@@ -137,7 +153,8 @@ export class ApplicationStateStore {
         publish(target, next);
       },
     };
-    return { key: scope.key, values: { session: this.session, screen: scope.values }, api,
-      revision: (target, key) => { if (!live()) return undefined; declared(target, key); return (target === "session" ? this.sessionRevisions : scope.revisions)[key] ?? 0; } };
+    return { key: instance ? `${scope.key}/${instance.key}` : scope.key, screenScope: scope, instanceScope: instance, ownerScopes, isCurrent: live,
+      values: { session: this.session, screen: scope.values, ...(instance ? { instance: instance.values } : {}) }, api,
+      revision: (target, key) => { if (!live()) return undefined; declared(target, key); return (target === "session" ? this.sessionRevisions : local(target).revisions)[key] ?? 0; } };
   }
 }

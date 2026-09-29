@@ -11,12 +11,13 @@ export interface InputEventsEditorProps {
   components: CanvasComponent[];
   inputs: InputValues;
   parameters: RuntimeParameters;
+  instanceStateAvailable?: boolean;
   onApply: (events: CanvasComponent["props"]["events"]) => void;
   onClose: () => void;
 }
 
 /** Edits both events as one draft. Code runs only after actual operator input. */
-export default function InputEventsEditor({ component, components, inputs, parameters, onApply, onClose }: InputEventsEditorProps) {
+export default function InputEventsEditor({ component, components, inputs, parameters, instanceStateAvailable = false, onApply, onClose }: InputEventsEditorProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [selected, setSelected] = useState<InputEventType>("change");
   const [code, setCode] = useState<Record<InputEventType, string>>({ change: component.props.events?.change?.code || "", commit: component.props.events?.commit?.code || "" });
@@ -36,13 +37,13 @@ export default function InputEventsEditor({ component, components, inputs, param
     { label: "event.previousValue", type: "property", detail: "Previous edit or last committed value" },
     { label: "app.notify", type: "function", detail: "Show a message on this input" },
     { label: "app.setInput", type: "function", detail: "Set a validated value in this form; no event retrigger" },
-    { label: "app.state.get", type: "function", detail: "Read a declared session or screen state property" },
+    { label: "app.state.get", type: "function", detail: instanceStateAvailable ? "Read declared session, screen or private instance state" : "Read a declared session or screen state property" },
     { label: "app.state.set", type: "function", detail: "Update typed local state and its bindings" },
     { label: "app.state.reset", type: "function", detail: "Restore one property or a scope to declared defaults" },
     { label: "inputs", type: "variable", detail: "Form values when the event occurred" },
     { label: "parameters", type: "variable", detail: "Current screen or template parameters" },
     ...["const", "let", "if", "else", "return", "await", "true", "false"].map((label) => ({ label, type: "keyword" })),
-  ], []);
+  ], [instanceStateAvailable]);
   function apply() {
     const events: NonNullable<CanvasComponent["props"]["events"]> = {};
     for (const type of ["change", "commit"] as const) {
@@ -71,7 +72,8 @@ export default function InputEventsEditor({ component, components, inputs, param
       <aside className="input-events-context" aria-label="Input event context">
         <h3>Event context</h3><pre>{`event = {\n  type: "${selected}",\n  componentId: ${JSON.stringify(component.id)},\n  fieldKey: ${JSON.stringify(fieldKey)},\n  value,\n  previousValue\n}`}</pre>
         <h4>Local form helpers</h4><p><code>app.notify(message)</code> shows a message on this control.</p><p><code>app.setInput(field, value)</code> updates a declared input in this form. The value must match its type, bounds, and options. It does not run input events.</p>
-        <h4>Application state</h4><p><code>app.state.get("session", "name")</code> reads a declared state property. Use <code>set(scope, name, value)</code> to update it and <code>reset(scope, name)</code> to restore its default. Omit the name to reset the whole scope. Scope is <code>"session"</code> or <code>"screen"</code>.</p><p>Values must match their declared types. Session state is shared within this runtime tab; screen state belongs to the current screen or popup. These local values are separate from gateway tags and database data.</p>
+        <h4>Application state</h4><p><code>app.state.get("session", "name")</code> reads a declared state property. Use <code>set(scope, name, value)</code> to update it and <code>reset(scope, name)</code> to restore its default. Omit the name to reset the whole scope. Scope is <code>"session"</code> or <code>"screen"</code>{instanceStateAvailable && <>, or <code>"instance"</code> inside this template</>}.</p><p>Values must match their declared types. Session state is shared within this runtime tab; screen state belongs to the current screen or popup. These local values are separate from gateway tags and database data.</p>
+        {instanceStateAvailable && <p><code>app.state.get("instance", "name")</code> reads private state declared on this shared template. Each placement and repeater row owns independent values. Nested templates cannot access their parent's private state. Bound-context changes and closure reset or dispose these values.</p>}
         <h4>Example</h4><pre>{`if (event.value !== event.previousValue) {\n  app.notify("Value: " + event.value);\n}`}</pre>
         <h4>Form inputs</h4><ul>{fields.length ? fields.map((item) => { const key = item.props.fieldKey || item.id; return <li key={item.id}><code>{key}</code><small>{item.type} · {String(inputs[key] ?? "Unavailable").slice(0, 90)}</small></li>; }) : <li>No fields in this form.</li>}</ul>
         <h4>Parameters</h4><ul>{Object.keys(parameters).length ? Object.entries(parameters).map(([key, value]) => <li key={key}><code>{key}</code><small>{value}</small></li>) : <li>No parameters declared.</li>}</ul>

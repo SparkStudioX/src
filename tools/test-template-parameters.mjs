@@ -150,7 +150,8 @@ try {
   });
   await test('typed popup openers stringify canonically and target templates coerce after reconstruction', async () => {
     const popupOrigin = { screenId: 'main', componentId: 'open', instanceId: 'query', rowId: '1:1' };
-    const result = await action({ screen: 'popup', instanceId: undefined, popupOrigin, popupParameters: { count: '999' } });
+    await action({ screen: 'popup', instanceId: undefined, popupOrigin, popupParameters: { count: '999' }, status: 400 });
+    const result = await action({ screen: 'popup', instanceId: undefined, popupOrigin });
     assert.equal(result.result.parameters.count, '1.25'); assert.equal(result.result.parameters.ready, 'false'); assert.equal(result.result.parameters.caption, '{count}');
     const child = await action({ screen: 'popup', instanceId: 'child', popupOrigin }); assert.equal(child.result.parameters.count, 1.25); assert.equal(child.result.parameters.ready, false);
     const rows = await action({ screen: 'popup', instanceId: 'children', rowId: 'child', popupOrigin }); assert.equal(rows.result.parameters.count, 2.25); assert.equal(rows.result.parameters.caption, '{count}');

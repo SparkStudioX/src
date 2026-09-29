@@ -151,7 +151,7 @@ export function initialInput(
   if (component.props.stateBinding !== undefined) {
     if (stateInputError(component, state)) return null;
     const binding = component.props.stateBinding;
-    return state![binding.scope][binding.key];
+    return state![binding.scope]![binding.key];
   }
   const tag = component.props.tagPath
     ? tags.find(
@@ -231,15 +231,15 @@ export function stateInputError(component: CanvasComponent, state?: RuntimeState
   const binding = component.props.stateBinding;
   if (binding === undefined) return null;
   if (!binding || typeof binding !== "object" || Array.isArray(binding) || Object.keys(binding).length !== 2 ||
-    (binding.scope !== "session" && binding.scope !== "screen") || typeof binding.key !== "string" ||
+    (binding.scope !== "session" && binding.scope !== "screen" && binding.scope !== "instance") || typeof binding.key !== "string" ||
     binding.key.trim() !== binding.key || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(binding.key) || ["constructor", "prototype", "__proto__"].includes(binding.key))
-    return "An input state binding needs a session or screen scope and a declared state name.";
+    return "An input state binding needs a session, screen or instance scope and a declared state name.";
   if (!isInput(component.type) || component.type === "passwordInput") return "State bindings require a non-password input.";
   if (component.props.tagPath || Object.hasOwn(component.props, "optionsSource") && component.props.optionsSource !== undefined ||
     Object.hasOwn(component.props, "selectionFields") && component.props.selectionFields !== undefined)
     return "Choose a state binding without a tag source, query options or selection mappings.";
   const values = state?.[binding.scope];
-  if (!values || !Object.hasOwn(values, binding.key)) return `${binding.scope === "session" ? "Session" : "Screen"} state '${binding.key}' is unavailable in this form.`;
+  if (!values || !Object.hasOwn(values, binding.key)) return `${binding.scope === "session" ? "Session" : binding.scope === "screen" ? "Screen" : "Instance"} state '${binding.key}' is unavailable in this form.`;
   const key = component.props.fieldKey || component.id;
   return validateInputs({ id: "bound-value", name: "Bound value", width: 1, height: 1, components: [component] }, { [key]: values[binding.key] });
 }

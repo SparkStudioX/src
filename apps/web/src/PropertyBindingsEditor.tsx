@@ -6,15 +6,20 @@ import { evaluateComponentBindings, isGeometryTarget, processBindingTargets, pro
 import { isProcessDisplay, resolveProcessDisplay } from "./processDisplays";
 import { drawingDefaults, isDrawingComponent } from "./drawingComponents";
 import { InputStateBindingEditor } from "./InputStateBindingEditor";
-import type { BindingReference, BindingTarget, CanvasComponent, InputValues, PropertyBinding, Tag } from "./types";
+import { TemplateParameterOverrides } from "./TemplateParametersEditor";
+import { coerceTemplateParameter } from "./templateModel";
+import { resolveParameterBindings, validateTemplateParameterBinding } from "./templateParameterBindings";
+import { resolvePath } from "./api";
+import type { BindingReference, BindingTarget, CanvasComponent, InputValues, PropertyBinding, Tag, Template } from "./types";
 import "./propertyBindings.css";
 
 type Target = BindingTarget;
 type CustomType = "number" | "string" | "boolean";
 type ReferenceRow = { id: number; name: string; reference: BindingReference };
-type BindingDraft = { kind: "binding"; target: Target; expression: string; rows: ReferenceRow[] };
+type BindingDraft = { kind: "binding"; target: Target; expression: string; rows: ReferenceRow[] } | { kind: "parameter"; target: string; expression: string; rows: ReferenceRow[] };
 type CustomDraft = { kind: "custom"; originalName?: string; name: string; type: CustomType; value: string };
 type Draft = BindingDraft | CustomDraft;
+const ownEntry = <T,>(entries: Record<string, T> | undefined, key: string): T | undefined => entries && Object.hasOwn(entries, key) ? entries[key] : undefined;
 
 export interface PropertyBindingsEditorProps {
   component: CanvasComponent;
@@ -25,6 +30,8 @@ export interface PropertyBindingsEditorProps {
   state?: RuntimeStateValues;
   allowUnresolvedScreenState?: boolean;
   communicationLost?: boolean;
+  parameterTemplate?: Template;
+  notify?: (message: string, error?: boolean) => void;
   onChange: (patch: CanvasComponent["props"]) => void;
   onGeometryChange: (patch: Partial<Pick<CanvasComponent, "x" | "y" | "width" | "height">>) => void;
 }
@@ -113,7 +120,7 @@ export function PropertyBindingsEditor(props: PropertyBindingsEditorProps) {
   return <BindingsPanel key={props.component.id} {...props} />;
 }
 
-function BindingsPanel({ component, components, tags, parameters, inputs, state, allowUnresolvedScreenState = false, communicationLost, onChange, onGeometryChange }: PropertyBindingsEditorProps) {
+function BindingsPanel({ component, components, tags, parameters, inputs, state, allowUnresolvedScreenState = false, communicationLost, parameterTemplate, notify = () => {}, onChange, onGeometryChange }: PropertyBindingsEditorProps) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [applyError, setApplyError] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
@@ -121,12 +128,14 @@ function BindingsPanel({ component, components, tags, parameters, inputs, state,
   const id = useId();
   const custom = component.props.customProperties || {};
   const bindings = component.props.bindings || {};
+  const parameterBindings = component.props.parameterBindings || {};
   const wrapper = component.type === "template" || component.type === "repeater";
   const context = { components, tags, parameters, inputs, state, communicationLost };
   const sessionState = state?.session || {};
   const screenState = state?.screen || {};
+  const instanceState = state?.instance;
   const evaluated = evaluateComponentBindings(component, context);
-  const inputKeys = [...new Set(components.filter((item) => isInput(item.type)).map((item) => item.props.fieldKey || item.id))];
+  const inputKeys = [...new Set(components.filter((item) => isInput(item.type) && (draft?.kind !== "parameter" || item.type !== "passwordInput")).map((item) => item.props.fieldKey || item.id))];
   const customComponents = [component, ...components.filter((item) => item.id !== component.id)];
   const open = Boolean(draft);
 
@@ -138,7 +147,7 @@ function BindingsPanel({ component, components, tags, parameters, inputs, state,
   function changeDraft(next: Draft) { setApplyError(""); setDraft(next); }
   function close() { setDraft(null); setApplyError(""); }
   function propertyUse(name: string): string[] {
-    return customComponents.flatMap((owner) => Object.entries(owner.props.bindings || {}).filter(([, binding]) => Object.values(binding?.references || {}).some((reference) => reference.kind === "custom" && reference.key === name && (reference.componentId || owner.id) === component.id)).map(([property]) => `${owner.props.text || owner.id} · ${property}`));
+    return customComponents.flatMap((owner) => [...Object.entries(owner.props.bindings || {}), ...Object.entries(owner.props.parameterBindings || {}).map(([key, binding]) => [`parameter ${key}`, binding] as const)].filter(([, binding]) => Object.values(binding?.references || {}).some((reference) => reference.kind === "custom" && reference.key === name && (reference.componentId || owner.id) === component.id)).map(([property]) => `${owner.props.text || owner.id} · ${property}`));
   }
   function referenceFor(kind: BindingReference["kind"]): BindingReference {
     if (kind === "custom") return { kind, key: Object.keys(custom)[0] || "" };
@@ -146,6 +155,7 @@ function BindingsPanel({ component, components, tags, parameters, inputs, state,
     if (kind === "parameter") return { kind, key: Object.keys(parameters)[0] || "" };
     if (kind === "sessionState") return { kind, key: Object.keys(sessionState)[0] || "" };
     if (kind === "screenState") return { kind, key: Object.keys(screenState)[0] || "" };
+    if (kind === "instanceState") return { kind, key: Object.keys(instanceState || {})[0] || "" };
     return { kind: "tag", path: tags[0]?.path || "" };
   }
   function bindingFrom(draft: BindingDraft): PropertyBinding {
@@ -154,6 +164,10 @@ function BindingsPanel({ component, components, tags, parameters, inputs, state,
   function draftError(draft: BindingDraft): string | undefined {
     if (draft.rows.some((row) => !validName(row.name))) return "Give each reference a name of 1–64 letters, numbers, or underscores. Start with a letter or underscore; reserved names are unavailable.";
     if (new Set(draft.rows.map((row) => row.name)).size !== draft.rows.length) return "Reference names must be unique.";
+    if (draft.kind === "parameter") {
+      if (!parameterTemplate || !Object.hasOwn(parameterTemplate.parameters, draft.target)) return "This parameter is no longer declared by the selected template.";
+      return validateTemplateParameterBinding(bindingFrom(draft), component, components, parameters, draft.target, ownEntry(parameterTemplate.parameterTypes, draft.target) || "string");
+    }
     const definitionError = validatePropertyBinding(bindingFrom(draft), draft.target, component);
     if (definitionError) return definitionError;
     for (const { name, reference } of draft.rows) {
@@ -169,6 +183,8 @@ function BindingsPanel({ component, components, tags, parameters, inputs, state,
         return `Reference '${name}' must name a declared session state property in Project settings.`;
       } else if (reference.kind === "screenState" && !Object.hasOwn(screenState, reference.key) && !allowUnresolvedScreenState) {
         return `Reference '${name}' must name a declared state property on this screen.`;
+      } else if (reference.kind === "instanceState" && (!instanceState || !Object.hasOwn(instanceState, reference.key))) {
+        return `Reference '${name}' must name private instance state declared on this shared template.`;
       } else if (reference.kind === "tag") {
         for (const match of reference.path.matchAll(/\{([^{}]+)\}/g)) {
           if (match[1].length > 256 || !Object.hasOwn(parameters, match[1]) || ["__proto__", "constructor", "prototype"].includes(match[1])) return `Reference '${name}' uses an undeclared or invalid tag path parameter '${match[1]}'.`;
@@ -183,14 +199,30 @@ function BindingsPanel({ component, components, tags, parameters, inputs, state,
     begin({ kind: "binding", target, expression: binding?.expression ?? JSON.stringify(value), rows: Object.entries(binding?.references || {}).map(([name, reference]) => ({ id: referenceId.current++, name, reference: { ...reference } })) });
   }
   function changeRow(rowId: number, patch: Partial<ReferenceRow>) {
-    if (draft?.kind === "binding") changeDraft({ ...draft, rows: draft.rows.map((row) => row.id === rowId ? { ...row, ...patch } : row) });
+    if (draft && draft.kind !== "custom") changeDraft({ ...draft, rows: draft.rows.map((row) => row.id === rowId ? { ...row, ...patch } : row) });
+  }
+  function editParameterBinding(name: string) {
+    if (!parameterTemplate) return;
+    const binding = ownEntry(parameterBindings, name);
+    let value: string | number | boolean = ownEntry(component.props.parameters, name) ?? parameterTemplate.parameters[name];
+    try { value = coerceTemplateParameter(name, resolvePath(String(value), parameters), ownEntry(parameterTemplate.parameterTypes, name) || "string"); } catch { /* The dialog reports invalid live data. */ }
+    begin({ kind: "parameter", target: name, expression: binding?.expression ?? JSON.stringify(value), rows: Object.entries(binding?.references || {}).map(([name, reference]) => ({ id: referenceId.current++, name, reference: { ...reference } })) });
+  }
+  function removeParameterBinding(name: string) { const next = { ...parameterBindings }; delete next[name]; onChange({ parameterBindings: next }); }
+  function parameterResult(name: string, binding: PropertyBinding): { value?: string | number | boolean; error?: string } {
+    if (!parameterTemplate) return { error: "Choose a template to resolve this parameter." };
+    const type = ownEntry(parameterTemplate.parameterTypes, name) || "string";
+    const error = validateTemplateParameterBinding(binding, component, components, parameters, name, type);
+    if (error) return { error };
+    try { return { value: resolveParameterBindings({ ...component, props: { ...component.props, parameterBindings: { [name]: binding } } }, parameterTemplate, context)[name] }; }
+    catch (reason) { return { error: reason instanceof Error ? reason.message : "Parameter binding failed." }; }
   }
   function apply() {
     if (!draft) return;
-    if (draft.kind === "binding") {
+    if (draft.kind !== "custom") {
       const error = draftError(draft);
       if (error) { setApplyError(error); return; }
-      onChange({ bindings: { ...bindings, [draft.target]: bindingFrom(draft) } });
+      onChange(draft.kind === "parameter" ? { parameterBindings: { ...parameterBindings, [draft.target]: bindingFrom(draft) } } : { bindings: { ...bindings, [draft.target]: bindingFrom(draft) } });
     } else {
       const name = draft.name.trim();
       if (!validName(name)) { setApplyError("Use 1–64 letters, numbers, and underscores. Start with a letter or underscore; reserved names are unavailable."); return; }
@@ -206,15 +238,17 @@ function BindingsPanel({ component, components, tags, parameters, inputs, state,
     }
     close();
   }
-  const definitionError = draft?.kind === "binding" ? draftError(draft) : undefined;
+  const definitionError = draft && draft.kind !== "custom" ? draftError(draft) : undefined;
   const preview = draft?.kind === "binding" && !definitionError
     ? evaluateComponentBindings({ ...component, props: { ...component.props, bindings: { ...bindings, [draft.target]: bindingFrom(draft) } } }, context)
     : undefined;
-  const previewError = draft?.kind === "binding" ? definitionError || preview?.errors[draft.target] : undefined;
+  const parameterPreview = draft?.kind === "parameter" && !definitionError ? parameterResult(draft.target, bindingFrom(draft)) : undefined;
+  const previewError = draft?.kind === "binding" ? definitionError || preview?.errors[draft.target] : draft?.kind === "parameter" ? definitionError || parameterPreview?.error : undefined;
+  const parameterResults = Object.fromEntries(Object.entries(parameterBindings).map(([name, binding]) => [name, parameterResult(name, binding)]));
   const processResult = isProcessDisplay(component.type) ? resolveProcessDisplay(evaluated.component, parameters) : undefined;
 
   return <section className="property-bindings-panel inspector-section" aria-label="Component property sheet">
-    <div className="binding-section-heading"><h3>Property sheet</h3><span>{Object.keys(bindings).length + Number(Boolean(component.props.stateBinding))} bound</span></div>
+    <div className="binding-section-heading"><h3>Property sheet</h3><span>{Object.keys(bindings).length + Object.keys(parameterBindings).length + Number(Boolean(component.props.stateBinding))} bound</span></div>
     {wrapper && <p className="binding-note">Wrapper bindings use the containing screen or popup's inputs, parameters, and components. Template parameters and repeated-row inputs stay separate. Appearance supplies defaults for child controls; each child's explicit appearance takes precedence.</p>}
     {isDrawingComponent(component.type) && <p className="binding-note">The accessible label describes this drawing to operators. Stroke width uses pixels; rotation uses degrees. Fill color accepts a hex color or <code>none</code>. {component.type === "pipe" ? "Flowing and Reverse flow show the state you bind; Accent color controls the moving flow marks." : component.type === "equipmentSymbol" ? "Active uses Accent color to show the state you bind." : ""}</p>}
     {processResult && !processResult.available && <p className="property-sheet-error" role="alert">{processResult.diagnostic}</p>}
@@ -252,6 +286,14 @@ function BindingsPanel({ component, components, tags, parameters, inputs, state,
       })}
     </div>)}
     <InputStateBindingEditor key={component.id} component={component} state={state} allowUnresolvedScreenState={allowUnresolvedScreenState} onChange={onChange} />
+    {wrapper && <div className="binding-template-parameters">
+      <div className="binding-section-heading"><h3>Template parameters</h3></div>
+      <TemplateParameterOverrides key={`${component.id}:${parameterTemplate?.id || ""}`} template={parameterTemplate}
+        parameters={component.props.parameters || {}} parentParameters={parameters} onChange={parameters => onChange({ parameters })} notify={notify}
+        bindings={parameterBindings} bindingValues={Object.fromEntries(Object.entries(parameterResults).filter(([, result]) => result.value !== undefined).map(([name, result]) => [name, result.value!]))}
+        bindingErrors={Object.fromEntries(Object.entries(parameterResults).filter(([, result]) => result.error).map(([name, result]) => [name, result.error!]))}
+        onEditBinding={editParameterBinding} onRemoveBinding={removeParameterBinding} />
+    </div>}
     <div className="binding-section-heading binding-custom-heading"><h3>Custom properties</h3><button type="button" className="button" disabled={Object.keys(custom).length >= 32} onClick={() => begin({ kind: "custom", name: "", type: "number", value: "0" })}>Add property</button></div>
     <p className="binding-note">{wrapper ? "Typed values belong to this wrapper and can drive its bindings. Child controls keep their own custom properties." : "Typed values belong to this component and can drive bindings."}</p>
     <div className="binding-custom-list">
@@ -267,7 +309,7 @@ function BindingsPanel({ component, components, tags, parameters, inputs, state,
       event.stopPropagation();
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); apply(); }
     }}>
-      <div className="binding-dialog-heading"><div><h2 id={`${id}-dialog-title`}>{draft.kind === "binding" ? `Bind ${draft.target}` : draft.originalName ? "Edit custom property" : "Add custom property"}</h2><p>{componentName(component)}</p></div><button type="button" aria-label="Close property editor" onClick={close}>×</button></div>
+      <div className="binding-dialog-heading"><div><h2 id={`${id}-dialog-title`}>{draft.kind === "parameter" ? `Bind parameter ${draft.target}` : draft.kind === "binding" ? `Bind ${draft.target}` : draft.originalName ? "Edit custom property" : "Add custom property"}</h2><p>{componentName(component)}</p></div><button type="button" aria-label="Close property editor" onClick={close}>×</button></div>
       <div className="binding-dialog-body">
         {draft.kind === "custom" ? <>
           <label>Name<input autoFocus aria-label="Custom property name" value={draft.name} maxLength={64} disabled={Boolean(draft.originalName && propertyUse(draft.originalName).length)} onChange={(event) => changeDraft({ ...draft, name: event.target.value })} placeholder="targetCount" /></label>
@@ -277,9 +319,10 @@ function BindingsPanel({ component, components, tags, parameters, inputs, state,
         </> : <>
           <label htmlFor={`${id}-expression`}>Expression</label>
           <textarea autoFocus id={`${id}-expression`} className="binding-expression" spellCheck={false} rows={3} value={draft.expression} onChange={(event) => changeDraft({ ...draft, expression: event.target.value })} maxLength={2048} />
-          <p className="binding-note">Use reference names below, such as <code>count &gt; 0</code> or <code>ready ? 'Running' : 'Stopped'</code>. Supports arithmetic, comparisons, <code>&amp;&amp;</code>, <code>||</code>, and <code>!</code>. Text needs quotes; Enabled and Visible require true or false. Colors use quoted hex values, such as <code>'#2563eb'</code> (3, 4, 6, or 8 hex digits). Process values and limits require numbers, decimal places require a whole number from 0 to 6, and display flags require true or false.</p>
+          {draft.kind === "parameter" ? <p className="binding-note">Use named references from the containing form: parameters, custom properties, and inputs. Password inputs are unavailable. Supports arithmetic, comparisons, <code>&amp;&amp;</code>, <code>||</code>, <code>!</code>, and expressions such as <code>ready ? 'Running' : 'Stopped'</code>. The result is converted to this parameter's {ownEntry(parameterTemplate?.parameterTypes, draft.target) || "string"} type. Saved or query row values take precedence. Child parameters and row inputs cannot feed their own instance.</p>
+          : <p className="binding-note">Use reference names below, such as <code>count &gt; 0</code> or <code>ready ? 'Running' : 'Stopped'</code>. Supports arithmetic, comparisons, <code>&amp;&amp;</code>, <code>||</code>, and <code>!</code>. Text needs quotes; Enabled and Visible require true or false. Colors use quoted hex values, such as <code>'#2563eb'</code> (3, 4, 6, or 8 hex digits). Process values and limits require numbers, decimal places require a whole number from 0 to 6, and display flags require true or false.</p>}
           {isDrawingComponent(component.type) && <p className="binding-note">Drawing fill also accepts <code>'none'</code>. Stroke width requires a number from 1 to 32, rotation from 0 to 360, and Active, Flowing, and Reverse flow require true or false.</p>}
-          <div className="binding-reference-heading"><h3>Named references</h3><button type="button" className="button" disabled={draft.rows.length >= 32} onClick={() => { let name = "value"; let number = 2; while (draft.rows.some((row) => row.name === name)) name = `value${number++}`; changeDraft({ ...draft, rows: [...draft.rows, { id: referenceId.current++, name, reference: referenceFor(Object.keys(custom).length ? "custom" : inputKeys.length ? "input" : Object.keys(parameters).length ? "parameter" : "tag") }] }); }}>Add reference</button></div>
+          <div className="binding-reference-heading"><h3>Named references</h3><button type="button" className="button" disabled={draft.rows.length >= 32} onClick={() => { let name = "value"; let number = 2; while (draft.rows.some((row) => row.name === name)) name = `value${number++}`; changeDraft({ ...draft, rows: [...draft.rows, { id: referenceId.current++, name, reference: referenceFor(Object.keys(custom).length ? "custom" : inputKeys.length ? "input" : Object.keys(parameters).length || draft.kind === "parameter" ? "parameter" : "tag") }] }); }}>Add reference</button></div>
           {!draft.rows.length && <p className="binding-empty">Add a reference to use a live value in the expression.</p>}
           <div className="binding-reference-list">{draft.rows.map((row, index) => {
             const reference = row.reference;
@@ -287,25 +330,25 @@ function BindingsPanel({ component, components, tags, parameters, inputs, state,
             const propertyKeys = Object.keys(sourceComponent?.props.customProperties || {});
             const listId = `${id}-ref-${row.id}`;
             return <fieldset className="binding-reference" key={row.id}><legend>Reference {index + 1}</legend>
-              <div className="binding-reference-top"><label>Name<input aria-label={`Reference ${index + 1} name`} value={row.name} maxLength={64} onChange={(event) => changeRow(row.id, { name: event.target.value })} /></label><label>Source<select aria-label={`Reference ${index + 1} source`} value={reference.kind} onChange={(event) => changeRow(row.id, { reference: referenceFor(event.target.value as BindingReference["kind"]) })}><option value="custom">Custom property</option><option value="input">Form input</option><option value="parameter">Parameter</option><option value="sessionState">Session state</option><option value="screenState">Screen state</option><option value="tag">Tag</option></select></label><button type="button" className="binding-remove" aria-label={`Remove reference ${index + 1}`} onClick={() => changeDraft({ ...draft, rows: draft.rows.filter((item) => item.id !== row.id) })}>Remove</button></div>
+              <div className="binding-reference-top"><label>Name<input aria-label={`Reference ${index + 1} name`} value={row.name} maxLength={64} onChange={(event) => changeRow(row.id, { name: event.target.value })} /></label><label>Source<select aria-label={`Reference ${index + 1} source`} value={reference.kind} onChange={(event) => changeRow(row.id, { reference: referenceFor(event.target.value as BindingReference["kind"]) })}><option value="custom">Custom property</option><option value="input">Form input</option><option value="parameter">Parameter</option>{draft.kind !== "parameter" && <><option value="sessionState">Session state</option><option value="screenState">Screen state</option>{instanceState !== undefined && <option value="instanceState">Private instance state</option>}<option value="tag">Tag</option></>}{draft.kind === "parameter" && !["custom", "input", "parameter"].includes(reference.kind) && <option value={reference.kind}>Unsupported: {reference.kind}</option>}{draft.kind !== "parameter" && instanceState === undefined && reference.kind === "instanceState" && <option value="instanceState" disabled>Unavailable: private instance state</option>}</select></label><button type="button" className="binding-remove" aria-label={`Remove reference ${index + 1}`} onClick={() => changeDraft({ ...draft, rows: draft.rows.filter((item) => item.id !== row.id) })}>Remove</button></div>
               {reference.kind === "custom" ? <div className="binding-reference-source"><label>Component<select aria-label={`Reference ${index + 1} component`} value={reference.componentId || ""} onChange={(event) => { const selected = customComponents.find((item) => item.id === (event.target.value || component.id)); changeRow(row.id, { reference: { kind: "custom", ...(event.target.value ? { componentId: event.target.value } : {}), key: Object.keys(selected?.props.customProperties || {})[0] || "" } }); }}><option value="">This component</option>{components.filter((item) => item.id !== component.id).map((item) => <option key={item.id} value={item.id}>{componentName(item)}</option>)}{reference.componentId && !components.some((item) => item.id === reference.componentId) && <option value={reference.componentId}>Missing: {reference.componentId}</option>}</select></label><label>Property<select aria-label={`Reference ${index + 1} custom property`} value={reference.key} onChange={(event) => changeRow(row.id, { reference: { ...reference, key: event.target.value } })}><option value="">Choose a property</option>{propertyKeys.map((key) => <option key={key} value={key}>{key} ({sourceComponent?.props.customProperties?.[key].type})</option>)}{reference.key && !propertyKeys.includes(reference.key) && <option value={reference.key}>Missing: {reference.key}</option>}</select></label></div>
               : reference.kind === "input" ? <label>Input key<input aria-label={`Reference ${index + 1} input key`} list={listId} value={reference.key} onChange={(event) => changeRow(row.id, { reference: { ...reference, key: event.target.value } })} /><datalist id={listId}>{inputKeys.map((key) => <option key={key} value={key} />)}</datalist></label>
               : reference.kind === "parameter" ? <label>Parameter name<input aria-label={`Reference ${index + 1} parameter name`} list={listId} value={reference.key} onChange={(event) => changeRow(row.id, { reference: { ...reference, key: event.target.value } })} /><datalist id={listId}>{Object.keys(parameters).map((key) => <option key={key} value={key} />)}</datalist></label>
-              : reference.kind === "sessionState" || reference.kind === "screenState" ? <>
-                <label>{reference.kind === "sessionState" ? "Session" : "Screen"} property
+              : reference.kind === "sessionState" || reference.kind === "screenState" || reference.kind === "instanceState" ? <>
+                <label>{reference.kind === "instanceState" ? "Private instance" : reference.kind === "sessionState" ? "Session" : "Screen"} property
                   <input aria-label={`Reference ${index + 1} state property`} list={listId} maxLength={64} value={reference.key} onChange={event => changeRow(row.id, { reference: { ...reference, key: event.target.value } })} />
-                  <datalist id={listId}>{Object.entries(reference.kind === "sessionState" ? sessionState : screenState).map(([key, value]) => <option key={key} value={key}>{typeof value}</option>)}</datalist>
+                  <datalist id={listId}>{Object.entries(reference.kind === "instanceState" ? instanceState || {} : reference.kind === "sessionState" ? sessionState : screenState).map(([key, value]) => <option key={key} value={key}>{typeof value}</option>)}</datalist>
                 </label>
-                <p className="binding-note">{reference.kind === "sessionState" ? "Declared in Project settings. Shared across this project's screens in one browser tab." : allowUnresolvedScreenState ? "Enter a state property declared by every screen or popup that uses this template. Its containing screen supplies the value; publication validates each placement." : "Declared in this screen's property sheet. Each open screen or popup has its own values."}</p>
+                <p className="binding-note">{reference.kind === "instanceState" ? "Declared on this shared template's property sheet. Every placement and repeater row owns separate private values; nested templates do not inherit them." : reference.kind === "sessionState" ? "Declared in Project settings. Shared across this project's screens in one browser tab." : allowUnresolvedScreenState ? "Enter a state property declared by every screen or popup that uses this template. Its containing screen supplies the value; publication validates each placement." : "Declared in this screen's property sheet. Each open screen or popup has its own values."}</p>
               </>
               : <label>Tag path<input aria-label={`Reference ${index + 1} tag path`} list={listId} value={reference.path} onChange={(event) => changeRow(row.id, { reference: { ...reference, path: event.target.value } })} placeholder="[default]Area/Value" /><datalist id={listId}>{tags.map((tag) => <option key={tag.path} value={tag.path} />)}</datalist></label>}
             </fieldset>;
           })}</div>
-          <div className={`binding-preview${previewError ? " has-error" : ""}`} role="status" aria-live="polite"><strong>Live preview</strong><output>{previewError || formatValue(preview && propertyValue(preview.component, draft.target))}</output>{!definitionError && previewError && <p>This expression can be saved, but its current result is invalid. Review the expression and source data. The property uses a safe fallback while evaluation fails.</p>}</div>
+          <div className={`binding-preview${previewError ? " has-error" : ""}`} role="status" aria-live="polite"><strong>Live preview</strong><output>{previewError || formatValue(draft.kind === "parameter" ? parameterPreview?.value : preview && propertyValue(preview.component, draft.target))}</output>{!definitionError && previewError && <p>This expression can be saved, but its current result is invalid. Review the expression and source data. {draft.kind === "parameter" ? "The template's controls are unavailable while its parameters cannot be resolved." : "The property uses a safe fallback while evaluation fails."}</p>}</div>
         </>}
         {applyError && <p className="binding-apply-error" role="alert">{applyError}</p>}
       </div>
-      <div className="binding-dialog-footer">{draft.kind === "binding" && bindings[draft.target] && <button type="button" className="button binding-remove" onClick={() => { const next = { ...bindings }; delete next[draft.target]; onChange({ bindings: next }); close(); }}>Remove binding</button>}<button type="button" className="button" onClick={close}>Cancel</button><button type="button" className="button primary" onClick={apply}>Apply</button></div>
+      <div className="binding-dialog-footer">{draft.kind === "parameter" && ownEntry(parameterBindings, draft.target) && <button type="button" className="button binding-remove" onClick={() => { removeParameterBinding(draft.target); close(); }}>Remove binding</button>}{draft.kind === "binding" && bindings[draft.target] && <button type="button" className="button binding-remove" onClick={() => { const next = { ...bindings }; delete next[draft.target]; onChange({ bindings: next }); close(); }}>Remove binding</button>}<button type="button" className="button" onClick={close}>Cancel</button><button type="button" className="button primary" onClick={apply}>Apply</button></div>
     </dialog>, document.body)}
   </section>;
 }

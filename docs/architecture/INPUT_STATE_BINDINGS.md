@@ -1,6 +1,6 @@
 # Two-way input and application-state bindings
 
-An input can bind its value directly to declared session or screen state. A valid edit updates the state and every control that reads it. Changing that state through a browser script updates the bound inputs too. A pair of quantity inputs, a selection used across screens, or a reusable form can share values without change handlers that copy one field into another.
+An input can bind its value directly to declared session, screen or private template-instance state. A valid edit updates the state and every control that reads it in that scope. Changing that state through a browser script updates the bound inputs too. A pair of quantity inputs, a selection used across screens, or a reusable form can share values without change handlers that copy one field into another.
 
 ## Authoring
 
@@ -23,7 +23,7 @@ The saved input property is a direct reference, not an expression:
 }
 ```
 
-The fragment omits the component ID and geometry. Its project must declare `sessionState.selectedQuantity` as a Number whose default is accepted by the input. `stateBinding` contains exactly `scope` and `key`. The supported scopes are `session` and `screen`; keys must name declared state in the relevant scope. The value uses the state's declared type, with no text/number/Boolean coercion.
+The fragment omits the component ID and geometry. Its project must declare `sessionState.selectedQuantity` as a Number whose default is accepted by the input. `stateBinding` contains exactly `scope` and `key`. The supported scopes are `session`, `screen`, and `instance` inside a template; keys must name declared state in the relevant scope. The value uses the state's declared type, with no text/number/Boolean coercion.
 
 | Input | Required state type |
 | --- | --- |
@@ -33,7 +33,7 @@ The fragment omits the component ID and geometry. Its project must declare `sess
 
 Password fields cannot bind to application state. A state-bound input cannot also use an initial-value tag path, a named-query option source or selection-field mappings. Static choice controls require the state default to match one of their available values. Date/time values use the existing local wall-clock text format; this binding does not add time-zone conversion. Numeric bounds, text bounds and the input's other validation still apply.
 
-Session bindings inside templates reference the project's declaration. A template's screen binding references its containing screen or popup; every placed instance must have a compatible declaration there. Sharing a template does not create an independent state scope. A screen binding may be authored in an unplaced template, but its compatibility is checked when it is placed and published.
+Session bindings inside templates reference the project's declaration. A template's screen binding references its containing screen or popup; every placed instance must have a compatible declaration there. An instance binding references that template's own `instanceState` declaration, with separate current values for every placement and row. Nested templates do not inherit a parent's private keys. A screen binding may be authored in an unplaced template, but its compatibility is checked when it is placed and published. See [private instance state](INSTANCE_STATE.md).
 
 ## Editing and synchronization
 
@@ -43,7 +43,7 @@ An invalid intermediate edit stays local to the edited input. For example, clear
 
 Synchronization does not generate synthetic user-input events on the receiving controls. The control being edited retains its normal change and commit behavior. State assignments and resets use the existing typed `app.state` API. Disabled, hidden, read-only or interaction-locked controls cannot write through an operator gesture; state can still be updated by another active control or a browser resource.
 
-Bindings on labels, colors, visibility and geometry can read the same state with the existing **Session state** and **Screen state** fx references. Those expression bindings remain read-only. Input state binding is a separate value connection and adds no arbitrary expression writeback, instance-state scope or general property-change event.
+Bindings on labels, colors, visibility and geometry can read the same state with **Session state**, **Screen state** and template-only **Instance state** fx references. Those expression bindings remain read-only. Input state binding is a separate value connection and adds no arbitrary expression writeback. Authors can separately configure a [component property-change handler](COMPONENT_LIFECYCLE.md) to observe accepted value changes, including programmatic updates; it does not turn them into user change/commit events.
 
 ## Lifetime and gateway behavior
 

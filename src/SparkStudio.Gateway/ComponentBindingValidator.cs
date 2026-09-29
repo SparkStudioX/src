@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
@@ -20,6 +21,12 @@ internal static class ComponentBindingValidator
     private static readonly HashSet<string> Reserved = new(StringComparer.Ordinal) { "__proto__", "constructor", "prototype", "true", "false", "null" };
     private static readonly Regex Identifier = new(@"\A[A-Za-z_][A-Za-z0-9_]{0,63}\z", RegexOptions.CultureInvariant);
     private static readonly Regex TagParameter = new(@"\{([^{}]+)\}", RegexOptions.CultureInvariant);
+
+    internal static bool SupportsTarget(string type, string target) => Targets.Contains(target)
+        && (!ProcessDisplayValidator.Targets.Contains(target) || ProcessDisplayValidator.Supports(type, target))
+        && (!DrawingComponentValidator.Targets.Contains(target) || DrawingComponentValidator.Supports(type, target))
+        && (target != "stateValue" || type == "multiStateIndicator")
+        && (target != "tagPath" || type is "value" or "gauge");
 
     public static void ValidateDocument(JsonObject document, JsonObject? projectParameters, JsonObject? sessionState, bool template)
     {
@@ -53,15 +60,8 @@ internal static class ComponentBindingValidator
             var constants = new Dictionary<string, object>(StringComparer.Ordinal);
             foreach (var (target, raw) in bindings)
             {
-                if (!Targets.Contains(target)) throw new ArgumentException("Unsupported component binding target.");
-                if (ProcessDisplayValidator.Targets.Contains(target) && !ProcessDisplayValidator.Supports(type, target))
+                if (!SupportsTarget(type, target))
                     throw new ArgumentException($"The {target} binding is not supported on {type}.");
-                if (DrawingComponentValidator.Targets.Contains(target) && !DrawingComponentValidator.Supports(type, target))
-                    throw new ArgumentException($"The {target} binding is not supported on {type}.");
-                if (target == "stateValue" && Text(component, "type", 64) != "multiStateIndicator")
-                    throw new ArgumentException("State value bindings are supported only on multi-state indicators.");
-                if (target == "tagPath" && Text(component, "type", 64) is not ("value" or "gauge"))
-                    throw new ArgumentException("Tag path bindings are supported on numeric displays and gauges.");
                 if (raw is not JsonObject binding || binding.Any(pair => pair.Key is not ("expression" or "references")))
                     throw new ArgumentException("A binding needs an expression and reference map.");
                 var expression = Text(binding, "expression", 2048);
@@ -97,6 +97,7 @@ internal static class ComponentBindingValidator
                             break;
                         case "sessionState":
                         case "screenState":
+                        case "instanceState":
                             ProjectStateValidator.ValidateReference(kind, Key(reference), sessionState, document, template);
                             break;
                         case "tag":
@@ -105,7 +106,7 @@ internal static class ComponentBindingValidator
                                 if (!SafeKey(match.Groups[1].Value) || !parameters.Contains(match.Groups[1].Value))
                                     throw new ArgumentException("Tag path parameters must name declared parameters.");
                             break;
-                        default: throw new ArgumentException("References support custom properties, inputs, parameters, tags, session state and screen state.");
+                        default: throw new ArgumentException("References support custom properties, inputs, parameters, tags, session state, screen state and private instance state.");
                     }
                 }
                 var parser = new ExpressionParser(expression, references.Select(pair => pair.Key).ToHashSet(StringComparer.Ordinal));
@@ -120,6 +121,34 @@ internal static class ComponentBindingValidator
             }
             ProcessDisplayValidator.ValidateConstantRange(type, props, constants);
         }
+    }
+
+    internal static (bool Constant, object? Value) ValidateExpression(string expression, IEnumerable<string> references)
+    {
+        if (!HasContent(expression) || expression.Length > 2048)
+            throw new ArgumentException("An expression needs 1 to 2048 characters.");
+        var parser = new ExpressionParser(expression, references.ToHashSet(StringComparer.Ordinal));
+        parser.Validate();
+        var constant = parser.TryConstant(out var value);
+        return (constant, value);
+    }
+
+    internal static JsonElement EvaluateExpression(string expression, IEnumerable<string> references, Func<string, JsonElement> resolve)
+    {
+        var parser = new ExpressionParser(expression, references.ToHashSet(StringComparer.Ordinal), name =>
+        {
+            var value = resolve(name);
+            return value.ValueKind switch
+            {
+                JsonValueKind.String when value.GetString()!.Length <= 4096 => value.GetString()!,
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.Number when value.TryGetDouble(out var number) && SafeNumber(number) => number,
+                _ => throw new ArgumentException("Binding references must contain bounded text, Boolean values or exact finite numbers.")
+            };
+        });
+        parser.Validate();
+        return JsonSerializer.SerializeToElement(parser.Evaluate());
     }
 
     private static void ValidateNumber(JsonObject props, string key, double minimum, double maximum)
@@ -172,6 +201,7 @@ internal static class ComponentBindingValidator
         private readonly HashSet<string> references;
         private int position;
         private Parsed? parsed;
+        private readonly Func<string, object>? resolve;
         private readonly record struct Token(string Kind, string Value, object? Scalar = null);
         private sealed record Parsed(int Height, bool Dynamic, Func<object> Evaluate);
         private static readonly Dictionary<string, int> Precedence = new(StringComparer.Ordinal)
@@ -183,9 +213,10 @@ internal static class ComponentBindingValidator
         private static readonly Regex Name = new(@"\A[A-Za-z_][A-Za-z0-9_]*", RegexOptions.CultureInvariant);
         private static readonly Regex Operator = new(@"\A(?:===|!==|==|!=|<=|>=|&&|\|\||[()+\-*/%<>!?:])", RegexOptions.CultureInvariant);
 
-        public ExpressionParser(string expression, HashSet<string> references)
+        public ExpressionParser(string expression, HashSet<string> references, Func<string, object>? resolve = null)
         {
             this.references = references;
+            this.resolve = resolve;
             for (var index = 0; index < expression.Length;)
             {
                 if (ExpressionSpace(expression[index])) { index++; continue; }
@@ -254,6 +285,7 @@ internal static class ComponentBindingValidator
             value = parsed.Dynamic ? null : parsed.Evaluate();
             return !parsed.Dynamic;
         }
+        public object Evaluate() => Scalar(parsed?.Evaluate() ?? throw new InvalidOperationException("Validate the expression before evaluation."));
         private bool Matches(string value) => position < tokens.Count && tokens[position].Kind == "operator" && tokens[position].Value == value;
         private void Consume(string value)
         {
@@ -267,7 +299,7 @@ internal static class ComponentBindingValidator
             var token = tokens[position++];
             Parsed left;
             if (token.Kind == "literal") left = new(0, false, () => token.Scalar!);
-            else if (token.Kind == "identifier") left = new(0, true, () => throw new ArgumentException("Constant evaluation cannot read a reference."));
+            else if (token.Kind == "identifier") left = new(0, true, () => resolve?.Invoke(token.Value) ?? throw new ArgumentException("Constant evaluation cannot read a reference."));
             else if (token.Value is "!" or "+" or "-")
             {
                 var operand = Parse(7, depth + 1);

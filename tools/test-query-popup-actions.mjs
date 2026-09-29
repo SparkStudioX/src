@@ -81,7 +81,8 @@ try {
     const runtime = await api(route('/runtime/project')); assert.equal(runtime.templates[0].components[0].props.action, 'openPopup');
   });
   await test('popup action derives current opener row, saved instance defaults and literal braces', async () => {
-    const result = await action({ inputs: { recordId: '2' }, popupParameters: { recordId: '2', title: 'FORGED' } });
+    await action({ inputs: { recordId: '2' }, popupParameters: { recordId: '2', title: 'FORGED' }, status: 400 });
+    const result = await action({ inputs: { recordId: '2' } });
     assert.equal(result.success, true, result.stderr);
     assert.equal(result.result.parameters.recordId, '1'); assert.equal(result.result.parameters.recordVersion, '1');
     assert.equal(result.result.parameters.title, 'Press01'); assert.equal(result.result.parameters.literal, '{filter}');
