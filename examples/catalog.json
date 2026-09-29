@@ -4,11 +4,30 @@
     "packageFormat": 1,
     "baseline": {
       "kind": "source-commit",
-      "value": "2143ecc26193aad264a0d3e2a5ea841efedb1dbd"
+      "value": "9e9a096c44ad5f73f64e668b0d8c2ccc41e37f12"
     },
     "note": "Use the SparkStudio build identified by the workshop bundle or a newer compatible build with the listed features. The original v0.1.0-preview.1 installer predates this catalog's baseline; its version number alone does not establish compatibility."
   },
   "workshops": [
+    {
+      "id": "project-search",
+      "title": "Project resource search",
+      "summary": "Find screens, templates, component properties and query uses; distinguish explicit dependencies from script-text matches.",
+      "source": "examples/project-search.json",
+      "distribution": "portable",
+      "features": ["project resource search", "structured references", "direct Designer navigation", "named-query property bindings"],
+      "prerequisites": ["Use the companion Designer build with Search project. No configured gateway tags or external database is required.", "The optional read-only Python button needs the bundled Python runtime and permission to run it."],
+      "gatewayWrites": "none",
+      "entryScreenId": "search-home",
+      "guide": "docs/architecture/PROJECT_SEARCH.md",
+      "walkthrough": [
+        "In Designer, search production-card and inspect its two structured placement references. Open one to select it.",
+        "Search production-summary and find the query's explicit uses in the template value and detail table.",
+        "Filter Script matches for production-summary. The button comment is searchable text, not a verified query dependency.",
+        "Close Production details, then reopen it through search. Edit a caption and find the unsaved text; undo the edit.",
+        "Publish and open the operator application. Compare the synthetic production cards, open details and return with Back."
+      ]
+    },
     {
       "id": "component-workshop",
       "title": "Component properties and form events",

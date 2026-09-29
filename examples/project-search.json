@@ -1,0 +1,40 @@
+{
+  "name": "Project search workshop",
+  "queries": [
+    { "id": "production-summary", "name": "Workshop production summary", "connectionId": "sample", "sql": "SELECT Line, Product, Produced, Target FROM ProductionSummary WHERE Line = @line", "parameters": [{ "name": "line", "type": "string", "defaultValue": "Line1" }] }
+  ],
+  "templates": [
+    {
+      "id": "production-card", "name": "Production card", "width": 440, "height": 180,
+      "parameters": { "line": "Line1" },
+      "components": [
+        { "id": "caption", "type": "label", "x": 20, "y": 16, "width": 400, "height": 40, "props": { "text": "Station {line}", "fontSize": 23 } },
+        { "id": "produced", "type": "ledDisplay", "x": 20, "y": 64, "width": 400, "height": 94, "props": { "text": "Produced", "value": 0, "decimals": 0, "queryBindings": { "value": { "queryId": "production-summary", "column": "Produced", "parameters": { "line": { "expression": "line", "references": { "line": { "kind": "parameter", "key": "line" } } } } } } } }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "id": "search-home", "name": "Resource search", "width": 1040, "height": 720,
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 20, "width": 992, "height": 52, "props": { "text": "Find a resource. Follow its references.", "fontSize": 29 } },
+        { "id": "instructions", "type": "label", "x": 24, "y": 90, "width": 992, "height": 100, "props": { "text": "In Designer, open Search project (Ctrl+Shift+F). Search for production-card and use Structured references to find its two placements. Open one to select it on the canvas.", "fontSize": 17 } },
+        { "id": "line-one", "type": "template", "x": 24, "y": 215, "width": 440, "height": 180, "props": { "text": "Line one production", "templateId": "production-card", "parameters": { "line": "Line1" } } },
+        { "id": "line-two", "type": "template", "x": 576, "y": 215, "width": 440, "height": 180, "props": { "text": "Line two production", "templateId": "production-card", "parameters": { "line": "Line2" } } },
+        { "id": "query-hint", "type": "label", "x": 24, "y": 430, "width": 992, "height": 94, "props": { "text": "Search production-summary. The query is used by a template value and the detail table. A script comment also contains the same text: it is searchable text, not a verified dependency.", "fontSize": 17 } },
+        { "id": "details", "type": "button", "x": 24, "y": 550, "width": 430, "height": 54, "props": { "text": "Open production details", "action": "navigate", "targetScreenId": "search-details" } },
+        { "id": "text-match", "type": "button", "x": 574, "y": 550, "width": 442, "height": 54, "props": { "text": "Read-only script example", "action": "script", "script": "# production-summary is mentioned here for search; this script does not execute a query.\nresult = {'message': 'Text matches are not verified references.'}" } },
+        { "id": "footer", "type": "label", "x": 24, "y": 652, "width": 992, "height": 36, "props": { "text": "Synthetic sample data · Search never runs code or queries · No equipment or database writes", "fontSize": 14 } }
+      ]
+    },
+    {
+      "id": "search-details", "name": "Production details", "width": 1040, "height": 720,
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 20, "width": 992, "height": 52, "props": { "text": "Production details", "fontSize": 29 } },
+        { "id": "table", "type": "table", "x": 24, "y": 100, "width": 992, "height": 410, "props": { "text": "Production summary", "queryId": "production-summary", "pageSize": 10 } },
+        { "id": "back", "type": "button", "x": 24, "y": 554, "width": 440, "height": 54, "props": { "text": "Back to resource search", "action": "navigate", "targetScreenId": "search-home" } },
+        { "id": "hint", "type": "label", "x": 24, "y": 638, "width": 992, "height": 50, "props": { "text": "Search selects the exact owning screen or template even when different screens reuse a component ID such as title.", "fontSize": 16 } }
+      ]
+    }
+  ]
+}
