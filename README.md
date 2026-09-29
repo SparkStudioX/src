@@ -36,7 +36,7 @@ The current source includes query-backed forms and scalar properties, single-sel
 
 ## Run on Windows
 
-For a prepared package, download the installer and checksum from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.2). It bundles .NET, Python and browser assets. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md): extraction and application execution are verified; actual elevated service installation, upgrade and uninstall are not yet verified.
+For a prepared package, download the installer and checksum from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.2). It bundles .NET, Python and browser assets. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md): extraction, application execution and an elevated service-install retry are verified on one Windows host; broader service lifecycle, upgrade recovery and uninstall acceptance remain open.
 
 For development, use Windows x64 with Node/npm available. Node 22.17.1 was used for the recorded checks. Run from the repository root in PowerShell:
 

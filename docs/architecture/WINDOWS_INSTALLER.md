@@ -2,7 +2,7 @@
 
 Download the installer, checksum and optional workshops from the [v0.2.0-preview.2 release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.2). The Windows x64 package includes the gateway, .NET runtime, CPython, browser Designer/operator application and dependency notices. Running it requires no separate .NET SDK, Python or Node.js installation.
 
-This is an **unsigned preview for local evaluation**. The verified deployment path is current-user extraction and execution on loopback. Actual elevated service installation, LocalService execution, upgrade recovery and uninstall still require acceptance testing on a disposable Windows machine. Docker and macOS are not part of this release.
+This is an **unsigned preview for local evaluation**. Current-user extraction and execution on loopback are verified. An elevated preview.2 installer retry after a failed preview.1 installation also started the LocalService gateway successfully on one Windows host with retained ProgramData. Broader installation, upgrade recovery, uninstall, service-account secret encryption and ACL acceptance remain open. Docker and macOS are not part of this release.
 
 Preview.2 fixes a startup-check error in preview.1: the installer anonymously polled the protected `/api/health` endpoint and could report a 45-second timeout even when the gateway had started. The corrected check uses `/api/ready`, described below.
 
@@ -74,9 +74,11 @@ Designer → **Connections** provides connection enable/disable, dependencies an
 
 Deployment settings can validate and save a loopback HTTP/HTTPS listener for the next start. Saving does not restart or rebind the gateway. Explicit `--urls` and other host overrides take precedence, including the example command above. Offline certificate/key references must be supplied in the deployment certificate directory. Read the [deployment guide](https://github.com/SparkStudioX/src/blob/main/docs/architecture/DEPLOYMENT_SETTINGS.md) first. Remote HTTPS, trusted proxies and certificate renewal remain future acceptance work.
 
-## Optional Windows service installation — acceptance pending
+## Optional Windows service installation — startup verified on one host
 
-Normal installation requests administrator elevation and is designed to register **SparkStudio Gateway** (service name `SparkStudio`) with automatic startup as `LocalService`. It defaults to loopback port 5090, configurable in the wizard, and creates no firewall rule. This service path is implemented but its elevated lifecycle is not verified by portable tests.
+Normal installation requests administrator elevation and is designed to register **SparkStudio Gateway** (service name `SparkStudio`) with automatic startup as `LocalService`. It defaults to loopback port 5090, configurable in the wizard, and creates no firewall rule.
+
+On the tested Windows host, the user completed elevated installation of preview.2 after preview.1's failed startup check, retaining `%ProgramData%\SparkStudio`. Windows reported the service running with automatic startup as `LocalService`, using the installed executable and the retained data directory on loopback port 5090. The installed version was `0.2.0-preview.2` from source revision `05cc9bf`; `/api/ready` returned HTTP 200 with caching disabled, exactly the four documented fields, a matching service process ID and `pythonAvailable: true`. This verifies that retry and startup on this host; it does not establish broad service lifecycle, secret encryption or ACL acceptance.
 
 Persistent service data belongs in `%ProgramData%\SparkStudio`. The installer configures a protected ACL for SYSTEM, Administrators and the service SID. For a fresh service installation, read the setup code from an elevated PowerShell terminal:
 
