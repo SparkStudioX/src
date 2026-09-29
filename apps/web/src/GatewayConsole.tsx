@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, apiUrl, authenticatedFetch, assertAuthResponseCurrent } from "./api";
-import { SessionIdentity } from "./OperatorAccess";
-import Icon from "./Icon";
+import WorkspaceHeader from "./WorkspaceHeader";
 import Security from "./Security";
 import GatewayDeployment from "./GatewayDeployment";
 import "./gatewayConsole.css";
@@ -49,7 +48,7 @@ export default function GatewayConsole() {
   const matching = (text: string) => text.toLowerCase().includes(query.toLowerCase());
   const securitySection = section === "security" || section === "audit";
   return <div className="gateway-console">
-    <header><a href="/" className="projects-brand"><span className="brand-mark"><Icon name="spark" size={24} /></span><strong>SparkStudio</strong></a><strong>Gateway Settings</strong><a href="/">Projects</a><SessionIdentity iconOnlySignOut /></header>
+    <WorkspaceHeader page="gateway" />
     <main><div className="gateway-heading"><div><div className="eyebrow">GATEWAY ADMINISTRATION</div><h1>{data?.identity || "Gateway Settings"}</h1><p>Shared resources, deployment, active sessions, security and diagnostics.</p></div>{!securitySection && section !== "deployment" && <button className="button" disabled={busy} onClick={() => void refresh()}>{busy ? "Refreshing…" : "Refresh status"}</button>}</div>
       <nav aria-label="Gateway sections">{sections.map(item => <a key={item.id} href={`#${item.id}`} aria-current={section === item.id ? "page" : undefined}>{item.name}</a>)}</nav>
       {securitySection ? <Security key={section} section={section} /> : section === "deployment" ? <GatewayDeployment /> : <>

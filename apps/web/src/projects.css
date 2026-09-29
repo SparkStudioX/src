@@ -1,8 +1,4 @@
 .projects-shell { min-height: 100vh; background: var(--page-bg); color: var(--ink); }
-.projects-header { height: 84px; padding: 0 max(28px, calc((100vw - 1240px) / 2)); display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); background: var(--panel); }
-.projects-header > div, .projects-brand { display: flex; align-items: center; gap: 16px; }
-.projects-brand strong { font-size: 25px; letter-spacing: -1px; }
-.projects-brand strong > span { font-weight: 400; }
 .project-local-label { color: var(--muted); font-size: 10px; letter-spacing: 1.5px; }
 .projects-main { max-width: 1296px; margin: 0 auto; padding: 46px 28px 38px; }
 .projects-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
@@ -54,4 +50,4 @@
   .designer-project-link > svg:first-child { width: 20px; height: 20px; }
 }
 @media (max-width: 1150px) { .project-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }.projects-heading { align-items: flex-start; }.projects-heading-actions { flex-direction: column; align-items: stretch; } }
-@media (max-width: 720px) { .projects-header { padding: 0 20px; height: 70px; }.project-local-label { display: none; }.projects-main { padding: 30px 18px; }.projects-heading { flex-direction: column; gap: 20px; }.projects-heading-actions { flex-direction: row; }.project-cards { grid-template-columns: 1fr; }.projects-tools { flex-wrap: wrap; }.project-search { width: 100%; }.project-archived-toggle { margin-right: auto; margin-left: 0; }.project-notice { flex-wrap: wrap; }.projects-brand strong { font-size: 22px; } }
+@media (max-width: 720px) { .project-local-label { display: none; }.projects-main { padding: 30px 18px; }.projects-heading { flex-direction: column; gap: 20px; }.projects-heading-actions { flex-direction: row; }.project-cards { grid-template-columns: 1fr; }.projects-tools { flex-wrap: wrap; }.project-search { width: 100%; }.project-archived-toggle { margin-right: auto; margin-left: 0; }.project-notice { flex-wrap: wrap; } }

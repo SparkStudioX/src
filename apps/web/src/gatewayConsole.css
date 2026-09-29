@@ -1,7 +1,5 @@
 .gateway-console { min-height:100dvh; background:var(--page-bg); color:var(--ink); }
-.gateway-console > header { display:flex; gap:24px; align-items:center; padding:20px 28px; border-bottom:1px solid var(--border); background:var(--panel); flex-wrap:wrap; }
-.gateway-console > header > strong { margin-right:auto; }
-.gateway-console > main { max-width:1440px; margin:auto; padding:32px; }
+.gateway-console > main { max-width:1296px; margin:auto; padding:32px 28px; }
 .gateway-heading { display:flex; align-items:center; justify-content:space-between; gap:20px; }
 .gateway-heading h1 { margin:8px 0; }
 .gateway-console > main > nav { display:flex; flex-wrap:wrap; gap:6px; border-bottom:1px solid var(--border); margin:20px 0; }

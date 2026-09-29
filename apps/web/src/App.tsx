@@ -1203,7 +1203,7 @@ export default function App() {
               <span>v{health?.version || "0.1.0"}</span>
             </div>
           </div>
-          <SessionIdentity onAccountSettings={() => setAccountSettingsOpen(true)} />
+          <SessionIdentity placement="sidebar" onAccountSettings={() => setAccountSettingsOpen(true)} />
         </div>
       </aside>
 

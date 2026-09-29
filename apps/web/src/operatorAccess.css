@@ -3,6 +3,11 @@
 .session-person span { display:flex; flex-direction:column; min-width:0; }
 .session-person strong { font-size:12px; overflow:hidden; text-overflow:ellipsis; max-width:190px; }
 .session-person small { font-size:10px; color:var(--text-muted); margin-top:2px; }
+.session-settings { border:0; background:none; color:inherit; text-align:left; padding:8px 4px; border-radius:6px; cursor:pointer; }
+.session-settings > svg { flex-shrink:0; }
+.session-settings:hover { background:var(--accent-soft); }
+.session-settings:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.session-settings:disabled { opacity:.6; cursor:wait; }
 .session-actions { display:flex; gap:10px; }
 .session-actions button { padding:0; border:0; background:none; color:var(--text-muted); cursor:pointer; font-size:11px; white-space:nowrap; }
 .session-actions button:hover { color:var(--accent); }
@@ -13,8 +18,7 @@
 .session-error { flex-basis:100%; color:var(--danger, #dc2626); font-size:12px; }
 .nav-bottom > .session-identity { padding:10px 4px; }
 .sidebar-session { flex-wrap:nowrap; gap:6px; border-top:1px solid var(--nav-border); color:var(--nav-text); }
-.sidebar-session .session-settings { flex:1; min-width:0; border:0; background:none; color:inherit; text-align:left; padding:8px 4px; border-radius:6px; cursor:pointer; }
-.sidebar-session .session-settings > svg { flex-shrink:0; }
+.sidebar-session .session-settings { flex:1; min-width:0; }
 .sidebar-session .session-person small { color:var(--nav-muted); font-size:9px; white-space:normal; }
 .sidebar-session .session-settings:hover { background:var(--nav-hover); color:var(--nav-heading); }
 .sidebar-session .session-actions { flex-shrink:0; }
