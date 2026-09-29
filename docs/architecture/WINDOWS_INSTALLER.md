@@ -68,7 +68,7 @@ The installer and workshop collection contain no development projects, accounts,
 
 OPC UA client, Microsoft SQL Server and SQLite connectors are available. Configure your own endpoints and credentials in the target deployment. SQL Server still requires live-server acceptance; SQLite tests do not establish SQL Server acceptance.
 
-Gateway Settings provides connection enable/disable, dependencies and timestamped tests. Designer read-query tests support typed parameters, cancellation and deadlines. Cancelling a read does not establish rollback of a database write; these controls never automatically retry writes.
+Designer → **Connections** provides connection enable/disable, dependencies and timestamped tests. Gateway Settings also shows a connection inventory. Designer read-query tests support typed parameters, cancellation and deadlines. Cancelling a read does not establish rollback of a database write; these controls never automatically retry writes.
 
 Deployment settings can validate and save a loopback HTTP/HTTPS listener for the next start. Saving does not restart or rebind the gateway. Explicit `--urls` and other host overrides take precedence, including the example command above. Offline certificate/key references must be supplied in the deployment certificate directory. Read the [deployment guide](https://github.com/SparkStudioX/src/blob/main/docs/architecture/DEPLOYMENT_SETTINGS.md) first. Remote HTTPS, trusted proxies and certificate renewal remain future acceptance work.
 
