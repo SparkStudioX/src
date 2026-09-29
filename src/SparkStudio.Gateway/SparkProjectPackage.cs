@@ -33,6 +33,7 @@ public static class SparkProjectPackage
             if (source.ContainsKey(key)) project[key] = source[key]?.DeepClone();
         ValidateProject(project);
         var queries = ValidateQueries(snapshot["queries"]!.AsArray());
+        ComponentQueryBindingValidator.ValidateQueries(project, queries);
         var scripts = ScriptResourceStore.ValidateDraft(workspace.Scripts.GetDraft());
         var dependencies = ConnectionDependencies(workspace.Store, queries);
         var manifest = new JsonObject
@@ -80,6 +81,7 @@ public static class SparkProjectPackage
         var queryNode = ParseJson(entries["queries.json"], "queries.json");
         if (queryNode is not JsonArray queryArray) throw new ArgumentException("queries.json must contain an array.");
         var queries = ValidateQueries(queryArray);
+        ComponentQueryBindingValidator.ValidateQueries(project, queries);
         var scripts = ScriptResourceStore.ValidateDraft(Object(entries, "scripts-draft.json"));
         var connectionIds = queries.OfType<JsonObject>().Select(query => Text(query, "connectionId", 256)).ToHashSet(StringComparer.Ordinal);
         var declaredConnections = manifest["connectionDependencies"]!.AsArray().OfType<JsonObject>().Select(item => Text(item, "id", 256)).ToHashSet(StringComparer.Ordinal);

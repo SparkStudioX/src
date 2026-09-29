@@ -28,7 +28,7 @@ export function resolveProcessDisplay(component: CanvasComponent, parameters: Ru
   if (!isProcessDisplay(component.type)) return { available: false, diagnostic: "Unsupported process display." };
   const props = component.props;
   const read = (key: string, fallback: unknown, label: string): unknown => {
-    if (Object.hasOwn(props.bindings ?? {}, key) && props[key] === undefined) throw new Error(`${label} binding is unavailable.`);
+    if ((Object.hasOwn(props.bindings ?? {}, key) || Object.hasOwn(props.queryBindings ?? {}, key)) && props[key] === undefined) throw new Error(`${label} binding is unavailable.`);
     return props[key] === undefined ? fallback : props[key];
   };
   const number = (key: string, fallback: number, label: string): number => {
@@ -47,7 +47,7 @@ export function resolveProcessDisplay(component: CanvasComponent, parameters: Ru
     if (!Number.isInteger(decimals) || decimals < 0 || decimals > 6) throw new Error("Decimal places must be an integer from 0 to 6.");
     const rawUnit = read("unit", "", "Unit");
     if (typeof rawUnit !== "string") throw new Error("Unit must be text up to 32 characters.");
-    const unit = Object.hasOwn(props.bindings ?? {}, "unit") ? rawUnit : resolvePath(rawUnit, parameters);
+    const unit = Object.hasOwn(props.bindings ?? {}, "unit") || Object.hasOwn(props.queryBindings ?? {}, "unit") ? rawUnit : resolvePath(rawUnit, parameters);
     if (rawUnit.length > 32 || unit.length > 32) throw new Error("Unit must be text up to 32 characters.");
     const formatted = (Object.is(value, -0) ? 0 : value).toFixed(decimals);
     if (component.type === "ledDisplay") return { available: true, value, formatted, decimals, unit, showValue: true, showPercent: false, orientation: "horizontal" };

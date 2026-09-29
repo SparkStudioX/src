@@ -99,6 +99,7 @@ public sealed class ProjectCatalog
             var id = NewId(name);
             var draft = NormalizeProject(project ?? BlankProject(), id, name);
             var queryDraft = SparkProjectPackage.ValidateQueries(queries ?? []);
+            ComponentQueryBindingValidator.ValidateQueries(draft, queryDraft);
             var scriptDraft = ScriptResourceStore.ValidateDraft(scripts ?? new JsonObject { ["revision"] = 0, ["resources"] = new JsonArray() });
             var content = (assets ?? []).Select(LocalAssetStore.ValidateContent).ToArray();
             var stage = NewStage(id);

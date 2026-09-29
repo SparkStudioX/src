@@ -19,14 +19,20 @@ export function runtimeBindingHealth(
   edits: Record<string, InputValues>,
   communicationLost = false,
   state?: import("./types").RuntimeStateValues,
-): { badCount: number; simulated: boolean } {
-  const health = { badCount: 0, simulated: false };
+  queryProperties?: import("./types").QueryPropertyValues,
+): { badCount: number; simulated: boolean; unknownCount?: number } {
+  const health: { badCount: number; simulated: boolean; unknownCount?: number } = { badCount: 0, simulated: false };
   if (!screen) return health;
   const limitError = templateExpansion(screen.components, templates).error?.includes("expansion exceeds");
   let limitReported = false;
   const inspect = (document: Screen, context: RuntimeParameters, inputs: InputValues, instanceSteps: InstancePathStep[] = [], ancestors: string[] = [], localState = state) => {
     for (const component of document.components) {
-      const resolved = evaluateComponentBindings(component, { components: document.components, tags, parameters: context, inputs, communicationLost, state: localState });
+      const localQueries = document === screen ? queryProperties : undefined;
+      // Preserve known expression/tag checks while disclosing query samples
+      // that are owned by a nested form and unavailable to this summary.
+      const unknownQueries = !localQueries && Object.keys(component.props.queryBindings ?? {}).length > 0;
+      if (unknownQueries) health.unknownCount = (health.unknownCount ?? 0) + 1;
+      const resolved = evaluateComponentBindings(component, { components: document.components, tags, parameters: context, inputs, communicationLost, state: localState, queryProperties: localQueries });
       const errors = Object.keys(resolved.errors).length > 0 || Boolean(stateInputError(component, localState));
       if (resolved.simulated) health.simulated = true;
       if (isTemplateInstance(component.type)) {
@@ -39,16 +45,19 @@ export function runtimeBindingHealth(
         if (errors || parameterError || graphError || limitError && !limitReported) health.badCount++;
         if (limitError) limitReported = true;
         // Live query rows remain outside this saved-graph summary.
-        if (limitError || parameterError || graphError || component.props.rowsSource) continue;
+        if (limitError || parameterError || graphError) continue;
+        if (component.props.rowsSource) { health.unknownCount = (health.unknownCount ?? 0) + 1; continue; }
         if (!template) continue;
         const rows = component.type === "repeater" ? component.props.rows ?? [] : [undefined];
+        const ownsLiveForm = Object.keys(component.props.parameterBindings ?? {}).length > 0 || Object.keys(template.instanceState ?? {}).length > 0;
+        if (ownsLiveForm && rows.length) health.unknownCount = (health.unknownCount ?? 0) + 1;
         for (const row of rows) {
           let parameters: RuntimeParameters;
           try { parameters = templateParameters(template, context, component.props.parameters, row?.parameters, boundValues); }
           catch { health.badCount++; continue; }
           // Bound forms own live edits, just like query rows. Saved scoped edits
           // are not their current inputs and must not make a stale health claim.
-          if (Object.keys(component.props.parameterBindings ?? {}).length || Object.keys(template.instanceState ?? {}).length) continue;
+          if (ownsLiveForm) continue;
           const childPath = [...instanceSteps, { instanceId: component.id, ...(row ? { rowId: row.id } : {}) }];
           const scope = instanceInputKey(screen.id, childPath);
           let childState: import("./types").RuntimeStateValues;
@@ -59,20 +68,21 @@ export function runtimeBindingHealth(
         continue;
       }
       const path = resolved.component.props.tagPath;
-      const needsTag = component.type === "value" || component.type === "gauge" || Boolean(path);
+      const unknownTagPath = unknownQueries && Boolean(component.props.queryBindings?.tagPath);
+      const needsTag = !unknownTagPath && (component.type === "value" || component.type === "gauge" || Boolean(path));
       // Failed dynamic paths are deliberately empty. Never consult the authored
       // fallback: that could report another machine as healthy or simulated.
-      const tag = path ? tags.find(item => item.path === resolvePath(path, context)) : undefined;
+      const tag = path && !unknownTagPath ? tags.find(item => item.path === (component.props.queryBindings?.tagPath ? path : resolvePath(path, context))) : undefined;
       const precisionLimited = typeof tag?.value === "number" && Number.isInteger(tag.value) && !Number.isSafeInteger(tag.value);
-      const stateUnavailable = component.type === "multiStateIndicator" && !resolveIndicatorState({
+      const stateUnavailable = !(unknownQueries && component.props.queryBindings?.stateValue) && component.type === "multiStateIndicator" && !resolveIndicatorState({
         ...resolved.component.props,
-        stateValue: Object.hasOwn(component.props.bindings ?? {}, "stateValue")
+        stateValue: Object.hasOwn(component.props.bindings ?? {}, "stateValue") || Object.hasOwn(component.props.queryBindings ?? {}, "stateValue")
           ? resolved.component.props.stateValue
           : resolvePath(resolved.component.props.stateValue ?? "", context),
       }).state;
-      const process = isProcessDisplay(component.type) ? resolveProcessDisplay(resolved.component, context) : undefined;
+      const process = isProcessDisplay(component.type) && !(unknownQueries && Object.keys(component.props.queryBindings ?? {}).some(key => ["value", "min", "max", "decimals", "unit", "showValue", "showPercent", "orientation"].includes(key))) ? resolveProcessDisplay(resolved.component, context) : undefined;
       const processUnavailable = process && (!process.available || Boolean(process.rangeStatus));
-      const drawingUnavailable = isDrawingComponent(component.type) && !resolveDrawingComponent(resolved.component).available;
+      const drawingUnavailable = isDrawingComponent(component.type) && !unknownQueries && !resolveDrawingComponent(resolved.component).available;
       if (errors || stateUnavailable || processUnavailable || drawingUnavailable || needsTag && (communicationLost || !tag || !String(tag.quality).toLowerCase().startsWith("good") || precisionLimited)) health.badCount++;
       if (tag?.source === "simulated") health.simulated = true;
     }

@@ -89,6 +89,20 @@ export interface PropertyBinding {
   expression: string;
   references: Record<string, BindingReference>;
 }
+export interface QueryPropertyBinding {
+  queryId: string;
+  column: string;
+  transform?: string;
+  parameters?: Record<string, PropertyBinding>;
+  refresh?: { mode: "onChange" | "poll"; intervalMs?: number };
+}
+export interface QueryPropertySample {
+  status: "idle" | "loading" | "ready" | "error";
+  value?: ParameterValue;
+  error?: string;
+  refreshing?: boolean;
+}
+export type QueryPropertyValues = Record<string, Partial<Record<BindingTarget, QueryPropertySample>>>;
 export interface CustomProperty {
   type: "number" | "string" | "boolean";
   value: string | number | boolean;
@@ -151,6 +165,7 @@ export interface CanvasComponent {
     enabled?: boolean;
     visible?: boolean;
     bindings?: Partial<Record<BindingTarget, PropertyBinding>>;
+    queryBindings?: Partial<Record<BindingTarget, QueryPropertyBinding>>;
     text?: string;
     tagPath?: string;
     queryId?: string;

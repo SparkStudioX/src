@@ -30,11 +30,8 @@ internal static class ComponentBindingValidator
 
     public static void ValidateDocument(JsonObject document, JsonObject? projectParameters, JsonObject? sessionState, bool template)
     {
-        var components = document["components"]!.AsArray().OfType<JsonObject>().ToDictionary(item => item["id"]!.GetValue<string>(), StringComparer.Ordinal);
-        var inputs = components.Values.Where(item => InputDefinitionValidator.IsInput(Text(item, "type", 64)))
-            .Select(item => Text(item["props"]!.AsObject(), "fieldKey", 64)).ToHashSet(StringComparer.Ordinal);
-        var parameters = (projectParameters?.Select(pair => pair.Key) ?? [])
-            .Concat((document["parameters"] as JsonObject)?.Select(pair => pair.Key) ?? []).ToHashSet(StringComparer.Ordinal);
+        var context = CreateExpressionContext(document, projectParameters, sessionState, template);
+        var components = context.Components;
         foreach (var component in components.Values)
         {
             if (component["props"] is not JsonObject props) continue;
@@ -62,65 +59,87 @@ internal static class ComponentBindingValidator
             {
                 if (!SupportsTarget(type, target))
                     throw new ArgumentException($"The {target} binding is not supported on {type}.");
-                if (raw is not JsonObject binding || binding.Any(pair => pair.Key is not ("expression" or "references")))
-                    throw new ArgumentException("A binding needs an expression and reference map.");
-                var expression = Text(binding, "expression", 2048);
-                if (binding["references"] is not JsonObject references || references.Count > 32)
-                    throw new ArgumentException("A binding can contain at most 32 references.");
-                foreach (var (name, referenceNode) in references)
+                var result = ValidatePropertyExpression(raw, component, context);
+                if (ProcessDisplayValidator.Targets.Contains(target) && result.Constant)
                 {
-                    if (!ValidIdentifier(name) || referenceNode is not JsonObject reference)
-                        throw new ArgumentException("References need valid identifier names and definitions.");
-                    var kind = Text(reference, "kind", 32);
-                    var allowed = kind == "custom" ? new[] { "kind", "key", "componentId" } : kind == "tag" ? ["kind", "path"] : ["kind", "key"];
-                    if (reference.Any(pair => !allowed.Contains(pair.Key, StringComparer.Ordinal)))
-                        throw new ArgumentException($"Reference '{name}' has unsupported fields.");
-                    switch (kind)
-                    {
-                        case "custom":
-                            var key = Key(reference);
-                            var owner = component;
-                            if (reference.ContainsKey("componentId"))
-                            {
-                                var id = Text(reference, "componentId", 256);
-                                if (!SafeKey(id) || !components.TryGetValue(id, out owner))
-                                    throw new ArgumentException("Custom property references must stay within their screen or template.");
-                            }
-                            if (!ValidIdentifier(key) || owner["props"]?["customProperties"] is not JsonObject customs || !customs.ContainsKey(key))
-                                throw new ArgumentException($"Custom property '{key}' was not found in the referenced component.");
-                            break;
-                        case "input":
-                            if (!inputs.Contains(Key(reference))) throw new ArgumentException("Input references must name an input in the same screen or template.");
-                            break;
-                        case "parameter":
-                            if (!parameters.Contains(Key(reference))) throw new ArgumentException("Parameter references must name a declared project, screen or template parameter.");
-                            break;
-                        case "sessionState":
-                        case "screenState":
-                        case "instanceState":
-                            ProjectStateValidator.ValidateReference(kind, Key(reference), sessionState, document, template);
-                            break;
-                        case "tag":
-                            var path = Text(reference, "path", 1024);
-                            foreach (Match match in TagParameter.Matches(path))
-                                if (!SafeKey(match.Groups[1].Value) || !parameters.Contains(match.Groups[1].Value))
-                                    throw new ArgumentException("Tag path parameters must name declared parameters.");
-                            break;
-                        default: throw new ArgumentException("References support custom properties, inputs, parameters, tags, session state, screen state and private instance state.");
-                    }
+                    ProcessDisplayValidator.ValidateResult(target, result.Value!);
+                    constants.Add(target, result.Value!);
                 }
-                var parser = new ExpressionParser(expression, references.Select(pair => pair.Key).ToHashSet(StringComparer.Ordinal));
-                parser.Validate();
-                if (ProcessDisplayValidator.Targets.Contains(target) && parser.TryConstant(out var constant))
-                {
-                    ProcessDisplayValidator.ValidateResult(target, constant!);
-                    constants.Add(target, constant!);
-                }
-                if ((DrawingComponentValidator.Targets.Contains(target) || target == "color" && DrawingComponentValidator.Types.Contains(type)) && parser.TryConstant(out var drawingConstant))
-                    DrawingComponentValidator.ValidateResult(target, drawingConstant!);
+                if ((DrawingComponentValidator.Targets.Contains(target) || target == "color" && DrawingComponentValidator.Types.Contains(type)) && result.Constant)
+                    DrawingComponentValidator.ValidateResult(target, result.Value!);
             }
             ProcessDisplayValidator.ValidateConstantRange(type, props, constants);
         }
+    }
+
+    // Query parameter expressions share the exact bounded grammar and scoped
+    // reference rules; they further exclude live tags and password values.
+    internal sealed record ExpressionContext(Dictionary<string, JsonObject> Components, HashSet<string> Inputs, HashSet<string> Parameters,
+        JsonObject Document, JsonObject? SessionState, bool Template, bool QueryParameter);
+
+    internal static ExpressionContext CreateExpressionContext(JsonObject document, JsonObject? projectParameters, JsonObject? sessionState,
+        bool template, bool queryParameter = false)
+    {
+        var components = document["components"]!.AsArray().OfType<JsonObject>().ToDictionary(item => item["id"]!.GetValue<string>(), StringComparer.Ordinal);
+        var inputs = components.Values.Where(item => InputDefinitionValidator.IsInput(Text(item, "type", 64)) &&
+            (!queryParameter || Text(item, "type", 64) != "passwordInput"))
+            .Select(item => Text(item["props"]!.AsObject(), "fieldKey", 64)).ToHashSet(StringComparer.Ordinal);
+        var parameters = (projectParameters?.Select(pair => pair.Key) ?? [])
+            .Concat((document["parameters"] as JsonObject)?.Select(pair => pair.Key) ?? []).ToHashSet(StringComparer.Ordinal);
+        return new(components, inputs, parameters, document, sessionState, template, queryParameter);
+    }
+
+    internal static (bool Constant, object? Value) ValidatePropertyExpression(JsonNode? raw, JsonObject component, ExpressionContext context)
+    {
+        if (raw is not JsonObject binding || binding.Any(pair => pair.Key is not ("expression" or "references")))
+            throw new ArgumentException("A binding needs an expression and reference map.");
+        var expression = Text(binding, "expression", 2048);
+        if (binding["references"] is not JsonObject references || references.Count > 32)
+            throw new ArgumentException("A binding can contain at most 32 references.");
+        foreach (var (name, referenceNode) in references)
+        {
+            if (!ValidIdentifier(name) || referenceNode is not JsonObject reference)
+                throw new ArgumentException("References need valid identifier names and definitions.");
+            var kind = Text(reference, "kind", 32);
+            var allowed = kind == "custom" ? new[] { "kind", "key", "componentId" } : kind == "tag" ? ["kind", "path"] : ["kind", "key"];
+            if (reference.Any(pair => !allowed.Contains(pair.Key, StringComparer.Ordinal)))
+                throw new ArgumentException($"Reference '{name}' has unsupported fields.");
+            switch (kind)
+            {
+                case "custom":
+                    var key = Key(reference);
+                    var owner = component;
+                    if (reference.ContainsKey("componentId"))
+                    {
+                        var id = Text(reference, "componentId", 256);
+                        if (!SafeKey(id) || !context.Components.TryGetValue(id, out owner))
+                            throw new ArgumentException("Custom property references must stay within their screen or template.");
+                    }
+                    if (!ValidIdentifier(key) || owner["props"]?["customProperties"] is not JsonObject customs || !customs.ContainsKey(key))
+                        throw new ArgumentException($"Custom property '{key}' was not found in the referenced component.");
+                    break;
+                case "input":
+                    if (!context.Inputs.Contains(Key(reference))) throw new ArgumentException("Input references must name an input in the same screen or template.");
+                    break;
+                case "parameter":
+                    if (!context.Parameters.Contains(Key(reference))) throw new ArgumentException("Parameter references must name a declared project, screen or template parameter.");
+                    break;
+                case "sessionState":
+                case "screenState":
+                case "instanceState":
+                    ProjectStateValidator.ValidateReference(kind, Key(reference), context.SessionState, context.Document, context.Template);
+                    break;
+                case "tag":
+                    if (context.QueryParameter) throw new ArgumentException("Query parameter expressions cannot reference tags.");
+                    var path = Text(reference, "path", 1024);
+                    foreach (Match match in TagParameter.Matches(path))
+                        if (!SafeKey(match.Groups[1].Value) || !context.Parameters.Contains(match.Groups[1].Value))
+                            throw new ArgumentException("Tag path parameters must name declared parameters.");
+                    break;
+                default: throw new ArgumentException("References support custom properties, inputs, parameters, tags, session state, screen state and private instance state.");
+            }
+        }
+        return ValidateExpression(expression, references.Select(pair => pair.Key));
     }
 
     internal static (bool Constant, object? Value) ValidateExpression(string expression, IEnumerable<string> references)
@@ -131,6 +150,26 @@ internal static class ComponentBindingValidator
         parser.Validate();
         var constant = parser.TryConstant(out var value);
         return (constant, value);
+    }
+
+    internal static void ValidateScalarTarget(string target, object value)
+    {
+        ProcessDisplayValidator.ValidateResult(target, value);
+        DrawingComponentValidator.ValidateResult(target, value);
+        if (target is "enabled" or "visible" && value is not bool)
+            throw new ArgumentException($"The {target} binding must produce a Boolean.");
+        if (target is "color" or "backgroundColor" or "foregroundColor" or "borderColor" or "strokeColor" &&
+            (value is not string color || !HexColor.IsMatch(color)))
+            throw new ArgumentException($"The {target} binding must produce a hex color.");
+        if (target is "x" or "y" or "width" or "height" or "fontSize" or "borderWidth")
+        {
+            var minimum = target is "x" or "y" or "borderWidth" ? 0 : 1;
+            var maximum = target == "fontSize" ? 256 : target == "borderWidth" ? 32 : 8192;
+            if (value is not double number || !double.IsFinite(number) || number < minimum || number > maximum)
+                throw new ArgumentException($"The {target} binding must produce a number between {minimum} and {maximum}.");
+        }
+        if (target == "tagPath" && (value is not string path || !HasContent(path) || path.Length > 1024 || path.Any(character => character < 32 || character == 127 || character is '{' or '}')))
+            throw new ArgumentException("A tag path binding must produce a complete bounded path without control characters or unresolved parameters.");
     }
 
     internal static JsonElement EvaluateExpression(string expression, IEnumerable<string> references, Func<string, JsonElement> resolve)

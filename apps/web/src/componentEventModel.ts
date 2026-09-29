@@ -20,7 +20,7 @@ export function componentEventSamples(component: CanvasComponent, evaluated: Can
     else {
       value = propertyValue(evaluated, property);
       if (property === "enabled" || property === "visible") value ??= true;
-      if (typeof value === "string" && !component.props.bindings?.[property] && ["text", "tagPath", "stateValue", "unit"].includes(property)) value = resolvePath(value, parameters);
+      if (typeof value === "string" && !component.props.bindings?.[property] && !component.props.queryBindings?.[property] && ["text", "tagPath", "stateValue", "unit"].includes(property)) value = resolvePath(value, parameters);
     }
     const available = !error && (typeof value === "string" || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value) && (!Number.isInteger(value) || Number.isSafeInteger(value)));
     samples[property] = { value: available ? value as InputValue : null, available, error: error || (available ? "" : "The property has no available scalar value.") };

@@ -26,7 +26,8 @@ function load(name, harness = false) {
   }}).outputText.replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
     .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, dependency) => {
       const stub = harness && name === 'inputStateBindings' && dependency === 'react' ? hookUrl : harness && name === 'templates' ? ({react: hookUrl, './BoundComponent': leafUrl,
-        './applicationState': stateUrl, './useQueryRepeater': queryUrl, './ComponentEvents': url('export const useComponentEvents=()=>{};')})[dependency] : undefined;
+        './applicationState': stateUrl, './useQueryRepeater': queryUrl, './ComponentEvents': url('export const useComponentEvents=()=>{};'),
+        './useQueryPropertyBindings': url('export const useQueryPropertyBindings=()=>({});export const useQueryPropertyContext=()=>undefined;export const QueryPropertyProvider=({children})=>children;')})[dependency] : undefined;
       return prefix + JSON.stringify(stub ?? (dependency.startsWith('./') ? load(dependency.slice(2), harness) : pathToFileURL(require.resolve(dependency)).href));
     });
   const result = url(code); modules.set(key, result); return result;

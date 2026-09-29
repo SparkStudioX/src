@@ -53,6 +53,7 @@ public sealed class ProjectStore
         lock (gate)
         {
             ProjectTemplates.ValidateStructure(value);
+            ComponentQueryBindingValidator.ValidateQueries(value, queries);
             var revision = project["revision"]?.GetValue<int>() ?? 0;
             if ((value["revision"]?.GetValue<int>() ?? -1) != revision) throw new InvalidOperationException("The project changed since it was loaded. Reload before saving.");
             var next = (JsonObject)value.DeepClone();
@@ -144,6 +145,7 @@ public sealed class ProjectStore
             var old = next.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "id") == id);
             if (old is not null) next.Remove(old);
             next.Add(node);
+            ComponentQueryBindingValidator.ValidateQueries(project, next);
             Persist("queries.json", next);
             queries = next;
             return (JsonObject)node.DeepClone();

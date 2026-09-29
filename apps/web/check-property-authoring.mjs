@@ -77,10 +77,10 @@ function drive(component) {
   const patches = [], geometry = [];
   const props = { ...context(component), onChange: patch => patches.push(patch), onGeometryChange: patch => geometry.push(patch) };
   let tree;
-  const refresh = () => { hooks.begin(); const outer = InteractiveEditor(props); tree = outer.type(outer.props); return tree; };
+  const refresh = () => { hooks.begin(); const outer = InteractiveEditor(props); tree = outer.type(outer.props); const expand = node => !node || typeof node !== "object" ? node : typeof node.type === "function" && node.type.name === "BindingReferencesEditor" ? expand(node.type(node.props)) : ({ ...node, props: { ...node.props, children: React.Children.toArray(node.props?.children).map(expand) } }); tree = expand(tree); return tree; };
   const find = predicate => { const node = nodes(tree).find(predicate); assert.ok(node, 'Expected authoring control'); return node; };
   const byLabel = label => find(node => node.props?.['aria-label'] === label);
-  const button = text => find(node => node.type === 'button' && node.props.children === text);
+  const button = text => find(node => node.type === 'button' && React.Children.toArray(node.props.children).join('') === text);
   refresh(); return { patches, geometry, refresh, find, byLabel, button, all: () => nodes(tree) };
 }
 const previousDocument = globalThis.document;

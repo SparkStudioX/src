@@ -7,6 +7,7 @@ import { useFormInputs } from "./inputStateBindings";
 import { ComponentEventDiagnostics } from "./ComponentEvents";
 import { actionKey, ProjectComponentView } from "./templates";
 import { componentGeometry } from "./propertyBindings";
+import { QueryPropertyProvider, useQueryPropertyBindings } from "./useQueryPropertyBindings";
 import { ApplicationStateProvider, useApplicationStateContext, usePopupApplicationState } from "./applicationState";
 import { popupQuerySource, popupSourceStatus } from "./popupModel";
 import { useQueryRepeater } from "./useQueryRepeater";
@@ -115,6 +116,11 @@ export default function Popup({
     state: applicationState, active: !busy && !sourceLocked && !readOnly, contextKey: popup.id,
     onEdit: (field, value) => setEdits(previous => ({ ...previous, direct: { ...previous.direct, [field]: value } })) });
   const inputs = form.inputs;
+  const queryProperties = useQueryPropertyBindings(screen?.components ?? [], {
+    components: screen?.components ?? [], tags, parameters: popup.parameters, inputs, communicationLost,
+    state: applicationState?.values,
+  }, { state: applicationState, scope: queryScope, publishedAt: queryScope === "runtime" ? project.publishedAt : undefined,
+    active: Boolean(screen) && !sourceLocked });
   if (!screen) return null;
   const close = () => {
     if (!busy) onClose();
@@ -198,6 +204,7 @@ export default function Popup({
   };
   return (
     <ApplicationStateProvider value={applicationState}>
+    <QueryPropertyProvider value={queryProperties}>
     <dialog
       className="spark-popup"
       ref={dialog}
@@ -298,7 +305,7 @@ export default function Popup({
                 key={component.id}
                 style={
                   {
-                    ...componentGeometry(component, {components:screen.components, tags, parameters:popup.parameters, inputs, communicationLost, state: applicationState?.values}),
+                    ...componentGeometry(component, {components:screen.components, tags, parameters:popup.parameters, inputs, communicationLost, state: applicationState?.values, queryProperties}),
                     "--component-accent":
                       component.props.color || "var(--accent)",
                     "--component-foreground": component.props.color
@@ -374,6 +381,6 @@ export default function Popup({
         </span>
       </footer>
     </dialog>
-    </ApplicationStateProvider>
+    </QueryPropertyProvider></ApplicationStateProvider>
   );
 }

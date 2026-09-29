@@ -1,0 +1,89 @@
+{
+  "name": "Query property workshop",
+  "queries": [ { "id": "production-summary", "name": "Production summary (sample)", "connectionId": "sample", "sql": "SELECT Line, Product, Produced, Target FROM ProductionSummary WHERE Line = @line", "parameters": [ { "name": "line", "type": "string", "defaultValue": "Line1" } ] } ],
+  "sessionState": { "selectedLine": { "type": "string", "value": "Line1" } },
+  "templates": [
+    {
+      "id": "query-property-panel", "name": "Query properties · production panel", "width": 510, "height": 310,
+      "parameters": { "line": "Line1" },
+      "components": [
+        { "id": "heading", "type": "label", "x": 20, "y": 12, "width": 470, "height": 38,
+          "props": { "text": "Production panel", "fontSize": 24,
+            "queryBindings": { "text": { "queryId": "production-summary", "column": "Product", "parameters": { "line": { "expression": "line == 'All' ? '' : line", "references": { "line": { "kind": "parameter", "key": "line" } } } } } } } },
+        { "id": "count", "type": "ledDisplay", "x": 20, "y": 60, "width": 220, "height": 100,
+          "props": { "text": "Produced", "value": 0, "decimals": 0, "color": "#4058ad", "foregroundColor": "#253044",
+            "queryBindings": { "value": { "queryId": "production-summary", "column": "Produced", "parameters": { "line": { "expression": "line == 'All' ? '' : line", "references": { "line": { "kind": "parameter", "key": "line" } } } }, "refresh": { "mode": "poll", "intervalMs": 10000 } } } } },
+        { "id": "target", "type": "ledDisplay", "x": 265, "y": 60, "width": 225, "height": 100,
+          "props": { "text": "Target", "value": 0, "decimals": 0, "color": "#4058ad", "foregroundColor": "#253044",
+            "queryBindings": { "value": { "queryId": "production-summary", "column": "Target", "parameters": { "line": { "expression": "line == 'All' ? '' : line", "references": { "line": { "kind": "parameter", "key": "line" } } } } } } } },
+        { "id": "progress", "type": "progressBar", "x": 20, "y": 177, "width": 470, "height": 46,
+          "props": { "text": "Completion", "color": "#4058ad", "foregroundColor": "#253044", "value": 0, "min": 0, "max": 100, "showValue": false, "showPercent": true,
+            "queryBindings": {
+              "value": { "queryId": "production-summary", "column": "Produced", "parameters": { "line": { "expression": "line == 'All' ? '' : line", "references": { "line": { "kind": "parameter", "key": "line" } } } } },
+              "max": { "queryId": "production-summary", "column": "Target", "parameters": { "line": { "expression": "line == 'All' ? '' : line", "references": { "line": { "kind": "parameter", "key": "line" } } } } }
+            } } },
+        { "id": "inspect", "type": "button", "x": 20, "y": 246, "width": 470, "height": 44,
+          "props": { "text": "Inspect {line}", "action": "openPopup", "targetScreenId": "query-property-inspection", "parameters": { "line": "{line}" } } }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "id": "query-property-workshop", "name": "Query properties", "width": 1120, "height": 1040,
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 20, "width": 1072, "height": 48,
+          "props": { "text": "Named queries. Live component properties.", "fontSize": 28 } },
+        { "id": "intro", "type": "label", "x": 24, "y": 75, "width": 1072, "height": 50,
+          "props": { "text": "Choose a line to change query parameters. Reusable panels, captions, numeric displays and geometry read the same saved query.", "fontSize": 16 } },
+        { "id": "line", "type": "select", "x": 24, "y": 142, "width": 280, "height": 76,
+          "props": { "text": "Selected line", "fieldKey": "line", "defaultValue": "Line1", "stateBinding": { "scope": "session", "key": "selectedLine" },
+            "options": [ { "value": "Line1", "label": "Line 1" }, { "value": "Line2", "label": "Line 2" }, { "value": "Missing", "label": "Missing line · empty result" }, { "value": "All", "label": "All lines · ambiguous result" } ] } },
+        { "id": "refresh", "type": "button", "x": 336, "y": 162, "width": 264, "height": 48,
+          "props": { "text": "Refresh query data", "action": "script", "script": "result = {'message': 'Read query refresh requested. No records were changed.'}" } },
+        { "id": "policy", "type": "label", "x": 628, "y": 142, "width": 468, "height": 76,
+          "props": { "text": "Changes reload immediately. The numeric panels also poll every 10 seconds. Refresh never updates database records.", "fontSize": 15 } },
+        { "id": "selected-panel", "type": "template", "x": 24, "y": 250, "width": 510, "height": 310,
+          "props": { "text": "Selected production panel", "templateId": "query-property-panel", "backgroundColor": "#f5f7ff", "foregroundColor": "#253044",
+            "parameterBindings": { "line": { "expression": "line == 'All' ? '' : line", "references": { "line": { "kind": "sessionState", "key": "selectedLine" } } } } } },
+        { "id": "compare-panel", "type": "template", "x": 586, "y": 250, "width": 510, "height": 310,
+          "props": { "text": "Line 2 comparison", "templateId": "query-property-panel", "parameters": { "line": "Line2" }, "backgroundColor": "#f5f7ff", "foregroundColor": "#253044" } },
+        { "id": "geometry-title", "type": "label", "x": 24, "y": 600, "width": 1072, "height": 38,
+          "props": { "text": "A query can drive size, color and visibility too", "fontSize": 23 } },
+        { "id": "geometry-caption", "type": "label", "x": 24, "y": 650, "width": 1072, "height": 44,
+          "props": { "text": "Scaled production", "fontSize": 17,
+            "queryBindings": { "text": { "queryId": "production-summary", "column": "Product", "transform": "value + ' · bar width = produced / 20'", "parameters": { "line": { "expression": "line == 'All' ? '' : line", "references": { "line": { "kind": "sessionState", "key": "selectedLine" } } } } } } } },
+        { "id": "production-bar", "type": "rectangle", "x": 24, "y": 715, "width": 120, "height": 36,
+          "props": { "text": "Production width", "fillColor": "#596fc7", "strokeColor": "#596fc7", "strokeWidth": 1,
+            "queryBindings": {
+              "width": { "queryId": "production-summary", "column": "Produced", "transform": "value / 20", "parameters": { "line": { "expression": "line == 'All' ? '' : line", "references": { "line": { "kind": "sessionState", "key": "selectedLine" } } } } },
+              "fillColor": { "queryId": "production-summary", "column": "Produced", "transform": "value > 14000 ? '#24876a' : '#596fc7'", "parameters": { "line": { "expression": "line == 'All' ? '' : line", "references": { "line": { "kind": "sessionState", "key": "selectedLine" } } } } }
+            } } },
+        { "id": "status", "type": "label", "x": 24, "y": 790, "width": 1072, "height": 40,
+          "props": { "text": "Production exceeds 14,000 units", "fontSize": 20,
+            "queryBindings": { "visible": { "queryId": "production-summary", "column": "Produced", "transform": "value > 14000", "parameters": { "line": { "expression": "line == 'All' ? '' : line", "references": { "line": { "kind": "sessionState", "key": "selectedLine" } } } } } } } },
+        { "id": "errors", "type": "label", "x": 24, "y": 870, "width": 1072, "height": 70,
+          "props": { "text": "Try Missing line or All lines to see unavailable data. A scalar property requires exactly one row and a non-null scalar cell; it never guesses which row you meant.", "fontSize": 16 } },
+        { "id": "footer", "type": "label", "x": 24, "y": 980, "width": 1072, "height": 32,
+          "props": { "text": "Synthetic built-in sample query · No external database required · No equipment or database writes", "fontSize": 13 } }
+      ]
+    },
+    {
+      "id": "query-property-inspection", "name": "Query inspection", "kind": "popup", "width": 580, "height": 360,
+      "parameters": { "line": "Line1" },
+      "components": [
+        { "id": "title", "type": "label", "x": 24, "y": 22, "width": 532, "height": 44,
+          "props": { "text": "Inspect {line}", "fontSize": 24 } },
+        { "id": "product", "type": "label", "x": 24, "y": 85, "width": 532, "height": 48,
+          "props": { "text": "Product", "fontSize": 22,
+            "queryBindings": { "text": { "queryId": "production-summary", "column": "Product", "parameters": { "line": { "expression": "line == 'All' ? '' : line", "references": { "line": { "kind": "parameter", "key": "line" } } } } } } } },
+        { "id": "quantity", "type": "ledDisplay", "x": 24, "y": 139, "width": 532, "height": 75,
+          "props": { "text": "Current quantity", "value": 0, "decimals": 0,
+            "queryBindings": { "value": { "queryId": "production-summary", "column": "Produced", "parameters": { "line": { "expression": "line == 'All' ? '' : line", "references": { "line": { "kind": "parameter", "key": "line" } } } }, "refresh": { "mode": "poll", "intervalMs": 10000 } } } } },
+        { "id": "note", "type": "label", "x": 24, "y": 219, "width": 532, "height": 48,
+          "props": { "text": "The opening line is fixed; its query data can refresh while the popup remains open.", "fontSize": 15 } },
+        { "id": "close", "type": "button", "x": 24, "y": 290, "width": 532, "height": 44,
+          "props": { "text": "Close inspection", "action": "closePopup" } }
+      ]
+    }
+  ]
+}

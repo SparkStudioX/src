@@ -36,6 +36,7 @@ internal static class ProjectTemplates
         }
         TemplateParameterTypes.ValidateProject(project);
         TemplateParameterBindings.ValidateProject(project);
+        ComponentQueryBindingValidator.ValidateProject(project);
         QueryRepeaterSource.ValidateStructure(project);
         ProjectNavigation.Validate(project, screens);
         ProjectInteractions.ValidateDrawingActions(project);

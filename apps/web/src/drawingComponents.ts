@@ -36,7 +36,7 @@ export function validateDrawingProps(type: string, props: Record<string, unknown
     if (props[field] !== undefined) return "Drawing components accept typed geometry and built-in symbols, not markup, URLs or scripts.";
   for (const field of fields) {
     if (props[field] === undefined) {
-      if (resolved && object(props.bindings) && Object.hasOwn(props.bindings, field)) return `${field} binding is unavailable.`;
+      if (resolved && (object(props.bindings) && Object.hasOwn(props.bindings, field) || object(props.queryBindings) && Object.hasOwn(props.queryBindings, field))) return `${field} binding is unavailable.`;
       continue;
     }
     if (!supportsDrawingProperty(type, field)) return `${field} is not supported on ${type}.`;
@@ -83,7 +83,7 @@ export function resolveDrawingComponent(component: CanvasComponent): DrawingMode
   if (diagnostic) return { ...fallback, diagnostic };
   if (!finite(component.width, 1, 8192) || !finite(component.height, 1, 8192)) return { ...fallback, diagnostic: "Drawing width and height must be from 1 to 8,192." };
   // Accent drives active/flow indication: missing bound accent must not imply a healthy state.
-  if (Object.hasOwn(component.props.bindings ?? {}, "color") && component.props.color === undefined) return { ...fallback, diagnostic: "Accent color binding is unavailable." };
+  if ((Object.hasOwn(component.props.bindings ?? {}, "color") || Object.hasOwn(component.props.queryBindings ?? {}, "color")) && component.props.color === undefined) return { ...fallback, diagnostic: "Accent color binding is unavailable." };
   const props = { ...drawingDefaults(component.type), ...Object.fromEntries(Object.entries(component.props).filter(([, value]) => value !== undefined)) };
   return { ...fallback, available: true, points: (props.points as DrawingPoint[] | undefined)?.map(point => ({ ...point })) ?? [],
     strokeColor: props.strokeColor as string, fillColor: props.fillColor as string ?? "none", strokeWidth: props.strokeWidth as number, rotation: props.rotation as number,

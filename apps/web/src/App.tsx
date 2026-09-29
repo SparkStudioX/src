@@ -51,6 +51,7 @@ import { ComponentEventDiagnostics } from "./ComponentEvents";
 import InputEventsEditor from "./InputEventsEditor";
 import { componentGeometry } from "./propertyBindings";
 import { PropertyBindingsEditor } from "./PropertyBindingsEditor";
+import { QueryPropertyProvider, useQueryPropertyBindings } from "./useQueryPropertyBindings";
 import { DocumentProperties, ProjectSettingsDialog } from "./DocumentProperties";
 import { StateControlEditor } from "./StateControlEditor";
 import { ListTreeOptionsEditor, TablePageSizeEditor } from "./ListTreeOptionsEditor";
@@ -1721,6 +1722,7 @@ export default function App() {
                       components={screen?.components || []}
                       tags={tags}
                       parameters={editorParameters}
+                      queries={queries}
                       inputs={currentPreviewInputs}
                       state={applicationState.values}
                       allowUnresolvedScreenState={Boolean(editingTemplate)}
@@ -2733,6 +2735,9 @@ function Canvas({
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const applicationState = useApplicationStateContext();
+  const queryProperties = useQueryPropertyBindings(screen.components, {
+    components: screen.components, tags, parameters, inputs, communicationLost, state: applicationState?.values,
+  }, { state: applicationState, scope: "designer", active: preview });
   const [scale, setScale] = useState(1);
   const [dragging, setDragging] = useState(false);
   const [marquee, setMarquee] = useState<SelectionBounds | null>(null);
@@ -2853,7 +2858,7 @@ function Canvas({
     element.addEventListener("lostpointercapture", end);
   };
   return (
-    <div
+    <QueryPropertyProvider value={queryProperties}><div
       className={`canvas-host ${dragging ? "dragging" : ""}`}
       ref={hostRef}
       tabIndex={preview ? -1 : 0}
@@ -2900,7 +2905,7 @@ function Canvas({
               className={`canvas-component component-${component.type} ${!preview && selectedIds.includes(component.id) ? "is-selected" : ""}`}
               style={
                 {
-                  ...componentGeometry(component, {components:screen.components, tags, parameters, inputs, communicationLost, state: applicationState?.values}, preview),
+                  ...componentGeometry(component, {components:screen.components, tags, parameters, inputs, communicationLost, state: applicationState?.values, queryProperties}, preview),
                   "--component-accent":
                     component.props.color || "var(--accent)",
                   "--component-foreground": component.props.color
@@ -2980,6 +2985,6 @@ function Canvas({
           ? "LIVE APPLICATION PREVIEW"
           : `${gridSize ? `${gridSize} PX GRID` : "FREE POSITION"} · DRAG EMPTY CANVAS TO SELECT · ARROWS TO NUDGE`}
       </div>
-    </div>
+    </div></QueryPropertyProvider>
   );
 }

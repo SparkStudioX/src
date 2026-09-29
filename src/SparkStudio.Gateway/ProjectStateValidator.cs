@@ -158,9 +158,9 @@ internal static class ProjectStateValidator
                 var (scope, key, expectedType) = InputBinding(component);
                 if (scope == "screen") ValidateBoundDeclaration(component, declarations, key, expectedType, "Screen");
             }
-            foreach (var field in new[] { "bindings", "parameterBindings" })
-            if (component["props"]?[field] is JsonObject bindings)
-                foreach (var binding in bindings.Select(pair => pair.Value).OfType<JsonObject>())
+            foreach (var binding in new[] { "bindings", "parameterBindings" }
+                .SelectMany(field => component["props"]?[field] is JsonObject bindings ? bindings.Select(pair => pair.Value).OfType<JsonObject>() : [])
+                .Concat(ComponentQueryBindingValidator.ParameterExpressions(component)))
                     if (binding["references"] is JsonObject references)
                         foreach (var reference in references.Select(pair => pair.Value).OfType<JsonObject>())
                             if (ProjectStore.Optional(reference, "kind") == "screenState" &&

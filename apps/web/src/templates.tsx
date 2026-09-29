@@ -9,6 +9,7 @@ import { useFormInputs } from "./inputStateBindings";
 import { queryRowFormKey } from "./queryRepeater";
 import { parameterBindingInputs, parameterBindingState, resolveParameterBindings } from "./templateParameterBindings";
 import { useComponentEvents } from "./ComponentEvents";
+import { QueryPropertyProvider, useQueryPropertyBindings, useQueryPropertyContext } from "./useQueryPropertyBindings";
 import { useQueryRepeater } from "./useQueryRepeater";
 import Icon from "./Icon";
 import type {
@@ -105,15 +106,21 @@ export function ProjectComponentView(props: ProjectComponentProps) {
 /** Wrapper bindings belong to the parent form, independently of each template row. */
 function BoundTemplateInstance(props: TemplateInstanceProps) {
   const applicationState = useApplicationStateContext();
+  const queryProperties = useQueryPropertyContext();
   const inherited = { ...props.inheritedAppearance };
-  if (props.component.props.color !== undefined || props.component.props.bindings?.color) delete inherited.foregroundColor;
+  if (props.component.props.color !== undefined || props.component.props.bindings?.color || props.component.props.queryBindings?.color) delete inherited.foregroundColor;
   const defaults = Object.fromEntries(Object.entries(inherited).filter(([key]) => props.component.props[key as keyof InheritedComponentAppearance] === undefined));
   const authored = { ...props.component, props: { ...props.component.props, ...defaults } };
   const result = evaluateComponentBindings(authored, {
     components: props.components ?? [props.component], tags: props.tags, parameters: props.parameters,
     inputs: props.inputs ?? {}, communicationLost: props.communicationLost, state: applicationState?.values,
+    queryProperties,
   });
   const errors = Object.entries(result.errors);
+  const querySamples = queryProperties?.[props.component.id] ?? {};
+  const queryWaiting = errors.length > 0 && errors.every(([target]) => querySamples[target as keyof typeof querySamples]?.status === "loading");
+  const queryErrors = errors.filter(([target]) => Object.hasOwn(props.component.props.queryBindings ?? {}, target));
+  const queryRefreshing = Object.values(querySamples).some(sample => sample?.status === "ready" && sample.refreshing);
   useComponentEvents({ component: props.component, evaluated: result.component, components: props.components ?? [props.component], errors: result.errors,
     parameters: props.parameters, inputs: props.inputs ?? {}, preview: props.preview, scopeKey: props.queryScope, onAutomaticInputChange: props.onAutomaticInputChange });
   const appearance = result.component.props;
@@ -126,7 +133,7 @@ function BoundTemplateInstance(props: TemplateInstanceProps) {
     ...result.component, x: props.component.x, y: props.component.y, width: props.component.width, height: props.component.height,
   };
   const template = props.templates?.find(item => item.id === view.props.templateId);
-  const caption = appearance.bindings?.text ? appearance.text ?? "" : resolvePath(appearance.text || template?.name || "Template instance", props.parameters);
+  const caption = appearance.bindings?.text || appearance.queryBindings?.text ? appearance.text ?? "" : resolvePath(appearance.text || template?.name || "Template instance", props.parameters);
   const canInteract = props.preview && enabled && visible && !props.interactionLocked;
   const gate = useRef(false);
   const writeGate = useRef(false);
@@ -163,8 +170,9 @@ function BoundTemplateInstance(props: TemplateInstanceProps) {
     </div>
     {!props.preview && !visible && <span className="binding-visibility-note">Hidden in runtime</span>}
     {errors.length > 0 && <div className="component-binding-error" role="status" title={errors.map(([target, error]) => `${target}: ${error}`).join("\n")}>
-      Binding error: {errors.map(([target]) => target).join(", ")}
+      {queryWaiting ? "Loading query…" : queryErrors.length ? `Query unavailable: ${queryErrors.map(([target]) => target).join(", ")}` : `Binding error: ${errors.map(([target]) => target).join(", ")}`}
     </div>}
+    {!errors.length && queryRefreshing && <div className="query-property-refreshing" role="status">Refreshing query…</div>}
   </div>;
 }
 
@@ -317,6 +325,9 @@ function TemplateInstanceCell({ component, templates, template, row, context, dy
       else (automatic ? onAutomaticScopedInputChange : onScopedInputChange)?.(scope, key, value);
     } });
   const inputs = form.inputs;
+  const queryProperties = useQueryPropertyBindings(template.components,
+    { components: template.components, tags, parameters: context, inputs, communicationLost, state: applicationState?.values },
+    { state: applicationState, scope: queryScope ?? "designer", publishedAt, active: preview });
   const instance: InstanceAction = {
     ...path[0], ...(path.length > 1 ? { instancePath: path } : {}), template, parameters: context, inputs,
     ...(queryParameters ? { querySourceParameters: queryParameters } : {}),
@@ -324,7 +335,7 @@ function TemplateInstanceCell({ component, templates, template, row, context, dy
     ...(parentBindingState ? { bindingState: structuredClone(parentBindingState) } : {}),
     isCurrent: () => lifetime.current,
   };
-  return <ApplicationStateProvider value={applicationState}><div className="template-instance-cell" data-instance-id={component.id} data-row-id={row?.id} data-instance-path={JSON.stringify(path)} style={{ height: cellHeight }}>
+  return <ApplicationStateProvider value={applicationState}><QueryPropertyProvider value={queryProperties}><div className="template-instance-cell" data-instance-id={component.id} data-row-id={row?.id} data-instance-path={JSON.stringify(path)} style={{ height: cellHeight }}>
               <div
                 className="template-instance-scene"
                 style={{
@@ -339,7 +350,7 @@ function TemplateInstanceCell({ component, templates, template, row, context, dy
                     key={`${template.id}:${leaf.id}`}
                     style={
                       {
-                        ...componentGeometry(leaf, {components:template.components, tags, parameters:context, inputs, communicationLost, state: applicationState?.values}, preview),
+                        ...componentGeometry(leaf, {components:template.components, tags, parameters:context, inputs, communicationLost, state: applicationState?.values, queryProperties}, preview),
                         "--component-accent":
                           leaf.props.color || "var(--accent)",
                         "--component-foreground": leaf.props.color
@@ -391,5 +402,5 @@ function TemplateInstanceCell({ component, templates, template, row, context, dy
                   </div>
                 ))}
               </div>
-            </div></ApplicationStateProvider>;
+            </div></QueryPropertyProvider></ApplicationStateProvider>;
 }

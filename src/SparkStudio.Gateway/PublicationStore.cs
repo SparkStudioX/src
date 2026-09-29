@@ -33,17 +33,19 @@ public sealed class PublicationStore
             var snapshot = store.CapturePublication(revision);
             var project = snapshot["project"]!.AsObject();
             ValidateScreens(project);
+            ComponentQueryBindingValidator.ValidateQueries(project, snapshot["queries"]!.AsArray());
             var referenced = ProjectTemplates.Components(project)
-                .Select(component => component["props"] is not JsonObject props ? null
+                .SelectMany(component => new[] { component["props"] is not JsonObject props ? null
                     : ProjectStore.Optional(component, "type") == "table" ? ProjectStore.Optional(props, "queryId")
                     : InputDefinitionValidator.IsQuerySelection(ProjectStore.Optional(component, "type")) && props["optionsSource"] is JsonObject source ? ProjectStore.Optional(source, "queryId")
-                    : ProjectStore.Optional(component, "type") == "repeater" && props["rowsSource"] is JsonObject rowsSource ? ProjectStore.Optional(rowsSource, "queryId") : null)
+                    : ProjectStore.Optional(component, "type") == "repeater" && props["rowsSource"] is JsonObject rowsSource ? ProjectStore.Optional(rowsSource, "queryId") : null }
+                    .Concat(ComponentQueryBindingValidator.Bindings(component).Select(binding => ProjectStore.Optional(binding, "queryId"))))
                 .Where(id => !string.IsNullOrWhiteSpace(id)).ToHashSet(StringComparer.Ordinal);
             var queries = snapshot["queries"]!.AsArray().OfType<JsonObject>().Where(query => referenced.Contains(ProjectStore.Optional(query, "id"))).ToArray();
             if (queries.Length != referenced.Count)
-                throw new ArgumentException("Every table, query-backed selection and query-backed repeater must reference an existing named query before publishing.");
+                throw new ArgumentException("Every table, query-backed selection, query-backed repeater and property query binding must reference an existing named query before publishing.");
             if (queries.Any(query => ProjectStore.Optional(query, "kind") == "update"))
-                throw new ArgumentException("Tables, query-backed selections and query-backed repeaters require read queries, not update queries.");
+                throw new ArgumentException("Tables, query-backed selections, query-backed repeaters and property query bindings require read queries, not update queries.");
             snapshot["scriptQueries"] = snapshot["queries"]!.DeepClone();
             snapshot["queries"] = new JsonArray(queries.Select(query => query.DeepClone()).ToArray());
             snapshot["publishedAt"] = DateTimeOffset.UtcNow.ToString("O");

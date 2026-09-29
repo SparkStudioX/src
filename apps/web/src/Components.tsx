@@ -79,15 +79,15 @@ export function ComponentView({
   const { type } = component;
   const props = {
     ...component.props,
-    text: Object.hasOwn(component.props.bindings ?? {}, "text")
+    text: Object.hasOwn(component.props.bindings ?? {}, "text") || Object.hasOwn(component.props.queryBindings ?? {}, "text")
       ? component.props.text ?? ""
       : resolvePath(component.props.text || "", parameters),
   };
-  const caption = (fallback: string) => Object.hasOwn(component.props.bindings ?? {}, "text")
+  const caption = (fallback: string) => Object.hasOwn(component.props.bindings ?? {}, "text") || Object.hasOwn(component.props.queryBindings ?? {}, "text")
     ? props.text
     : props.text || fallback;
   const tag = tags.find(
-    (item) => item.path === resolvePath(props.tagPath || "", parameters),
+    (item) => item.path === (props.queryBindings?.tagPath ? props.tagPath : resolvePath(props.tagPath || "", parameters)),
   );
   const precisionLimited =
     typeof tag?.value === "number" &&
@@ -106,7 +106,7 @@ export function ComponentView({
   if (isProcessDisplay(type)) return <ProcessDisplay component={{ ...component, props }} parameters={parameters} />;
   if (isDrawingComponent(type)) return <DrawingComponent component={{ ...component, props }} preview={preview} interactionLocked={interactionLocked} onNavigate={onNavigate} onOpenPopup={onOpenPopup} />;
   if (type === "multiStateIndicator") {
-    const stateValue = Object.hasOwn(props.bindings ?? {}, "stateValue")
+    const stateValue = Object.hasOwn(props.bindings ?? {}, "stateValue") || Object.hasOwn(props.queryBindings ?? {}, "stateValue")
       ? props.stateValue : resolvePath(props.stateValue ?? "", parameters);
     const { state, diagnostic } = resolveIndicatorState({ ...props, stateValue });
     return <div className={`render-state-indicator${state ? "" : " state-unavailable"}`} role="status" aria-label={props.text || "State indicator"}>

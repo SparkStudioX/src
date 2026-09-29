@@ -116,7 +116,7 @@ export function stateDefinitionReferences(documents: (Screen | Template)[], scop
     visited.add(document);
     for (const component of document.components) {
       const add = (key: string, property: string) => { const label = `${document.name} / ${component.props.text || component.id} · ${property}`; if (!(references[key] ??= []).includes(label)) references[key].push(label); };
-      const bindings = [...Object.entries(component.props.bindings || {}), ...Object.entries(component.props.parameterBindings || {}).map(([target, binding]) => [`parameter ${target}`, binding] as const)];
+      const bindings = [...Object.entries(component.props.bindings || {}), ...Object.entries(component.props.parameterBindings || {}).map(([target, binding]) => [`parameter ${target}`, binding] as const), ...Object.entries(component.props.queryBindings || {}).flatMap(([target, source]) => Object.entries(source?.parameters || {}).map(([name, binding]) => [`query ${target} / ${name}`, binding] as const))];
       for (const [target, binding] of bindings)
         for (const reference of Object.values(binding?.references || {}))
           if (reference.kind !== "tag" && reference.kind === `${scope}State`) add(reference.key, target);

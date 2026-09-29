@@ -15,6 +15,7 @@ import {
 import { ThemePicker } from "./Theme";
 import { useBrowserScripts } from "./browserScripts";
 import { componentGeometry } from "./propertyBindings";
+import { QueryPropertyProvider, useQueryPropertyBindings } from "./useQueryPropertyBindings";
 import { instanceRequestScope } from "./templateModel";
 import { runtimeBindingHealth } from "./runtimeQuality";
 import { runtimeMenuItems, runtimeScreenId } from "./runtimeNavigation";
@@ -240,6 +241,10 @@ export default function OperatorRuntime() {
       if (screen) setInputsByScreen(previous => ({ ...previous, [screen.id]: { ...previous[screen.id], [fieldKey]: value } }));
     } });
   const currentInputs = form.inputs;
+  const queryProperties = useQueryPropertyBindings(screen?.components ?? [], {
+    components: screen?.components ?? [], tags, parameters: activeParameters, inputs: currentInputs,
+    communicationLost: !connected, state: applicationState.values,
+  }, { state: applicationState, scope: "runtime", publishedAt: project?.publishedAt, active: Boolean(project && screen) });
   const changeContext = (key: string, value: string) => {
     if (actionBusyId) return;
     const next = { ...parameters, [key]: value };
@@ -380,12 +385,13 @@ export default function OperatorRuntime() {
       setNotice("Fullscreen is unavailable in this browser window.");
     }
   };
-  const { badCount, simulated } = runtimeBindingHealth(
-    screen, project?.templates || [], tags, activeParameters, inputsByScreen, !connected, applicationState.values,
+  const { badCount, simulated, unknownCount } = runtimeBindingHealth(
+    screen, project?.templates || [], tags, activeParameters, inputsByScreen, !connected, applicationState.values, queryProperties,
   );
 
   return (
     <ApplicationStateProvider value={applicationState}>
+    <QueryPropertyProvider value={queryProperties}>
     <div className={`operator-app${showRuntimeControls ? "" : " operator-application-only"}`}>
       {showRuntimeControls && <header className="operator-header">
         <div className="operator-brand">
@@ -476,13 +482,15 @@ export default function OperatorRuntime() {
           </div>
           <div className="operator-screen-health">
             <span
-              className={`quality-dot ${badCount || !connected ? "bad" : ""}`}
+              className={`quality-dot ${badCount || !connected ? "bad" : unknownCount ? "neutral" : ""}`}
             />
             {!connected
               ? "Values may be stale"
               : badCount
                 ? `${badCount} binding${badCount > 1 ? "s need" : " needs"} attention`
-                : "Live data healthy"}
+                : unknownCount
+                  ? "Check live values inside reusable panels"
+                  : "Live data healthy"}
           </div>
         </div>
       )}
@@ -609,7 +617,7 @@ export default function OperatorRuntime() {
                     className={`canvas-component component-${component.type}`}
                     style={
                       {
-                        ...componentGeometry(component, { components: screen.components, tags, parameters: activeParameters, inputs: currentInputs, communicationLost: !connected, state: applicationState.values }),
+                        ...componentGeometry(component, { components: screen.components, tags, parameters: activeParameters, inputs: currentInputs, communicationLost: !connected, state: applicationState.values, queryProperties }),
                         "--component-accent":
                           component.props.color || "var(--accent)",
                         "--component-foreground": component.props.color
@@ -757,6 +765,6 @@ export default function OperatorRuntime() {
         <span className="operator-wordmark">sparkstudio</span>
       </footer>}
     </div>
-    </ApplicationStateProvider>
+    </QueryPropertyProvider></ApplicationStateProvider>
   );
 }

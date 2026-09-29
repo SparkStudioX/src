@@ -24,7 +24,7 @@ function loader(harness=false){const cache=new Map();return function load(name){
     .replace(/import "\.\/[^"\n]+\.css";\r?\n/g,'')
     .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g,(_all,prefix,_quote,dependency)=>{
       const stub=harness&&['applicationState','templates','inputStateBindings','ComponentEvents'].includes(name)&&dependency==='react'?hookUrl
-        :harness&&name==='templates'?({'./BoundComponent':leafUrl,'./useQueryRepeater':queryUrl})[dependency]:undefined;
+        :harness&&name==='templates'?({'./BoundComponent':leafUrl,'./useQueryRepeater':queryUrl,'./useQueryPropertyBindings':moduleUrl('export const useQueryPropertyBindings=()=>({});export const useQueryPropertyContext=()=>undefined;export const QueryPropertyProvider=({children})=>children;')})[dependency]:undefined;
       return prefix+JSON.stringify(stub??(dependency.startsWith('./')?load(dependency.slice(2)):pathToFileURL(require.resolve(dependency)).href));
     });
   const result=moduleUrl(code);cache.set(name,result);return result;
@@ -163,7 +163,7 @@ await check('private defaults appear in real rendering and health without leakin
   const outer=store.createScope('outer',{count:{type:'number',value:9}});
   const html=renderToStaticMarkup(React.createElement(realState.ApplicationStateProvider,{value:{...store.context(scope,outer),store}},React.createElement(realTemplates.ProjectComponentView,{component:repeat,components:[repeat],templates:[template],screenId:'main',tags:[],parameters:{},inputs:{},preview:true,onNavigate(){}})));
   assert.match(html,/>2</);assert.doesNotMatch(html,/Binding error/);
-  assert.deepEqual(runtimeBindingHealth(screen,[template],[],{}, {},false,store.context(scope,outer).values),{badCount:0,simulated:false});
+  assert.deepEqual(runtimeBindingHealth(screen,[template],[],{}, {},false,store.context(scope,outer).values),{badCount:0,simulated:false,unknownCount:1});
 });
 
 // Hook-only owners make Preview and popup lifetimes independently observable.

@@ -64,7 +64,8 @@ internal static class ProcessDisplayValidator
     {
         if (!Types.Contains(type) || type == "ledDisplay") return;
         var bindings = props["bindings"] as JsonObject;
-        if (new[] { "min", "max" }.Any(key => bindings?.ContainsKey(key) == true && !constants.ContainsKey(key))) return;
+        var queryBindings = props["queryBindings"] as JsonObject;
+        if (new[] { "min", "max" }.Any(key => (bindings?.ContainsKey(key) == true || queryBindings?.ContainsKey(key) == true) && !constants.ContainsKey(key))) return;
         var minimum = constants.TryGetValue("min", out var min) ? (double)min : Number(props, "min", 0);
         var maximum = constants.TryGetValue("max", out var max) ? (double)max : Number(props, "max", 100);
         ValidateRange(minimum, maximum);

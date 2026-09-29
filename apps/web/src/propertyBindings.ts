@@ -16,6 +16,7 @@ export interface BindingContext {
   inputs: InputValues;
   communicationLost?: boolean;
   state?: import("./types").RuntimeStateValues;
+  queryProperties?: import("./types").QueryPropertyValues;
 }
 
 export const processBindingTargets = ["value", "min", "max", "decimals", "unit", "showValue", "showPercent", "orientation"] as const;
@@ -179,19 +180,28 @@ export function validatePropertyBinding(binding: PropertyBinding, target?: Bindi
     const node = validateDefinition(binding);
     if (target && parse(binding.expression).names.size === 0) validateTarget(target, evaluate(node, () => fail("A reference is missing.")));
     if (component && (target === "min" || target === "max")) {
-      const range = (key: "min" | "max") => {
-        const definition = key === target ? binding : component.props.bindings?.[key];
-        if (!definition) return component.props[key] ?? (key === "min" ? 0 : 100);
-        if (parse(definition.expression).names.size) return undefined;
-        const value = evaluate(validateDefinition(definition), () => fail("A reference is missing."));
-        validateTarget(key, value); return value as number;
-      };
-      const minimum = range("min"), maximum = range("max");
-      if (minimum !== undefined && maximum !== undefined && minimum >= maximum) fail("Minimum must be less than maximum.");
+      validateComponentBindingRange({ ...component, props: { ...component.props, bindings: { ...component.props.bindings, [target]: binding } } });
     }
     return undefined;
   }
   catch (error) { return error instanceof Error ? error.message : "Invalid property binding."; }
+}
+
+/** Compare only values that are known without fetching or observing runtime sources. */
+export function validateComponentBindingRange(component: CanvasComponent): void {
+  const range = (key: "min" | "max"): number | undefined => {
+    const expression = component.props.bindings?.[key];
+    const query = component.props.queryBindings?.[key];
+    if (!expression && !query) return component.props[key] ?? (key === "min" ? 0 : 100);
+    const definition = expression ?? (query?.transform === undefined ? undefined
+      : { expression: query.transform, references: { value: { kind: "custom" as const, key: "value" } } });
+    if (!definition) return undefined;
+    const constant = constantPropertyBinding(definition);
+    if (!constant.constant) return undefined;
+    validateTarget(key, constant.value); return constant.value as number;
+  };
+  const minimum = range("min"), maximum = range("max");
+  if (minimum !== undefined && maximum !== undefined && minimum >= maximum) fail("Minimum must be less than maximum.");
 }
 
 function validateTarget(target: BindingTarget, value: Scalar): void {
@@ -300,6 +310,11 @@ export function evaluatePropertyBinding(binding: PropertyBinding, component: Can
   return { value, ...(simulated ? { simulated: true as const } : {}) };
 }
 
+/** Query cells use exactly the same scalar and target constraints as expressions. */
+export function validateBindingTargetValue(target: BindingTarget, value: unknown): asserts value is Scalar {
+  validateTarget(target, scalar(value));
+}
+
 /** Pure evaluation: a failure affects one target; saved definitions are never mutated. */
 export function evaluateComponentBindings(component: CanvasComponent, context: BindingContext): {
   component: CanvasComponent;
@@ -309,25 +324,35 @@ export function evaluateComponentBindings(component: CanvasComponent, context: B
 } {
   const errors: Partial<Record<BindingTarget, string>> = {};
   let simulated = false;
-  if (component.props.bindings === undefined) return { component, errors };
+  if (component.props.bindings === undefined && component.props.queryBindings === undefined) return { component, errors };
   const result: CanvasComponent = { ...component, props: { ...component.props } };
-  if (!object(component.props.bindings)) {
+  if (component.props.bindings !== undefined && !object(component.props.bindings) || component.props.queryBindings !== undefined && !object(component.props.queryBindings)) {
     errors.text = "Component bindings must be an object.";
     result.props.text = "Binding error";
     result.props.enabled = false;
     return { component: result, errors };
   }
   for (const target of bindingTargets) {
-    if (!own(component.props.bindings, target)) continue;
+    const expressionBound = own(component.props.bindings ?? {}, target), queryBound = own(component.props.queryBindings ?? {}, target);
+    if (!expressionBound && !queryBound) continue;
     try {
       if (!supportsBindingTarget(component.type, target)) fail(`${target} bindings are not supported on ${component.type}.`);
-      const binding = component.props.bindings[target]!;
       let targetSimulated = false;
-      const value = evaluate(validateDefinition(binding), name => {
-        const reference = resolveReference(binding.references[name], component, context);
-        targetSimulated ||= reference.simulated === true;
-        return reference.value;
-      });
+      let value: Scalar;
+      if (queryBound) {
+        if (expressionBound) fail("Choose an expression or a query for this property, not both.");
+        const sample = context.queryProperties?.[component.id]?.[target];
+        if (sample?.status === "idle" || !context.queryProperties) continue;
+        if (sample?.status !== "ready") fail(sample?.error || (sample?.status === "loading" ? "Query property is loading." : "Query property is unavailable."));
+        value = scalar(sample?.value);
+      } else {
+        const binding = component.props.bindings![target]!;
+        value = evaluate(validateDefinition(binding), name => {
+          const reference = resolveReference(binding.references[name], component, context);
+          targetSimulated ||= reference.simulated === true;
+          return reference.value;
+        });
+      }
       validateTarget(target, value);
       if (target === "text" || target === "stateValue") result.props[target] = String(value);
       else if (target === "enabled" || target === "visible" || target === "showValue" || target === "showPercent" || target === "flowing" || target === "flowReverse" || target === "active") result.props[target] = boolean(value);

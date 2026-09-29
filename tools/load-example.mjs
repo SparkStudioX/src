@@ -12,7 +12,7 @@ assert.ok(args.filter(arg => arg.startsWith('--')).every(arg => arg === '--publi
 const positional = args.filter(arg => !arg.startsWith('--'));
 assert.ok(positional.length >= 1 && positional.length <= 2, 'Choose a bundled example name, then an optional local gateway URL.');
 const [name, address = 'http://127.0.0.1:5090'] = positional;
-assert.ok(['application-form', 'reusable-applications', 'assets-popups', 'operator-inputs', 'property-bindings', 'component-workshop', 'template-properties', 'state-controls', 'process-displays', 'process-graphics', 'application-state', 'nested-forms', 'input-state-bindings', 'template-parameter-bindings', 'instance-state', 'component-events', 'template-parameter-state'].includes(name), 'Choose a bundled example name.');
+assert.ok(['application-form', 'reusable-applications', 'assets-popups', 'operator-inputs', 'property-bindings', 'component-workshop', 'template-properties', 'state-controls', 'process-displays', 'process-graphics', 'application-state', 'nested-forms', 'input-state-bindings', 'template-parameter-bindings', 'instance-state', 'component-events', 'template-parameter-state', 'query-properties'].includes(name), 'Choose a bundled example name.');
 const base = new URL(address);
 assert.ok(['127.0.0.1', 'localhost'].includes(base.hostname) && ['5090', '5091'].includes(base.port), 'Examples are restricted to local development gateways on ports 5090 and 5091.');
 assert.ok(base.protocol === 'http:' && base.pathname === '/' && !base.username && !base.password && !base.search && !base.hash, 'Use a plain local gateway URL.');
@@ -39,6 +39,19 @@ async function api(path, method = 'GET', body) {
 }
 
 const project = await api('/project');
+const newQueries = [];
+if (name === 'query-properties') {
+  const queries = await api('/queries');
+  for (const query of example.queries) {
+    const existing = queries.find(item => item.id === query.id);
+    if (existing) {
+      assert.equal(existing.connectionId, query.connectionId, 'The sample query conflicts with an existing connection; no changes made.');
+      assert.equal(existing.kind ?? 'query', 'query', 'The sample query conflicts with an existing update query; no changes made.');
+      assert.equal(existing.sql, query.sql, 'The sample query conflicts with existing SQL; no changes made.');
+      assert.deepEqual(existing.parameters, query.parameters, 'The sample query conflicts with existing parameter definitions; no changes made.');
+    } else newQueries.push(query);
+  }
+}
 const definitions = await api('/tag-definitions');
 const newTags = [];
 for (const tag of example.tags || []) {
@@ -79,6 +92,7 @@ for (const asset of assets) {
   assert.equal(savedAsset.id, asset.id, 'The gateway asset ID must match the example reference.');
 }
 for (const tag of newTags) await api('/tags', 'POST', tag);
+for (const query of newQueries) await api(`/queries/${encodeURIComponent(query.id)}`, 'PUT', query);
 const saved = added || addedState ? await api('/project', 'PUT', next) : project;
 console.log(`Added ${added} project resources, ${addedState} session state defaults and ${newTags.length} memory tags; existing resources and tag values preserved.`);
 if (assets.length) console.log(`${assets.length} bundled local images are available in the asset library.`);

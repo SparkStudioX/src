@@ -24,3 +24,4 @@
 .bound-component.has-custom-background .spinner-control button:hover:not(:disabled) { background-color: var(--component-background); }
 .bound-component.has-custom-foreground .spinner-control button { color: var(--component-text-color); }
 .bound-component.has-custom-font .spinner-control button { font-size: var(--component-font-size); }
+.query-property-refreshing { position: absolute; right: 4px; bottom: 3px; font-size: 10px; color: var(--muted); pointer-events: none; }
