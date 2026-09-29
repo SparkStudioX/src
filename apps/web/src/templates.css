@@ -10,7 +10,8 @@
   touch-action: auto;
 }
 .template-instance-host.is-template {
-  overflow: hidden;
+  /* Embedded forms fit their frame; clipping must not create another scroll container. */
+  overflow: clip;
 }
 .template-instance-grid {
   display: grid;
@@ -22,7 +23,8 @@
 .template-instance-cell {
   position: relative;
   min-width: 0;
-  overflow: hidden;
+  /* Only the repeater host scrolls. Row frames just clip scaled template content. */
+  overflow: clip;
   border-radius: 6px;
   background: var(--template-background, var(--panel, #fff));
   box-shadow: inset 0 0 0 1px var(--border, #e1e8d8);
@@ -38,6 +40,10 @@
   position: absolute;
   touch-action: manipulation;
   user-select: text;
+}
+.template-instance-host.template-authoring {
+  /* Edit the instance as one canvas component; row interaction belongs to Preview/runtime. */
+  pointer-events: none;
 }
 .template-authoring .template-leaf {
   pointer-events: none;

@@ -6,7 +6,7 @@ import type { RuntimePresentation } from "./operatorAccessModel";
 import type { Publication } from "./types";
 import "./operatorAccess.css";
 
-export function SessionIdentity({ operator = false }: { operator?: boolean }) {
+export function SessionIdentity({ operator = false, onAccountSettings }: { operator?: boolean; onAccountSettings?: () => void }) {
   const { user, gatewayAdmin, permissions, signOut } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -16,9 +16,11 @@ export function SessionIdentity({ operator = false }: { operator?: boolean }) {
     try { await signOut(); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to sign out."); setBusy(false); }
   };
-  return <div className={`session-identity${operator ? " operator-identity" : ""}`}>
-    <div className="session-person"><Icon name="shield" size={15} /><span><strong>{user?.displayName || user?.username || "Signed in"}</strong><small>{operator ? permissions.operate ? "Operator" : "Read-only viewer" : gatewayAdmin ? "Gateway administrator" : "Engineering"}</small></span></div>
-    <div className="session-actions">{operator && <button type="button" disabled={busy} onClick={() => void leave()}>Switch user</button>}<button type="button" disabled={busy} onClick={() => void leave()}>{busy ? "Signing out…" : "Sign out"}</button></div>
+  const name = user?.displayName || user?.username || "Signed in";
+  const person = <><Icon name="shield" size={15} /><span><strong>{name}</strong><small>{operator ? permissions.operate ? "Operator" : "Read-only viewer" : gatewayAdmin ? "Gateway administrator" : "Engineering"}</small></span></>;
+  return <div className={`session-identity${operator ? " operator-identity" : ""}${onAccountSettings ? " sidebar-session" : ""}`}>
+    {onAccountSettings ? <button type="button" className="session-person session-settings" onClick={onAccountSettings} aria-label={`Account settings for ${name}`} title="Account settings" disabled={busy}>{person}</button> : <div className="session-person">{person}</div>}
+    <div className="session-actions">{operator && <button type="button" disabled={busy} onClick={() => void leave()}>Switch user</button>}<button type="button" className={onAccountSettings ? "session-sign-out" : undefined} aria-label={busy ? "Signing out…" : "Sign out"} title={onAccountSettings ? "Sign out" : undefined} disabled={busy} onClick={() => void leave()}>{onAccountSettings ? <Icon name="logout" size={18} /> : busy ? "Signing out…" : "Sign out"}</button></div>
     {error && <span className="session-error" role="alert">{error}</span>}
   </div>;
 }

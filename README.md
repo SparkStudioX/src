@@ -16,18 +16,18 @@ The current source includes **local accounts, separate engineering/operator sess
 - Reusable templates and saved-row repeaters nested through four template levels, with independent inputs for every complete instance/row path, typed parameters, inherited wrapper properties and validated popup provenance. Query-backed repeaters stay at the screen or popup root.
 - A name/value property sheet with direct fx controls for common presentation/layout properties and type-specific value, scale, formatting, state and tag sources. Sources include form inputs, typed template parameters, sibling custom properties and tags.
 - Optional browser JavaScript input change/commit events with validated same-form assignments, separate from gateway Python button actions.
-- Declared, typed browser session and screen state, read by bindings and updated through script helpers. Nested templates share their containing screen's state; popups start fresh screen state while retaining the session.
+- Declared, typed browser session and screen state, read by bindings and updated through script helpers or two-way value bindings on thirteen non-password input types. Nested templates share their containing screen's state; popups start fresh screen state while retaining the session.
 - A persistent scripting workspace for reusable libraries and gateway/browser events, plus an expanded Python onClick editor with syntax highlighting, completion and form/parameter context.
 - Immutable local images and parameterized modal popups with independent form state.
 - OPC UA discovery, browse/read and monitored-item subscriptions; managed local SQLite databases and SQL Server connections with parameterized named reads and explicit updates.
 - Query tables with configurable headings, order, visibility, widths, alignment and value formats, plus loaded-row paging, filtering, sorting, refresh, selection into declared form inputs and validated inline edits through published Python handlers.
 - Single-selection dropdowns, lists and trees with static or named-query choices, validated row-to-form mappings and published server-side membership checks. Query trees declare a parent column; input-driven tag paths let a selected machine determine its process display.
-- Light, Dark and System themes, browser preference persistence and a collapsible designer sidebar.
+- Light, Dark and System themes, browser preference persistence, a collapsible designer sidebar and horizontally resizable project/properties panes with saved widths.
 - A self-contained Windows package, an unsigned Windows installer and a non-root Linux container baseline.
 
 These are bounded implementations, not complete Ignition feature or file-format compatibility. Real SQL Server validation, external OPC writes, expression tags, UDTs, historian, alarms, reporting and migration tooling remain outstanding. See the [component matrix](docs/architecture/COMPONENTS.md).
 
-The current source includes query-backed forms, single-selection lists/trees, loaded-result table paging and inline editing, typed nested templates, browser session/screen state, state controls, five process displays and six drawing/symbol types. Supplied-data charts are the next palette family; historian, alarms and reporting still need their backing subsystems. The [component guide](docs/architecture/COMPONENTS.md) defines behavior and remaining work; the [verification ledger](docs/architecture/PARITY.md) separates current evidence from earlier package results. SQLite has real disposable-database and gateway/Python integration checks; SQL Server reads and DML still need a live test server. The linked public preview installer records the earlier baseline.
+The current source includes query-backed forms, single-selection lists/trees, loaded-result table paging and inline editing, typed nested templates, two-way input/session/screen-state bindings, state controls, five process displays and six drawing/symbol types. Next application work is template-parameter fx bindings with gateway context validation, followed by private instance state and property-change events. Supplied-data charts are the next palette family; historian, alarms and reporting still need their backing subsystems. The [component guide](docs/architecture/COMPONENTS.md) defines behavior and remaining work; the [verification ledger](docs/architecture/PARITY.md) separates current evidence from earlier package results. SQLite has real disposable-database and gateway/Python integration checks; SQL Server reads and DML still need a live test server. The linked public preview installer records the earlier baseline.
 
 ## Run on Windows
 
@@ -41,6 +41,18 @@ For development, use Windows x64 with Node/npm available. Node 22.17.1 was used 
 ```
 
 Open the default local address printed by the script, `http://127.0.0.1:5090`. Stop the foreground gateway with Ctrl+C. Development data is stored in `.data/development`; `-Port 5092` selects another port.
+
+For automatic source updates, stop the existing development gateway, then run in **PowerShell 7**:
+
+```powershell
+.\tools\dev.ps1 -Watch -NoBuild
+```
+
+Keep this PowerShell terminal open while developing. Watch mode runs in the foreground; closing or stopping its host can end both servers. It is not a Windows service.
+
+Watch mode keeps the browser address at `http://127.0.0.1:5090`. Vite updates frontend code through hot module replacement; a separate `dotnet watch` process on loopback port 5092 updates gateway code or restarts it when an edit cannot be applied live. The browser proxies API requests and live connections through the same public development address, retaining the existing login, cookies and origin checks. Designer/runtime page routes stay with Vite. `-Port 5094 -BackendPort 5095` selects a different pair. Both ports must be free; the script never stops an existing server for you.
+
+The same `.data/development` projects and accounts are used by default. For a separate test environment, pass `-DataDirectory .data/my-test-gateway`; relative directories resolve from the source repository root. Run only one gateway against any data directory. Ctrl+C stops both process trees started by watch mode; diagnostics remain under local-only `.data/dev-watch/`. Run the initial build first; omit `-NoBuild` to restore/build prerequisites before watching. Changes to dependencies may require another build. Browser refresh or backend restart can reset unsaved browser state, so save Designer edits before changing application code. Source updates do not publish project drafts or update an installed package. Without `-Watch`, the existing build-and-run behavior is unchanged; an already-running packaged gateway does not adopt source edits automatically.
 
 Create the first administrator using the local code in `.data/development/security/setup-code.txt`. Choose your own password in the setup form; there is no default password. Existing projects remain intact. Use **Security** to add accounts and assign per-project Design/Publish/View/Operate permissions. Operator links require a separate operator sign-in. The current public installer predates this account system.
 
@@ -60,6 +72,7 @@ node tools/load-example.mjs component-workshop
 node tools/load-example.mjs template-properties
 node tools/load-example.mjs nested-forms
 node tools/load-example.mjs application-state
+node tools/load-example.mjs input-state-bindings
 node tools/load-example.mjs state-controls
 node tools/load-example.mjs process-displays
 node tools/load-example.mjs process-graphics
@@ -109,6 +122,10 @@ The [input workshop](examples/operator-inputs.json) demonstrates the six new con
 The [Binding workshop](examples/property-bindings.json) demonstrates captions, hex color and visibility driven by form inputs, typed custom properties and a tag-qualified Enabled condition. Its Python button returns the current form values. Use the inspector's binding dialog to choose named sources and preview an expression result. Hidden controls remain selectable while designing, and disappear in Preview and the operator application. These bindings are interface behavior, not permissions. See [component properties and bindings](docs/architecture/PROPERTY_BINDINGS.md) for syntax, scope, errors and limits.
 
 Define typed **Session state** in Project settings and **Screen state** in each screen or popup property sheet. Read these values with fx references and update them from browser scripts through `app.state.get/set/reset`. Session values survive screen navigation in the current tab; screen values reset on leaving, and each popup starts fresh. Only authored defaults are saved or exported. The [application-state guide](docs/architecture/APPLICATION_STATE.md) and [two-screen workshop](examples/application-state.json) show the scopes, script helpers and reset behavior. Load the example with `node tools/load-example.mjs application-state`, or import its generated `.sparkproj` through Projects.
+
+For a two-way value connection, select a supported input and choose **Data → Value → fx**. Bind it to a declared state key of the matching Text, Number or Boolean type. Valid edits update other bound controls across root forms, nested templates, repeater rows and popups; script updates flow back into the controls. An invalid draft stays local, leaves shared state unchanged and blocks submission of its own form until corrected. Password inputs are excluded. The [input-state guide](docs/architecture/INPUT_STATE_BINDINGS.md) explains compatible controls and restrictions. Its [workshop](examples/input-state-bindings.json) provides mirrored inputs, nested forms and independent screen/popup notes without database or equipment writes; import the generated local-only `artifacts/examples/input-state-bindings.sparkproj`, or use the example loader above.
+
+Use **Project settings** above the left project tree for project-wide properties; the right property sheet follows the selected screen, template or component. Drag either vertical separator to resize the project and properties panes. Focus a separator and use Left/Right arrows for 8-pixel changes, Shift+arrows for 32 pixels, or Home/End for its limits; double-click restores default widths. Width preferences survive reload and fit around a usable canvas. A repeater consumes wheel scrolling while it can scroll, then lets scrolling continue in the surrounding screen.
 
 The common property sheet shows name/value rows and an fx control for each of its 13 binding targets. Positions and sizes can bind just like captions and colors. Geometry bindings apply in Preview and the operator application while the authoring canvas keeps stored geometry for stable handles. Existing type-specific and complex configuration editors remain available; not every component field supports a binding.
 

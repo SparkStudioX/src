@@ -9,7 +9,18 @@
 .session-actions button:disabled { opacity:.6; cursor:wait; }
 .session-error { flex-basis:100%; color:var(--danger, #dc2626); font-size:12px; }
 .nav-bottom > .session-identity { padding:10px 4px; }
-.workspace-collapsed .session-identity .session-person span, .workspace-collapsed .session-actions { display:none; }
+.sidebar-session { flex-wrap:nowrap; gap:6px; border-top:1px solid var(--nav-border); color:var(--nav-text); }
+.sidebar-session .session-settings { flex:1; min-width:0; border:0; background:none; color:inherit; text-align:left; padding:8px 4px; border-radius:6px; cursor:pointer; }
+.sidebar-session .session-settings > svg { flex-shrink:0; }
+.sidebar-session .session-person small { color:var(--nav-muted); font-size:9px; white-space:normal; }
+.sidebar-session .session-settings:hover { background:var(--nav-hover); color:var(--nav-heading); }
+.sidebar-session .session-actions { flex-shrink:0; }
+.sidebar-session .session-sign-out { display:grid; place-items:center; width:34px; height:36px; padding:0; color:var(--nav-muted); border-radius:6px; }
+.sidebar-session .session-sign-out:hover { background:var(--nav-hover); color:var(--nav-heading); }
+.sidebar-session button:focus-visible { outline:2px solid var(--nav-accent); outline-offset:2px; }
+.workspace-collapsed .sidebar-session .session-person { display:none; }
+.workspace-collapsed .sidebar-session { justify-content:center; }
+@media (max-width:1050px) { .sidebar-session .session-person { display:none; } .sidebar-session { justify-content:center; } }
 .operator-identity { padding:0 12px; border-left:1px solid var(--border); }
 .operator-access-publication { display:flex; flex-wrap:wrap; gap:24px; margin:12px 0; }
 .operator-access-publication dt { font-size:11px; color:var(--text-muted); }

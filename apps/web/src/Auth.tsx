@@ -24,6 +24,7 @@ interface AuthContextValue {
   epoch: number;
   publicOperatorBaseUrl: string;
   signOut: () => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   refresh: () => Promise<void>;
   phase: "checking" | "ready" | "unavailable" | "signingOut";
   setupRequired: boolean;
@@ -57,7 +58,8 @@ export function AuthProvider({ audience, projectId, children }: { audience: Auth
   const [notice, setNotice] = useState("");
   const [epoch, setEpoch] = useState(0);
   const serial = useRef(0), fingerprint = useRef(""), signedOut = useRef(false), authenticating = useRef(false), loggingOut = useRef(false);
-  const active = useRef(true), channel = useRef<BroadcastChannel | null>(null);
+  const changingPassword = useRef(false);
+  const active = useRef(true), lifecycle = useRef(0), channel = useRef<BroadcastChannel | null>(null);
 
   const apply = useCallback((next: AuthSession | null) => {
     const key = next?.user ? JSON.stringify([next.user, next.permissions, next.csrfToken]) : "anonymous";
@@ -86,7 +88,7 @@ export function AuthProvider({ audience, projectId, children }: { audience: Auth
   }, [apply, audience]);
 
   const refresh = useCallback(async () => {
-    if (signedOut.current || authenticating.current || loggingOut.current) return;
+    if (signedOut.current || authenticating.current || loggingOut.current || changingPassword.current) return;
     const run = ++serial.current;
     const query = new URLSearchParams({ audience });
     if (projectId) query.set("projectId", projectId);
@@ -103,7 +105,7 @@ export function AuthProvider({ audience, projectId, children }: { audience: Auth
   }, [apply]);
 
   useEffect(() => {
-    active.current = true; signedOut.current = signOutIntent(audience).active;
+    active.current = true; lifecycle.current++; signedOut.current = signOutIntent(audience).active;
     configureAuthSession({ audience, projectId, csrfToken: null, key: "checking" });
     if (signedOut.current) {
       apply(null); setPhase(signOutIntent(audience).pending ? "signingOut" : "ready"); setNotice("Signed out. Enter your credentials to continue.");
@@ -124,11 +126,11 @@ export function AuthProvider({ audience, projectId, children }: { audience: Auth
       channel.current = new BroadcastChannel(`sparkstudio-auth-${audience}`);
       channel.current.onmessage = event => { if (event.data === "signed-out") onStoredIntent(); };
     }
-    return () => { active.current = false; serial.current++; window.clearInterval(timer); window.removeEventListener("focus", onFocus); window.removeEventListener(authExpiredEvent, onExpired); window.removeEventListener("storage", onStoredIntent); channel.current?.close(); channel.current = null; };
+    return () => { active.current = false; lifecycle.current++; serial.current++; window.clearInterval(timer); window.removeEventListener("focus", onFocus); window.removeEventListener(authExpiredEvent, onExpired); window.removeEventListener("storage", onStoredIntent); channel.current?.close(); channel.current = null; };
   }, [audience, projectId, refresh, expire, apply, request]);
 
   const signOut = useCallback(async () => {
-    if (loggingOut.current) return;
+    if (loggingOut.current || changingPassword.current) return;
     const csrf = session?.csrfToken;
     loggingOut.current = true; storeSignOutIntent(audience, true);
     signedOut.current = true; expire(""); setPhase("signingOut"); channel.current?.postMessage("signed-out");
@@ -137,8 +139,26 @@ export function AuthProvider({ audience, projectId, children }: { audience: Auth
     finally { loggingOut.current = false; storeSignOutIntent(audience, false); channel.current?.postMessage("signed-out"); if (active.current) setPhase("ready"); }
   }, [audience, expire, request, session?.csrfToken]);
 
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    if (changingPassword.current) throw new Error("Your password change is still finishing. Please wait.");
+    if (!session?.user || !session.csrfToken || signedOut.current || loggingOut.current || authenticating.current)
+      throw new Error("Sign in before changing your password.");
+    // A refresh started before this mutation must not restore a revoked session.
+    changingPassword.current = true; serial.current++;
+    const started = lifecycle.current;
+    try {
+      const result = await request<{ changed: boolean }>("password", { currentPassword, newPassword }, session.csrfToken);
+      if (result.changed !== true) throw new Error("The gateway did not confirm your password change.");
+      if (!active.current || lifecycle.current !== started) return;
+      signedOut.current = true; storeSignOutIntent(audience, false);
+      expire("Password changed. Sign in with your new password.");
+      channel.current?.postMessage("signed-out");
+    } finally { changingPassword.current = false; }
+  }, [audience, expire, request, session]);
+
   const authenticate = useCallback(async (path: "login" | "setup", body: unknown) => {
     if (loggingOut.current || signOutIntent(audience).pending) throw new Error("Sign-out is still finishing. Please wait before signing in.");
+    if (changingPassword.current) throw new Error("Your password change is still finishing. Please wait before signing in.");
     if (authenticating.current) return;
     authenticating.current = true;
     const run = ++serial.current;
@@ -154,10 +174,10 @@ export function AuthProvider({ audience, projectId, children }: { audience: Auth
   const value = useMemo<AuthContextValue>(() => ({
     user: session?.user ?? null, gatewayAdmin: Boolean(session?.user?.gatewayAdmin), permissions: session?.permissions ?? noPermissions,
     csrfToken: session?.csrfToken ?? null, audience, projectId, epoch, publicOperatorBaseUrl: session?.operatorBaseUrl ?? "",
-    signOut, refresh, phase, setupRequired: session?.setupRequired ?? false, notice,
+    signOut, changePassword, refresh, phase, setupRequired: session?.setupRequired ?? false, notice,
     signIn: (username, password) => authenticate("login", { audience, username, password, ...(projectId ? { projectId } : {}) }),
     setup: (username, displayName, password, setupCode) => authenticate("setup", { username, displayName, password, setupCode }),
-  }), [session, audience, projectId, epoch, signOut, refresh, phase, notice, authenticate]);
+  }), [session, audience, projectId, epoch, signOut, changePassword, refresh, phase, notice, authenticate]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

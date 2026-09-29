@@ -1,5 +1,6 @@
 using System.Net;
 using System.Security.Claims;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 
@@ -8,6 +9,8 @@ namespace SparkStudio.Gateway;
 public sealed record SecuritySetupRequest(string SetupCode, string Username, string Password, string? DisplayName = null);
 public sealed record SecurityLoginRequest(string Audience, string Username, string Password, string? ProjectId = null);
 public sealed record SecurityLogoutRequest(string Audience);
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record SecurityPasswordRequest(string? CurrentPassword, string? NewPassword);
 
 /// <summary>Separate browser sessions for engineering and operator applications.</summary>
 public static class GatewaySecurity
@@ -152,6 +155,33 @@ public static class GatewaySecurity
             await SignIn(context, store, user, request.Audience);
             store.Audit(user, "auth.login", request.ProjectId, "allowed");
             return Results.Json(SessionResponse(context, store, catalog, request.Audience, user, request.ProjectId));
+        });
+        endpoints.MapPost("/api/auth/password", async (HttpContext context, SecurityPasswordRequest request, SecurityStore store) =>
+        {
+            GuardTransportAndOrigin(context, json: true);
+            var audiences = context.Request.Headers["X-SPARK-AUDIENCE"];
+            if (audiences.Count > 1) throw new ArgumentException("Choose one authentication audience.");
+            var audience = ValidateAudience(audiences.Count == 0 ? EngineeringAudience : audiences[0]);
+            var user = await AuthenticateAsync(context, audience);
+            if (user is null) throw new BadHttpRequestException("Sign in to continue.", 401);
+            ValidateCsrf(context, user);
+            var session = (SecuritySession)context.Items[SessionKey]!;
+            // A browser can be signed in as a different person in the other application.
+            // Clear only this account's cookies; its other devices are revoked in the store.
+            var schemes = new List<string>();
+            foreach (var scheme in new[] { EngineeringScheme, OperatorScheme })
+            {
+                var authenticated = await context.AuthenticateAsync(scheme);
+                if (authenticated.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) == user.Id) schemes.Add(scheme);
+            }
+            AuditMutation(context, store, user, "auth.password.change", user.Id,
+                () => store.ChangePassword(user, session, request.CurrentPassword, request.NewPassword,
+                    context.Connection.RemoteIpAddress?.ToString() ?? "unknown"));
+            foreach (var scheme in schemes) await context.SignOutAsync(scheme);
+            context.Items.Remove(SessionKey);
+            context.Items.Remove(UserKey);
+            context.User = new ClaimsPrincipal(new ClaimsIdentity());
+            return Results.Json(new { changed = true });
         });
         endpoints.MapPost("/api/auth/logout", async (HttpContext context, SecurityLogoutRequest request, SecurityStore store) =>
         {

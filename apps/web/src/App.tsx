@@ -3,7 +3,8 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { api, currentProjectId, displayValue, eventStreamUrl, id, projectPage, projectStorageKey, resolvePath } from "./api";
 import { useAuth } from "./Auth";
 import { ApplicationStateProvider, useApplicationState, useApplicationStateContext } from "./applicationState";
-import { OperatorAccessDialog, SessionIdentity } from "./OperatorAccess";
+import { SessionIdentity } from "./OperatorAccess";
+import { AccountSettingsDialog } from "./AccountSettings";
 import { ProjectImportDialog } from "./Projects";
 import { exportProjectPackage } from "./projectManagement";
 import Icon, { iconNames } from "./Icon";
@@ -39,7 +40,6 @@ import {
   projectInputContext,
 } from "./templates";
 import { resolveTemplateParameters, templatePlacementError } from "./templateModel";
-import { ThemePicker } from "./Theme";
 import Tags from "./Tags";
 import { isInput, validateInputs } from "./inputs";
 import { useFormInputs } from "./inputStateBindings";
@@ -171,7 +171,7 @@ function UnsavedProjectNavigation({ onStay, onDiscard }: { onStay: () => void; o
 
 export default function App() {
   const { gatewayAdmin, permissions } = useAuth();
-  const [operatorAccessOpen, setOperatorAccessOpen] = useState(false);
+  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [workspace, setWorkspace] = useState<Workspace>("designer");
   const [scriptsVisited, setScriptsVisited] = useState(false);
   const [queriesVisited, setQueriesVisited] = useState(false);
@@ -915,6 +915,7 @@ export default function App() {
       <aside
         className={`navigation ${workspaceCollapsed ? "workspace-collapsed" : ""}`}
       >
+        <div className="navigation-scroll">
         <a
           className="brand"
           href="#designer"
@@ -986,6 +987,7 @@ export default function App() {
           ))}
         </nav>
         {gatewayAdmin && <a className="designer-project-link" href="/security" title="Gateway security"><Icon name="shield" size={17} /><span>Security</span></a>}
+        </div>
         <div className="nav-bottom">
           <a
             className="runtime-launch-link"
@@ -1018,7 +1020,7 @@ export default function App() {
               <span>v{health?.version || "0.1.0"}</span>
             </div>
           </div>
-          <SessionIdentity />
+          <SessionIdentity onAccountSettings={() => setAccountSettingsOpen(true)} />
         </div>
       </aside>
 
@@ -1045,7 +1047,6 @@ export default function App() {
             )}
           </div>
           <div className="topbar-actions">
-            <ThemePicker />
             {workspace === "designer" && project && (
               <>
                 <span className={`save-state ${dirty ? "unsaved" : ""}`}>
@@ -1086,20 +1087,8 @@ export default function App() {
                   <Icon name="upload" size={15} />
                   {publishing ? "Publishing…" : "Publish"}
                 </button>
-                <a
-                  className="button runtime-topbar-link"
-                  href={projectPage("runtime")}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Open the published operator application"
-                >
-                  <Icon name="external" size={15} />
-                  <span>Open runtime</span>
-                </a>
-                <button className="button" onClick={() => setOperatorAccessOpen(true)}><Icon name="external" size={15} />Operator link</button>
               </>
             )}
-            <span className="small-avatar">SS</span>
           </div>
         </header>
 
@@ -2534,7 +2523,7 @@ export default function App() {
         onClose={() => setEventEditorId(null)}
       />}
       {gatewayAdmin && projectImportOpen && <ProjectImportDialog onClose={() => setProjectImportOpen(false)} />}
-      {operatorAccessOpen && project && currentProjectId() && <OperatorAccessDialog projectId={currentProjectId()!} projectName={project.name} publication={publication} onClose={() => setOperatorAccessOpen(false)} />}
+      {accountSettingsOpen && <AccountSettingsDialog hasUnsavedChanges={dirty || queriesDirty || scriptsDirty} onClose={() => setAccountSettingsOpen(false)} />}
       {projectSettingsOpen && project && <ProjectSettingsDialog project={project} canRename={gatewayAdmin} notify={notify}
         onChange={patch => change(current => ({ ...current, ...patch }))} onClose={() => setProjectSettingsOpen(false)} />}
       {pendingNavigation && <UnsavedProjectNavigation onStay={() => setPendingNavigation(null)} onDiscard={() => {

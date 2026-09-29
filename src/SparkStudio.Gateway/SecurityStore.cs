@@ -181,6 +181,40 @@ public sealed class SecurityStore
         }
     }
 
+    public bool ChangePassword(SecurityUser actor, SecuritySession session, string? currentPassword, string? newPassword, string remoteAddress)
+    {
+        lock (gate)
+        {
+            // Recheck the ticket while holding the same lock as the credential update.
+            // A concurrent logout, disable, or password change cannot reuse an old request.
+            var authenticated = ResolveSession(session.Id, session.Audience);
+            if (authenticated is null || authenticated.Value.User.Id != actor.Id || authenticated.Value.User.Revision != actor.Revision)
+                throw new BadHttpRequestException("Sign in again to continue.", 401);
+            var existing = state.Users.Single(item => item.User.Id == actor.Id);
+            var now = DateTimeOffset.UtcNow;
+            var accountKey = "account:" + actor.Username.ToUpperInvariant();
+            var addressKey = "address:" + remoteAddress;
+            CheckThrottle(accountKey, now);
+            CheckThrottle(addressKey, now);
+            var candidate = currentPassword is { Length: <= 256 } ? currentPassword : "";
+            var verified = hasher.VerifyHashedPassword(existing.User, existing.PasswordHash, candidate);
+            if (currentPassword is null || currentPassword.Length > 256 || verified == PasswordVerificationResult.Failed)
+            {
+                FailThrottle(accountKey, now, 5);
+                FailThrottle(addressKey, now, 25);
+                throw new BadHttpRequestException("The current password is incorrect.", 400);
+            }
+            ValidatePassword(newPassword);
+            if (SecretEquals(currentPassword, newPassword)) throw new ArgumentException("Choose a new password different from your current password.");
+            var user = existing.User with { Revision = checked(existing.User.Revision + 1), UpdatedAt = Now() };
+            var replacement = new StoredUser(user, hasher.HashPassword(user, newPassword!));
+            Commit(state with { Users = state.Users.Select(item => item.User.Id == user.Id ? replacement : item).ToList() });
+            foreach (var ticket in sessions.Values.Where(item => item.UserId == user.Id).ToArray()) sessions.Remove(ticket.Id);
+            throttles.Remove(accountKey);
+            return true;
+        }
+    }
+
     public SecurityUser CreateUser(SecurityCreateUser request)
     {
         lock (gate)

@@ -128,6 +128,11 @@ button svg {
   flex-direction: column;
   padding: 30px 17px 0;
 }
+.navigation-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
 .brand {
   display: flex;
   align-items: center;
@@ -281,6 +286,7 @@ button svg {
 }
 .nav-bottom {
   margin-top: auto;
+  flex-shrink: 0;
 }
 .local-card {
   background: var(--nav-hover);
@@ -2705,8 +2711,15 @@ button svg {
   .nav-link > span,
   .nav-link > kbd,
   .nav-section-label,
-  .nav-bottom {
+  .nav-bottom .local-card,
+  .nav-bottom .runtime-launch-link > span,
+  .nav-bottom .runtime-launch-link > svg:last-child {
     display: none;
+  }
+  .nav-bottom .runtime-launch-link {
+    justify-content: center;
+    padding: 13px 8px;
+    margin-bottom: 12px;
   }
   .nav-link {
     justify-content: center;

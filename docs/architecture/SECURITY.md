@@ -8,6 +8,12 @@ On a new or upgraded data directory without accounts, the gateway requires setup
 
 Passwords contain 12–256 characters and are stored using the framework's salted, versioned PBKDF2 password hasher. The `security/` directory is restricted to the gateway Windows identity, local Administrators and SYSTEM; Unix directories/files use owner-only permissions. Back up the whole gateway data directory with its identity and data-protection files. A missing or invalid identity store requires administrator recovery; removing security files is not an ordinary password-reset workflow.
 
+## Your account
+
+In Designer, click your name at the bottom of the expanded workspace sidebar to open **Account settings**. Theme selection (Light, Dark or System) applies immediately in that browser. To change your password, save any project, query or script edits first, then enter your current password and the new password twice. Successful changes sign that account out on all devices and from both engineering and operator sessions. Sign in again with the new password. The sign-out icon beside your name ends the current session; the collapsed sidebar retains this icon.
+
+Self-service changes require the current password, a valid session and its CSRF token. Incorrect current passwords use the existing account/address attempt limits; invalid passwords leave credentials and sessions unchanged. The endpoint accepts only current and new passwords, never a target account or role. It rechecks the session inside the credential update lock and records an audit outcome without credential contents. If the other application is signed in as another person, that person's session is preserved. Password fields are held only in the open form and cleared after attempts or dismissal.
+
 ## Permissions
 
 | Permission | Scope |
@@ -28,11 +34,11 @@ Viewer pages retain navigation, popups, filtering and table paging while disabli
 
 Security settings declare readable tag paths separately for each project. An exact path grants that tag; a prefix ending in `/` grants descendants. `*` explicitly grants every gateway tag. Empty scopes grant no tag data to non-administrator operators. HTTP reads and event streams enforce the same scope; denied explicit reads return 403. Administrators and engineering designers retain engineering tag browsing. Published query/action code is trusted and can access its authored data sources; tag-read scopes are not an operating-system or Python sandbox.
 
-Designer **Operator access** shows the published revision/time and a copyable stable link. Set the public operator base URL in Security to the gateway's HTTPS origin. Without a configured origin, the link uses the current browser address. A localhost link only works on the computer opening it. Publishing updates the application at the existing link; it does not create an anonymous access grant.
+Designer **Operator application** in the workspace sidebar opens the published project in another tab. Copy that tab's address to share a stable project link. Use the gateway's reachable HTTPS address for remote operators; a localhost link only works on the computer opening it. Publishing updates the application at the existing link; it does not create an anonymous access grant. The Designer header no longer contains separate runtime/link buttons.
 
-The **Operator link → Presentation** choice defaults to **Application only**. Bare `/runtime/<project-id>` links show the authored screen and popups without the SparkStudio header, screen menu, parameter selectors, theme/account controls or footer. The screen fits the available browser viewport while preserving its aspect ratio. Use authored navigation buttons to move between screens in this view. Connection-loss, action-result and publication notices remain available as overlays when needed.
+Bare `/runtime/<project-id>` links default to **Application only**: the authored screen and popups without the SparkStudio header, screen menu, parameter selectors, theme/account controls or footer. The screen fits the available browser viewport while preserving its aspect ratio. Use authored navigation buttons to move between screens in this view. Connection-loss, action-result and publication notices remain available as overlays when needed.
 
-Choose **Show runtime controls** to generate `/runtime/<project-id>?view=controls`. This restores the surrounding interface, including the configured screen menu, context selectors, theme, Switch user and Sign out. The setting belongs to the link; it does not edit or republish the project. Only one exact `view=controls` parameter opts in; absent, unknown or duplicated values use Application only. Legacy `/runtime` redirects preserve this query choice. Sign-in and all View/Operate permissions apply identically in both presentations.
+Append `?view=controls` to restore the surrounding interface, including the configured screen menu, context selectors, theme, Switch user and Sign out. The setting belongs to the link; it does not edit or republish the project. Only one exact `view=controls` parameter opts in; absent, unknown or duplicated values use Application only. Legacy `/runtime` redirects preserve this query choice. Sign-in and all View/Operate permissions apply identically in both presentations.
 
 ## Sessions and request protection
 

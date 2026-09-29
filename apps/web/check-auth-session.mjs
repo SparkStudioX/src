@@ -88,6 +88,49 @@ try {
   await check('operator first-run gate never renders the administrator setup form',async()=>{
     hooks.setContext({phase:'ready',setupRequired:true,audience:'operator',user:null,refresh:async()=>{}});const gate=AuthGate({children:'private'});assert.ok(nodes(gate).some(node=>node.type==='h1'&&node.props.children==='Gateway setup pending'));assert.ok(!nodes(gate).some(node=>node.type?.name==='SignInForm'));
   });
+  await check('password change carries the current audience, project and CSRF and returns to explicit sign-in',async()=>{
+    for(const audience of ['engineering','operator']) {
+      stored.clear();let changed;globalThis.fetch=async(url,init)=>{if(url.endsWith('/password')){changed=init;return response({changed:true})}return response(session({audience}))};
+      const ui=drive(AuthProvider,{audience,projectId:'plant',children:'app'});hooks.flush();await settle();ui.render();const original=ui.tree.props.value.epoch;
+      await ui.tree.props.value.changePassword('old-password-for-test','new-password-for-test');ui.render();
+      assert.equal(changed.headers.get('X-SPARK-AUDIENCE'),audience);assert.equal(changed.headers.get('X-SPARK-PROJECT'),'plant');assert.equal(changed.headers.get('X-SPARK-CSRF'),'csrf-a');
+      assert.equal(changed.credentials,'same-origin');assert.equal(changed.redirect,'error');assert.deepEqual(JSON.parse(changed.body),{currentPassword:'old-password-for-test',newPassword:'new-password-for-test'});
+      assert.equal(ui.tree.props.value.user,null);assert.ok(ui.tree.props.value.epoch>original);assert.equal(transport.authHeaders('POST').get('X-SPARK-CSRF'),null);
+      assert.equal(ui.tree.props.value.notice,'Password changed. Sign in with your new password.');assert.deepEqual([...stored],[[`sparkstudio.auth.signout.${audience}`,'1']]);
+    }
+  });
+  await check('password mutation fences in-flight refresh and prevents polling, duplicate mutations and replacement login',async()=>{
+    const poll=defer(),mutation=defer();let sessionCalls=0,passwordCalls=0;
+    globalThis.fetch=async url=>{if(url.endsWith('/password')){passwordCalls++;return mutation.promise}sessionCalls++;return sessionCalls===1?response(session()):poll.promise};
+    const ui=drive(AuthProvider,{audience:'engineering',projectId:'plant',children:'app'});hooks.flush();await settle();ui.render();const stalePoll=ui.tree.props.value.refresh();
+    const changing=ui.tree.props.value.changePassword('old-password-for-test','new-password-for-test');await ui.tree.props.value.refresh();assert.equal(sessionCalls,2);
+    await assert.rejects(ui.tree.props.value.changePassword('old','replacement'),/still finishing/);assert.equal(passwordCalls,1);
+    await assert.rejects(ui.tree.props.value.signIn('admin','replacement-password'),/still finishing/);
+    mutation.resolve(response({changed:true}));await changing;poll.resolve(response(session()));await stalePoll;ui.render();
+    assert.equal(ui.tree.props.value.user,null);assert.equal(ui.tree.props.value.notice,'Password changed. Sign in with your new password.');
+  });
+  await check('wrong current password and rate limits retain the authenticated account without storing credentials',async()=>{
+    for(const status of[400,429]) {
+      stored.clear();globalThis.fetch=async url=>url.endsWith('/password')?response({error:status===400?'Current password is incorrect.':'Too many attempts.'},status):response(session());
+      const ui=drive(AuthProvider,{audience:'engineering',projectId:'plant',children:'app'});hooks.flush();await settle();ui.render();const original=ui.tree.props.value.epoch;
+      await assert.rejects(ui.tree.props.value.changePassword('wrong-current','new-password-for-test'),status===400?/incorrect/:/Too many/);ui.render();
+      assert.equal(ui.tree.props.value.user.id,'user-a');assert.equal(ui.tree.props.value.epoch,original);assert.equal(stored.size,0);await ui.tree.props.value.refresh();
+    }
+  });
+  await check('an unconfirmed password response does not claim success or sign out',async()=>{
+    globalThis.fetch=async url=>response(url.endsWith('/password')?{changed:false}:session());const ui=drive(AuthProvider,{audience:'engineering',projectId:'plant',children:'app'});hooks.flush();await settle();ui.render();
+    await assert.rejects(ui.tree.props.value.changePassword('old-password-for-test','new-password-for-test'),/did not confirm/);ui.render();assert.equal(ui.tree.props.value.user.id,'user-a');assert.equal(stored.size,0);
+  });
+  await check('password confirmation replaces an intervening expiry notice with the actionable new-password message',async()=>{
+    const gate=defer();globalThis.fetch=async url=>url.endsWith('/password')?gate.promise:response(session());const ui=drive(AuthProvider,{audience:'engineering',projectId:'plant',children:'app'});hooks.flush();await settle();ui.render();
+    const changing=ui.tree.props.value.changePassword('old-password-for-test','new-password-for-test');window.dispatchEvent(new Event(transport.authExpiredEvent));gate.resolve(response({changed:true}));await changing;ui.render();
+    assert.equal(ui.tree.props.value.user,null);assert.equal(ui.tree.props.value.notice,'Password changed. Sign in with your new password.');
+  });
+  await check('password response after provider unmount cannot clear a replacement session',async()=>{
+    const gate=defer();globalThis.fetch=async url=>url.endsWith('/password')?gate.promise:response(session());const ui=drive(AuthProvider,{audience:'engineering',projectId:'plant',children:'app'});hooks.flush();await settle();ui.render();
+    const changing=ui.tree.props.value.changePassword('old-password-for-test','new-password-for-test');hooks.clear();configure({csrfToken:'replacement-token',key:'replacement-user'});gate.resolve(response({changed:true}));await changing;
+    assert.equal(transport.authHeaders('POST').get('X-SPARK-CSRF'),'replacement-token');assert.equal(stored.size,0);
+  });
   await check('login submits only explicit credentials and selected audience, without CSRF or browser storage',async()=>{
     let login;globalThis.fetch=async(url,init)=>{if(url.endsWith('/login')){login=init;return response(session({audience:'operator'}))}return response(session({audience:'operator',user:null,csrfToken:null,permissions:noPermissions}))};
     const ui=drive(AuthProvider,{audience:'operator',projectId:'plant',children:'app'});hooks.flush();await settle();ui.render();await ui.tree.props.value.signIn('operator-a','explicit-test-password');ui.render();assert.deepEqual(JSON.parse(login.body),{audience:'operator',username:'operator-a',password:'explicit-test-password',projectId:'plant'});assert.equal(login.headers.get('X-SPARK-CSRF'),null);assert.equal(ui.tree.props.value.user.id,'user-a');

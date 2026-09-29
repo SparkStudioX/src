@@ -40,6 +40,7 @@ const shapes: Record<string, React.ReactNode> = {
   down: <path d="m6 9 6 6 6-6" />,
   plus: <path d="M12 5v14M5 12h14" />,
   close: <path d="m6 6 12 12M6 18 18 6" />,
+  logout: <path d="M9 4H4v16h5m5-12 4 4-4 4m-6-4h10" />,
   check: <path d="m5 12 4 4L19 6" />,
   play: <path d="m8 4 13 8-13 8z" />,
   stop: <rect x="5" y="5" width="14" height="14" rx="2" />,
