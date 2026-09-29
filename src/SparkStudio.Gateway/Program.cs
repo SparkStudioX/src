@@ -105,7 +105,10 @@ app.Run();
 static void MapProjectEndpoints(RouteGroupBuilder routes)
 {
 routes.MapPreviewEndpoints();
-routes.MapGet("/health", (PythonRunner python) => new { status = "ok", version = "0.1.0", pythonAvailable = python.Available, demoMode = true, deployment = "local-development" }).Access("signedIn", "context");
+routes.MapGet("/health", (PythonRunner python) => new { status = "ok", version = typeof(PythonRunner).Assembly
+    .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+    .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "unknown",
+    pythonAvailable = python.Available, demoMode = true, deployment = "local-development" }).Access("signedIn", "context");
 routes.MapGet("/project", (ProjectStore store) => store.GetProject()).Access("design");
 routes.MapGet("/assets", (LocalAssetStore assets) => assets.List()).Access("design");
 routes.MapPost("/assets", (AssetUpload upload, LocalAssetStore assets) => assets.Add(upload)).Access("design", audit: true);

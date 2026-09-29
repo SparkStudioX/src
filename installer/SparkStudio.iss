@@ -5,16 +5,25 @@
 #ifndef OutputFolder
   #error OutputFolder is required.
 #endif
-#define AppVersion "0.1.0"
+#ifndef AppVersion
+  #define AppVersion "0.2.0-preview.1"
+#endif
+#ifndef NumericVersion
+  #define NumericVersion "0.2.0.1"
+#endif
 
 [Setup]
 AppId={{C85DA4EA-0382-4B12-943A-CE73A1772FD8}
 AppName=SparkStudio
 AppVersion={#AppVersion}
-AppVerName=SparkStudio {#AppVersion} Preview
+AppVerName=SparkStudio {#AppVersion}
 AppPublisher=SparkStudio
 AppComments=Unsigned internal preview. Loopback gateway with an offline Python runtime.
 VersionInfoDescription=SparkStudio offline Windows installer (unsigned preview)
+VersionInfoVersion={#NumericVersion}
+VersionInfoProductVersion={#NumericVersion}
+VersionInfoTextVersion={#AppVersion}
+VersionInfoProductTextVersion={#AppVersion}
 DefaultDirName={code:DefaultDirectory}
 DefaultGroupName=SparkStudio
 DisableProgramGroupPage=yes
@@ -38,7 +47,7 @@ RestartIfNeededByRun=no
 SetupLogging=yes
 UninstallDisplayIcon={app}\SparkStudio.Gateway.exe
 InfoBeforeFile=INSTALL-NOTES.txt
-UninstallDisplayName=SparkStudio {#AppVersion} Preview
+UninstallDisplayName=SparkStudio {#AppVersion}
 
 [Tasks]
 Name: desktopicon; Description: "Create Designer and Runtime desktop shortcuts"; Flags: unchecked; Check: not PortableMode
