@@ -104,7 +104,10 @@ try {
     # Inventory installed production dependencies, including transitive editor packages.
     # Only license/notice texts are copied; never package JavaScript or other source files.
     $web = Join-Path $root 'apps\web'
-    $browserLock = Get-Content -LiteralPath (Join-Path $web 'package-lock.json') -Raw | ConvertFrom-Json
+    # npm's root package has an empty key, which older PowerShell JSON readers reject.
+    $lockPackagesJson = & node -e "const fs=require('fs'); const lock=JSON.parse(fs.readFileSync(process.argv[1],'utf8')); delete lock.packages['']; process.stdout.write(JSON.stringify(lock.packages));" (Join-Path $web 'package-lock.json')
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot read the browser dependency lockfile.' }
+    $browserLock = $lockPackagesJson | ConvertFrom-Json
     $browserDirectories = @(& npm.cmd --prefix $web ls --omit=dev --all --parseable)
     if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate installed browser production dependencies.' }
     $browserPackages = @()
@@ -115,7 +118,7 @@ try {
         $metadata = Get-Content -LiteralPath (Join-Path $packageDirectory 'package.json') -Raw | ConvertFrom-Json
         if ($metadata.name -notmatch '^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$' -or $metadata.version -notmatch '^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.+-]+)?$') { throw 'Invalid browser package identity.' }
         $lockPath = $packageDirectory.Substring($web.Length + 1).Replace('\', '/')
-        $lockedPackage = $browserLock.packages.PSObject.Properties[$lockPath].Value
+        $lockedPackage = $browserLock.PSObject.Properties[$lockPath].Value
         if (!$lockedPackage -or $lockedPackage.version -ne $metadata.version) { throw "Installed browser dependency does not match the lockfile: $($metadata.name)" }
         $licenseFiles = @(Get-ChildItem -LiteralPath $packageDirectory -File -Recurse | Where-Object {
             $relative = $_.FullName.Substring($packageDirectory.Length + 1)
