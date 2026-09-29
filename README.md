@@ -186,11 +186,13 @@ Compose publishes host loopback only and retains a named data volume. Stop any o
 
 ## Feature workshops
 
-The [workshop catalog](examples/README.md) covers 21 authored examples. Fifteen build into independent, importable `.sparkproj` projects; six require gateway tags or SQLite setup and are clearly listed separately. Each major feature should include a workshop, walkthrough, prerequisites and verification. The portable collection uses synthetic data and works without external servers or Internet access.
+The [workshop catalog](examples/README.md) covers 22 authored examples. Sixteen build into independent, importable `.sparkproj` projects; six require gateway tags or SQLite setup and are clearly listed separately. Each major feature should include a workshop, walkthrough, prerequisites and verification. The portable collection uses synthetic data and works without external servers or Internet access.
 
 Designer **Search project** (Ctrl+Shift+F / Cmd+Shift+F) finds draft resources, properties, bindings, queries and scripts, with direct navigation and structured-reference views. See [project search](docs/architecture/PROJECT_SEARCH.md) and its portable workshop. Run `node tools/test-project-search.mjs` with Node 22.17 or newer to check the pure index and reference contracts offline.
 
 Screen/template renames and canvas-resource deletions have [change previews](docs/architecture/RESOURCE_CHANGES.md), reference blockers and one-step Undo. Names retain stable resource IDs. Code-text matches require review and are never rewritten automatically. `node tools/test-resource-changes.mjs` checks these preview/apply contracts offline.
+
+**Search project → Replace…** (Ctrl+Shift+H / Cmd+Shift+H) previews literal replacements in supported display text or tag paths. Select the properties to change, apply them as one undoable draft edit, then save and publish explicitly. Stable IDs, code, SQL, expressions and input values are excluded. See [bulk replacement](docs/architecture/BULK_REPLACEMENT.md) and run `node tools/test-bulk-replacement.mjs` for its offline contracts.
 
 ```powershell
 node tools/build-workshops.mjs --version 2026.09.29

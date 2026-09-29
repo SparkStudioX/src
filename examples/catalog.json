@@ -4,11 +4,32 @@
     "packageFormat": 1,
     "baseline": {
       "kind": "source-commit",
-      "value": "8bbfa8cd7e70ca2a831d1316de14ac42b4a53efc"
+      "value": "3f7bcf5099b5df05ce9fb581b546ab084d82bc9a"
     },
     "note": "Use the SparkStudio build identified by the workshop bundle or a newer compatible build with the listed features. The original v0.1.0-preview.1 installer predates this catalog's baseline; its version number alone does not establish compatibility."
   },
   "workshops": [
+    {
+      "id": "bulk-replacement",
+      "title": "Bulk replacement",
+      "summary": "Preview literal text changes across screens and templates, apply selected properties and undo the entire batch.",
+      "source": "examples/bulk-replacement.json",
+      "distribution": "portable",
+      "features": ["project replacement previews", "selective display-text replacement", "literal case-sensitive and case-insensitive matching", "atomic project undo", "draft and publication separation"],
+      "prerequisites": ["Use the companion Designer build with Search project → Replace… and the Replace in project dialog.", "No configured tags, database, assets, scripts, Python runtime or network access are required."],
+      "gatewayWrites": "none",
+      "entryScreenId": "replace-home",
+      "guide": "docs/architecture/BULK_REPLACEMENT.md",
+      "walkthrough": [
+        "Preview the local form and navigate between Line A desk and Line A review; compare their shared station cards.",
+        "Find Line A and replace with Cell B in Display text. Apply only the desk title and repeated caption; one Undo restores both.",
+        "Compare Match case on and off using the Line A / line a / LINE A caption; apply only that row, then Undo.",
+        "Replace only the shared template caption and verify both placements before one Undo.",
+        "Apply all case-sensitive display-text matches. Inspect unchanged field keys, defaults, option values and navigation IDs, then Undo.",
+        "Choose Tag paths and verify the project has no candidates; cancel without changes.",
+        "Publish the original project, make a draft replacement and verify the operator title changes only after explicit Save and Publish."
+      ]
+    },
     {
       "id": "resource-changes",
       "title": "Resource changes",
