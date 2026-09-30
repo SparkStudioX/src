@@ -2,7 +2,7 @@
 
 These guides describe the current SparkStudio source, including development work that may be newer than the downloadable installer. The source/documentation review date is **September 30, 2026**. A documented implementation is not a claim that every browser, deployment, integration or failure condition has passed acceptance.
 
-Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md). For installation, use the guide attached to your exact release; [Windows installation](WINDOWS_INSTALLER.md) records the preview.9 boundary. [Verification and roadmap](PARITY.md) separates dated observations from current capability summaries and remaining gates. Earlier ledger entries retain the facts and limitations of their original checks; they are not instructions to start an old development package or assertions about the currently running gateway.
+Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md). For installation, use the guide attached to your exact release; [Windows installation](WINDOWS_INSTALLER.md) records the preview.10 boundary. [Verification and roadmap](PARITY.md) separates dated observations from current capability summaries and remaining gates. Earlier ledger entries retain the facts and limitations of their original checks; they are not instructions to start an old development package or assertions about the currently running gateway.
 
 ## Overview and installation
 
@@ -13,6 +13,7 @@ Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md).
 - [Preview release cycle](RELEASE_PROCESS.md)
 - [Security and accounts](SECURITY.md)
 - [Verification and roadmap](PARITY.md)
+- [Synthetic gateway load testing](LOAD_TESTING.md)
 
 ## Designer and presentation
 

@@ -63,10 +63,13 @@ store.ApplyTagImport(new(upgrade, preview.Revision, preview.PreviewToken));
 expanded = store.GetTagDefinitions().OfType<JsonObject>().ToDictionary(tag => tag["path"]!.GetValue<string>());
 Assert(expanded["[default]Units/A/Count"]["value"]!.GetValue<int>() == 7 && expanded["[default]Units/B/Count"]["value"]!.GetValue<int>() == 10, "Upgrade did not preserve overrides and propagate defaults.");
 var mutate = Package(); mutate["udtDefinitions"]!.AsArray().Add(Definition(2, 11)); Throws<ArgumentException>(() => store.PreviewTagImport(mutate));
+var beforeRuntimeWrite = store.ExportTags();
 store.WriteMemoryTag("[default]Units/B/Count", JsonSerializer.SerializeToElement(12));
-Assert(store.ExportTags()["instances"]!.AsArray().OfType<JsonObject>().Single(item => item["path"]!.GetValue<string>().EndsWith("/B"))["overrides"]!["Count"]!["value"]!.GetValue<int>() == 12, "Memory write was not a persistent instance override.");
+Assert(JsonNode.DeepEquals(store.ExportTags(), beforeRuntimeWrite), "A runtime value write changed the authored instance override.");
+store.FlushMemoryValues();
+Assert(new ProjectStore(directory, protection, gatewayOnly: true).GetTagDefinitions().OfType<JsonObject>().Single(item => item["path"]!.GetValue<string>() == "[default]Units/B/Count")["value"]!.GetValue<int>() == 12, "Checkpointed instance value did not survive reload.");
 Throws<ArgumentException>(() => store.SaveTag(expanded["[default]Units/A/Count"])); Throws<ArgumentException>(() => store.DeleteTag("[default]Units/A/Count"));
-Console.WriteLine("PASS versions are immutable and pinned; explicit upgrades preserve override fields; memory writes persist overrides");
+Console.WriteLine("PASS versions are immutable and pinned; explicit upgrades preserve override fields; memory values checkpoint separately and survive reload");
 
 var removedMember = Package(); var third = Definition(3); third["members"]!.AsArray().RemoveAt(0); third["members"]![0]!["inputs"] = new JsonObject(); third["members"]![0]!["expression"] = "1";
 removedMember["udtDefinitions"]!.AsArray().Add(third); var incompatible = (JsonObject)upgradeA.DeepClone(); incompatible["version"] = 3; removedMember["instances"]!.AsArray().Add(incompatible); Conflict(removedMember, "Override references");
@@ -78,8 +81,13 @@ var missingInput = Package(); missingInput["tags"]!.AsArray().Add(Read("""{"path
 var removeInstance = Package(); removeInstance["removeInstances"] = new JsonArray("[default]Units/A"); Conflict(removeInstance, "does not exist");
 var multiProvider = Package(); multiProvider["provider"] = Read("""{"name":"remote","enabled":true}"""); Conflict(multiProvider, "Only the default");
 var stale = Package(); stale["scanGroups"]!.AsArray().Add(Read("""{"name":"Fast","publishingIntervalMs":200,"enabled":true}""")); preview = store.PreviewTagImport(stale);
-store.WriteMemoryTag("[default]Units/B/Count", JsonSerializer.SerializeToElement(13)); Throws<InvalidOperationException>(() => store.ApplyTagImport(new(stale, preview.Revision, preview.PreviewToken)));
-Assert(JsonNode.DeepEquals(new ProjectStore(directory, protection, gatewayOnly: true).ExportTags(), store.ExportTags()), "Restart lost model or memory override.");
+store.WriteMemoryTag("[default]Units/B/Count", JsonSerializer.SerializeToElement(13));
+Assert(store.PreviewTagImport(stale).PreviewToken == preview.PreviewToken, "Runtime value writes invalidated a configuration-only import preview.");
+store.SaveTag(Read("""{"path":"[default]Legacy/Count","kind":"memory","dataType":"Int32","value":4}"""));
+Throws<InvalidOperationException>(() => store.ApplyTagImport(new(stale, preview.Revision, preview.PreviewToken)));
+store.FlushMemoryValues();
+var reloaded = new ProjectStore(directory, protection, gatewayOnly: true);
+Assert(JsonNode.DeepEquals(reloaded.ExportTags(), store.ExportTags()) && reloaded.GetTagDefinitions().OfType<JsonObject>().Single(item => item["path"]!.GetValue<string>() == "[default]Units/B/Count")["value"]!.GetValue<int>() == 13, "Restart lost model or separately checkpointed instance value.");
 Console.WriteLine("PASS removed/typed override conflicts, missing groups/types, namespaces, dependent deletion and stale previews reject atomically; restart retains model");
 
 using var connector = new ConnectorService(directory);

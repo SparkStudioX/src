@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Text.Json;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 namespace SparkStudio.Gateway;
@@ -7,17 +8,7 @@ namespace SparkStudio.Gateway;
 /// <summary>One bounded, fixed startup probe; polling cannot execute project scripts or spawn processes.</summary>
 public sealed class GatewayReadiness : IHostedService, IDisposable
 {
-    private const string SuccessMarker = "SPARKSTUDIO_PYTHON_READY";
-    private const string ProbeCode = """
-import contextlib, io, json, runpy, sys
-sys.stdin = io.StringIO(json.dumps({"code": "", "parameters": {}, "inputs": {}, "libraries": {}}) + "\n")
-output = io.StringIO()
-with contextlib.redirect_stdout(output):
-    runpy.run_path(sys.argv[1], run_name="__main__")
-result = json.loads(output.getvalue())
-assert result.get("type") == "result" and result.get("success") is True and result.get("result") is None
-print("SPARKSTUDIO_PYTHON_READY")
-""";
+    private const string ProbeRequest = """{"code":"","parameters":{},"inputs":{},"libraries":{}}""";
     private readonly object sync = new();
     private readonly CancellationTokenSource stopping = new();
     private readonly Func<CancellationToken, Task<bool>> probe;
@@ -115,19 +106,33 @@ print("SPARKSTUDIO_PYTHON_READY")
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
             WorkingDirectory = Path.GetDirectoryName(worker)!
         };
-        info.ArgumentList.Add("-I"); info.ArgumentList.Add("-S"); info.ArgumentList.Add("-c");
-        info.ArgumentList.Add(ProbeCode); info.ArgumentList.Add(worker);
+        // Use the actual pipe protocol. The worker intentionally duplicates its OS
+        // stdout descriptor; replacing stdout with StringIO breaks that protection.
+        info.ArgumentList.Add("-I"); info.ArgumentList.Add("-S"); info.ArgumentList.Add(worker);
         using var process = Process.Start(info);
         if (process is null) return false;
-        process.StandardInput.Close();
         var stdout = ReadBoundedAsync(process.StandardOutput, cancellation);
         var stderr = ReadBoundedAsync(process.StandardError, cancellation);
         try
         {
+            await process.StandardInput.WriteLineAsync(ProbeRequest.AsMemory(), cancellation);
+            process.StandardInput.Close();
             await process.WaitForExitAsync(cancellation);
             var output = await stdout;
-            await stderr;
-            return process.ExitCode == 0 && output.Trim() == SuccessMarker;
+            var error = await stderr;
+            if (process.ExitCode != 0 || output.Truncated || error.Truncated) return false;
+            try
+            {
+                using var document = JsonDocument.Parse(output.Text);
+                var result = document.RootElement;
+                return result.ValueKind == JsonValueKind.Object && result.EnumerateObject().Count() == 5
+                    && result.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String && type.GetString() == "result"
+                    && result.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.True
+                    && result.TryGetProperty("result", out var value) && value.ValueKind == JsonValueKind.Null
+                    && result.TryGetProperty("stdout", out var scriptOutput) && scriptOutput.ValueKind == JsonValueKind.String && scriptOutput.GetString() == ""
+                    && result.TryGetProperty("stderr", out var scriptError) && scriptError.ValueKind == JsonValueKind.String && scriptError.GetString() == "";
+            }
+            catch (JsonException) { return false; }
         }
         finally
         {
@@ -142,14 +147,21 @@ print("SPARKSTUDIO_PYTHON_READY")
         }
     }
 
-    private static async Task<string> ReadBoundedAsync(StreamReader reader, CancellationToken cancellation)
+    private sealed record ProbeOutput(string Text, bool Truncated);
+
+    private static async Task<ProbeOutput> ReadBoundedAsync(StreamReader reader, CancellationToken cancellation)
     {
         var buffer = new char[1024];
         var output = new System.Text.StringBuilder(128);
+        var truncated = false;
         int count;
         while ((count = await reader.ReadAsync(buffer, cancellation)) > 0)
-            if (output.Length < 128) output.Append(buffer, 0, Math.Min(count, 128 - output.Length));
-        return output.ToString();
+        {
+            var remaining = 4096 - output.Length;
+            if (count > remaining) truncated = true;
+            if (remaining > 0) output.Append(buffer, 0, Math.Min(count, remaining));
+        }
+        return new(output.ToString(), truncated);
     }
 
     public void Dispose()

@@ -236,11 +236,12 @@ public sealed partial class ProjectStore
         {
             var node = NormalizeTag(value);
             var tagPath = Required(node, "path");
-            if (GetTagDefinitions().OfType<JsonObject>().Any(tag => Optional(tag, "path") == tagPath && tag["udtInstance"] is not null))
+            var current = GetTagDefinitions();
+            if (current.OfType<JsonObject>().Any(tag => Optional(tag, "path") == tagPath && tag["udtInstance"] is not null))
                 throw new ArgumentException("Edit UDT members through a reviewed instance override or a new definition version.");
             var next = (JsonArray)definitions.DeepClone();
             var old = next.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "path") == tagPath);
-            if (old is null && next.Count >= 1000) throw new ArgumentException("A gateway supports at most 1000 configured tags in this version.");
+            if (old is null && current.Count >= TagModel.MaximumTags) throw new ArgumentException($"A gateway supports at most {TagModel.MaximumTags} configured tags, including UDT members.");
             if (old is not null) next.Remove(old);
             next.Add(node);
             var model = ModelWithTags(next); var expanded = TagModel.Expand(model, NormalizeTag);

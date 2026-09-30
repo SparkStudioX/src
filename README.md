@@ -2,11 +2,11 @@
 
 SparkStudio is an early-preview industrial application builder with a browser designer, a published operator runtime and a self-hosted gateway. The application uses ASP.NET Core/.NET 10, React/TypeScript and CPython 3; it does not require Java or Jython.
 
-[Website](https://sparkstudiox.com/) · [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.9) · [Product scope](docs/architecture/PRODUCT.md) · [Verification and roadmap](docs/architecture/PARITY.md)
+[Website](https://sparkstudiox.com/) · [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.10) · [Product scope](docs/architecture/PRODUCT.md) · [Verification and roadmap](docs/architecture/PARITY.md)
 
 The current source includes **local accounts, separate engineering/operator sessions, server-enforced project permissions and a bounded audit trail**. First run requires administrator setup on the gateway computer. Remote account/API access requires HTTPS; network deployment and service lifecycle acceptance remain separate gates. Python scripts run with the gateway account's operating-system access; worker processes are not a security sandbox. See the [security guide](docs/architecture/SECURITY.md).
 
-Current source is ahead of the preview.9 installer. The roadmap increments below require a development build until the next release.
+Preview.10 packages the roadmap and reliability increments below. Exact-package verification and remaining acceptance limitations are recorded in the release notes.
 
 ## What works today
 
@@ -50,7 +50,7 @@ The current source includes query-backed forms and scalar properties, single-sel
 
 ## Run on Windows
 
-For a prepared package, download the installer and checksum from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.9). It bundles .NET, Python and browser assets. Preview.9 adds the unified Actions & Events editor, Python component lifecycle and form-value support, compile-only syntax checks, gateway-to-operator session messages and a gateway shutdown crash fix. Its companion bundle contains 29 portable workshops. It retains self-signed HTTPS setup, recovery/tag improvements and scheduled backups. Consult its release notes for exact-package verification; elevated preview.9 service/network installation, remote browser trust, actual domain SMB and trusted external FTPS acceptance remain pending. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md): an elevated preview.5 upgrade over a running preview.3 service succeeded on one Windows host without a Windows restart, and all 486 installed payload hashes matched. Rollback, uninstall, complete real-data preservation and broader service-account/ACL acceptance remain open.
+For a prepared package, download the installer and checksum from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.10). It bundles .NET, Python and browser assets. Preview.10 adds unified application publication, datasets/charts, reusable tag models, equipment commands, local alarms/history, gateway hardening and a 10,000-expanded-tag configuration limit. Its matching workshop bundle documents portable and setup-required examples separately. Consult the release notes for exact-package verification and [load measurements](docs/architecture/LOAD_TESTING.md) for throughput limits. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md). Elevated preview.10 service/network installation, remote browser trust, rollback, uninstall, complete real-data preservation, broader service-account/ACL behavior, actual domain SMB and trusted external FTPS acceptance remain pending.
 
 For development, use Windows x64 with Node/npm available. Node 22.17.1 was used for the recorded checks. Run from the repository root in PowerShell:
 

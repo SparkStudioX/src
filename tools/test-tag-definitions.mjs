@@ -172,21 +172,39 @@ try {
   });
 
   if (args.includes('--capacity')) {
-    await test('1000 configured tags are allowed; new tags above the limit fail and upserts still work', async () => {
+    await test('10,000 configured tags are allowed; 10,001 fail and upserts still work', async () => {
       const current = await definitions();
-      assert.ok(current.length <= 1000);
-      const count = 1000 - current.length;
-      for (let start = 0; start < count; start += 16)
-        await Promise.all(Array.from({ length: Math.min(16, count - start) }, (_, offset) => save(memory(`Capacity${start + offset}`, 'Boolean', false))));
-      assert.equal((await definitions()).length, 1000);
+      const maximum = 10_000;
+      assert.ok(current.length <= maximum);
+      const oversized = { format: 'sparkstudio.tags', version: 1, tags: Array.from({ length: maximum + 1 }, (_, index) => memory(`RejectedCapacity${index}`, 'Boolean', false)) };
+      await request('/api/tag-engineering/preview', 'POST', oversized, 400);
+      assert.deepEqual(await definitions(), current, 'An over-limit import preview changed tag definitions.');
+      const additions = Array.from({ length: maximum - current.length }, (_, index) => memory(`Capacity${index}`, 'Boolean', false));
+      // One reviewed transaction avoids 10,000 whole-configuration saves in a capacity check.
+      if (additions.length) {
+        const package_ = { format: 'sparkstudio.tags', version: 1, tags: additions };
+        const { data: preview } = await request('/api/tag-engineering/preview', 'POST', package_);
+        assert.equal(preview.canApply, true);
+        for (const tag of additions) created.add(tag.path);
+        await request('/api/tag-engineering/apply', 'POST', { package: package_, revision: preview.revision, previewToken: preview.previewToken });
+      }
+      assert.equal((await definitions()).length, maximum);
       await reject(memory('OverCapacity'));
       await save(memory('Double', 'Double', 10));
-      assert.equal((await definitions()).length, 1000);
+      assert.equal((await definitions()).length, maximum);
     });
   }
 } finally {
   await test('remove only tag fixtures created by this run', async () => {
-    for (const path of [...created]) await remove(path);
+    if (args.includes('--capacity')) {
+      const removeTags = (await definitions()).filter(tag => created.has(tag.path) && tag.path.startsWith(prefix + '/')).map(tag => tag.path);
+      if (removeTags.length) {
+        const package_ = { format: 'sparkstudio.tags', version: 2, tags: [], udtDefinitions: [], instances: [], scanGroups: [], removeTags };
+        const { data: preview } = await request('/api/tag-engineering/preview', 'POST', package_);
+        assert.equal(preview.canApply, true);
+        await request('/api/tag-engineering/apply', 'POST', { package: package_, revision: preview.revision, previewToken: preview.previewToken });
+      }
+    } else for (const path of [...created]) await remove(path);
     assert.ok(!(await definitions()).some(definition => definition.path.startsWith(prefix + '/')));
   });
 }

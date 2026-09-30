@@ -6,6 +6,8 @@ namespace SparkStudio.Gateway;
 /// <summary>Authored gateway tag model. UDT versions are immutable and instances explicitly pin a version.</summary>
 public static class TagModel
 {
+    public const int MaximumTags = 10_000;
+
     public static JsonObject Empty() => new()
     {
         ["format"] = "sparkstudio.tags", ["version"] = 2, ["tags"] = new JsonArray(),
@@ -66,6 +68,9 @@ public static class TagModel
 
     public static JsonArray Expand(JsonObject model, Func<JsonObject, JsonObject> normalize)
     {
+        // Validate cardinality before cloning and normalizing thousands of entries.
+        var directTags = Array(model, "tags", MaximumTags);
+        var instances = Array(model, "instances", 128);
         if (model["provider"] is not JsonObject provider) throw new ArgumentException("A default provider configuration is required.");
         Fields(provider, "name", "enabled");
         if (TagDefinitionValidator.Text(provider, "name") != "default") throw new ArgumentException("Only the default provider is supported.");
@@ -112,6 +117,14 @@ public static class TagModel
                 validationMembers.Add(new JsonObject { ["path"] = path, ["kind"] = "memory", ["dataType"] = "Double", ["value"] = 0 });
             TagExpressions.Order(validationMembers.ToArray());
         }
+        var expandedCount = directTags.Count;
+        foreach (var instance in instances.OfType<JsonObject>())
+        {
+            var id = Name(instance, "definitionId"); var version = Version(instance);
+            if (!types.TryGetValue(id + "@" + version, out var type)) throw new ArgumentException($"Missing UDT definition: {id}@{version}.");
+            expandedCount += type["members"]!.AsArray().Count;
+            if (expandedCount > MaximumTags) throw new ArgumentException($"A gateway supports at most {MaximumTags} configured tags, including UDT members.");
+        }
         var output = new JsonArray(); var paths = new HashSet<string>(StringComparer.Ordinal);
         void Add(JsonObject input, JsonObject? instance = null, string? member = null, string[]? overrides = null)
         {
@@ -135,9 +148,9 @@ public static class TagModel
             }
             output.Add(tag);
         }
-        foreach (var tag in Array(model, "tags", 1000).OfType<JsonObject>()) Add(tag);
+        foreach (var tag in directTags.OfType<JsonObject>()) Add(tag);
         var roots = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var instance in Array(model, "instances", 128).OfType<JsonObject>())
+        foreach (var instance in instances.OfType<JsonObject>())
         {
             Fields(instance, "path", "definitionId", "version", "enabled", "overrides");
             var root = TagDefinitionValidator.Path(TagDefinitionValidator.Text(instance, "path"));
@@ -163,7 +176,6 @@ public static class TagModel
                 Add(ConcreteMember(authored, root), instance, memberPath, fields);
             }
         }
-        if (output.Count > 1000) throw new ArgumentException("A gateway supports at most 1000 configured tags, including UDT members.");
         foreach (var root in roots)
             if (output.OfType<JsonObject>().Any(tag => tag["udtInstance"] is null && (TagDefinitionValidator.Text(tag, "path") == root || TagDefinitionValidator.Text(tag, "path").StartsWith(root + "/", StringComparison.Ordinal))))
                 throw new ArgumentException($"Direct tags cannot occupy UDT instance namespace: {root}.");

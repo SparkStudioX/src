@@ -6,7 +6,7 @@
       "kind": "source-commit",
       "value": "4e58e436ef3817458427e23a81d14a65ff1d190a"
     },
-    "note": "Use the companion roadmap source build or a later compatible release for the newly added examples. Preview.9 does not contain unified publication, datasets, charts, UDTs or equipment commands. The bundle source revision and each workshop prerequisites identify its actual requirements."
+    "note": "Use the matching preview.10 installer or a later compatible release. Preview.10 includes unified publication, datasets, charts, UDTs, equipment commands and local alarms/history. The bundle source revision and each workshop prerequisites identify its actual requirements."
   },
   "workshops": [
     {
@@ -23,7 +23,7 @@
         "Reviewed synthetic commands"
       ],
       "prerequisites": [
-        "Use the companion review-hardening source build; preview.9 does not include alarms or history.",
+        "Use preview.10 or later for local alarms and history.",
         "Run tools/load-process-data-example.mjs against an isolated gateway using administrator credentials; --publish is explicit.",
         "Operators need View to read, Commands to change the synthetic temperature and Operate to acknowledge; tag scope must include [default]ProcessWorkshop/."
       ],
@@ -59,7 +59,7 @@
       "source": "examples/validated-inputs.json",
       "distribution": "portable",
       "features": ["Formatted input masks", "Required and text validation", "Keyboard barcode scans", "Python commit handlers"],
-      "prerequisites": ["Use the companion application-workflows source build or later compatible release; preview.9 does not include these controls.", "The bundled Python runtime and operator Operate permission are required."],
+      "prerequisites": ["Use preview.10 or later for these controls.", "The bundled Python runtime and operator Operate permission are required."],
       "gatewayWrites": "none",
       "entryScreenId": "validated-inputs",
       "guide": "docs/architecture/VALIDATED_INPUTS.md",
@@ -72,7 +72,7 @@
       "source": "examples/component-interactions.json",
       "distribution": "portable",
       "features": ["Focus and blur events", "Keyboard and pointer events", "Double-click handlers", "Password key redaction", "Template event isolation"],
-      "prerequisites": ["Use the companion application-workflows source build or later compatible release; preview.9 does not include these events.", "Python handlers require the bundled runtime and operator Operate permission."],
+      "prerequisites": ["Use preview.10 or later for these events.", "Python handlers require the bundled runtime and operator Operate permission."],
       "gatewayWrites": "none",
       "entryScreenId": "interaction-lab",
       "guide": "docs/architecture/COMPONENT_INTERACTIONS.md",

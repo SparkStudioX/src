@@ -41,6 +41,11 @@ rejects('different screen context is rejected', next => { next.project.screens[0
 rejects('disabled synthetic tag definitions are rejected', next => { next.tags[0].enabled = false; });
 rejects('external tags cannot occupy a synthetic tag path', next => { next.tags[0].kind = 'opc'; });
 rejects('screen capacity is checked before mutation', next => { next.project.screens = Array.from({ length: 100 }, (_, id) => ({ id: String(id) })); });
+check('additive equipment tags fit exactly at the 10,000-tag boundary', () => {
+  const tags = Array.from({ length: 10_000 - plan.tags.length }, (_, index) => ({ path: `[default]CapacityFixture/T${index}`, kind: 'memory', dataType: 'Int32', value: 0 }));
+  preflightEquipmentExample({ ...snapshot, tags });
+  assert.throws(() => preflightEquipmentExample({ ...snapshot, tags: [...tags, { path: '[default]CapacityFixture/Extra' }] }), /10,000-tag limit/);
+});
 check('harmless styling, metadata, and existing synthetic values are preserved', () => {
   const next = structuredClone(snapshot);
   next.project.screens[0].kind = 'screen'; next.project.screens[0].parameters = {};

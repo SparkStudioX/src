@@ -1118,9 +1118,16 @@ export default function App() {
       setPackageExporting(false);
     }
   };
-  const filteredTags = tags.filter((tag) =>
-    tag.path.toLowerCase().includes(tagFilter.toLowerCase()),
-  );
+  const { rows: filteredTags, count: matchingTagCount } = useMemo(() => {
+    const needle = tagFilter.toLowerCase(), rows: typeof tags = [];
+    let count = 0;
+    for (const tag of tags) {
+      if (!tag.path.toLowerCase().includes(needle)) continue;
+      count++;
+      if (rows.length < 200) rows.push(tag);
+    }
+    return { rows, count };
+  }, [tags, tagFilter]);
   const parameterChoices = [
     ...new Set(
       tags
@@ -1563,6 +1570,9 @@ export default function App() {
                           onChange={(event) => setTagFilter(event.target.value)}
                         />
                       </label>
+                      {matchingTagCount > filteredTags.length && <p className="panel-help" role="status">
+                        Showing {filteredTags.length} of {matchingTagCount.toLocaleString()} matching tags. Refine the search to find another tag.
+                      </p>}
                       <div className="tag-list">
                         {filteredTags.map((tag) => (
                           <button

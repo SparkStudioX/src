@@ -98,15 +98,30 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             cachedDefinitions = store.GetRuntimeTagDefinitions().OfType<JsonObject>().ToArray();
             cachedDisabledConnections = store.GetConnections().OfType<JsonObject>().Where(item => item["enabled"]?.GetValue<bool>() == false)
                 .Select(item => ProjectStore.Required(item, "id")).ToHashSet(StringComparer.Ordinal);
-            cachedPlans = cachedDefinitions.Where(definition => recovery?.Active != true && TagDefinitionValidator.Kind(definition) == "opcua" && definition["enabled"]?.GetValue<bool>() != false
-                    && !cachedDisabledConnections.Contains(ProjectStore.Required(definition, "connectionId")))
-                .GroupBy(definition => (ConnectionId: ProjectStore.Required(definition, "connectionId"), Interval: definition["publishingIntervalMs"]?.GetValue<int>() ?? 1000, Deadband: TagDefinitionValidator.AbsoluteDeadband(definition), QueueSize: TagDefinitionValidator.MonitorQueueSize(definition)))
-                .Select(group => new WatchPlan($"{group.Key.ConnectionId}\n{group.Key.Interval}\n{group.Key.Deadband:R}\n{group.Key.QueueSize}", store.GetConnection(group.Key.ConnectionId, allowDisabled: true), group.Key.Interval,
-                    group.Select(definition => new Binding(ProjectStore.Required(definition, "path"), ProjectStore.Required(definition, "nodeId"), TagDefinitionValidator.AbsoluteDeadband(definition), TagDefinitionValidator.MonitorQueueSize(definition))).OrderBy(binding => binding.Path, StringComparer.Ordinal).ToArray()))
+            cachedPlans = BuildWatchPlans(cachedDefinitions.Where(definition => recovery?.Active != true && TagDefinitionValidator.Kind(definition) == "opcua" && definition["enabled"]?.GetValue<bool>() != false
+                    && !cachedDisabledConnections.Contains(ProjectStore.Required(definition, "connectionId"))), id => store.GetConnection(id, allowDisabled: true))
                 .ToDictionary(plan => plan.Key, StringComparer.Ordinal);
             capacityWarnings.RemoveWhere(key => !cachedPlans.ContainsKey(key));
             definitionGeneration = generation; cachedRecovery = recovery?.Active == true; DefinitionBuildCount++;
         }
+    }
+    private static WatchPlan[] BuildWatchPlans(IEnumerable<JsonObject> definitions, Func<string, ConnectionDefinition> getConnection)
+    {
+        return definitions.GroupBy(definition => (ConnectionId: ProjectStore.Required(definition, "connectionId"), Interval: definition["publishingIntervalMs"]?.GetValue<int>() ?? 1000,
+                Deadband: TagDefinitionValidator.AbsoluteDeadband(definition), QueueSize: TagDefinitionValidator.MonitorQueueSize(definition)))
+            .SelectMany(group =>
+            {
+                var connection = getConnection(group.Key.ConnectionId);
+                // The connector's per-watch node ceiling is independent of the
+                // gateway's configured-tag ceiling. Keep aliases for one node in
+                // one partition and derive stable chunks from sorted node IDs.
+                var byNode = group.Select(definition => new Binding(ProjectStore.Required(definition, "path"), ProjectStore.Required(definition, "nodeId"), group.Key.Deadband, group.Key.QueueSize))
+                    .GroupBy(binding => binding.NodeId, StringComparer.Ordinal).ToDictionary(items => items.Key, items => items.ToArray(), StringComparer.Ordinal);
+                var key = FormattableString.Invariant($"{group.Key.ConnectionId}\n{group.Key.Interval}\n{group.Key.Deadband:R}\n{group.Key.QueueSize}");
+                return byNode.Keys.Order(StringComparer.Ordinal).Chunk(ConnectorService.MaximumReadNodes).Select((nodes, index) =>
+                    new WatchPlan(key + "\n" + index.ToString(System.Globalization.CultureInfo.InvariantCulture), connection, group.Key.Interval,
+                        nodes.SelectMany(node => byNode[node]).OrderBy(binding => binding.Path, StringComparer.Ordinal).ToArray()));
+            }).OrderBy(plan => plan.Key, StringComparer.Ordinal).ToArray();
     }
     public static bool SameValue(object? left, object? right) => ReferenceEquals(left, right) ||
         (left is JsonElement a && right is JsonElement b ? JsonElement.DeepEquals(a, b) : Equals(left, right));

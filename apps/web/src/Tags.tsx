@@ -38,6 +38,7 @@ export default function Tags({
   const [valueText, setValueText] = useState("0");
   const [folder, setFolder] = useState("");
   const [filter, setFilter] = useState("");
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -79,13 +80,18 @@ export default function Tags({
     }
     return [...found].sort((left, right) => left.localeCompare(right));
   }, [definitions]);
-  const visible = definitions.filter(
+  const visible = useMemo(() => definitions.filter(
     (definition) =>
       (!folder ||
         folderOf(definition.path) === folder ||
         folderOf(definition.path).startsWith(folder + "/")) &&
       definition.path.toLowerCase().includes(filter.toLowerCase()),
-  );
+  ), [definitions, folder, filter]);
+  const liveByPath = useMemo(() => new Map(tags.map(tag => [tag.path, tag])), [tags]);
+  const pageSize = 100, pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageRows = visible.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+  useEffect(() => setPage(0), [folder, filter]);
   const edit = (patch: Partial<TagDefinition>) => {
     if (current) setDraft({ ...current, ...patch });
   };
@@ -221,7 +227,7 @@ export default function Tags({
     }
   };
   const live = current
-    ? tags.find((tag) => tag.path === current.path)
+    ? liveByPath.get(current.path)
     : undefined;
 
   return (
@@ -309,6 +315,14 @@ export default function Tags({
             </button>
           </div>
           {error && <div className="inline-error">{error}</div>}
+          <nav aria-label="Configured tag pages" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "8px 12px" }}>
+            <span role="status">{visible.length ? `${currentPage * pageSize + 1}–${Math.min((currentPage + 1) * pageSize, visible.length)} of ${visible.length} tags` : "0 tags"}</span>
+            <button className="button small" disabled={currentPage === 0} onClick={() => setPage(0)}>First</button>
+            <button className="button small" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</button>
+            <span>Page {currentPage + 1} of {pageCount}</span>
+            <button className="button small" disabled={currentPage === pageCount - 1} onClick={() => setPage(currentPage + 1)}>Next</button>
+            <button className="button small" disabled={currentPage === pageCount - 1} onClick={() => setPage(pageCount - 1)}>Last</button>
+          </nav>
           <div className="data-table-wrap">
             <table className="data-table tag-definition-table">
               <thead>
@@ -320,10 +334,8 @@ export default function Tags({
                 </tr>
               </thead>
               <tbody>
-                {visible.map((definition) => {
-                  const tag = tags.find(
-                    (item) => item.path === definition.path,
-                  );
+                {pageRows.map((definition) => {
+                  const tag = liveByPath.get(definition.path);
                   const good = tag?.quality.toLowerCase().startsWith("good");
                   return (
                     <tr

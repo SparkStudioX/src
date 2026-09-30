@@ -1,18 +1,42 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Http.Features;
 
 namespace SparkStudio.Gateway;
 
 public static class TagEngineering
 {
+    public const long MaximumImportBytes = 32L * 1024 * 1024;
+
     public static void MapTagEngineeringEndpoints(this RouteGroupBuilder routes)
     {
         routes.MapGet("/tag-engineering/export", (ProjectStore store) => store.ExportTags()).Access("configuration");
-        routes.MapPost("/tag-engineering/preview", (JsonObject package, ProjectStore store) => store.PreviewTagImport(package)).Access("configuration");
-        routes.MapPost("/tag-engineering/apply", (TagImportRequest request, TagEngine tags) => tags.ApplyImport(request)).Access("configuration", audit: true);
+        routes.MapPost("/tag-engineering/preview", async (HttpContext context, ProjectStore store) => store.PreviewTagImport(await ReadImportAsync<JsonObject>(context))).Access("configuration");
+        routes.MapPost("/tag-engineering/apply", async (HttpContext context, TagEngine tags) => tags.ApplyImport(await ReadImportAsync<TagImportRequest>(context))).Access("configuration", audit: true);
         routes.MapGet("/tag-engineering/status", (TagEngine tags) => tags.ProviderSnapshot()).Access("configuration");
         routes.MapGet("/tag-engineering/values", (TagEngine tags) => tags.Snapshot()).Access("configuration");
+    }
+
+    private static async Task<T> ReadImportAsync<T>(HttpContext context)
+    {
+        // Model binding normally reads the body before the handler. Read explicitly
+        // so only these authorized import routes lift the global 1 MiB ceiling.
+        var size = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
+        if (size is { IsReadOnly: false }) size.MaxRequestBodySize = MaximumImportBytes;
+        if (context.Request.ContentLength > MaximumImportBytes) throw new BadHttpRequestException("Tag imports are limited to 32 MiB.", 413);
+        if (!context.Request.HasJsonContentType()) throw new BadHttpRequestException("Tag imports require a JSON content type.", 415);
+        using var data = new MemoryStream();
+        var buffer = new byte[81920];
+        int count;
+        while ((count = await context.Request.Body.ReadAsync(buffer, context.RequestAborted)) > 0)
+        {
+            if (data.Length + count > MaximumImportBytes) throw new BadHttpRequestException("Tag imports are limited to 32 MiB.", 413);
+            await data.WriteAsync(buffer.AsMemory(0, count), context.RequestAborted);
+        }
+        data.Position = 0;
+        return await System.Text.Json.JsonSerializer.DeserializeAsync<T>(data, ProjectStore.Json, context.RequestAborted)
+            ?? throw new ArgumentException("A tag import package is required.");
     }
 }
 
@@ -170,7 +194,7 @@ public sealed partial class ProjectStore
             throw new ArgumentException("Import requires sparkstudio.tags version 1 or 2.");
         if (number == 1) TagModel.Fields(package, "format", "version", "tags");
         else TagModel.Fields(package, "format", "version", "tags", "provider", "scanGroups", "udtDefinitions", "instances", "removeTags", "removeInstances", "removeScanGroups", "removeUdtDefinitions");
-        var imported = TagModel.Array(package, "tags", 1000);
+        var imported = TagModel.Array(package, "tags", TagModel.MaximumTags);
         if (number == 1 && imported.Count == 0) throw new ArgumentException("Version 1 imports require at least one tag.");
         if (number == 2)
         {
@@ -179,16 +203,19 @@ public sealed partial class ProjectStore
         var next = (JsonObject)tagModel.DeepClone(); var changes = new List<TagImportChange>();
         void Merge(string collection, JsonArray incoming, Func<JsonObject, string> key, Func<JsonObject, JsonObject>? normalize = null, bool immutable = false)
         {
-            var seen = new HashSet<string>(StringComparer.Ordinal); var target = next[collection]!.AsArray();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var target = next[collection]!.AsArray().OfType<JsonObject>().ToDictionary(key, StringComparer.Ordinal);
+            var incomingNodes = new List<JsonObject>();
             foreach (var value in incoming.OfType<JsonObject>())
             {
                 var node = normalize is null ? (JsonObject)value.DeepClone() : normalize(value); var id = key(node);
                 if (!seen.Add(id)) throw new ArgumentException($"Duplicate {collection} key: {id}.");
-                var old = target.OfType<JsonObject>().FirstOrDefault(item => key(item) == id);
+                target.Remove(id, out var old);
                 if (immutable && old is not null && !JsonNode.DeepEquals(old, node)) throw new ArgumentException($"UDT {id} is immutable. Create a new version and explicitly upgrade instances.");
                 if (collection != "tags") changes.Add(new(id, old is null ? "add" : JsonNode.DeepEquals(old, node) ? "unchanged" : "update", collection));
-                if (old is not null) target.Remove(old); target.Add(node);
+                incomingNodes.Add(node);
             }
+            next[collection] = new JsonArray(target.Values.Select(item => item.DeepClone()).Concat(incomingNodes).ToArray());
         }
         Merge("tags", imported, tag => Required(tag, "path"), tag => { TagModel.ValidateTagFields(tag); return NormalizeTag(tag); });
         if (number == 2)
@@ -202,21 +229,23 @@ public sealed partial class ProjectStore
                 next["provider"] = provider.DeepClone();
             }
             else if (package.ContainsKey("provider")) throw new ArgumentException("provider must be an object.");
-            void Remove(string field, string collection, Func<JsonObject, string> key)
+            void Remove(string field, string collection, Func<JsonObject, string> key, int maximum)
             {
                 if (!package.ContainsKey(field)) return;
-                if (package[field] is not JsonArray remove || remove.Count > 1000) throw new ArgumentException($"{field} must be an array of keys.");
+                if (package[field] is not JsonArray remove || remove.Count > maximum) throw new ArgumentException($"{field} must be an array of at most {maximum} keys.");
+                var incomingIds = package[collection]!.AsArray().OfType<JsonObject>().Select(key).ToHashSet(StringComparer.Ordinal);
+                var target = next[collection]!.AsArray().OfType<JsonObject>().ToDictionary(key, StringComparer.Ordinal);
                 foreach (var item in remove)
                 {
                     if (item is not JsonValue scalar || !scalar.TryGetValue<string>(out var id)) throw new ArgumentException($"{field} must contain text keys.");
-                    if (package[collection]!.AsArray().OfType<JsonObject>().Any(value => key(value) == id)) throw new ArgumentException($"Cannot import and remove {id} together.");
-                    var target = next[collection]!.AsArray(); var old = target.OfType<JsonObject>().FirstOrDefault(value => key(value) == id);
-                    if (old is null) throw new ArgumentException($"Cannot remove missing {collection}: {id}.");
-                    target.Remove(old); if (collection != "tags") changes.Add(new(id, "remove", collection));
+                    if (incomingIds.Contains(id)) throw new ArgumentException($"Cannot import and remove {id} together.");
+                    if (!target.Remove(id)) throw new ArgumentException($"Cannot remove missing {collection}: {id}.");
+                    if (collection != "tags") changes.Add(new(id, "remove", collection));
                 }
+                next[collection] = new JsonArray(target.Values.Select(item => item.DeepClone()).ToArray());
             }
-            Remove("removeTags", "tags", tag => Required(tag, "path")); Remove("removeInstances", "instances", tag => Required(tag, "path"));
-            Remove("removeScanGroups", "scanGroups", tag => Required(tag, "name")); Remove("removeUdtDefinitions", "udtDefinitions", TagModel.DefinitionKey);
+            Remove("removeTags", "tags", tag => Required(tag, "path"), TagModel.MaximumTags); Remove("removeInstances", "instances", tag => Required(tag, "path"), 128);
+            Remove("removeScanGroups", "scanGroups", tag => Required(tag, "name"), 32); Remove("removeUdtDefinitions", "udtDefinitions", TagModel.DefinitionKey, 128);
         }
         var previous = GetTagDefinitions().OfType<JsonObject>().ToDictionary(tag => Required(tag, "path"), StringComparer.Ordinal);
         JsonArray expanded; string[] conflicts = [];
@@ -224,12 +253,13 @@ public sealed partial class ProjectStore
         catch (ArgumentException error) when (number == 2) { expanded = []; conflicts = [error.Message]; }
         if (conflicts.Length == 0)
         {
+            var importedPaths = imported.OfType<JsonObject>().Select(tag => Required(tag, "path")).ToHashSet(StringComparer.Ordinal);
             foreach (var node in expanded.OfType<JsonObject>())
             {
                 var path = Required(node, "path"); var old = previous.GetValueOrDefault(path);
                 var action = old is null ? "add" : JsonNode.DeepEquals(old, node) ? "unchanged" : "update";
                 // Include unchanged incoming direct tags as in the version-1 contract, and all affected instance members.
-                if (action != "unchanged" || imported.OfType<JsonObject>().Any(tag => Required(tag, "path") == path) || number == 2 && node["udtInstance"] is not null)
+                if (action != "unchanged" || importedPaths.Contains(path) || number == 2 && node["udtInstance"] is not null)
                     changes.Add(new(path, action, Required(node, "kind"), node["overrideFields"]?.AsArray().Select(field => field!.GetValue<string>()).ToArray()));
                 previous.Remove(path);
             }

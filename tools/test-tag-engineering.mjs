@@ -52,6 +52,12 @@ Console.WriteLine("PASS preview is read-only, forward references import atomical
 
 var changed = Package(Memory("Count", 13)); var review = store.PreviewTagImport(changed);
 store.WriteMemoryTag("[default]Engineering/Count", JsonSerializer.SerializeToElement(14));
+Assert(store.PreviewTagImport(changed).PreviewToken == review.PreviewToken, "Runtime writes invalidated a configuration-only preview.");
+var unchanged = store.ExportTags(); var unchangedReview = store.PreviewTagImport(unchanged); store.ApplyTagImport(new(unchanged, unchangedReview.Revision, unchangedReview.PreviewToken));
+store.FlushMemoryValues();
+Assert(new ProjectStore(directory, protection, gatewayOnly: true).GetTagDefinitions().OfType<JsonObject>().Single(tag => tag["path"]!.GetValue<string>() == "[default]Engineering/Count")["value"]!.GetValue<double>() == 14,
+    "Unchanged import or reload lost a checkpointed runtime value.");
+store.SaveTag(Memory("Count", 14));
 Throws<InvalidOperationException>(() => store.ApplyTagImport(new(changed, review.Revision, review.PreviewToken)));
 review = store.PreviewTagImport(changed); changed["tags"]![0]!["value"] = 15;
 Throws<InvalidOperationException>(() => store.ApplyTagImport(new(changed, review.Revision, review.PreviewToken)));
@@ -60,7 +66,10 @@ store.SaveConnection(new JsonObject { ["id"] = "offline", ["name"] = "Offline fi
 Throws<InvalidOperationException>(() => store.ApplyTagImport(new(changed, review.Revision, review.PreviewToken)));
 review = store.PreviewTagImport(changed); store.ApplyTagImport(new(changed, review.Revision, review.PreviewToken));
 Assert(store.GetTagDefinitions().Count == 4, "Merge deleted absent tags.");
-Console.WriteLine("PASS memory writes, edited packages and connection changes invalidate review; merge retains unrelated tags");
+Assert(store.GetTagDefinitions().OfType<JsonObject>().Single(tag => tag["path"]!.GetValue<string>() == "[default]Engineering/Count")["value"]!.GetValue<double>() == 15
+    && new ProjectStore(directory, protection, gatewayOnly: true).GetTagDefinitions().OfType<JsonObject>().Single(tag => tag["path"]!.GetValue<string>() == "[default]Engineering/Count")["value"]!.GetValue<double>() == 15,
+    "A checkpoint for the old configuration overrode a reviewed changed default before or after reload.");
+Console.WriteLine("PASS runtime writes preserve configuration review and checkpoint across unchanged imports; configuration, edited packages and connections invalidate review; merge retains unrelated tags");
 
 Reject(Package(Memory("Duplicate", 1), Memory("Duplicate", 2)));
 Reject(Package(Expression("Missing", "x", "Double", ("x", "NotFound"))));

@@ -21,6 +21,7 @@ export default function TagModels({ onClose, onApplied }: { onClose: () => void;
   const [name, setName] = useState("NewUnit"), [version, setVersion] = useState(1), [text, setText] = useState(initialMembers);
   const [definitionId, setDefinitionId] = useState(""), [enabled, setEnabled] = useState(true), [interval, setInterval] = useState(1000);
   const [review, setReview] = useState<{ package: object; preview: Preview } | null>(null);
+  const [reviewPage, setReviewPage] = useState(0);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [message, setMessage] = useState("");
   async function load() {
     const [next, health] = await Promise.all([api<Model>("/tag-engineering/export"), api<Status>("/tag-engineering/status")]);
@@ -31,7 +32,7 @@ export default function TagModels({ onClose, onApplied }: { onClose: () => void;
     void load().catch(reason => setError(String(reason)));
     return () => { element?.close(); if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
   }, []);
-  function change() { setReview(null); setError(""); setMessage(""); }
+  function change() { setReview(null); setReviewPage(0); setError(""); setMessage(""); }
   function choose(nextTab: Tab, key = "") {
     change(); setTab(nextTab); setSelected(key);
     if (nextTab === "definitions") {
@@ -65,8 +66,11 @@ export default function TagModels({ onClose, onApplied }: { onClose: () => void;
       if (remove) package_.removeScanGroups = [selected];
       else package_.scanGroups = [{ name, publishingIntervalMs: interval, enabled }];
     } else package_.provider = { name: "default", enabled };
-    setReview({ package: package_, preview: await api<Preview>("/tag-engineering/preview", "POST", package_) });
+    setReview({ package: package_, preview: await api<Preview>("/tag-engineering/preview", "POST", package_) }); setReviewPage(0);
   }
+  const reviewChanges = review?.preview.changes ?? [], reviewPageSize = 200;
+  const currentReviewPage = Math.min(reviewPage, Math.max(0, Math.ceil(reviewChanges.length / reviewPageSize) - 1));
+  const reviewOffset = currentReviewPage * reviewPageSize;
   return createPortal(<dialog ref={dialog} className="account-settings-dialog" style={{ width: "min(1000px, 95vw)" }} aria-labelledby={`${id}-title`}
     onCancel={event => { event.preventDefault(); if (!busy) onClose(); }} onKeyDown={event => event.stopPropagation()}>
     <header><h2 id={`${id}-title`}>Tag model</h2><button className="account-settings-close" aria-label="Close tag model" disabled={busy} onClick={onClose}>×</button></header>
@@ -109,8 +113,15 @@ export default function TagModels({ onClose, onApplied }: { onClose: () => void;
       {review && <div role="status">
         {review.preview.conflicts?.length > 0 ? <div className="security-error"><strong>Resolve these conflicts before applying</strong><ul>{review.preview.conflicts.map(item => <li key={item}>{item}</li>)}</ul></div> : <p>{review.preview.totalTags} configured tags after apply. Review inherited changes and retained overrides below.</p>}
         <div style={{ maxHeight: 260, overflow: "auto" }}><table className="data-table"><thead><tr><th>Action</th><th>Resource / path</th><th>Kind</th><th>Retained overrides</th></tr></thead><tbody>
-          {review.preview.changes.map(item => <tr key={`${item.kind}:${item.path}`}><td>{item.action}</td><td>{item.path}</td><td>{item.kind}</td><td>{item.overrideFields?.join(", ") || "—"}</td></tr>)}
-        </tbody></table></div><small>Concurrent tag, memory-value, connection, or model edits invalidate this preview.</small>
+          {reviewChanges.slice(reviewOffset, reviewOffset + reviewPageSize).map(item => <tr key={`${item.kind}:${item.path}`}><td>{item.action}</td><td>{item.path}</td><td>{item.kind}</td><td>{item.overrideFields?.join(", ") || "—"}</td></tr>)}
+        </tbody></table></div>
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <span>{reviewChanges.length ? `Showing ${reviewOffset + 1}–${Math.min(reviewOffset + reviewPageSize, reviewChanges.length)} of ${reviewChanges.length.toLocaleString()} changes.` : "No resource changes."}</span>
+          {reviewChanges.length > reviewPageSize && <>
+            <button type="button" className="button" disabled={busy || currentReviewPage === 0} onClick={() => setReviewPage(currentReviewPage - 1)}>Previous changes</button>
+            <button type="button" className="button" disabled={busy || reviewOffset + reviewPageSize >= reviewChanges.length} onClick={() => setReviewPage(currentReviewPage + 1)}>Next changes</button>
+          </>}
+        </div><small>Apply includes all {reviewChanges.length.toLocaleString()} changes, including other pages. Concurrent tag-definition, connection, or model edits invalidate this preview.</small>
       </div>}
       {error && <p className="security-error" role="alert">{error}</p>}{message && <p role="status">{message}</p>}
       <footer><button className="button" disabled={busy} onClick={onClose}>Done</button><button className="button primary" disabled={busy || !review?.preview.canApply} onClick={() => void run(async () => {

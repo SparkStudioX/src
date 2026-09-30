@@ -8,6 +8,38 @@ The [Designer implementation track](#designer-implementation-track-2026-09-29) a
 
 ## Reliability, security and process-data review follow-up, 2026-09-30
 
+The subsequent capacity increment raises the gateway validation ceiling to
+**10,000 expanded tags**, with indexed bulk imports, bounded 32 MiB tag-import
+requests, paged tag/review lists and partitioned OPC watches. Thirty capacity
+checks and forty backend regression checks passed. Memory loads at 1,000/5,000/
+10,000 tags preserved all final and reloaded values. With 10,000 configured tags,
+100 protocol sessions at 1,000 aggregate updates/second had 8 ms HTTP-read p95
+and 970 ms SSE fresh-value-age p95. At 10,000 updates/second, 50/100 sessions
+became slow (4.4/22.9 seconds SSE p95), despite correct final convergence; full
+snapshot fallback and saturation of the same-host Node consumer were observed.
+These high-rate runs are not acceptable live-delivery capacity claims. Historian
+limits remain independent at 5,000 recorded tags and 2,000 alarms.
+
+Initial isolated load tests measured the then-current **1,000-expanded-tag limit**
+and rejected 5,000/10,000-tag imports without bypassing validation. Thirty-second
+internal memory stages reached 125,000–174,000 writes/second with eight writers,
+without network or historian overhead. The real operator transport sustained
+1,000 aggregate tag updates/second with 1/10/50/100 independent sessions and no
+final-value mismatches or disconnects. At 100 sessions, tag-read p95 was 6 ms,
+SSE sample-age p95 was 956 ms, and gateway working set peaked near 164 MiB.
+Historian recording with 1,000 tags and four concurrent query workers had
+140 ms query-service p95 and 386 ms mean recorded intervals despite a 250 ms
+fixed delay. All recorded quality, database integrity and reload checks passed.
+These are short synthetic Windows desktop measurements, not production capacity
+or real OPC/network/browser/soak acceptance. See [methodology and results](LOAD_TESTING.md).
+
+Load preparation also exposed and fixed the readiness probe's incompatibility
+with the Python worker's protected stdout descriptor. The probe now uses the
+actual stdin/stdout protocol; 14 worker/protocol checks and six HTTP/startup
+groups passed. No worker isolation mechanism was removed. Event-driven operator
+delivery and historian read/recording separation remain
+performance work.
+
 The review follow-up adds administrator approval for changed executable publications and restores, operator Python tag scopes (including queued messages), raw-transport authentication checks, bounded password verification/Python workers and hardened response headers. Unchanged code with layout edits remains publishable by a project publisher. Authored Python and browser JavaScript remain trusted code; synchronous JavaScript loops are not isolated from the browser UI thread.
 
 Tag definitions and connection plans are generation-cached, memory values use a coalesced durable checkpoint, and script diagnostics append outside the scheduler lock. Operator streams send bounded deltas and named heartbeats, with scope-change resets and connection caps. Project startup isolates invalid projects, draft writes flush before replacement, publication history is loaded on demand, and archived runtimes are evicted. The browser has application/component error boundaries, validated project payloads, path-indexed tag subscriptions, memoized tiles and separate Designer/Gateway bundles.

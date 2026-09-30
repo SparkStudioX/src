@@ -141,7 +141,7 @@ export function preflightEquipmentExample({ project, queries: existingQueries, c
     if (found.length > 1 || (found.length && (found[0].kind !== 'memory' || found[0].dataType !== 'Int32' || found[0].enabled === false))) conflict('tag', expected.path);
   }
   assert.ok(project.screens.length + (found.length ? 0 : 1) <= 100, 'The equipment example would exceed the 100-screen limit; nothing was changed.');
-  assert.ok(existingTags.length + tags.filter(item => !existingTags.some(saved => saved.path === item.path)).length <= 1000, 'The equipment example would exceed the 1000-tag limit; nothing was changed.');
+  assert.ok(existingTags.length + tags.filter(item => !existingTags.some(saved => saved.path === item.path)).length <= 10_000, 'The equipment example would exceed the 10,000-tag limit; nothing was changed.');
 }
 
 export function validateEquipmentSchema(schema) {
