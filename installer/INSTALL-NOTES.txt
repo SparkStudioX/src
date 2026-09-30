@@ -4,7 +4,7 @@ Preview.9 adds a unified Actions & Events editor, Python component lifecycle and
 
 The offline package includes the gateway, .NET runtime, browser Designer and operator application, and CPython. No separate SDK, Node.js or Python installation is required to run it.
 
-Current-user extraction (/PORTABLE=1 /CURRENTUSER) is the evaluation path verified in prior releases; consult preview.8 release notes for this package's verification results. It extracts application files without registering a service, shortcuts or an uninstaller. Use a separate data directory and an unused loopback port; see the installation guide supplied with the release.
+Current-user extraction (/PORTABLE=1 /CURRENTUSER) is the evaluation path verified in prior releases; consult this release's notes for this package's verification results. It extracts application files without registering a service, shortcuts or an uninstaller. Use a separate data directory and an unused loopback port; see the installation guide supplied with the release.
 
 On first launch, create an administrator using security/setup-code.txt in the gateway data directory. There are no default credentials. Projects require explicit publication before operators can open them. Accounts, project grants and gateway resources persist on disk.
 
