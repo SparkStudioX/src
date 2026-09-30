@@ -303,14 +303,19 @@ internal static class PythonComponentEventChecks
             }
             AdmissionScript("1.2");
             var deadlineActions = new RuntimeActions(workspace.Publication, runner, queries);
+            // Hold the actual project admission slots so every request has a known
+            // minimum queue wait, independent of serial process startup on the host.
+            var deadlineSlots = (SemaphoreSlim)typeof(RuntimeActions).GetField("componentEventSlots", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(deadlineActions)!;
+            for (var index = 0; index < 4; index++) await deadlineSlots.WaitAsync();
             var elapsed = System.Diagnostics.Stopwatch.StartNew();
-            var totalBudget = Enumerable.Range(0, 8).Select(index => deadlineActions.ExecutePreviewComponentEventAsync(workspace.Store, "main", "quantity", false, Marked(index), "deadline-" + index, CancellationToken.None)).ToArray();
+            var totalBudget = Enumerable.Range(0, 4).Select(index => deadlineActions.ExecutePreviewComponentEventAsync(workspace.Store, "main", "quantity", false, Marked(index), "deadline-" + index, CancellationToken.None)).ToArray();
+            try { await Task.Delay(1100); }
+            finally { deadlineSlots.Release(4); }
             var results = await Task.WhenAll(totalBudget);
-            // Interpreter startup belongs to the same deadline. On a busy Windows runner
-            // even an initial worker can legitimately time out; its success is not the
-            // queue contract. The second wave must never receive a fresh execution budget.
+            // 1.1 seconds queued plus 1.2 seconds executing cannot fit the two-second
+            // total budget. Slow interpreter startup may consume more, never less.
             bool Deadline(JsonObject item) => !item["success"]!.GetValue<bool>() && item["stderr"]!.GetValue<string>().Contains("2 second");
-            Check(results.Take(4).All(item => item["success"]!.GetValue<bool>() || Deadline(item)) && results.Skip(4).All(Deadline),
+            Check(results.All(Deadline),
                 "queue time consumes the same two-second deadline as actual Python execution: " + string.Join("; ", results.Select(item => item.ToJsonString())));
             Check(elapsed.ElapsedMilliseconds < 5000, "queued execution terminates within a bounded cleanup allowance after its two-second budget");
             AdmissionScript("0");
