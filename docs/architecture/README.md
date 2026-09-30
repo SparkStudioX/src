@@ -9,6 +9,7 @@ Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md).
 - [Product and architecture](PRODUCT.md)
 - [Projects and portable packages](PROJECTS.md)
 - [Windows installer](WINDOWS_INSTALLER.md)
+- [Preview release cycle](RELEASE_PROCESS.md)
 - [Security and accounts](SECURITY.md)
 - [Verification and roadmap](PARITY.md)
 

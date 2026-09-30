@@ -11,4 +11,8 @@ This checkout contains independently authored SparkStudio application source onl
 
 Build and test commands are documented in README.md. Existing source-relative paths must remain portable to a fresh clone.
 
+## Standard release cycle
+
+Follow [the preview release process](docs/architecture/RELEASE_PROCESS.md) for every request to ship or publish an application release. Completion includes a new preview version, a clean-source Windows installer build, matching verified workshops/checksums, GitHub prerelease publication, updated WWW download links, reviewed hosted docs and successful live verification. A source push alone is not a completed release. Requests explicitly limited to docs or website maintenance can publish independently. Preserve unrelated ongoing changes and report any unfinished release stage accurately.
+
 For each substantial user-facing feature, add or update an independently authored workshop and its entry in `examples/catalog.json`. Include a short walkthrough, expected behavior, prerequisites and compatibility. Validate portable `.sparkproj` workshops through import, explicit publication and re-export before release; classify examples that need gateway setup separately. Never build distributable examples from development project exports, private reference projects or live gateway data. Workshop packages and bundles belong under ignored `artifacts/workshops/` and ship as release assets, not source commits.

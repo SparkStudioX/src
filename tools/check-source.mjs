@@ -116,6 +116,7 @@ const toolFiles = new Set([
   'test-input-state-bindings.mjs',
 ]);
 const architectureDocs = new Set([
+  'RELEASE_PROCESS.md',
   'README.md', 'GATEWAY_EVENTS.md', 'COMPONENT_MESSAGING.md', 'PYTHON_UI.md', 'PYTHON_COMPONENT_EVENTS.md',
   'ASSETS_POPUPS.md', 'COMPONENTS.md', 'PARITY.md', 'PRODUCT.md', 'TEMPLATES.md',
   'WINDOWS_INSTALLER.md', 'SOURCE_BOUNDARY.md',

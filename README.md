@@ -169,6 +169,8 @@ Publication has current limits: shared Python libraries follow their independent
 
 ## Packages and Docker
 
+For an application release, follow the [standard preview release cycle](docs/architecture/RELEASE_PROCESS.md), including the new installer, workshop verification, GitHub publication, website downloads and hosted docs.
+
 The [template workshop](examples/template-properties.json) demonstrates typed public Number/Boolean parameters, per-instance overrides and inherited wrapper properties. The [state controls workshop](examples/state-controls.json) adds a segmented multi-state input, an independently bound state indicator and a masked password field. Load missing resources with `node tools/load-example.mjs state-controls`; review navigation and publish through Designer. Password defaults must be blank; authored scripts can receive entered values, so masking is not credential storage or authentication. The example reports only whether its masked field was entered.
 
 See the [component roadmap](docs/architecture/COMPONENTS.md) for current control contracts and remaining component families. Palette presence does not imply full subsystem or compatibility support.
