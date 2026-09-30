@@ -19,6 +19,7 @@ async function model() {
   await writeFile(path.join(directory, 'Program.cs'), String.raw`
 using System.Net;
 using System.Net.Sockets;
+using System.Net.Security;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
@@ -98,7 +99,7 @@ Console.WriteLine("PASS external file edits reject saves; malformed persisted fi
 var certificateDirectory = Path.Combine(directory, "certificates", "deployment"); Directory.CreateDirectory(certificateDirectory);
 using var rsa = RSA.Create(2048);
 var certificateRequest = new CertificateRequest("CN=SparkStudio isolated loopback fixture", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-var san = new SubjectAlternativeNameBuilder(); san.AddIpAddress(IPAddress.Loopback); san.AddDnsName("gateway.fixture.test"); certificateRequest.CertificateExtensions.Add(san.Build());
+var san = new SubjectAlternativeNameBuilder(); san.AddIpAddress(IPAddress.Loopback); san.AddIpAddress(IPAddress.Parse("192.0.2.10")); san.AddDnsName("gateway.fixture.test"); certificateRequest.CertificateExtensions.Add(san.Build());
 certificateRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, true));
 certificateRequest.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") }, false));
 using var certificate = certificateRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(2));
@@ -199,7 +200,53 @@ await using (var app = networkFallbackBuilder.Build())
   await app.StopAsync();
 }
 Console.WriteLine("PASS network HTTPS validates separate DNS identity and port; dual listeners start and invalid certificates retain only local recovery");
-Console.WriteLine("8 deployment settings model/TLS groups passed.");
+File.WriteAllText(Path.Combine(certificateDirectory, "fixture-key.pem"), rsa.ExportPkcs8PrivateKeyPem());
+var ipIntent = networkIntent with { PublicHostname = "192.0.2.10" };
+var ipStore = new DeploymentSettings(directory, installerManagementPort: localPort);
+Assert(ipStore.Validate(ipIntent).Settings.PublicHostname == "192.0.2.10", "A matching IP SAN was rejected.");
+foreach (var invalidIp in new[] { "0.0.0.0", "0.1.2.3", "224.1.2.3", "255.255.255.255", "127.1", "192.000.002.010", "0xC000020A", "3221225994", "192.0.2.999", "::1", "[::1]", "::ffff:192.0.2.10", "192.0.2.10:5443", "https://192.0.2.10", "192.0.2.10/path" })
+    Throws<ArgumentException>(() => ipStore.Validate(ipIntent with { Enabled = false, PublicHostname = invalidIp }));
+Throws<ArgumentException>(() => ipStore.Validate(ipIntent with { PublicHostname = "192.0.2.11" }));
+var numericRequest = new CertificateRequest("CN=192.0.2.10", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+var numericSan = new SubjectAlternativeNameBuilder(); numericSan.AddDnsName("192.0.2.10"); numericRequest.CertificateExtensions.Add(numericSan.Build());
+using var numericCertificate = numericRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(2));
+File.WriteAllText(Path.Combine(certificateDirectory, "numeric-dns.pem"), numericCertificate.ExportCertificatePem());
+Throws<ArgumentException>(() => ipStore.Validate(ipIntent with { CertificateFile = "numeric-dns.pem" }));
+var cnRequest = new CertificateRequest("CN=192.0.2.10", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+using var cnCertificate = cnRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(2));
+File.WriteAllText(Path.Combine(certificateDirectory, "numeric-cn.pem"), cnCertificate.ExportCertificatePem());
+Throws<ArgumentException>(() => ipStore.Validate(ipIntent with { CertificateFile = "numeric-cn.pem" }));
+ipStore.Save(new(ipStore.Snapshot().Revision, ipIntent));
+var ipStartup = new DeploymentSettings(directory, installerManagementPort: localPort);
+var ipBuilder = Builder(); ipBuilder.Configuration.AddJsonFile("appsettings.json", optional: false); ipStartup.ApplyStartup(ipBuilder);
+Assert(ipStartup.Snapshot().StartupState == "managed" && ipBuilder.Configuration["AllowedHosts"]!.Contains("192.0.2.10"), "IP identity did not survive restart/host policy.");
+ipBuilder.Services.AddHostFiltering(options => options.AllowedHosts = ipBuilder.Configuration["AllowedHosts"]!.Split(';'));
+await using (var app = ipBuilder.Build())
+{
+    app.UseHostFiltering(); app.MapGet("/fixture", () => "IP SAN fixture"); await app.StartAsync();
+    // Route only the TCP socket to loopback; the URI retains the documentation IP
+    // so platform TLS still checks its exact IP SAN and HTTP still checks its Host.
+    using var handler = new SocketsHttpHandler { UseProxy = false, ConnectCallback = async (_, cancellation) =>
+    {
+        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        try { await socket.ConnectAsync(IPAddress.Loopback, networkPort, cancellation); return new NetworkStream(socket, ownsSocket: true); }
+        catch { socket.Dispose(); throw; }
+    } };
+    handler.SslOptions.RemoteCertificateValidationCallback = (_, presented, _, errors) => presented?.GetCertHashString() == certificate.Thumbprint
+        && (errors & ~SslPolicyErrors.RemoteCertificateChainErrors) == SslPolicyErrors.None;
+    using var client = new HttpClient(handler);
+    Assert(await client.GetStringAsync($"https://192.0.2.10:{networkPort}/fixture") == "IP SAN fixture", "IP HTTPS/Host check failed without DNS.");
+    var mismatchRejected = false;
+    try { await client.GetStringAsync($"https://192.0.2.11:{networkPort}/fixture"); } catch (HttpRequestException) { mismatchRejected = true; }
+    Assert(mismatchRejected, "TLS accepted an IP absent from the SAN.");
+    using var hostile = new HttpRequestMessage(HttpMethod.Get, $"https://192.0.2.10:{networkPort}/fixture"); hostile.Headers.Host = "unrelated.fixture.test";
+    // An unrelated Host may be rejected by TLS identity or host filtering; it cannot receive the endpoint.
+    try { using var response = await client.SendAsync(hostile); Assert(response.StatusCode == HttpStatusCode.BadRequest, "Unrelated IP listener Host accepted."); }
+    catch (HttpRequestException) { }
+    await app.StopAsync();
+}
+Console.WriteLine("PASS canonical IPv4 HTTPS uses exact IP SAN and host filtering; numeric DNS SAN, CN fallback, wrong IP and wildcard/IPv6 identities are rejected");
+Console.WriteLine("9 deployment settings model/TLS groups passed.");
 
 static WebApplicationBuilder Builder() { var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = [], ContentRootPath = AppContext.BaseDirectory }); builder.Configuration.Sources.Clear(); builder.Configuration.AddInMemoryCollection(); builder.Logging.ClearProviders(); return builder; }
 static int Port() { var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start(); var port = ((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop(); return port; }

@@ -118,14 +118,12 @@ public sealed class DeploymentSettings : IDisposable
             || uri.Port is < 1024 or > 65535 || uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0
             || uri.AbsolutePath != "/" || !IPAddress.TryParse(uri.Host.Trim('[', ']'), out var address)
             || !(address.Equals(IPAddress.Loopback) || address.Equals(IPAddress.IPv6Loopback) || address.Equals(IPAddress.Any)))
-            throw new ArgumentException("Use 127.0.0.1, [::1], or 0.0.0.0 with a port from 1024 to 65535. Network listeners require HTTPS and a public hostname.");
+            throw new ArgumentException("Use 127.0.0.1, [::1], or 0.0.0.0 with a port from 1024 to 65535. Network listeners require HTTPS and a DNS hostname or specific IPv4 address.");
         var network = address.Equals(IPAddress.Any);
         if (network && uri.Scheme != "https") throw new ArgumentException("Network access requires HTTPS. HTTP is supported only on loopback.");
         var hostname = string.IsNullOrWhiteSpace(input.PublicHostname) ? null : input.PublicHostname.Trim().ToLowerInvariant();
-        if (hostname is not null && (hostname.Length > 253 || Uri.CheckHostName(hostname) != UriHostNameType.Dns || hostname.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '.' or '-'))
-            || hostname.StartsWith('.') || hostname.EndsWith('.') || hostname.Split('.').Any(label => label.Length is < 1 or > 63 || label.StartsWith('-') || label.EndsWith('-'))))
-            throw new ArgumentException("The public hostname must be a DNS hostname without a scheme, port, path or wildcard.");
-        if (network && hostname is null) throw new ArgumentException("A DNS hostname matching the certificate is required for network access.");
+        if (hostname is not null) ValidatePublicAddress(hostname);
+        if (network && hostname is null) throw new ArgumentException("A DNS hostname or specific IPv4 address matching the certificate is required for network access.");
         if (!network && hostname is not null) throw new ArgumentException("A public hostname is used only for the 0.0.0.0 network listener.");
         if (installerManagementPort == uri.Port && (network || uri.Scheme == "https" || !address.Equals(IPAddress.Loopback)))
             throw new ArgumentException("The HTTPS port must differ from the installer's local management port.");
@@ -229,7 +227,7 @@ public sealed class DeploymentSettings : IDisposable
             {
                 if (!cert.HasPrivateKey || cert.NotBefore.ToUniversalTime() > DateTime.UtcNow || cert.NotAfter.ToUniversalTime() <= DateTime.UtcNow
                     || !cert.MatchesHostname(intent.PublicHostname ?? uri.Host.Trim('[', ']'), allowWildcards: false, allowCommonName: false))
-                    throw new ArgumentException("The certificate must have its matching private key, be currently valid, and contain the public hostname (network) or listener IP address (loopback) in its subject alternative names.");
+                    throw new ArgumentException("The certificate must have its matching private key, be currently valid, and contain the public DNS hostname or exact IP address in its subject alternative names. IP addresses require an IP SAN; a DNS SAN containing digits or a Common Name is insufficient.");
                 foreach (var usage in cert.Extensions.OfType<X509EnhancedKeyUsageExtension>())
                     if (!usage.EnhancedKeyUsages.Cast<Oid>().Any(oid => oid.Value == "1.3.6.1.5.5.7.3.1"))
                         throw new ArgumentException("The certificate's extended key usage must allow TLS server authentication.");
@@ -247,6 +245,23 @@ public sealed class DeploymentSettings : IDisposable
         }
         catch (Exception error) when (IsFileFailure(error))
         { throw new ArgumentException("Unable to load the certificate/key pair. Use a PEM certificate and its matching unencrypted PEM private key in the deployment certificate directory; passwords and key uploads are not supported."); }
+    }
+
+    private static void ValidatePublicAddress(string value)
+    {
+        if (IPAddress.TryParse(value, out var ip))
+        {
+            if (ip.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+                throw new ArgumentException("Network access currently uses IPv4. Enter a DNS hostname or specific IPv4 address, without brackets or a port.");
+            var first = ip.GetAddressBytes()[0];
+            if (value != ip.ToString() || first == 0 || first >= 224)
+                throw new ArgumentException("Use a specific canonical IPv4 address such as 192.168.1.20, not an abbreviated, wildcard, multicast or reserved address.");
+            return;
+        }
+        if (value.Length > 253 || value.All(c => char.IsAsciiDigit(c) || c == '.') || Uri.CheckHostName(value) != UriHostNameType.Dns
+            || value.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '.' or '-')) || value.StartsWith('.') || value.EndsWith('.')
+            || value.Split('.').Any(label => label.Length is < 1 or > 63 || label.StartsWith('-') || label.EndsWith('-')))
+            throw new ArgumentException("Use a DNS hostname or specific IPv4 address without a scheme, port, path or wildcard.");
     }
 
     private static void ValidateFilename(string? value)

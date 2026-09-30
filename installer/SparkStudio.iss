@@ -6,10 +6,10 @@
   #error OutputFolder is required.
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.2.0-preview.6"
+  #define AppVersion "0.2.0-preview.7"
 #endif
 #ifndef NumericVersion
-  #define NumericVersion "0.2.0.6"
+  #define NumericVersion "0.2.0.7"
 #endif
 
 [Setup]
@@ -179,10 +179,10 @@ begin
     'Gateway data is retained in ' + ExpandConstant('{commonappdata}\SparkStudio') + ' during upgrades and uninstall.');
   PortPage.Add('Local management port:', False);
   PortPage.Values[0] := ExpandConstant('{param:PORT|' + DefaultPort + '}');
-  NetworkPage := CreateInputQueryPage(PortPage.ID, 'Network HTTPS connection', 'Choose the HTTPS port and public hostname',
-    'Operators connect using https://hostname:port. The hostname must resolve to this gateway and match the certificate DNS subject alternative name. Use your factory CA for air-gapped installations.');
+  NetworkPage := CreateInputQueryPage(PortPage.ID, 'Network HTTPS connection', 'Choose the HTTPS port and DNS name or IPv4 address',
+    'Use this gateway''s IPv4 address without needing DNS, or a DNS name that resolves to it. The certificate must contain the chosen DNS name or IP Address in its subject alternative names. Use your factory CA for air-gapped installations.');
   NetworkPage.Add('HTTPS port (different from the local management port):', False);
-  NetworkPage.Add('Public DNS hostname (for example sparkstudio.factory.local):', False);
+  NetworkPage.Add('DNS name or IPv4 address (for example 192.168.1.50):', False);
   NetworkPage.Values[0] := ExpandConstant('{param:HTTPSPORT|5443}');
   NetworkPage.Values[1] := ExpandConstant('{param:HOSTNAME|}');
   CertificatePage := CreateInputFilePage(NetworkPage.ID, 'HTTPS certificate', 'Select the certificate and its matching private key',

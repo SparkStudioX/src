@@ -44,19 +44,19 @@
     {
       "id": "gateway-network",
       "title": "Network HTTPS access",
-      "summary": "A read-only published application for checking local management, network HTTPS, DNS names and trusted operator access.",
+      "summary": "A read-only published application for checking local management, network HTTPS, DNS or IPv4 identities and trusted operator access.",
       "source": "examples/gateway-network.json",
       "distribution": "setup-required",
       "features": [
         "installer local/network access selection",
         "separate local management and network HTTPS ports",
-        "PEM certificate and DNS identity validation",
+        "PEM certificate and exact DNS or iPAddress SAN validation",
         "protected private key import",
         "restart-only managed listener configuration"
       ],
       "prerequisites": [
-        "Use the companion network-listener build on a disposable gateway; preview.5 predates these installer choices.",
-        "Provide a DNS hostname, matching server certificate and PEM key, client CA trust and the intended firewall rule. No certificate material is included.",
+        "Use the preview.7 companion network-listener build on a disposable gateway; preview.5 predates these installer choices.",
+        "Provide a DNS hostname or stable IPv4 address, matching DNS or iPAddress certificate SAN and PEM key, client CA trust and the intended firewall rule. IP access needs no DNS. No certificate material is included.",
         "Publish the supplied synthetic screen and grant a separate operator account View. No equipment, database, Python actions or external internet is required.",
         "Run tools/load-network-example.mjs on a disposable local gateway with explicit administrator credentials to create its unpublished draft; the loader does not configure listeners."
       ],
@@ -64,9 +64,9 @@
       "entryScreenId": "network-home",
       "guide": "docs/architecture/NETWORK_ACCESS.md",
       "walkthrough": [
-        "Install Local only first or choose Network HTTPS with a distinct port, DNS hostname and matching PEM pair.",
+        "Install Local only first or choose Network HTTPS with a distinct port, DNS hostname or specific IPv4 address and matching PEM pair.",
         "Create the first administrator through local management, then import/review/publish this project and grant operator View.",
-        "Open the operator project from another computer using the trusted HTTPS hostname and inspect the local-only checkbox.",
+        "Open the operator project from another computer using the trusted HTTPS hostname or IP address and inspect the local-only checkbox.",
         "Inspect both actual listeners, then verify a managed upgrade keeps the selected network settings."
       ]
     },

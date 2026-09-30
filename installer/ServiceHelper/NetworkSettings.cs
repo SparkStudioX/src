@@ -23,14 +23,25 @@ internal static partial class Program
         if (access == "network" && (port is < 1024 or > 65535 || tlsPort == port))
             throw new ArgumentException("Local and network HTTPS ports must differ and be between 1024 and 65535.");
         var hostname = options.GetValueOrDefault("hostname")?.Trim().ToLowerInvariant();
-        if (access == "network" && !ValidHostname(hostname)) throw new ArgumentException("Network access needs a DNS hostname without scheme, port, path or wildcard.");
+        if (access == "network" && !ValidHostname(hostname)) throw new ArgumentException("Network access needs a DNS name or a specific IPv4 address, without scheme, port, path or wildcard. IPv6 and unspecified, multicast or reserved IPv4 addresses are not supported.");
         return new(access, port, tlsPort, hostname, options.GetValueOrDefault("certificate"), options.GetValueOrDefault("private-key"));
     }
 
-    private static bool ValidHostname(string? hostname) => hostname is { Length: > 0 and <= 253 }
-        && Uri.CheckHostName(hostname) == UriHostNameType.Dns
-        && hostname.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-')
-        && hostname.Split('.').All(label => label.Length is > 0 and <= 63 && !label.StartsWith('-') && !label.EndsWith('-'));
+    private static bool ValidHostname(string? hostname)
+    {
+        if (hostname is not { Length: > 0 and <= 253 }) return false;
+        if (IPAddress.TryParse(hostname, out var address))
+        {
+            // The installed network listener is IPv4. Reject alternate numeric spellings
+            // and non-unicast targets; a selected IP is a certificate identity, never a bind wildcard.
+            return address.AddressFamily == AddressFamily.InterNetwork && address.ToString() == hostname
+                && address.GetAddressBytes()[0] is > 0 and < 224;
+        }
+        return !hostname.All(c => char.IsAsciiDigit(c) || c == '.')
+            && Uri.CheckHostName(hostname) == UriHostNameType.Dns
+            && hostname.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-')
+            && hostname.Split('.').All(label => label.Length is > 0 and <= 63 && !label.StartsWith('-') && !label.EndsWith('-'));
+    }
 
     private static byte[] CertificateBytes(string? path)
     {
@@ -55,7 +66,7 @@ internal static partial class Program
             {
                 if (!certificate.HasPrivateKey || certificate.NotBefore.ToUniversalTime() > DateTime.UtcNow || certificate.NotAfter.ToUniversalTime() <= DateTime.UtcNow
                     || !certificate.MatchesHostname(options.Hostname!, allowWildcards: false, allowCommonName: false))
-                    throw new ArgumentException("The certificate must be currently valid and have a matching key and an exact DNS subject alternative name for the public hostname.");
+                    throw new ArgumentException("The certificate must be currently valid, have a matching key, and include the selected DNS name as a DNS subject alternative name or the selected IPv4 address as an IP Address subject alternative name. A common name or DNS entry containing an IP is insufficient.");
                 if (certificate.Extensions.OfType<X509EnhancedKeyUsageExtension>().Any(usage => !usage.EnhancedKeyUsages.Cast<Oid>().Any(oid => oid.Value == "1.3.6.1.5.5.7.3.1")))
                     throw new ArgumentException("The certificate must allow TLS server authentication.");
                 return certificate;
@@ -81,7 +92,7 @@ internal static partial class Program
         if (uri.Scheme != "https" || uri.Port is < 1024 or > 65535 || uri.UserInfo.Length != 0 || uri.AbsolutePath != "/" || uri.Query.Length != 0 || uri.Fragment.Length != 0)
             throw new ArgumentException("The saved network listener must use HTTPS.");
         var hostname = settings["publicHostname"]?.GetValue<string>();
-        if (!ValidHostname(hostname)) throw new ArgumentException("The saved network listener has an invalid public hostname.");
+        if (!ValidHostname(hostname)) throw new ArgumentException("The saved network listener has an invalid DNS name or IPv4 address.");
         string CertificatePath(string name)
         {
             var value = settings[name]?.GetValue<string>();
@@ -218,11 +229,15 @@ internal static partial class Program
             var fields = new Dictionary<string, string> { ["access"] = "network", ["hostname"] = "gateway.fixture.test", ["https-port"] = "5443" };
             var options = ParseNetwork(fields, 5090);
             Reject(() => ParseNetwork(fields, 5443));
-            foreach (var hostname in new[] { "https://gateway.fixture.test", "0.0.0.0", "*.fixture.test", "gateway.fixture.test/path", "gateway..test", "-gateway.test" })
+            foreach (var hostname in new[] { "https://gateway.fixture.test", "0.0.0.0", "*.fixture.test", "gateway.fixture.test/path", "gateway..test", "-gateway.test",
+                "0.1.2.3", "255.255.255.255", "224.0.0.1", "239.1.2.3", "240.0.0.1", "256.1.2.3", "192.168.1.999", "127.1", "2130706433", "0x7f000001",
+                "192.168.001.1", "192.168.1.1:5443", "[::1]", "::1", "2001:db8::1", "::ffff:192.168.1.50" })
                 Reject(() => ParseNetwork(new(fields) { ["hostname"] = hostname }, 5090));
+            foreach (var hostname in new[] { "192.168.1.50", "10.20.30.40", "172.16.10.2", "169.254.10.2", "127.0.0.1", "192.0.2.10" })
+                Assert(ParseNetwork(new(fields) { ["hostname"] = hostname }, 5090).Hostname == hostname, "A specific IPv4 identity was rejected or changed.");
             using var rsa = RSA.Create(2048);
             var request = new CertificateRequest("CN=SparkStudio synthetic network fixture", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-            var san = new SubjectAlternativeNameBuilder(); san.AddDnsName("gateway.fixture.test"); request.CertificateExtensions.Add(san.Build());
+            var san = new SubjectAlternativeNameBuilder(); san.AddDnsName("gateway.fixture.test"); san.AddIpAddress(IPAddress.Parse("192.0.2.10")); request.CertificateExtensions.Add(san.Build());
             request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new("1.3.6.1.5.5.7.3.1") }, false));
             using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(1));
             var certFile = Path.Combine(directory, "certificate.pem"); var keyFile = Path.Combine(directory, "key.pem");
@@ -230,9 +245,23 @@ internal static partial class Program
             options = options with { Certificate = certFile, PrivateKey = keyFile };
             using (var validated = ValidateCertificate(options)) Assert(validated.Thumbprint == certificate.Thumbprint, "Selected certificate validation failed.");
             Reject(() => ValidateCertificate(options with { Hostname = "different.fixture.test" }));
+            using (var validated = ValidateCertificate(options with { Hostname = "192.0.2.10" })) Assert(validated.Thumbprint == certificate.Thumbprint, "Exact IP SAN validation failed.");
+            Reject(() => ValidateCertificate(options with { Hostname = "192.0.2.11" }));
+            var dnsIpRequest = new CertificateRequest("CN=192.0.2.10", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            var dnsIpSan = new SubjectAlternativeNameBuilder(); dnsIpSan.AddDnsName("192.0.2.10"); dnsIpRequest.CertificateExtensions.Add(dnsIpSan.Build());
+            using var dnsIpCertificate = dnsIpRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(1));
+            var dnsIpFile = Path.Combine(directory, "dns-ip.pem"); File.WriteAllText(dnsIpFile, dnsIpCertificate.ExportCertificatePem());
+            Reject(() => ValidateCertificate(options with { Hostname = "192.0.2.10", Certificate = dnsIpFile }));
+            var cnIpRequest = new CertificateRequest("CN=192.0.2.10", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            using var cnIpCertificate = cnIpRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(1));
+            var cnIpFile = Path.Combine(directory, "cn-ip.pem"); File.WriteAllText(cnIpFile, cnIpCertificate.ExportCertificatePem());
+            Reject(() => ValidateCertificate(options with { Hostname = "192.0.2.10", Certificate = cnIpFile }));
             using var otherKey = RSA.Create(2048); var wrongKey = Path.Combine(directory, "wrong-key.pem"); File.WriteAllText(wrongKey, otherKey.ExportPkcs8PrivateKeyPem());
             Reject(() => ValidateCertificate(options with { PrivateKey = wrongKey }));
             var settingsFile = Path.Combine(directory, "deployment.json");
+            File.WriteAllText(settingsFile, JsonSerializer.Serialize(new { version = 1, settings = new { enabled = true, url = "https://0.0.0.0:5443", publicHostname = "192.0.2.10", certificateFile = "ip.pem", privateKeyFile = "ip-key.pem" } }));
+            Assert(ReadNetworkIntent(directory)?.Hostname == "192.0.2.10", "Keeping a saved IP network identity failed.");
+            File.Delete(settingsFile);
             var local = options with { Access = "local" };
             var change = InstallDeployment(directory, 15090, local);
             Assert(JsonNode.Parse(File.ReadAllText(settingsFile))?["settings"]?["url"]?.GetValue<string>() == "http://127.0.0.1:15090", "Local intent was not installed.");
@@ -240,24 +269,30 @@ internal static partial class Program
             File.WriteAllText(settingsFile, "retained configuration");
             var update = InstallDeployment(directory, 15091, local); update.Rollback();
             Assert(File.ReadAllText(settingsFile) == "retained configuration", "Rollback did not restore exact previous bytes.");
-            var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start();
-            var tlsPort = ((IPEndPoint)listener.LocalEndpoint).Port;
-            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             var pfx = certificate.Export(X509ContentType.Pkcs12);
             using var serverCertificate = X509CertificateLoader.LoadPkcs12(pfx, null, X509KeyStorageFlags.DefaultKeySet); CryptographicOperations.ZeroMemory(pfx);
-            var server = Task.Run(async () =>
+            foreach (var identity in new[] { "gateway.fixture.test", "192.0.2.10" })
             {
-                using var connection = await listener.AcceptTcpClientAsync(deadline.Token);
-                await using var stream = new SslStream(connection.GetStream());
-                await stream.AuthenticateAsServerAsync(new SslServerAuthenticationOptions { ServerCertificate = serverCertificate }, deadline.Token);
-                using var reader = new StreamReader(stream, leaveOpen: true);
-                while (await reader.ReadLineAsync(deadline.Token) is { Length: > 0 }) { }
-                var body = System.Text.Encoding.UTF8.GetBytes("{\"product\":\"SparkStudio\",\"status\":\"ready\",\"pythonAvailable\":true,\"processId\":1234}");
-                var header = System.Text.Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n");
-                await stream.WriteAsync(header, deadline.Token); await stream.WriteAsync(body, deadline.Token); await stream.FlushAsync(deadline.Token);
-            }, deadline.Token);
-            try { await VerifyNetworkReadinessAsync(options with { HttpsPort = tlsPort }, () => 1234); await server; checks++; }
-            finally { listener.Stop(); }
+                var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start();
+                var tlsPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                var server = Task.Run(async () =>
+                {
+                    using var connection = await listener.AcceptTcpClientAsync(deadline.Token);
+                    await using var stream = new SslStream(connection.GetStream());
+                    await stream.AuthenticateAsServerAsync(new SslServerAuthenticationOptions { ServerCertificate = serverCertificate }, deadline.Token);
+                    using var reader = new StreamReader(stream, leaveOpen: true);
+                    var hostSeen = false;
+                    while (await reader.ReadLineAsync(deadline.Token) is { Length: > 0 } headerLine)
+                        if (headerLine.Equals($"Host: {identity}:{tlsPort}", StringComparison.OrdinalIgnoreCase)) hostSeen = true;
+                    if (!hostSeen) throw new Exception("The readiness Host header did not preserve the selected DNS/IP identity.");
+                    var body = System.Text.Encoding.UTF8.GetBytes("{\"product\":\"SparkStudio\",\"status\":\"ready\",\"pythonAvailable\":true,\"processId\":1234}");
+                    var header = System.Text.Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n");
+                    await stream.WriteAsync(header, deadline.Token); await stream.WriteAsync(body, deadline.Token); await stream.FlushAsync(deadline.Token);
+                }, deadline.Token);
+                try { await VerifyNetworkReadinessAsync(options with { Hostname = identity, HttpsPort = tlsPort }, () => 1234); await server; checks++; }
+                finally { listener.Stop(); }
+            }
             var stalledListener = new TcpListener(IPAddress.Loopback, 0); stalledListener.Start();
             var stalledPort = ((IPEndPoint)stalledListener.LocalEndpoint).Port;
             using var stalledDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -278,7 +313,7 @@ internal static partial class Program
                 catch (InvalidOperationException error) when (error.Message.Contains("within 5 seconds")) { Assert(watch.Elapsed < TimeSpan.FromSeconds(8), "TLS readiness body deadline was not bounded."); }
             }
             finally { stalledDeadline.Cancel(); stalledListener.Stop(); try { await stalledServer; } catch (OperationCanceledException) { } }
-            Console.WriteLine($"PASS {checks} network hostname/certificate/port, exact deployment rollback and pinned TLS readiness checks; no service, registration or trust store was changed.");
+            Console.WriteLine($"PASS {checks} network DNS/IPv4 identity/certificate/port, exact deployment rollback and pinned TLS readiness checks; no service, registration or trust store was changed.");
         }
         finally
         {

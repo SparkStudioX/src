@@ -1,17 +1,17 @@
 # SparkStudio Windows preview installation guide
 
-Download the installer, checksum and optional workshops from the [v0.2.0-preview.6 release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.6). The Windows x64 package includes the gateway, .NET runtime, CPython, browser Designer/operator application and dependency notices. Running it requires no separate .NET SDK, Python or Node.js installation.
+Download the installer, checksum and optional workshops from the [v0.2.0-preview.7 release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.7). The Windows x64 package includes the gateway, .NET runtime, CPython, browser Designer/operator application and dependency notices. Running it requires no separate .NET SDK, Python or Node.js installation.
 
-This is an **unsigned preview for local evaluation**. Previous-release current-user extraction and execution on loopback are verified; consult the preview.6 release notes for this package's verification results. Preview.6 service upgrade and network-listener acceptance remain pending. On one Windows host, an elevated preview.2 installer retry started the LocalService gateway after a failed preview.1 installation, and a later elevated preview.5 upgrade over the running preview.3 service completed successfully. Rollback, uninstall, complete real-data preservation, service-account secret encryption and broader ACL acceptance remain open. Docker and macOS are not part of this release.
+This is an **unsigned preview for local evaluation**. Previous-release current-user extraction and execution on loopback are verified; consult the preview.7 release notes for this package's verification results. Preview.7 service upgrade and network-listener acceptance remain pending. On one Windows host, an elevated preview.2 installer retry started the LocalService gateway after a failed preview.1 installation, and a later elevated preview.5 upgrade over the running preview.3 service completed successfully. Rollback, uninstall, complete real-data preservation, service-account secret encryption and broader ACL acceptance remain open. Docker and macOS are not part of this release.
 
-Preview.6 retains the preview.5 wait for the actual owned gateway process to exit before copying application files and its process-access fix during elevated upgrade preparation. It retains preview.3's Windows administrator instructions for finding the setup code and compact Designer version label with the full build in its tooltip. It also retains preview.2's fix for a startup-check error in preview.1: the installer anonymously polled the protected `/api/health` endpoint and could report a 45-second timeout even when the gateway had started. The corrected check uses `/api/ready`, described below.
+Preview.7 retains the preview.5 wait for the actual owned gateway process to exit before copying application files and its process-access fix during elevated upgrade preparation. It retains preview.3's Windows administrator instructions for finding the setup code and compact Designer version label with the full build in its tooltip. It also retains preview.2's fix for a startup-check error in preview.1: the installer anonymously polled the protected `/api/health` endpoint and could report a 45-second timeout even when the gateway had started. The corrected check uses `/api/ready`, described below.
 
 ## Verify the download
 
-The installer is `SparkStudio-Setup-0.2.0-preview.6-windows-x64-unsigned.exe`. Download its adjacent `.exe.sha256` from the same release and compare it with:
+The installer is `SparkStudio-Setup-0.2.0-preview.7-windows-x64-unsigned.exe`. Download its adjacent `.exe.sha256` from the same release and compare it with:
 
 ```powershell
-Get-FileHash .\SparkStudio-Setup-0.2.0-preview.6-windows-x64-unsigned.exe -Algorithm SHA256
+Get-FileHash .\SparkStudio-Setup-0.2.0-preview.7-windows-x64-unsigned.exe -Algorithm SHA256
 ```
 
 The published checksum identifies that executable; a rebuild can differ. Do not disable Windows security or organizational policy to run an unsigned package. Release notes record the tested source revision and package verification. The extracted `package-manifest.json` records bundled file hashes and build provenance.
@@ -21,7 +21,7 @@ The published checksum identifies that executable; a rebuild can differ. Do not 
 Run the downloaded installer with:
 
 ```powershell
-.\SparkStudio-Setup-0.2.0-preview.6-windows-x64-unsigned.exe /PORTABLE=1 /CURRENTUSER
+.\SparkStudio-Setup-0.2.0-preview.7-windows-x64-unsigned.exe /PORTABLE=1 /CURRENTUSER
 ```
 
 Choose an empty writable directory. This mode extracts files without creating a service, installation registration, Start-menu shortcuts or an uninstaller. From that directory, start the gateway using an unused loopback port and a separate writable data directory:
@@ -60,7 +60,7 @@ On Projects, **Settings** opens Gateway Settings. Designer has a **Gateway Setti
 
 ## Workshop examples
 
-Download `SparkStudio-Workshops-0.2.0-preview.6.zip` and verify its adjacent `.sha256`. It contains portable `.sparkproj` workshops, walkthroughs and compatibility metadata. Import a file from `projects/` through **Import .sparkproj** on Projects. Each import creates a new unpublished draft; review and explicitly publish it before opening its operator application.
+Download `SparkStudio-Workshops-0.2.0-preview.7.zip` and verify its adjacent `.sha256`. It contains portable `.sparkproj` workshops, walkthroughs and compatibility metadata. Import a file from `projects/` through **Import .sparkproj** on Projects. Each import creates a new unpublished draft; review and explicitly publish it before opening its operator application.
 
 Portable workshops use synthetic data and need no OPC UA server, SQL Server or internet connection. Python exercises use the bundled interpreter. Follow each guide's action permissions and unavailable-data exercises. Additional authored source examples need gateway resources or user-supplied assets; the catalog identifies them separately and they are not portable imports. See the [workshop guide](https://github.com/SparkStudioX/src/blob/main/examples/README.md).
 
@@ -68,13 +68,13 @@ The installer and workshop collection contain no development projects, accounts,
 
 ## Network listener choices
 
-Preview.6 adds installer **Local only**, **Network access over HTTPS**, and managed-upgrade **Keep existing listener settings** choices. A fresh install defaults to local-only HTTP on `127.0.0.1:5090`. Managed upgrades preserve the existing listener by default. Network mode keeps that loopback management listener and adds HTTPS on `0.0.0.0` at a separate chosen port, normally 5443.
+Preview.7 adds installer **Local only**, **Network access over HTTPS**, and managed-upgrade **Keep existing listener settings** choices. A fresh install defaults to local-only HTTP on `127.0.0.1:5090`. Managed upgrades preserve the existing listener by default. Network mode keeps that loopback management listener and adds HTTPS on `0.0.0.0` at a separate chosen port, normally 5443.
 
-Supply the DNS hostname used by operators and matching PEM certificate chain plus an unencrypted PEM private key from your organization's CA or another trusted issuer. The hostname identifies the certificate and operator URL; `0.0.0.0` is only the bind address. Setup protects the copied private key but does not create DNS records, firewall rules or client trust. No internet or automatic certificate service is required. Browser computers must resolve the hostname and trust its certificate issuer.
+Supply the DNS hostname or specific canonical IPv4 address used by operators, a matching PEM certificate chain and an unencrypted PEM private key from your organization's CA or another trusted issuer. A stable LAN address such as `10.20.30.40` works without DNS; enter four decimal octets without leading zeros, not a URL or `0.0.0.0`. The certificate must contain the exact hostname as a DNS SAN or the exact address as an **iPAddress SAN**. An IP written as a numeric DNS SAN or common name is insufficient. `0.0.0.0` remains only the all-IPv4 bind address; network IPv6 is not supported. Setup protects the copied private key but does not create DNS records, firewall rules or client trust. No internet or automatic certificate service is required. Browser computers must trust the issuer for both DNS and IP access; only a hostname requires DNS resolution. Certificate verification remains enforced.
 
-First-admin bootstrap and installer readiness remain direct-loopback only. Finish initial setup locally before using network clients. The installer checks local process readiness and, for HTTPS, verifies the served certificate, selected hostname and protected endpoint response over its network port. This verifies startup behavior; it does not establish actual remote-client, certificate-renewal or production-network acceptance.
+First-admin bootstrap and installer readiness remain direct-loopback only. Finish initial setup locally before using network clients. The installer checks local process readiness and, for HTTPS, verifies the served certificate, selected DNS or IP identity and protected endpoint response over its network port. This verifies startup behavior; it does not establish actual remote-client, certificate-renewal or production-network acceptance.
 
-Read the release's [network access guide](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.6/NETWORK_ACCESS.md) before selecting network access. Automated listener, certificate and installer-helper fixtures are covered; an elevated preview.6 installation using a real CA chain and remote browser clients still needs acceptance testing. The verified preview.5 service-upgrade history below does not establish that new network path.
+Read the release's [network access guide](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.7/NETWORK_ACCESS.md) before selecting network access. Automated listener, certificate and installer-helper fixtures are covered; an elevated preview.7 installation using a real CA chain and remote browser clients still needs acceptance testing. The verified preview.5 service-upgrade history below does not establish that new network path.
 
 ## Configuration backups and recovery
 
@@ -84,7 +84,7 @@ The default retention is seven days, evaluated from generated UTC archive names.
 
 A running-gateway configuration backup contains saved projects, gateway configuration, accounts and protected keys. It excludes live databases, history and audit data. Use the separate offline full-backup procedure for a stopped gateway's complete data directory; external databases always require their own backups. Restores go to a new directory in recovery quarantine for review before activation. Windows account-specific protected secrets still require the original machine/account or explicit reentry.
 
-Download the release's [scheduled backup guide](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.6/SCHEDULED_BACKUPS.md) and [gateway recovery guide](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.6/GATEWAY_RECOVERY.md). Loopback FTP protocol, corruption, cancellation, retention and untrusted-FTPS rejection fixtures are verified. Actual domain SMB access as LocalService or with supplied credentials and delivery to a trusted external FTPS server remain acceptance work. Native Windows UNC calls may outlast the caller's deadline; only one such worker can remain active, and it does not start retention after cancellation.
+Download the release's [scheduled backup guide](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.7/SCHEDULED_BACKUPS.md) and [gateway recovery guide](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.7/GATEWAY_RECOVERY.md). Loopback FTP protocol, corruption, cancellation, retention and untrusted-FTPS rejection fixtures are verified. Actual domain SMB access as LocalService or with supplied credentials and delivery to a trusted external FTPS server remain acceptance work. Native Windows UNC calls may outlast the caller's deadline; only one such worker can remain active, and it does not start retention after cancellation.
 
 ## Connections and deployment settings
 
@@ -116,7 +116,7 @@ Credentials encrypted for a development user cannot be assumed readable by Local
 
 Stop the gateway and back up its complete data directory before upgrading. Back up external databases separately and retain the previous installer. For portable use, extract into a new empty application directory and point the replacement at existing data only after backup. For rollback, restore a compatible data backup with the previous application; do not assume older software can read newer data.
 
-For service upgrades, use the same program directory. The helper attempts to preserve configuration and resume a previously running service if preparation fails, but provides no transactional rollback of replaced application files. A preview.5 upgrade is verified on one host as described below. Preview.6 elevated service upgrade, rollback and broader recovery acceptance remain pending.
+For service upgrades, use the same program directory. The helper attempts to preserve configuration and resume a previously running service if preparation fails, but provides no transactional rollback of replaced application files. A preview.5 upgrade is verified on one host as described below. Preview.7 elevated service upgrade, rollback and broader recovery acceptance remain pending.
 
 Preview.3 could reach file copying after Windows reported the service stopped but before its process exited. This caused an `Access denied` error replacing `clrjit.dll` and could require **Retry** after the old process finished exiting; a smooth preview.3 upgrade was not verified. Preview.4 added a wait for actual process exit, but elevated upgrade preparation failed with Windows error 5 while acquiring the process handle, before any files were copied. That release was held.
 
