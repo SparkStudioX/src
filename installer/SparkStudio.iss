@@ -6,10 +6,10 @@
   #error OutputFolder is required.
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.2.0-preview.7"
+  #define AppVersion "0.2.0-preview.8"
 #endif
 #ifndef NumericVersion
-  #define NumericVersion "0.2.0.7"
+  #define NumericVersion "0.2.0.8"
 #endif
 
 [Setup]
@@ -68,7 +68,7 @@ Filename: "{code:DesignerUrl}"; Description: "Open SparkStudio Designer"; Flags:
 
 [Code]
 var
-  AccessPage: TInputOptionWizardPage;
+  AccessPage, CertificateModePage: TInputOptionWizardPage;
   PortPage, NetworkPage: TInputQueryWizardPage;
   CertificatePage: TInputFileWizardPage;
   HasManagedInstallation: Boolean;
@@ -96,6 +96,12 @@ begin
   if AccessPage.SelectedValueIndex = 1 then Result := 'network'
   else if AccessPage.SelectedValueIndex = 2 then Result := 'keep'
   else Result := 'local';
+end;
+
+function SelectedCertificateMode: String;
+begin
+  if CertificateModePage.SelectedValueIndex = 1 then Result := 'provided'
+  else Result := 'self-signed';
 end;
 
 function QuotedArgument(Value: String): String;
@@ -131,11 +137,14 @@ begin
     '" --port ' + SelectedPort + ' --report "' + ReportPath + '"';
   if (Action = 'preflight') or (Action = 'prepare') or (Action = 'install') then begin
     Arguments := Arguments + ' --access ' + SelectedAccess;
-    if SelectedAccess = 'network' then
+    if SelectedAccess = 'network' then begin
       Arguments := Arguments + ' --https-port ' + QuotedArgument(Trim(NetworkPage.Values[0])) +
         ' --hostname ' + QuotedArgument(Trim(NetworkPage.Values[1])) +
-        ' --certificate ' + QuotedArgument(CertificatePage.Values[0]) +
-        ' --private-key ' + QuotedArgument(CertificatePage.Values[1]);
+        ' --certificate-mode ' + SelectedCertificateMode;
+      if SelectedCertificateMode = 'provided' then
+        Arguments := Arguments + ' --certificate ' + QuotedArgument(CertificatePage.Values[0]) +
+          ' --private-key ' + QuotedArgument(CertificatePage.Values[1]);
+    end;
   end;
   Result := Exec(Executable, Arguments, '', SW_HIDE, ewWaitUntilTerminated, ExitCode);
   if LoadStringFromFile(ReportPath, Contents) then MessageText := String(Contents)
@@ -151,7 +160,7 @@ begin
 end;
 
 procedure InitializeWizard;
-var ExistingPort, CommandVersion: Cardinal; DefaultPort, AccessParameter: String;
+var ExistingPort, CommandVersion: Cardinal; DefaultPort, AccessParameter, CertificateModeParameter: String;
 begin
   ServiceStopped := False;
   ServiceInstalled := False;
@@ -180,17 +189,29 @@ begin
   PortPage.Add('Local management port:', False);
   PortPage.Values[0] := ExpandConstant('{param:PORT|' + DefaultPort + '}');
   NetworkPage := CreateInputQueryPage(PortPage.ID, 'Network HTTPS connection', 'Choose the HTTPS port and DNS name or IPv4 address',
-    'Use this gateway''s IPv4 address without needing DNS, or a DNS name that resolves to it. The certificate must contain the chosen DNS name or IP Address in its subject alternative names. Use your factory CA for air-gapped installations.');
+    'Use this gateway''s stable IPv4 address without needing DNS, or a DNS name that resolves to it. Setup can generate a self-signed certificate for exactly this name or address, or you can supply one from your organization. Use a fixed IP or DHCP reservation for IP access.');
   NetworkPage.Add('HTTPS port (different from the local management port):', False);
   NetworkPage.Add('DNS name or IPv4 address (for example 192.168.1.50):', False);
   NetworkPage.Values[0] := ExpandConstant('{param:HTTPSPORT|5443}');
   NetworkPage.Values[1] := ExpandConstant('{param:HOSTNAME|}');
-  CertificatePage := CreateInputFilePage(NetworkPage.ID, 'HTTPS certificate', 'Select the certificate and its matching private key',
+  CertificateModePage := CreateInputOptionPage(NetworkPage.ID, 'HTTPS certificate', 'Choose how to secure the network connection',
+    'Generate a certificate when you have no certificate or private key. Browsers will warn until you trust the generated public certificate on each operator computer. Setup creates a protected private key and a public certificate with trust instructions; it does not install trust or open firewall ports automatically.', True, False);
+  CertificateModePage.Add('Generate a self-signed certificate (no files needed)');
+  CertificateModePage.Add('Use an existing certificate and private key');
+  CertificateModePage.SelectedValueIndex := 0;
+  CertificatePage := CreateInputFilePage(CertificateModePage.ID, 'Existing HTTPS certificate', 'Select the certificate and its matching private key',
     'Select a currently valid PEM server certificate (include intermediate certificates after the leaf) and its unencrypted PEM private key. Setup copies them into a protected gateway folder. Operator computers must trust the issuing CA. Configure an inbound Windows firewall rule for the HTTPS port on the intended network profile separately.');
   CertificatePage.Add('PEM certificate / certificate chain:', 'PEM certificate|*.pem;*.crt;*.cer|All files|*.*', '.pem');
   CertificatePage.Add('Matching unencrypted PEM private key:', 'PEM private key|*.pem;*.key|All files|*.*', '.pem');
   CertificatePage.Values[0] := ExpandConstant('{param:CERTIFICATE|}');
   CertificatePage.Values[1] := ExpandConstant('{param:PRIVATEKEY|}');
+  CertificateModeParameter := Lowercase(Trim(ExpandConstant('{param:CERTIFICATEMODE|}')));
+  if (CertificateModeParameter <> '') and (CertificateModeParameter <> 'self-signed') and (CertificateModeParameter <> 'provided') then
+    RaiseException('Invalid /CERTIFICATEMODE value. Use self-signed or provided.');
+  if (CertificateModeParameter = 'self-signed') and ((CertificatePage.Values[0] <> '') or (CertificatePage.Values[1] <> '')) then
+    RaiseException('Do not combine /CERTIFICATEMODE=self-signed with /CERTIFICATE or /PRIVATEKEY. Choose provided to import existing files.');
+  if (CertificateModeParameter = 'provided') or ((CertificateModeParameter = '') and ((CertificatePage.Values[0] <> '') or (CertificatePage.Values[1] <> ''))) then
+    CertificateModePage.SelectedValueIndex := 1;
   if PortableMode then begin
     WizardForm.WelcomeLabel2.Caption := 'This mode only extracts the offline application. No service, registry registration, shortcuts or automatic application launch will be created.';
   end else begin
@@ -201,8 +222,9 @@ end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
-  Result := (PortableMode and ((PageID = AccessPage.ID) or (PageID = PortPage.ID) or (PageID = NetworkPage.ID) or (PageID = CertificatePage.ID) or (PageID = wpSelectTasks)))
-    or ((SelectedAccess <> 'network') and ((PageID = NetworkPage.ID) or (PageID = CertificatePage.ID)));
+  Result := (PortableMode and ((PageID = AccessPage.ID) or (PageID = PortPage.ID) or (PageID = NetworkPage.ID) or (PageID = CertificateModePage.ID) or (PageID = CertificatePage.ID) or (PageID = wpSelectTasks)))
+    or ((SelectedAccess <> 'network') and ((PageID = NetworkPage.ID) or (PageID = CertificateModePage.ID) or (PageID = CertificatePage.ID)))
+    or ((PageID = CertificatePage.ID) and (SelectedCertificateMode = 'self-signed'));
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -220,7 +242,7 @@ begin
       end;
     end;
   end;
-  if (CurPageID = CertificatePage.ID) and not PortableMode then
+  if ((CurPageID = CertificatePage.ID) or ((CurPageID = CertificateModePage.ID) and (SelectedCertificateMode = 'self-signed'))) and not PortableMode then
     if not RunHelper('preflight', ExpandConstant('{app}'), HelperPath, MessageText) then begin
       MsgBox(MessageText, mbError, MB_OK); Result := False;
     end;
@@ -243,6 +265,15 @@ begin
     if not RunHelper('install', ExpandConstant('{app}'), HelperPath, MessageText) then RaiseException(MessageText);
     ServiceInstalled := True;
   end;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if (CurPageID = wpFinished) and ServiceInstalled and (SelectedAccess = 'network') and (SelectedCertificateMode = 'self-signed') then
+    WizardForm.FinishedLabel.Caption := 'HTTPS: https://' + Trim(NetworkPage.Values[1]) + ':' + Trim(NetworkPage.Values[0]) + '/' + #13#10 + #13#10 +
+      'Trust this public certificate on each operator computer to avoid browser warnings. Copy it using administrator access:' + #13#10 +
+      ExpandConstant('{commonappdata}\SparkStudio\certificates\deployment\gateway-public.cer') + #13#10 + #13#10 +
+      'Read gateway-trust.txt beside it. Never share the private key.';
 end;
 
 procedure DeinitializeSetup;

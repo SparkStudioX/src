@@ -103,6 +103,9 @@ internal static partial class Program
                     Directory.CreateDirectory(DataDirectory);
                     await InstallAsync(manager, service, registration, directory, port, network);
                     result = $"SparkStudio is running at http://127.0.0.1:{port}. Data is retained in {DataDirectory}.";
+                    if (network.Access == "network")
+                        result += $" HTTPS is configured at https://{network.Hostname}:{network.HttpsPort}. Public certificate: {Path.Combine(DataDirectory, "certificates", "deployment", "gateway-public.cer")}. " +
+                            $"Trust and renewal instructions: {Path.Combine(DataDirectory, "certificates", "deployment", "gateway-trust.txt")}. No operator trust or firewall rules were changed.";
                     break;
                 case "resume":
                     if (service is not null) Native.StartAndWait(service);
@@ -135,7 +138,7 @@ internal static partial class Program
     {
         if (args.Length % 2 != 0) throw new ArgumentException("Arguments must be --name value pairs.");
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        var allowed = new HashSet<string>(["action", "install-dir", "port", "report", "process-id", "access", "https-port", "hostname", "certificate", "private-key"]);
+        var allowed = new HashSet<string>(["action", "install-dir", "port", "report", "process-id", "access", "https-port", "hostname", "certificate-mode", "certificate", "private-key"]);
         for (var index = 0; index < args.Length; index += 2)
         {
             var key = args[index].StartsWith("--", StringComparison.Ordinal) ? args[index][2..] : "";
