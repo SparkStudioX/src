@@ -1,6 +1,6 @@
 SparkStudio 0.2.0-preview.9 - unsigned Windows preview
 
-Preview.8 adds a Generate a self-signed certificate option for HTTPS: no existing certificate, private key, DNS or internet connection is needed when using a stable IPv4 address. It retains encrypted configuration backup downloads, daily SMB/FTP/FTPS delivery, retention, and offline recovery with quarantine. See this release's installation, network access, scheduled backup and recovery guides. Elevated preview.8 service upgrade, operator-PC certificate trust and remote SMB/FTPS acceptance remain pending.
+Preview.9 adds a unified Actions & Events editor, Python component lifecycle and form-value support, compile-only syntax checking, gateway-to-operator session messages and a gateway shutdown crash fix. Its companion bundle contains 29 portable workshops. It retains self-signed HTTPS setup, encrypted configuration backups, scheduled remote delivery and offline recovery. See this release's installation, network access, scheduled backup and recovery guides. Elevated preview.9 service upgrade, operator-PC certificate trust and remote SMB/FTPS acceptance remain pending.
 
 The offline package includes the gateway, .NET runtime, browser Designer and operator application, and CPython. No separate SDK, Node.js or Python installation is required to run it.
 
