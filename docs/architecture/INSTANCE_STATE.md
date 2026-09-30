@@ -52,11 +52,13 @@ Assignments must match declared types and bounds. A live call to an unavailable 
 
 Gateway actions receive validated form inputs and reconstructed published parameter context. Private maps are not implicit Python variables, query parameters or permission inputs. A state-bound field submits its current value as ordinary user input; the gateway validates its published field definition. A parameter expression can explicitly read containing-form parameters, inputs, custom properties or typed state. Only referenced state values are submitted in a separate sparse snapshot; the gateway checks their published types and reconstructs parameters. These values remain untrusted user data and grant no permission.
 
+Python button UI actions also carry a bounded presentation snapshot. `system.ui.setState("instance", "key", value)` and `self.parent.custom.key = value` stage private changes for the calling template or repeater row. `self.getSibling("component-id").props.text` targets an unbound component in that same form. Successful effects are applied only to the still-live instance and reject conflicting newer edits. This UI snapshot remains separate from parameter reconstruction and authorization. See [Python UI actions](PYTHON_UI.md).
+
 Individual components display their live binding diagnostics. The saved-graph health summary does not evaluate private-state-owned forms from defaults, just as it does not summarize live query rows; those defaults cannot establish the health of their current values.
 
 ## Workshop
 
-The independently authored [instance-state workshop](../../examples/instance-state.json) contains two shared templates, two screens and a popup. It needs no database, tags or equipment. Load it with the existing authenticated example-loader workflow, or import the generated local-only `artifacts/examples/instance-state.sparkproj`:
+The independently authored [instance-state workshop](../../examples/instance-state.json) contains two shared templates, two screens and a popup. It needs no database, tags or equipment. Load it with the existing authenticated example-loader workflow, or import the local `artifacts/sparkproj/instance-state.sparkproj` (when present after consolidation; fresh versioned builds use `artifacts/workshops/<version>/projects/`):
 
 ```powershell
 node tools/load-example.mjs instance-state

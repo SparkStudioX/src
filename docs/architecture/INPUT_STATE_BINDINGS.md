@@ -4,7 +4,7 @@ An input can bind its value directly to declared session, screen or private temp
 
 ## Authoring
 
-Declare a Text, Number or Boolean value in the project's **Session state** editor or a screen's **Screen state** editor. Select an input and choose **fx** beside **Data → Value** in the property sheet. In **Bind input value**, choose the scope and state property, then Apply. Cancel leaves the existing binding unchanged; **Remove binding** returns the control to its ordinary form-value behavior. Save and Publish retain the usual separation between the Designer draft and operator publication.
+Declare a Text, Number or Boolean value in the project's **Session state** editor, a screen's **Screen state** editor or a template's **Private instance state** editor. Select an input and choose **fx** beside **Data → Value** in the property sheet. In **Bind input value**, choose the scope and state property, then Apply. Cancel leaves the existing binding unchanged; **Remove binding** returns the control to its ordinary form-value behavior. Save and Publish retain the usual separation between the Designer draft and operator publication.
 
 The saved input property is a direct reference, not an expression:
 

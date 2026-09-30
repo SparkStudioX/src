@@ -51,7 +51,7 @@ Direct state references use a separate sparse `bindingState` array at the same i
 
 ## Workshop and verification
 
-The synthetic [template parameter workshop](../../examples/template-parameter-bindings.json) contains two templates, a regular screen and an inspection popup. It needs no tags, database or external equipment. Import the generated local-only `artifacts/examples/template-parameter-bindings.sparkproj`, or add its resources with the existing authenticated example loader:
+The synthetic [template parameter workshop](../../examples/template-parameter-bindings.json) contains two templates, a regular screen and an inspection popup. It needs no tags, database or external equipment. Import the local `artifacts/sparkproj/template-parameter-bindings.sparkproj` (when present after consolidation; fresh versioned builds use `artifacts/workshops/<version>/projects/`), or add its resources with the existing authenticated example loader:
 
 ```powershell
 node tools/load-example.mjs template-parameter-bindings

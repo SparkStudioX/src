@@ -1,0 +1,75 @@
+# Architecture and feature documentation
+
+These guides describe the current SparkStudio source, including development work that may be newer than the downloadable installer. The source/documentation review date is **September 30, 2026**. A documented implementation is not a claim that every browser, deployment, integration or failure condition has passed acceptance.
+
+Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md). For installation, use the guide attached to your exact release; [Windows installation](WINDOWS_INSTALLER.md) records the preview.8 boundary. [Verification and roadmap](PARITY.md) separates dated observations from current capability summaries and remaining gates. Earlier ledger entries retain the facts and limitations of their original checks; they are not instructions to start an old development package or assertions about the currently running gateway.
+
+## Overview and installation
+
+- [Product and architecture](PRODUCT.md)
+- [Projects and portable packages](PROJECTS.md)
+- [Windows installer](WINDOWS_INSTALLER.md)
+- [Security and accounts](SECURITY.md)
+- [Verification and roadmap](PARITY.md)
+
+## Designer and presentation
+
+- [Component coverage](COMPONENTS.md)
+- [Property sheet, input events and groups](PROPERTY_SHEET_EVENTS.md)
+- [Canvas precision](CANVAS_PRECISION.md)
+- [Authoring defaults](AUTHORING_DEFAULTS.md)
+- [Images and popups](ASSETS_POPUPS.md)
+- [Asset library](ASSET_LIBRARY.md)
+- [Drawing and symbols](DRAWING.md)
+- [Visual styles](VISUAL_STYLES.md)
+- [Caption translations](LOCALIZATION.md)
+
+## Bindings, state and reusable forms
+
+- [Property bindings](PROPERTY_BINDINGS.md)
+- [Application state](APPLICATION_STATE.md)
+- [Input-state bindings](INPUT_STATE_BINDINGS.md)
+- [Private instance state](INSTANCE_STATE.md)
+- [Templates and repeaters](TEMPLATES.md)
+- [Nested forms](NESTED_FORMS.md)
+- [Template parameter bindings](TEMPLATE_PARAMETER_BINDINGS.md)
+- [State-driven template parameters](TEMPLATE_PARAMETER_STATE.md)
+- [Query controls and tables](QUERY_CONTROLS.md)
+- [Query-backed properties](QUERY_PROPERTIES.md)
+- [Read-query testing](QUERY_TESTING.md)
+
+## Scripting and events
+
+- [Scripting workspace](SCRIPTING.md)
+- [Gateway events](GATEWAY_EVENTS.md)
+- [Component property/lifecycle events](COMPONENT_LIFECYCLE.md)
+- [Component messages](COMPONENT_MESSAGING.md)
+- [Python UI actions](PYTHON_UI.md)
+- [Python component events](PYTHON_COMPONENT_EVENTS.md)
+
+## Project tools and diagnostics
+
+- [Project search](PROJECT_SEARCH.md)
+- [Resource changes](RESOURCE_CHANGES.md)
+- [Bulk replacement](BULK_REPLACEMENT.md)
+- [Publication history](PUBLICATION_HISTORY.md)
+- [Preview communication](PREVIEW_COMMUNICATION.md)
+- [Designer diagnostics](DESIGNER_DIAGNOSTICS.md)
+
+## Gateway and operations
+
+- [Gateway console](GATEWAY_CONSOLE.md)
+- [Connection operations](CONNECTION_OPERATIONS.md)
+- [Tag engineering](TAG_ENGINEERING.md)
+- [Deployment settings](DEPLOYMENT_SETTINGS.md)
+- [Network access](NETWORK_ACCESS.md)
+- [Offline gateway recovery](GATEWAY_RECOVERY.md)
+- [Scheduled configuration backups](SCHEDULED_BACKUPS.md)
+
+## Workshops and verification
+
+Use [the example catalog and build instructions](../../examples/README.md) for independently authored workshops. Portable examples import as unpublished projects; setup-required examples also need the documented gateway resources. Match a workshop to its companion build. New Python event workshops are not automatically compatible with the preview.8 installer.
+
+Local artifact cleanup consolidated available packages under `artifacts/sparkproj/`, with their guides and provenance in `index.json`. This is not a checked-in directory or a new builder default. A fresh `node tools/build-workshops.mjs --version <version>` still generates `artifacts/workshops/<version>/projects/` and a complete versioned ZIP. Example loaders can generate `artifacts/examples/` separately. Historical artifact paths in dated verification records may have been archived or removed; regenerate outputs from authored sources when needed.
+
+The September 30 documentation audit reconciled the overview, reusable forms, bindings, state, events, recovery and roadmap summaries against current frontend models/editors, gateway validators/services, Python helpers and existing verification records. It also checked documentation navigation, local links and referenced tool paths. It did not rerun all runtime, installer, network or database acceptance suites. Current source behavior, recorded verification and released binary coverage remain distinct.

@@ -50,7 +50,7 @@ The frontend discards form and query state when its identity or effective permis
 
 ## Audit and limits
 
-Security records account administration, sign-in/out, permission denials, project changes/publication and operator action outcomes using the authenticated account identity. Records omit request bodies, passwords, CSRF values and form contents. Audit files remain local in `security/`; the UI shows recent entries. Rotation keeps a current file and one previous file, each approximately 5 MiB. This is a bounded local audit trail, not tamper-evident archival or an external compliance log. Gateway timer/startup scripts have no interactive operator identity and continue to use their existing script-event logs.
+Security records account administration, sign-in/out, permission denials, project changes/publication and operator action outcomes using the authenticated account identity. Records omit request bodies, passwords, CSRF values and form contents. Audit files remain local in `security/`; the UI shows recent entries. Rotation keeps a current file and one previous file, each approximately 5 MiB. This is a bounded local audit trail, not tamper-evident archival or an external compliance log. Scheduled/startup/shutdown/tag-triggered gateway scripts do not acquire an interactive operator identity. Explicit gateway message requests retain their authenticated request checks. Execution diagnostics are recorded separately from the security audit; see [gateway events](GATEWAY_EVENTS.md).
 
 The public installer, container lifecycle, real SQL Server and factory-network acceptance remain separate release gates. Project archives and `.sparkproj` packages do not contain users, password hashes, session cookies, security settings or the gateway audit log.
 

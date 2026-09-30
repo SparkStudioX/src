@@ -32,7 +32,7 @@ Opening a popup captures its context and initializes fresh local inputs. Closing
 
 ## Server-derived context
 
-A popup action sends root project parameter overrides, its typed local inputs, the publication token and `popupOrigin` containing the opener's `screenId`, `componentId` and optional `instanceId` and `rowId`. It does not send a trusted, precomputed popup context.
+A popup action sends root project parameter overrides, its typed local inputs, the publication token and `popupOrigin` containing the opener's `screenId`, `componentId` and optional legacy `instanceId`/`rowId` or the bounded nested `instancePath`. Parameter fx additionally uses validated parent inputs and sparse state snapshots, with frozen opening values separate from later popup values; see [parameter context](TEMPLATE_PARAMETER_BINDINGS.md#publication-and-gateway-actions). It does not send a trusted, precomputed popup context.
 
 The gateway validates the saved regular-screen opener and its exact popup target under the publication token, then derives the context:
 
@@ -49,7 +49,7 @@ A button inside a query-backed repeater can open a popup using the same paramete
 
 The gateway independently checks opener row membership again before executing every popup script. A missing or stale row returns a clear error, leaving the operator application loaded. This check and the subsequent script are separate operations: an update query must still enforce its expected revision and atomic business transition. A dialog's visibility or selected demo identity does not grant authorization. There is still only one popup level, and a template used inside a popup cannot itself open another popup.
 
-These checks protect application identity and context; they do not provide user authentication or permissioned equipment control. The preview is for trusted local use, and external OPC writes are not implemented.
+These checks protect application identity and context alongside the account/project authorization in [Security](SECURITY.md). They do not authorize equipment control; external OPC writes remain unavailable.
 
 ## Example and verification
 
@@ -59,6 +59,6 @@ The independently authored [assets and popups example](../../examples/assets-pop
 node tools/load-example.mjs assets-popups
 ```
 
-The loader adds missing resources while preserving existing IDs and values. Review and publish the draft. Preview actions can change local memory tags, just as published actions can.
+The loader adds missing resources while preserving existing IDs and values. Review and publish the draft. Default read-only Preview blocks Python. Save the draft and explicitly enable administrator Live actions to exercise a Python action; authored actions can then change local memory tags, just as published actions can.
 
 API upload, format rejection, immutable content, publication isolation, server-derived contexts and restart persistence have been tested on Windows and the Linux container. Browser checks covered image rendering, inspector edits, nested-template popup forms, row isolation, parent input retention, focus restoration and busy locking. Automated verification of the browser file chooser was blocked by its extension's file-access permission; the upload API and image rendering were verified separately. Full evidence and remaining limits are in [PARITY.md](PARITY.md).

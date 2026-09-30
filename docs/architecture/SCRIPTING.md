@@ -1,12 +1,12 @@
 # Scripting workspace
 
-SparkStudio separates reusable Python libraries, gateway automation and browser JavaScript events. The Scripting workspace edits persistent resources with a tree, document tabs and a locally bundled CodeMirror editor. Syntax highlighting, line numbers, folding, indentation, find/replace and completion hints work without a CDN. Completion hints are not a language server; a debugger, breakpoints and nested library packages are not included.
+SparkStudio supports reusable Python libraries, gateway automation, gateway-executed Python component events and browser JavaScript events. The Scripting workspace edits persistent resources with a tree, document tabs and a locally bundled CodeMirror editor. Component event editors use the same bundled source editor. Syntax highlighting, line numbers, folding, indentation, find/replace and completion hints work without a CDN. Completion hints are not a language server; a debugger, breakpoints and nested library packages are not included.
 
 Resources belong to the project currently open in the Designer. Different projects can use the same library and resource names without sharing definitions. Gateway tags and connections remain shared. Archiving a project stops its event scheduler; restoring it resumes the prior script publication. See [project management](PROJECTS.md).
 
 ## Save, publish and run
 
-**Save resources** persists the complete script draft using its revision. **Publish scripts** activates the saved library/event snapshot. Saving alone does not replace running events. Script publication is separate from the screen/project publication; these resources do not yet form one atomic release.
+**Save resources** persists the complete script draft using its revision. **Publish scripts** activates the saved library/event snapshot. Saving alone does not replace running events, though an already published Update handler can observe the saved resource changes. Script publication is separate from the screen/project publication; these resources do not yet form one atomic release.
 
 Add a resource under Project library, Gateway events or Browser events. Libraries are enabled initially; new events are disabled until explicitly enabled. Choose an event, edit its code and optional scalar parameter defaults, then save and publish. Deletion is a draft change until saved and published.
 
@@ -38,12 +38,20 @@ Published operator actions resolve named queries from their captured project pub
 
 ## Event scopes
 
+Python button actions and input, property-change and component-message handlers receive a scoped UI proxy. For example, `self.text = "hi"` changes the calling component and `self.getSibling("heading-id").text = "Ready"` stages an unbound heading change in its form. `system.ui.setState("screen", "title", "Ready")` updates declared state and its bindings. These effects apply only after success and only to the still-current browser context. Shared changes continue to use gateway tags or database records. See [Python UI actions](PYTHON_UI.md) for the scope, conflict and failure contract, and [Python component events](PYTHON_COMPONENT_EVENTS.md) for the automatic event editor, payloads and portable workshop.
+
 | Resource | Events | Execution and lifetime |
 | --- | --- | --- |
-| Gateway Python | Startup, timer | Runs without an operator browser. Startup runs when a new script publication activates and after gateway restart. Timers wait their configured delay before the first execution and after each completed execution. |
+| Gateway Python | Startup, update, shutdown, timer, tag change, message, scheduled | Runs without an operator browser. Published resources govern execution; each event has its own trigger configuration, bounded timeout and dedicated or shared execution lane. |
+| Component Python | Button click, input change/commit, property change, named message handlers | Runs saved code on the gateway with Operate permission, or saved-draft code in administrator-enabled Live Preview. Validated UI effects return to the calling screen, popup or template instance. Shared tag/database changes use their normal gateway behavior. |
 | Browser JavaScript | Startup, screen open | Runs in each operator runtime tab. Startup runs once per script revision in the mounted runtime; screen open runs on screen activation. |
+| Component JavaScript | Input change/commit, mount/unmount, property change, named message handlers | Runs in the browser with local form/state helpers. Messages use an exact type and listener scope; instance, screen and single-tab session scopes expire with their mounted context. See [component messaging](COMPONENT_MESSAGING.md). |
 
-Gateway timers do not overlap themselves. Replacing a script publication cancels previous gateway event work before activating the replacement. Republishing the same revision is idempotent. The timer interval is a fixed delay, not a calendar schedule or a fixed-rate timing guarantee. Separate resources may execute independently. Python invocations have a ten-second execution limit.
+New supported automatic handlers default to Python; existing JavaScript keeps its language and source. Language switching uses separate drafts and does not translate code. Mount/unmount, password-control automatic events and template/repeater-wrapper events remain JavaScript-only; ordinary child components inside templates and rows support Python. Component messages stay within one runtime tab even when a receiver executes on the gateway. Python message-send helpers and gateway-to-browser push remain separate work.
+
+Gateway events do not overlap themselves. Replacing a script publication stops previous work and gives old shutdown handlers a bounded best-effort opportunity before activating the replacement. Republishing the same revision is idempotent. Fixed-delay timers wait after completion; fixed-rate timers skip missed intervals without a catch-up backlog. Scheduled handlers use five-field numeric cron and an explicit time zone. Tag handlers observe selected value, quality and timestamp changes and report coalescing. Named message handlers accept permission-checked JSON payloads. Gateway resource timeouts default to ten seconds and can be configured from 100 to 300,000 milliseconds; console and other invocation limits are separate.
+
+Dedicated resources can execute independently. Shared resources serialize within their project's shared lane. Shutdown is best effort within a ten-second aggregate budget, and forced termination cannot execute cleanup. Missed schedules during downtime are skipped; daylight-saving gaps are skipped and repeated minutes run once. See the [Gateway events workshop](GATEWAY_EVENTS.md) for every trigger, Python event context, message testing and the portable seven-event example. The new examples are disabled until deliberately enabled and published.
 
 Browser event bodies may use `await` and receive:
 
@@ -72,17 +80,21 @@ For reactive application data, declare defaults in the project or screen propert
 app.state.set("session", "showDetails", true);
 ```
 
-Session state survives screen navigation within this project tab. Screen state resets when that screen is left, and popup state belongs to each popup opening. Templates and repeater rows inherit the containing screen or popup state. Application reload, project/publication replacement and user changes reset the state. Values stay in memory; packages contain defaults only. Input change/commit handlers also receive `app.state`, subject to their existing enabled, visible, read-only and stale-context gates. Missing keys and incorrectly typed values fail with a script diagnostic. See [typed application state](APPLICATION_STATE.md) for the saved format, binding sources and reset rules.
+Session state survives screen navigation within this project tab. Screen state resets when that screen is left, and popup state belongs to each popup opening. Templates and repeater rows inherit the containing screen or popup state. Application reload, project/publication replacement and user changes reset the state. Values stay in memory; packages contain defaults only. JavaScript input change/commit handlers also receive `app.state`, subject to their existing enabled, visible, read-only and stale-context gates. Python uses `system.ui` and `self.parent.custom` under its gateway permission and context checks. Missing keys and incorrectly typed values fail with a script diagnostic. See [typed application state](APPLICATION_STATE.md) for the saved format, binding sources and reset rules.
 
 Updating declared state changes its bindings; assigning to the older `session` memory object does not. Browser startup/screen-open code can change local presentation state for a viewer, but those values never grant permissions or become implicit gateway Python inputs.
 
 The browser helper object does not provide direct Python or database access. Browser code is trusted JavaScript in the application's origin, not a security sandbox. Python similarly runs with the gateway account's OS access. Process isolation and execution limits do not make untrusted author code safe.
 
+## Component scripting
+
+[Python UI actions](PYTHON_UI.md) expose scoped `self` and `system.ui` to button actions. [Python component events](PYTHON_COMPONENT_EVENTS.md) extend that bridge to supported input change/commit, property-change and component-message handlers. These definitions publish with the project; libraries publish separately. Password controls and template/repeater wrappers remain JavaScript-only, as do mount/unmount handlers. JavaScript uses its browser `app` helpers; language selection is not source translation. Gateway message resources and single-browser component messages have distinct routing contracts.
+
 ## Diagnostics and limits
 
-The Gateway events output tab shows the active revision, enabled/running state, last/next run times and recent results. Its polling interval is five seconds. Logs retain at most 100 resource runs in memory and reset on gateway restart; they are not a durable audit journal. Standard output and error are each bounded to 8,192 characters per log, and logged results are capped at 8,192 serialized characters.
+The Gateway events output tab shows the active revision, enabled/running/queued state, execution counts, last/next run times and recent results. Its polling interval is five seconds. The latest 100 run records are persisted across gateway restarts; they are bounded diagnostics, not a durable job queue or security audit journal. Standard output and error are each bounded to 8,192 characters per log, and logged results are capped at 8,192 serialized characters. Engineering administrators can cancel active runs; cancellation cannot undo completed side effects.
 
-There are at most 100 resources, with 64 KiB of UTF-8 code per resource and 512 KiB total. Each resource may declare up to 64 scalar parameters: string, finite safe number, Boolean or null. Strings are limited to 4,096 characters. Timer delays range from 100 to 86,400,000 milliseconds. Manual cancellation controls, durable job queues and delivery guarantees are not included.
+There are at most 100 resources, with 64 KiB of UTF-8 code per resource and 512 KiB total. Each resource may declare up to 64 scalar parameters: string, finite safe number, Boolean or null. Strings are limited to 4,096 characters. Timer intervals range from 100 to 86,400,000 milliseconds. Tag-change resources accept one to 64 unique absolute paths. Durable job queues, replay after downtime and guaranteed delivery are not included.
 
 ## Database application example and next scope
 
@@ -90,6 +102,6 @@ From the source checkout, `node tools/load-sqlite-example.mjs` loads independent
 
 Chrome verification exercised library creation in the editor, retention of unsaved edits across Designer/Scripting navigation, saved execution, publication and console import. Invalid parameter JSON retained its buffer when switching was attempted. Gateway status/logs were visible, and an authored browser screen-open notification executed. These are selected workflows, not complete editor or browser compatibility coverage.
 
-The 14 scripting API groups passed from source and again from the rebuilt self-contained Windows executable. A separate restart audit retained the publication and library and ran startup exactly once after restart. The accompanying 12 SQLite API groups also passed from the package; Chrome create/edit, immediate refresh, stale-edit rejection, reload/filter and selection after sorting passed. The public installer and Linux image have not been refreshed for this increment.
+Historical baseline: the original scripting increment passed 14 API groups from source and its self-contained Windows package, with restart/library/startup and SQLite/browser checks described in the dated [verification ledger](PARITY.md). Those counts do not validate the later seven-family gateway event engine, component messaging, Python UI bridge or Python component events. Their guides and ledger entries identify their own evidence and release boundary.
 
-Next work includes broader component events, tag-change/message handlers, shutdown and calendar scheduling, package organization, diagnostics/navigation across resources, and dependency environments with offline wheels. Authentication, permissioned actions and audit remain required before shared-network deployment. See [verification and roadmap](PARITY.md) for measured coverage and remaining boundaries.
+Remaining scripting work includes package organization, deeper debugging, additional APIs and dependency environments with offline wheels. See [verification and roadmap](PARITY.md) for measured coverage and remaining boundaries; selected automated and browser checks do not establish production scheduling or every shutdown condition.

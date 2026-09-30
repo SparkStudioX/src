@@ -1,8 +1,10 @@
 # Component property and lifecycle events
 
-Select a component and open **Component events → Edit lifecycle & property events** in its property sheet. The editor stages three JavaScript handlers: **Mounted**, **Property changed**, and **Unmounted**. Apply records one Designer undo step; Cancel discards the draft. Save and publish to deploy the definitions to operators. Designer authoring and default read-only Preview do not execute these scripts. An administrator must explicitly enable [live-actions Preview](PREVIEW_COMMUNICATION.md) to exercise them there; the published operator application retains its normal event behavior.
+Select a component and open **Component events → Edit lifecycle & property events** in its property sheet. Mounted and Unmounted use JavaScript; Property changed can use JavaScript or Python on supported components. Password controls and template/repeater wrappers remain JavaScript-only. Apply records one undo step; Cancel discards the draft. Save and publish to deploy definitions. Authoring and default read-only Preview execute no authored scripts. Administrator-enabled [Live actions Preview](PREVIEW_COMMUNICATION.md) can exercise saved Python handlers; save changes before testing them. See [Python component events](PYTHON_COMPONENT_EVENTS.md).
 
-These handlers add automatic local behavior to all component types, including template and repeater wrappers. They are separate from explicit user input change/commit events and gateway Python button actions. The application supplies browser state and form helpers, not gateway query or equipment command helpers. Author scripts remain trusted JavaScript and are not a security sandbox.
+These handlers add automatic behavior to component instances and are separate from explicit user input change/commit events. The JavaScript contract below provides browser state/form helpers. Python property handlers execute saved code on the gateway with scoped `self`/`system.ui`, require Operate authority in the operator application and retain their separate transport/deadline rules. Both languages are trusted author code, not a security sandbox.
+
+New supported property-change handlers default to Python; existing JavaScript remains unchanged. Each language has a separate source draft; switching languages does not translate code. Ordinary child components inside templates and repeated rows can use Python even though the wrapper itself cannot.
 
 ## Saved definition
 
@@ -28,7 +30,16 @@ These handlers add automatic local behavior to all component types, including te
 }
 ```
 
-Each configured handler requires nonblank JavaScript of at most 65,536 UTF-16 code units. The gateway rejects unknown fields, languages, unsupported watch targets and misplaced definitions. Property-change handlers observe 1–16 unique properties in authored order. An empty events object is valid. Only saved definitions enter projects, publications and `.sparkproj` packages; execution queues, operator values and diagnostics do not.
+Each configured handler requires nonblank code of at most 65,536 UTF-16 code units. Mount/unmount require JavaScript; propertyChange also accepts Python where the component supports it. The gateway rejects unknown fields, languages, unsupported watch targets and misplaced definitions. Property-change handlers observe 1–16 unique properties in authored order. An empty events object is valid. Only saved definitions enter projects, publications and `.sparkproj` packages; execution queues, operator values and diagnostics do not.
+
+Python source is omitted from operator project responses and resolved from saved handler identity when invoked. To use Python for a property handler, select Python and author:
+
+```python
+if event.available:
+    self.getSibling("event-log").text = event.property + ": " + str(event.value)
+```
+
+The receiving form must contain an unbound component with ID `event-log`. For a bound target, update its declared state or data source instead. CPython checks syntax when a live event executes; the editor checks JavaScript syntax without execution.
 
 ## What changes are observed
 
@@ -36,11 +47,11 @@ The watch list offers the component's supported scalar property-binding targets.
 
 The first committed snapshot establishes a silent baseline. Mounted runs before property-change work for that component. Later differences in value, availability or diagnostic produce an event; equal snapshots are suppressed. Programmatic assignments may produce property-change events, but never synthesize explicit user input change/commit events.
 
-All payloads contain `type` and `componentId`. Property-change payloads also contain `property`, `value`, `previousValue`, `available`, `previousAvailable`, `error` and `previousError`. An unavailable value is `null` with `available: false`; display fallbacks are not reported as successful values. Check availability before doing calculations.
+All payloads contain `type` and `componentId`. Property-change payloads also contain `property`, `value`, `previousValue`, `available`, `previousAvailable`, `error`, `previousError` and `origin`. Origin describes the source as `input`, `binding`, `script` or `configuration`; it is diagnostic presentation context, not trusted identity. An unavailable value is `null` (`None` in Python) with false availability; display fallbacks are not reported as successful values. Check availability and scalar types before doing calculations; numeric input drafts may temporarily contain empty or invalid text.
 
-Hidden and disabled components remain mounted and keep observing changes. Automatic local events also run for read-only operators; this does not enable interactive inputs or authorize server actions. A wrapper's events use its containing form. Components inside a template use that template's own parameters, inputs and private state. Stable repeater identities preserve their lifetime through reordering.
+Hidden and disabled components remain mounted and keep observing changes. Automatic JavaScript events also run for read-only operators; this does not enable interactive inputs or authorize server actions. Python events require Operate permission and the gateway checks their saved identity and context. A wrapper's events use its containing form. Components inside a template use that template's own parameters, inputs and private state. Stable repeater identities preserve their lifetime through reordering.
 
-## Helpers and snapshots
+## JavaScript helpers and snapshots
 
 - `inputs` and `parameters` are frozen snapshots captured when the event is queued. Password inputs are omitted.
 - `app.setInput(field, value)` validates and assigns a non-password input in the current form without producing user input events.
@@ -64,14 +75,18 @@ Declare the numeric `ticks` key first. Awaited work should pass `app.signal` to 
 
 ## Disposal and execution limits
 
+Python uses the same UI ownership and conflict rules as [Python UI actions](PYTHON_UI.md). Input events and automatic property/message events retain separate 32-item waiting queues; dispatched Python calls share another bounded component FIFO. This is not a single aggregate 32-event cap. Gateway execution has a two-second limit and the browser allows three seconds for the response including transport. Exceptions, timeouts, canceled contexts and conflicting newer edits apply no staged UI changes. Gateway tag/database writes remain immediate and cannot be rolled back by discarding the UI response. Local effects do not broadcast across operator tabs.
+
 Changing the effective component/form context, removing an instance, navigating, closing a popup, replacing a publication or restarting Preview disposes the old context. Pending work is canceled and old helpers lose write authority before Unmounted and registered cleanup callbacks run. Cleanup reads a captured state snapshot; state writes, input assignments and notifications do nothing. Its signal is already aborted. Cleanup errors remain visible in the owning application after the leaf component disappears.
 
-Handlers run serially per component, with at most 32 pending/running events. Each asynchronous invocation has a 2-second deadline; a timed-out invocation loses its helpers even if its promise later resolves. Cleanup has a shared 1-second deadline. Execution is scheduled outside React's effect stack. Synchronous infinite loops cannot be interrupted by these limits.
+Handlers run serially per component, with at most 32 pending/running events. Each asynchronous JavaScript invocation has a 2-second deadline; a timed-out invocation loses its helpers even if its promise later resolves. Cleanup has a shared 1-second deadline. Execution is scheduled outside React's effect stack. Synchronous infinite loops cannot be interrupted by these limits.
 
 A shared application-run breaker stops automatic mount/property work at 512 invocations in a rolling second or after 128 property changes without a quiet break. A quiet break requires 50 milliseconds with no queued or running automatic handlers, including awaited work. This also catches slow asynchronous feedback loops. Instance or popup churn does not reset the breaker. Main-screen navigation, a new application/publication run or Preview restart resets it. Cleanup still runs when the breaker is open. Ordinary diagnostics retain the latest 20 messages; dismissing one does not reset a latched breaker.
 
 ## Workshop and remaining work
 
-The independently authored [component-event workshop](../../examples/component-events.json) demonstrates independent template counters, programmatic versus user changes, hidden-instance lifetime and popup cleanup. Its separate diagnostics screen deliberately exercises timeout and feedback-loop errors using browser state only. It has no database, tag or equipment dependencies. Load it with the authenticated example loader or import the generated local-only `artifacts/examples/component-events.sparkproj`.
+The independently authored [component-event workshop](../../examples/component-events.json) demonstrates independent template counters, programmatic versus user changes, hidden-instance lifetime and popup cleanup. Its separate diagnostics screen deliberately exercises timeout and feedback-loop errors using browser state only. It has no database, tag or equipment dependencies. Load it with the authenticated example loader or import the local `artifacts/sparkproj/component-events.sparkproj` (when present after consolidation; fresh versioned builds use `artifacts/workshops/<version>/projects/`).
 
-This is the property-change and lifecycle portion of D03. Focus, keyboard and pointer events, a unified action editor, automatic server/query actions and broader property dependency graphs remain separate roadmap work. Existing gateway actions keep their published-definition and permission checks.
+The [Python component events workshop](../../examples/python-component-events.json) demonstrates Python input, property and message handlers with independent template and repeater state. It requires CPython but no database or device.
+
+This is the property-change and lifecycle portion of D03. Focus, keyboard and pointer events, a unified action editor, Python mount/unmount and broader property dependency graphs remain separate roadmap work. Python input, property-change and message handlers can now use gateway tags and named queries while retaining published-definition and permission checks.

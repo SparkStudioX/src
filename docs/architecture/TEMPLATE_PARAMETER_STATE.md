@@ -59,6 +59,6 @@ These are untrusted operator-supplied values, just like submitted form inputs. T
 
 ## Workshop and boundary
 
-The independently authored [state-parameter workshop](../../examples/template-parameter-state.json) combines session station selection, a screen batch quantity, separate private offsets, saved repeater rows and a popup with its own batch. Read-only Python buttons report the gateway-reconstructed context without writing tags or records. The generated local-only `artifacts/examples/template-parameter-state.sparkproj` can be imported as a separate project. The authenticated example loader also accepts `template-parameter-state`.
+The independently authored [state-parameter workshop](../../examples/template-parameter-state.json) combines session station selection, a screen batch quantity, separate private offsets, saved repeater rows and a popup with its own batch. Read-only Python buttons report the gateway-reconstructed context without writing tags or records. The local `artifacts/sparkproj/template-parameter-state.sparkproj` (when present after consolidation; fresh versioned builds use `artifacts/workshops/<version>/projects/`) can be imported as a separate project. The authenticated example loader also accepts `template-parameter-state`.
 
 Verification is recorded in [PARITY.md](PARITY.md). This increment adds direct browser state sources only. Direct tag-derived parameter sources, parameter writeback, nested query sources, query-backed arbitrary properties and atomic multi-resource publication remain separate roadmap work.
