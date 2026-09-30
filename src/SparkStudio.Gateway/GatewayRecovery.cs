@@ -14,9 +14,11 @@ namespace SparkStudio.Gateway;
 
 public sealed record RecoveryFile(string Path, long Length, string Sha256, string Category);
 public sealed record RecoveryManifest(int SchemaVersion, string ArchiveId, string CreatedAtUtc, string SourceVersion,
-    string SourcePlatform, bool SourceWasQuarantined, string SecretPortability, long TotalBytes, List<RecoveryFile> Files);
+    string SourcePlatform, bool SourceWasQuarantined, string SecretPortability, long TotalBytes, List<RecoveryFile> Files,
+    string Scope = "full", List<string>? ExcludedPaths = null);
 public sealed record RecoveryReport(string ArchiveId, string CreatedAtUtc, string SourceVersion, string SourcePlatform,
-    int FileCount, long TotalBytes, string SecretPortability, bool SourceWasQuarantined, IReadOnlyDictionary<string, int> Categories);
+    int FileCount, long TotalBytes, string SecretPortability, bool SourceWasQuarantined, IReadOnlyDictionary<string, int> Categories,
+    string Scope = "full", IReadOnlyList<string>? ExcludedPaths = null);
 
 /// <summary>Offline authenticated snapshots; this never loads gateway stores or executes project code.</summary>
 public static class GatewayRecovery
@@ -29,7 +31,15 @@ public static class GatewayRecovery
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow, RespectRequiredConstructorParameters = true, MaxDepth = 16 };
 
-    public static async Task<RecoveryReport> BackupAsync(string dataDirectory, string archivePath, string passphrase, CancellationToken cancellation = default)
+    public static Task<RecoveryReport> BackupAsync(string dataDirectory, string archivePath, string passphrase, CancellationToken cancellation = default)
+        => BackupCoreAsync(dataDirectory, archivePath, passphrase, "full", ["backup-work/"], null, cancellation);
+
+    internal static Task<RecoveryReport> BackupConfigurationAsync(string stagedDirectory, string archivePath, string passphrase,
+        List<string> excludedPaths, bool sourceWasQuarantined, CancellationToken cancellation)
+        => BackupCoreAsync(stagedDirectory, archivePath, passphrase, "configuration", excludedPaths, sourceWasQuarantined, cancellation);
+
+    private static async Task<RecoveryReport> BackupCoreAsync(string dataDirectory, string archivePath, string passphrase,
+        string scope, List<string> excludedPaths, bool? sourceWasQuarantined, CancellationToken cancellation)
     {
         cancellation.ThrowIfCancellationRequested();
         var root = RecoveryFileSystem.LocalPath(dataDirectory);
@@ -54,7 +64,8 @@ public static class GatewayRecovery
         var manifest = new RecoveryManifest(FormatVersion, Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow.ToString("O"),
             typeof(GatewayRecovery).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown",
             OperatingSystem.IsWindows() ? "windows" : OperatingSystem.IsMacOS() ? "macos" : "linux",
-            File.Exists(Path.Combine(root, QuarantineFileName)) || Directory.Exists(Path.Combine(root, QuarantineFileName)), PortabilityPolicy, total, entries);
+            sourceWasQuarantined ?? (File.Exists(Path.Combine(root, QuarantineFileName)) || Directory.Exists(Path.Combine(root, QuarantineFileName))), PortabilityPolicy, total, entries,
+            scope, excludedPaths);
         ValidateManifest(manifest);
         var manifestBytes = JsonSerializer.SerializeToUtf8Bytes(manifest, Json);
         if (manifestBytes.Length > MaxManifestBytes) throw new InvalidDataException("The backup manifest exceeds its size limit.");
@@ -135,7 +146,9 @@ public static class GatewayRecovery
                 {
                     schemaVersion = 1, archiveId = report.ArchiveId, restoredAtUtc = DateTimeOffset.UtcNow.ToString("O"),
                     sourceVersion = report.SourceVersion, sourcePlatform = report.SourcePlatform,
-                    fileCount = report.FileCount, totalBytes = report.TotalBytes, state = "quarantined"
+                    fileCount = report.FileCount, totalBytes = report.TotalBytes, state = "quarantined",
+                    scope = report.Scope, excludedPaths = ReceiptExclusions(report.ExcludedPaths),
+                    excludedPathCount = report.ExcludedPaths?.Count ?? 0
                 }, Json);
                 cancellation.ThrowIfCancellationRequested();
                 WriteDurableMarker(stage, marker);
@@ -222,7 +235,7 @@ public static class GatewayRecovery
                 if (++visited > entryLimit) throw new InvalidDataException("The data directory exceeds the recovery directory-entry limit.");
                 RecoveryFileSystem.RejectLinks(path);
                 var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
-                if (relative is DataDirectoryLease.FileName or QuarantineFileName) continue;
+                if (relative is DataDirectoryLease.FileName or QuarantineFileName or "backup-work") continue;
                 ValidateRelativePath(relative);
                 if (Directory.Exists(path)) { directories.Push(path); continue; }
                 if (result.Count >= MaxFiles) throw new InvalidDataException("The data directory exceeds the backup file-count limit.");
@@ -240,7 +253,9 @@ public static class GatewayRecovery
         if (manifest.SchemaVersion != FormatVersion || !Guid.TryParseExact(manifest.ArchiveId, "N", out _) ||
             !DateTimeOffset.TryParse(manifest.CreatedAtUtc, out _) || string.IsNullOrWhiteSpace(manifest.SourceVersion) || manifest.SourceVersion.Length > 200 ||
             manifest.SourcePlatform is not ("windows" or "linux" or "macos") || manifest.SecretPortability != PortabilityPolicy ||
-            manifest.Files is null || manifest.Files.Count > MaxFiles || manifest.TotalBytes is < 0 or > MaxTotalBytes)
+            manifest.Files is null || manifest.Files.Count > MaxFiles || manifest.TotalBytes is < 0 or > MaxTotalBytes ||
+            manifest.Scope is not ("full" or "configuration") || (manifest.ExcludedPaths?.Count ?? 0) > MaxDirectoryEntries ||
+            manifest.ExcludedPaths?.Any(path => string.IsNullOrEmpty(path) || path.Length > 1001 || path.Any(char.IsControl)) == true)
             throw new InvalidDataException("The archive manifest uses invalid or unsupported metadata.");
         var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -302,6 +317,19 @@ public static class GatewayRecovery
             throw new ArgumentException("Keep the archive outside the gateway data directory.");
     }
     private static bool DigestMatches(byte[] bytes, string expected) => CryptographicOperations.FixedTimeEquals(bytes, Convert.FromHexString(expected));
+    private static string[] ReceiptExclusions(IReadOnlyList<string>? paths)
+    {
+        var result = new List<string>(); var bytes = 2;
+        foreach (var path in paths ?? [])
+        {
+            // The manifest keeps every exclusion; a small receipt preview must fit
+            // even when JSON escaping makes Unicode names larger than their length.
+            var size = JsonSerializer.SerializeToUtf8Bytes(path, Json).Length + 1;
+            if (result.Count >= 32 || bytes + size > 4096) break;
+            result.Add(path); bytes += size;
+        }
+        return result.ToArray();
+    }
     private static void WriteDurableMarker(string directory, byte[] bytes)
     {
         using var file = new FileStream(Path.Combine(directory, QuarantineFileName), FileMode.Create, FileAccess.Write, FileShare.None);
@@ -317,7 +345,8 @@ public static class GatewayRecovery
     };
     private static RecoveryReport Report(RecoveryManifest value) => new(value.ArchiveId, value.CreatedAtUtc, value.SourceVersion,
         value.SourcePlatform, value.Files.Count, value.TotalBytes, value.SecretPortability, value.SourceWasQuarantined,
-        value.Files.GroupBy(file => file.Category).ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal));
+        value.Files.GroupBy(file => file.Category).ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal),
+        value.Scope, value.ExcludedPaths ?? []);
 }
 
 /// <summary>Sequence-bound AES-GCM records; no compression or plaintext temporary archive.</summary>

@@ -7,6 +7,7 @@ namespace SparkStudio.Gateway;
 /// <summary>A restored gateway stays isolated for the entire process, including after approval.</summary>
 public sealed class RecoveryQuarantine
 {
+    private const int MaximumMarkerBytes = 65536;
     public const string MarkerName = "recovery-quarantine.json";
     public const string BlockedMessage = "Gateway recovery mode blocks connections and Python scripts. Review Recovery in Gateway Settings, approve resuming, then restart the gateway.";
     private readonly object gate = new();
@@ -28,14 +29,15 @@ public sealed class RecoveryQuarantine
         try
         {
             var info = new FileInfo(marker);
-            if ((info.Attributes & FileAttributes.ReparsePoint) != 0 || info.Length > 8192)
+            if ((info.Attributes & FileAttributes.ReparsePoint) != 0 || info.Length > MaximumMarkerBytes)
                 throw new InvalidOperationException();
             var bytes = File.ReadAllBytes(marker);
             revision = Convert.ToHexString(SHA256.HashData(bytes));
             receipt = JsonNode.Parse(bytes)?.AsObject();
             invalid = receipt?["schemaVersion"]?.GetValue<int>() != 1
                 || receipt?["state"]?.GetValue<string>() != "quarantined"
-                || !Guid.TryParse(receipt?["archiveId"]?.GetValue<string>(), out _);
+                || !Guid.TryParse(receipt?["archiveId"]?.GetValue<string>(), out _)
+                || receipt?["scope"]?.GetValue<string>() is { } scope && scope is not ("full" or "configuration");
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException or FormatException)
         { invalid = true; }
@@ -57,7 +59,10 @@ public sealed class RecoveryQuarantine
             sourceVersion = invalid ? null : receipt?["sourceVersion"]?.DeepClone(),
             fileCount = invalid ? null : receipt?["fileCount"]?.DeepClone(),
             totalBytes = invalid ? null : receipt?["totalBytes"]?.DeepClone(),
-            coverage = "Complete offline data-directory snapshot: projects, publications, local databases, accounts, grants, connections, tags, assets, keyring and certificates. External databases need their own backup.",
+            scope = invalid ? null : receipt?["scope"]?.GetValue<string>() ?? "full",
+            excludedPaths = invalid || receipt?["excludedPaths"] is not System.Text.Json.Nodes.JsonArray excluded ? new JsonArray() : excluded.DeepClone(),
+            excludedPathCount = invalid ? null : receipt?["excludedPathCount"]?.DeepClone(),
+            coverage = !invalid && receipt?["scope"]?.GetValue<string>() == "configuration" ? GatewayBackups.Coverage : "Complete offline data-directory snapshot: projects, publications, local databases, accounts, grants, connections, tags, assets, keyring and certificates. Temporary backup work/cache is excluded. External databases need their own backup.",
             portability = "Windows-protected connection secrets retain their original machine and Windows account binding. Reenter credentials when moving to another machine or service account.",
             backupMode = "Stop the gateway and its Python workers before backup. The data-directory lease prevents concurrent access by this gateway version; older versions and third-party writers must be stopped separately."
         };
@@ -73,7 +78,7 @@ public sealed class RecoveryQuarantine
                 throw new ArgumentException("Review connections, scripts, account/key portability and deployment, then enter RESUME RESTORED GATEWAY.");
             if (request.Revision != revision || !File.Exists(marker)
                 || (File.GetAttributes(marker) & FileAttributes.ReparsePoint) != 0
-                || new FileInfo(marker).Length > 8192
+                || new FileInfo(marker).Length > MaximumMarkerBytes
                 || Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(marker))) != revision)
                 throw new InvalidOperationException("Recovery state changed. Refresh and review it again.");
             // The original receipt is retained. No work is enabled in this process; restart

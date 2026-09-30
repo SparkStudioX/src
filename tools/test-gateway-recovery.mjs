@@ -73,6 +73,7 @@ Put("tags.json", "[]"); Put("connections.json", "[]");
 Put("deployment.json", "{\"revision\":2}"); Put("deployment.json.previous", "{\"revision\":1}");
 Put("certificates/deployment/fixture.pem", "synthetic-noncertificate-fixture"); Put("pki/rejected/fixture.der", "synthetic-pki-fixture");
 Put("unknown/operator-notes.txt", "additional-local-data-canary"); Put("projects/.orphan-fixture/state.tmp", "interrupted-local-state");
+Put("backup-work/cached.sparkbak", "excluded-owned-backup-cache");
 Put(GatewayRecovery.QuarantineFileName, "{\"state\":\"quarantined\"}");
 Directory.CreateDirectory(Path.Combine(source, "keys"));
 var provider = DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(source, "keys")), builder =>
@@ -88,7 +89,8 @@ using (var wal = Child("--create-wal", Path.Combine(source, "databases", "fixtur
 }
 Check(File.Exists(Path.Combine(source, "databases/fixture.db-wal")), "WAL-only fixture was checkpointed unexpectedly.");
 var sourceHashes = Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories)
-    .Where(file => Path.GetRelativePath(source, file) is not GatewayRecovery.QuarantineFileName and not DataDirectoryLease.FileName)
+    .Where(file => Path.GetRelativePath(source, file) is not GatewayRecovery.QuarantineFileName and not DataDirectoryLease.FileName
+        && !Path.GetRelativePath(source, file).Replace('\\', '/').StartsWith("backup-work/", StringComparison.Ordinal))
     .ToDictionary(file => Path.GetRelativePath(source, file).Replace('\\', '/'), file => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file))));
 var archive = Path.Combine(fixture, "gateway.sparkbak");
 var report = await GatewayRecovery.BackupAsync(source, archive, passphrase);
@@ -97,6 +99,7 @@ Check(!Encoding.UTF8.GetString(File.ReadAllBytes(archive)).Contains("canary"), "
 var inspection = await GatewayRecovery.InspectAsync(archive, passphrase);
 Check(inspection.ArchiveId == report.ArchiveId && inspection.TotalBytes == report.TotalBytes, "Authenticated inspection changed coverage.");
 var restored = Path.Combine(fixture, "restored"); await GatewayRecovery.RestoreAsync(archive, restored, passphrase);
+Check(report.Scope == "full" && report.ExcludedPaths!.Contains("backup-work/") && !Directory.Exists(Path.Combine(restored, "backup-work")), "Full archive scope/cache exclusion is incorrect.");
 foreach (var (relative, digest) in sourceHashes)
     Check(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(Path.Combine(restored, relative)))) == digest, "Restored bytes changed: " + relative);
 Check(JsonNode.Parse(File.ReadAllText(Path.Combine(restored, GatewayRecovery.QuarantineFileName)))?["state"]?.GetValue<string>() == "quarantined", "Restore omitted quarantine marker.");
@@ -181,7 +184,9 @@ var cases = new Dictionary<string, Action<JsonObject>>
     ["null-path"] = value => value["files"]![0]!["path"] = null,
     ["file-bound"] = value => value["files"]![0]!["length"] = GatewayRecovery.MaxFileBytes + 1,
     ["total"] = value => value["totalBytes"] = 0,
-    ["digest"] = value => value["files"]![0]!["sha256"] = "bad"
+    ["digest"] = value => value["files"]![0]!["sha256"] = "bad",
+    ["unknown-scope"] = value => value["scope"] = "partial-unknown",
+    ["unsafe-exclusion"] = value => value["excludedPaths"] = new JsonArray("bad\npath")
 };
 foreach (var (name, change) in cases)
 {
@@ -195,6 +200,12 @@ var duplicateJson = Path.Combine(fixture, "duplicate-json.sparkbak");
 using (var output = File.Create(duplicateJson)) using (var records = RecoveryRecords.Create(output, passphrase))
     records.Write(1, Encoding.UTF8.GetBytes(manifest.ToJsonString().Insert(1, "\"schemaVersion\":1,")));
 await Reject(() => GatewayRecovery.InspectAsync(duplicateJson, passphrase), "duplicate JSON fields");
+var legacyManifest = (JsonObject)manifest.DeepClone(); legacyManifest.Remove("scope"); legacyManifest.Remove("excludedPaths");
+legacyManifest["files"] = new JsonArray(); legacyManifest["totalBytes"] = 0;
+var legacyArchive = Path.Combine(fixture, "legacy-scope.sparkbak");
+using (var output = File.Create(legacyArchive)) using (var records = RecoveryRecords.Create(output, passphrase))
+{ records.Write(1, Encoding.UTF8.GetBytes(legacyManifest.ToJsonString())); records.Write(3, []); }
+Check((await GatewayRecovery.InspectAsync(legacyArchive, passphrase)).Scope == "full", "Original v1 archives must retain their full scope without the optional field.");
 Console.WriteLine("PASS authenticated malformed manifest fields, traversal/device/ADS paths, aliases, collisions and declared size bounds");
 
 var linked = Path.Combine(fixture, "linked-source"); Directory.CreateDirectory(linked);

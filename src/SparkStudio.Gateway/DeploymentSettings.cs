@@ -15,7 +15,7 @@ public sealed class DeploymentSettings : IDisposable
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     { WriteIndented = true, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
     private static readonly Regex FileName = new(@"\A[A-Za-z0-9][A-Za-z0-9._-]{0,119}\z", RegexOptions.CultureInvariant);
-    private readonly object sync = new();
+    private readonly object sync = GatewayConfigurationLock.SyncRoot;
     private readonly string filename;
     private readonly string certificateDirectory;
     private readonly string? overrideReason;

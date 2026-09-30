@@ -5,7 +5,7 @@ namespace SparkStudio.Gateway;
 /// <summary>Operators use an explicitly published, persisted snapshot of screens and named queries.</summary>
 public sealed partial class PublicationStore
 {
-    private readonly object gate = new();
+    private readonly object gate = GatewayConfigurationLock.SyncRoot;
     private readonly string path;
     private readonly LocalAssetStore assets;
     private JsonObject? publication;

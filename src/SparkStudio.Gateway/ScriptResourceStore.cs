@@ -11,7 +11,7 @@ public sealed record ScriptRunSnapshot(JsonObject Resource, int Revision, string
 /// <summary>Script resources have an independent draft and explicitly published snapshot.</summary>
 public sealed class ScriptResourceStore
 {
-    private readonly object gate = new();
+    private readonly object gate = GatewayConfigurationLock.SyncRoot;
     private readonly string directory;
     private JsonObject draft;
     private JsonObject? published;

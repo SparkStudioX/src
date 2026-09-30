@@ -10,6 +10,38 @@
   },
   "workshops": [
     {
+      "id": "scheduled-backups",
+      "title": "Scheduled backup workshop",
+      "summary": "A read-only checkpoint for encrypted configuration downloads, daily SMB/FTP/FTPS delivery, gateway-specific age retention and isolated restore.",
+      "source": "examples/scheduled-backups.json",
+      "distribution": "setup-required",
+      "features": [
+        "online saved-configuration snapshot",
+        "passphrase-encrypted archives",
+        "daily destination delivery",
+        "verified atomic promotion",
+        "gateway-owned age retention",
+        "quarantined restore"
+      ],
+      "prerequisites": [
+        "Use the companion scheduling build and an engineering administrator on a disposable gateway; preview.5 predates this feature.",
+        "Run tools/load-backup-example.mjs with SPARKSTUDIO_ADMIN_AUTH_FILE to create a new unpublished checkpoint project; --publish is an explicit option. The loader does not change gateway backup settings.",
+        "Choose an archive passphrase and a dedicated writable test SMB share or FTP/FTPS directory for the remote exercise. No credentials, remote folders or certificate material are included.",
+        "The daily schedule defaults to disabled, 02:00 in the gateway time zone, seven-day retention and a 300-second transfer deadline. Save and verify a manual delivery before enabling it.",
+        "Configuration archives exclude live databases, history and audit data. Keep separate database backups and use the offline full-backup procedure when complete stopped-gateway data is needed."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "scheduled-backups",
+      "guide": "docs/architecture/SCHEDULED_BACKUPS.md",
+      "walkthrough": [
+        "Load the checkpoint screen into the disposable gateway, review and publish SCHEDULE-LAB-A, then save an unpublished SCHEDULE-LAB-B draft.",
+        "Open Gateway Settings → Recovery, save an archive passphrase with scheduling disabled, create a download and inspect its configuration scope.",
+        "Configure the dedicated destination, deliver a manual backup and verify its success before enabling the daily schedule. Observe an unavailable-destination failure without older-archive deletion.",
+        "Review the default 02:00 daily time in the gateway time zone and seven-day retention. Confirm the next run before enabling; change the time deliberately for an isolated scheduled-run exercise.",
+        "Restore to a fresh isolated directory, review quarantine and exclusions, and compare published A with draft B before permitting external activity."
+      ]
+    },
+    {
       "id": "gateway-network",
       "title": "Network HTTPS access",
       "summary": "A read-only published application for checking local management, network HTTPS, DNS names and trusted operator access.",

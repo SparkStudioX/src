@@ -30,7 +30,7 @@ public sealed class ProjectWorkspace
 public sealed class ProjectCatalog
 {
     private sealed record Entry(string Id, string CreatedAt, bool Archived);
-    private readonly object gate = new();
+    private readonly object gate = GatewayConfigurationLock.SyncRoot;
     private readonly string directory;
     private readonly string projectsDirectory;
     private readonly string catalogPath;

@@ -14,7 +14,7 @@ public sealed record AssetContent(AssetMetadata Metadata, byte[] Data);
 public sealed class LocalAssetStore
 {
     public const int MaximumBytes = 512 * 1024;
-    private readonly object gate = new();
+    private readonly object gate = GatewayConfigurationLock.SyncRoot;
     private readonly string directory;
     private static readonly Regex AssetId = new(@"\A[a-f0-9]{64}\z", RegexOptions.CultureInvariant);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);

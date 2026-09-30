@@ -40,6 +40,9 @@ builder.Services.AddSingleton(sp => new TagEngine(sp.GetRequiredService<ProjectC
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TagEngine>());
 builder.Services.AddSingleton<ProjectRuntimeRegistry>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ProjectRuntimeRegistry>());
+builder.Services.AddSingleton(sp => new GatewayBackups(dataDir, sp.GetRequiredService<IDataProtectionProvider>(), recovery,
+    sp.GetRequiredService<SecurityStore>(), sp.GetRequiredService<IHostApplicationLifetime>()));
+builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayBackups>());
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped(sp => sp.GetRequiredService<ProjectRuntimeRegistry>().Get(
     sp.GetRequiredService<IHttpContextAccessor>().HttpContext?.Request.RouteValues["projectId"]?.ToString()
@@ -90,6 +93,7 @@ app.MapGatewayConsoleEndpoints();
 app.MapGatewayDeploymentEndpoints();
 app.MapDeploymentSettingsEndpoints();
 app.MapGatewayRecoveryEndpoints();
+app.MapGatewayBackupEndpoints();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapGet("/api/ready", GatewayReadiness.Respond);

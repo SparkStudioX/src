@@ -34,7 +34,7 @@ public sealed class SecurityStore
     private sealed record StoredUser(SecurityUser User, string PasswordHash);
     private sealed record StoredState(int Version, List<StoredUser> Users, SecuritySettings Settings);
     private sealed record Throttle(int Failures, DateTimeOffset Since, DateTimeOffset? BlockedUntil);
-    private readonly object gate = new();
+    private readonly object gate = GatewayConfigurationLock.SyncRoot;
     private readonly string directory;
     private readonly string statePath;
     private readonly string setupPath;

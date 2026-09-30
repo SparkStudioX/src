@@ -2,7 +2,7 @@
 
 SparkStudio is an early-preview industrial application builder with a browser designer, a published operator runtime and a self-hosted gateway. The application uses ASP.NET Core/.NET 10, React/TypeScript and CPython 3; it does not require Java or Jython.
 
-[Website](https://sparkstudiox.com/) · [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.5) · [Product scope](docs/architecture/PRODUCT.md) · [Verification and roadmap](docs/architecture/PARITY.md)
+[Website](https://sparkstudiox.com/) · [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.6) · [Product scope](docs/architecture/PRODUCT.md) · [Verification and roadmap](docs/architecture/PARITY.md)
 
 The current source includes **local accounts, separate engineering/operator sessions, server-enforced project permissions and a bounded audit trail**. First run requires administrator setup on the gateway computer. Remote account/API access requires HTTPS; network deployment and service lifecycle acceptance remain separate gates. Python scripts run with the gateway account's operating-system access; worker processes are not a security sandbox. See the [security guide](docs/architecture/SECURITY.md).
 
@@ -24,19 +24,22 @@ The current source includes **local accounts, separate engineering/operator sess
 - Reusable visual styles and packaged caption translations, with staged editors, explicit source precedence and stable resource references.
 - Live read-only Designer Preview by default, with administrator-confirmed live actions, expiring session/project capabilities and bounded authoring diagnostics.
 - An administrator gateway overview, revocable session inventory, process/API diagnostics and a redacted support download. Checked operator publication history restores a prior application while preserving its Designer draft.
+- Encrypted online configuration backup downloads, daily SMB/FTP/FTPS delivery and gateway-owned age retention in **Gateway Settings → Recovery**. Offline full-data archives restore into a new directory under enforced recovery quarantine. See [scheduled backups](docs/architecture/SCHEDULED_BACKUPS.md) and [offline recovery](docs/architecture/GATEWAY_RECOVERY.md) for scope and secret portability.
+- Scalar gateway expression tags with dependency/quality handling and reviewed additive tag imports; see [tag engineering](docs/architecture/TAG_ENGINEERING.md).
+- Installer selection of local-only access or HTTPS on all IPv4 interfaces with a separate loopback management port, matching DNS certificate and protected PEM key import. See [network access](docs/architecture/NETWORK_ACCESS.md).
 - OPC UA discovery, browse/read and monitored-item subscriptions; managed local SQLite databases and SQL Server connections with parameterized named reads and explicit updates.
 - Query tables with configurable headings, order, visibility, widths, alignment and value formats, plus loaded-row paging, filtering, sorting, refresh, selection into declared form inputs and validated inline edits through published Python handlers.
 - Single-selection dropdowns, lists and trees with static or named-query choices, validated row-to-form mappings and published server-side membership checks. Query trees declare a parent column; input-driven tag paths let a selected machine determine its process display.
 - Light, Dark and System themes, browser preference persistence, a collapsible designer sidebar and horizontally resizable project/properties panes with saved widths.
 - A self-contained Windows package, an unsigned Windows installer and a non-root Linux container baseline.
 
-These are bounded implementations, not complete Ignition feature or file-format compatibility. Real SQL Server validation, external OPC writes, expression tags, UDTs, historian, alarms, reporting and migration tooling remain outstanding. See the [component matrix](docs/architecture/COMPONENTS.md).
+These are bounded implementations, not complete Ignition feature or file-format compatibility. Real SQL Server validation, external OPC writes, provider/UDT administration, historian, alarms, reporting and migration tooling remain outstanding. See the [component matrix](docs/architecture/COMPONENTS.md).
 
-The current source includes query-backed forms and scalar properties, single-selection lists/trees, loaded-result table paging and inline editing, typed nested templates with parameter fx bindings and private instance state, two-way input/state bindings, automatic property/lifecycle events, state controls, five process displays and six drawing/symbol types. Further binding sources, responsive containers, conditional styles, deeper diagnostics, unified action authoring and complete gateway recovery remain planned. Supplied-data charts are the next palette family; historian, alarms and reporting still need their backing subsystems. The [component guide](docs/architecture/COMPONENTS.md) defines behavior and remaining work; the [verification ledger](docs/architecture/PARITY.md) separates each implemented increment from its remaining acceptance gates. SQLite has real disposable-database and gateway/Python integration checks; SQL Server reads and DML still need a live test server. The newest ten roadmap increments passed the focused checks recorded in the ledger; port 5090 runs that Windows build. The linked public preview installer records an earlier baseline.
+The current source includes query-backed forms and scalar properties, single-selection lists/trees, loaded-result table paging and inline editing, typed nested templates with parameter fx bindings and private instance state, two-way input/state bindings, automatic property/lifecycle events, state controls, five process displays and six drawing/symbol types. Further binding sources, responsive containers, conditional styles, deeper diagnostics, unified action authoring, service-switching recovery and cross-version restore migrations remain planned. Supplied-data charts are the next palette family; historian, alarms and reporting still need their backing subsystems. The [component guide](docs/architecture/COMPONENTS.md) defines behavior and remaining work; the [verification ledger](docs/architecture/PARITY.md) separates each implemented increment from its remaining acceptance gates. SQLite has real disposable-database and gateway/Python integration checks; SQL Server reads and DML still need a live test server. Verification applies only to the build and environment named in the ledger. An already installed gateway does not adopt source changes automatically.
 
 ## Run on Windows
 
-For a prepared package, download the installer and checksum from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.5). It bundles .NET, Python and browser assets. Preview.5 retains the wait for the owned gateway process to exit before replacing files and fixes access to that process during elevated upgrade preparation. Setup-code instructions and the compact Designer version label remain included. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md): an elevated preview.5 upgrade over a running preview.3 service succeeded on one Windows host without a Windows restart, and all 486 installed payload hashes matched. Rollback, uninstall, complete real-data preservation and broader service-account/ACL acceptance remain open.
+For a prepared package, download the installer and checksum from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.6). It bundles .NET, Python and browser assets. Preview.6 adds the listener wizard, recovery/tag improvements and configuration backup scheduling while retaining the owned-process shutdown barrier. Consult its release notes for package verification; elevated preview.6 service/network installation, actual domain SMB and trusted external FTPS acceptance remain pending. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md): an elevated preview.5 upgrade over a running preview.3 service succeeded on one Windows host without a Windows restart, and all 486 installed payload hashes matched. Rollback, uninstall, complete real-data preservation and broader service-account/ACL acceptance remain open.
 
 For development, use Windows x64 with Node/npm available. Node 22.17.1 was used for the recorded checks. Run from the repository root in PowerShell:
 
@@ -189,7 +192,7 @@ Compose publishes host loopback only and retains a named data volume. Stop any o
 
 ## Feature workshops
 
-The [workshop catalog](examples/README.md) covers 31 authored examples. Twenty-four build into independent, importable `.sparkproj` projects; seven require gateway tags, SQLite setup or local image assignment and are clearly listed separately. Each major feature includes a workshop, walkthrough, prerequisites and verification. The portable collection uses synthetic data and works without external servers or Internet access.
+The [workshop catalog](examples/README.md) covers 36 authored examples. Twenty-four build into independent, importable `.sparkproj` projects; twelve require gateway tags, databases, administrative exercises or local image assignment and are clearly listed separately. Each major feature includes a workshop, walkthrough, prerequisites and verification. The portable collection uses synthetic data and works without external servers or Internet access.
 
 Designer **Search project** (Ctrl+Shift+F / Cmd+Shift+F) finds draft resources, properties, bindings, queries and scripts, with direct navigation and structured-reference views. See [project search](docs/architecture/PROJECT_SEARCH.md) and its portable workshop. Run `node tools/test-project-search.mjs` with Node 22.17 or newer to check the pure index and reference contracts offline.
 
@@ -199,6 +202,9 @@ Screen/template renames and canvas-resource deletions have [change previews](doc
 
 The newest workshops cover the following authoring and gateway increments:
 
+- [Scheduled backups](docs/architecture/SCHEDULED_BACKUPS.md): encrypted configuration downloads, daily destination delivery, seven-day retention and published/draft restore checkpoints. Its dedicated loader creates a new project; schedules start disabled with a 02:00 gateway-local default.
+- [Gateway recovery](docs/architecture/GATEWAY_RECOVERY.md), [tag engineering](docs/architecture/TAG_ENGINEERING.md) and [network access](docs/architecture/NETWORK_ACCESS.md): offline full-data recovery, derived tags/reviewed imports and HTTPS listener setup. These exercises require deliberate gateway setup.
+
 - [Canvas precision](docs/architecture/CANVAS_PRECISION.md) and [authoring defaults](docs/architecture/AUTHORING_DEFAULTS.md): matching geometry, custom grids and starting dimensions for new resources.
 - [Visual styles](docs/architecture/VISUAL_STYLES.md) and [caption translations](docs/architecture/LOCALIZATION.md): shared appearance, local overrides and offline language resources.
 - [Preview communication](docs/architecture/PREVIEW_COMMUNICATION.md) and [Designer diagnostics](docs/architecture/DESIGNER_DIAGNOSTICS.md): guarded live actions and explicit diagnostic snapshots.
@@ -206,7 +212,7 @@ The newest workshops cover the following authoring and gateway increments:
 - [Gateway console and diagnostics](docs/architecture/GATEWAY_CONSOLE.md): administration, session inventory and bounded process/API observations.
 - [Publication history](docs/architecture/PUBLICATION_HISTORY.md): checked revisions, reviewed restore, retention limits and preserved drafts.
 
-Focused automated checks, all 24 portable package round trips and the documented browser workflows passed. Port 5090 runs the updated Windows package; see the [verification ledger](docs/architecture/PARITY.md) for tested scope and remaining acceptance gates. Use a matching current gateway build for these workshops.
+Focused automated checks and prior 24-project portable package round trips are recorded in the [verification ledger](docs/architecture/PARITY.md). Match each workshop bundle to its tested gateway build; new setup-required workshops and external deployments have separate acceptance requirements.
 
 ```powershell
 node tools/build-workshops.mjs --version 2026.09.29.4

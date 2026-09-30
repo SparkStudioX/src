@@ -7,7 +7,7 @@ namespace SparkStudio.Gateway;
 
 public sealed partial class ProjectStore
 {
-    private readonly object gate = new();
+    private readonly object gate = GatewayConfigurationLock.SyncRoot;
     private readonly string directory;
     private readonly IDataProtector protector;
     private readonly ProjectStore? gatewayStore;

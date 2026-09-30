@@ -2,7 +2,7 @@
 
 Each major user-facing feature should ship with an independently authored workshop project, a short exercise guide, compatibility information and a verified import/publish/runtime check. Workshops serve as both learning material and reproducible acceptance examples. Use synthetic data and make any gateway setup or writes explicit.
 
-[catalog.json](catalog.json) is the machine-readable inventory of all 32 source examples. Twenty-four are portable project workshops; eight require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
+[catalog.json](catalog.json) is the machine-readable inventory of all 36 source examples. Twenty-four are portable project workshops; twelve require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
 
 ## Use a downloaded workshop
 
@@ -53,6 +53,7 @@ These remain useful authored source fixtures, but are excluded from the standalo
 
 | Source example | Additional setup | Runtime writes |
 | --- | --- | --- |
+| [Scheduled backups](scheduled-backups.json) | Disposable gateway and optional dedicated SMB/FTP/FTPS destination; disabled by default, 02:00 gateway-local daily time and seven-day retention. See the [backup schedule guide](../docs/architecture/SCHEDULED_BACKUPS.md). | None from the screen; administrator actions create and copy encrypted archives. |
 | [Gateway recovery](gateway-recovery.json) | Disposable gateway, offline CLI backup/restore and explicit review; see the [recovery guide](../docs/architecture/GATEWAY_RECOVERY.md). | None from the screen; the administrative exercise creates archive/restored files. |
 | [Gateway network access](gateway-network.json) | Disposable installation, matching DNS certificate and client trust; see the [network guide](../docs/architecture/NETWORK_ACCESS.md). | None from the screen; deployment changes are deliberate administrator actions. |
 | [Gateway tag engineering](tag-engineering.json) | Synthetic memory/expression tags initialized by its dedicated loader; see the [tag guide](../docs/architecture/TAG_ENGINEERING.md). | Explicit Save actions update synthetic memory tags. |
@@ -64,6 +65,8 @@ These remain useful authored source fixtures, but are excluded from the standalo
 | [Images and popups](assets-popups.json) | Eight synthetic memory tags and the local drawing in `examples/assets/assembly-cell.png`. | Explicit popup save/release actions write those tags. |
 | [SQLite data controls](data-controls.json) | Separate managed SQLite connection and synthetic database initialized by its dedicated loader. | None during the exercise; setup creates and seeds the database. |
 | [Read query operations](query-testing.json) | Managed SQLite connection and synthetic database; follow the [setup and cancellation guide](../docs/architecture/QUERY_TESTING.md). | None during reads; setup creates and seeds the database. |
+
+The dedicated `tools/load-backup-example.mjs` creates a new Scheduled backup workshop project on an authenticated local gateway; it leaves the checkpoint unpublished unless `--publish` is explicit. It never configures backup credentials or schedules. Its read-only screen helps compare published checkpoint A with an unpublished draft B after an isolated configuration restore. Follow the guide before using any real destination.
 
 The generic `tools/load-example.mjs <id>` loader is a development tool for an authenticated local gateway on port 5090 or 5091. It backs up and adds missing resources to the **default project**, preserves existing resource IDs and tag values, and leaves the draft unpublished unless `--publish` is supplied. It cannot retarget an arbitrary project. Prefer portable imports for the collection above. The [security verification guide](../docs/architecture/SECURITY.md#verification-commands) describes authentication for an isolated test gateway; there is no unauthenticated loader bypass.
 
