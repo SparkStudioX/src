@@ -74,11 +74,11 @@ if ($Watch) {
         }
     }
     try {
-        $backend = Start-WatchedProcess 'gateway' $dotnet @('watch', '--project', $projectFile, '--non-interactive', 'run', '--no-launch-profile', '--no-restore', '--', '--urls', "http://127.0.0.1:$BackendPort", '--contentRoot', $contentRoot) $root
+        $backend = Start-WatchedProcess 'gateway' $dotnet @('watch', '--project', $projectFile, '--no-hot-reload', 'run', '--no-launch-profile', '--no-restore', '--', '--urls', "http://127.0.0.1:$BackendPort", '--contentRoot', $contentRoot) $root
         $frontend = Start-WatchedProcess 'browser' $node @($vite) $webRoot
         Write-Host "SparkStudio watch: http://127.0.0.1:$Port"
         Write-Host "Gateway backend: http://127.0.0.1:$BackendPort (browser requests are proxied through $Port)"
-        Write-Host 'Browser source changes refresh through Vite. Gateway source changes hot-reload or restart through dotnet watch.'
+        Write-Host 'Browser source changes refresh through Vite. Gateway source changes rebuild and restart through dotnet watch.'
         Write-Host "Development data: $env:SPARKSTUDIO_DATA_DIR"
         Write-Host "Logs: $logRoot"
         Write-Host 'Press Ctrl+C to stop both servers. Do not run another gateway against this data directory.'

@@ -63,7 +63,9 @@ check('field bounds keep one definition and cap authoring at64 without losing ro
 });
 check('CodeMirror has completion and Apply but no Run action; context explains server reconstruction and atomic conflict checks',()=>{
   const ui=drive(make(saved()));assert.equal(ui.code().props.language,'python');assert.equal(ui.code().props.onRun,undefined);assert.equal(typeof ui.code().props.onSave,'function');assert.ok(ui.code().props.completions.some(item=>item.label==='system.db.runNamedQuery'));
+  const labels=ui.code().props.completions.map(item=>item.label);for(const name of ['system.ui.sendMessage','system.ui.getSessionInfo','system.util.sendMessage','system.util.sendRequest','system.util.jsonEncode','system.date.now','inputs["value"]','inputs["row"]'])assert.ok(labels.includes(name),name);assert.ok(!labels.some(name=>name.startsWith('self.')||name.startsWith('event.')));
   const content=renderToStaticMarkup(ui.tree);for(const key of ['column','value','oldValue','rowKey','version','row'])assert.ok(content.includes(`inputs[&quot;${key}&quot;]`));assert.match(content,/reconstructed by the gateway/);assert.match(content,/affected-row count/);assert.match(content,/does not make the database update atomic/);assert.doesNotMatch(content,/>Run</);
+  assert.match(content,/same gateway/);assert.match(content,/does not receive component/);
 });
 check('dialog shortcuts isolate pending drafts while preserving native editor undo',()=>{
   const patches=[],ui=drive(make(saved()),patch=>patches.push(patch));let stopped=0,prevented=0;ui.tree.props.onKeyDown({key:'z',ctrlKey:true,stopPropagation(){stopped++},preventDefault(){prevented++}});assert.equal(stopped,1);assert.equal(prevented,0);assert.deepEqual(patches,[]);

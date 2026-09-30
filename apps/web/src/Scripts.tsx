@@ -1,24 +1,14 @@
-import type { RuntimeParameters } from "./types";
+import type { GatewayScriptEvent, RuntimeParameters, ScriptResource, ScriptType } from "./types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, id, projectPage, projectStorageKey } from "./api";
 import Icon from "./Icon";
 import { useAuth } from "./Auth";
 import ScriptEditor from "./ScriptEditor";
+import { pythonSystemCompletions } from "./eventScriptAuthoring";
 import type { ScriptResult } from "./types";
 import type { Completion } from "@codemirror/autocomplete";
 
 type Scalar = string | number | boolean | null;
-type ScriptType = "library" | "gateway" | "client";
-interface ScriptResource {
-  id: string;
-  name: string;
-  type: ScriptType;
-  code: string;
-  enabled: boolean;
-  event?: "startup" | "timer" | "screenOpen";
-  intervalMs?: number;
-  parameters: Record<string, Scalar>;
-}
 interface ScriptDraft { revision: number; resources: ScriptResource[] }
 export type ScriptSearchResource = ScriptResource;
 interface ScriptPublication { published: boolean; revision?: number; publishedAt?: string; draftRevision?: number }
@@ -26,7 +16,8 @@ interface EventStatus {
   activeRevision: number | null;
   publishedAt: string | null;
   pythonAvailable: boolean;
-  resources: { id: string; name: string; event: string; enabled: boolean; running: boolean; nextRunAt?: string | null; lastRunAt?: string | null; lastSuccess?: boolean | null }[];
+  journalError?: string | null;
+  resources: { id: string; name: string; event: string; enabled: boolean; running: boolean; currentRunId?: string | null; queued?: number; missedEvents?: number; executionCount?: number; nextRunAt?: string | null; lastRunAt?: string | null; lastSuccess?: boolean | null }[];
 }
 interface RunLog {
   runId: string; resourceId: string; name: string; type: string; event: string; source: string;
@@ -38,16 +29,25 @@ const scopes: { type: ScriptType; name: string; icon: string }[] = [
   { type: "gateway", name: "Gateway events", icon: "activity" },
   { type: "client", name: "Browser events", icon: "monitor" },
 ];
+const gatewayEvents: { event: GatewayScriptEvent; title: string; description: string }[] = [
+  { event: "startup", title: "Startup", description: "Runs when this script publication starts, including gateway restart. Republishing the same revision does not run it again." },
+  { event: "update", title: "Update", description: "The published handler observes saved script or project resources, including the actor and changed resources. Saving does not execute draft code." },
+  { event: "shutdown", title: "Shutdown", description: "Best-effort cleanup during an orderly stop, project archive or script-publication replacement. All shutdown work shares a bounded budget; forced termination cannot run cleanup." },
+  { event: "timer", title: "Timer", description: "Runs repeatedly without overlapping itself. Fixed rate skips missed intervals instead of building a backlog." },
+  { event: "tagChange", title: "Tag change", description: "Watches configured tag paths. The event includes the previous/new qualified values, initialChange and missedEvents." },
+  { event: "message", title: "Message handler", description: "Receives an explicit named request. The resource name is the handler name; payload is a JSON object." },
+  { event: "scheduled", title: "Scheduled", description: "Runs on a five-field cron schedule in the selected time zone. Missed time during downtime is skipped; a repeated daylight-saving minute runs once." },
+];
 const initialCode = `# Python 3 executes on the gateway.\nvalues = system.tag.readBlocking(["[default]Line/{line}/Speed"])\nprint("Speed:", values[0].value)\nresult = {"speed": values[0].value}\n`;
 const pythonCompletions: Completion[] = [
-  { label: "system.tag.readBlocking", type: "function", detail: "Read current gateway tag values" },
-  { label: "system.tag.writeBlocking", type: "function", detail: "Write configured memory tags" },
-  { label: "system.db.runNamedQuery", type: "function", detail: "Execute a named query" },
-  { label: "system.util.getLogger", type: "function", detail: "Create a named logger" },
-  { label: "system.util.jsonEncode", type: "function" },
-  { label: "system.util.jsonDecode", type: "function" },
-  { label: "system.date.now", type: "function" },
+  ...pythonSystemCompletions,
   { label: "parameters", type: "variable", detail: "Declared execution parameters" },
+  { label: "event", type: "variable", detail: "Gateway event context: type, reason, timestamp, actor, resources, executionCount" },
+  { label: "payload", type: "variable", detail: "Message handler JSON payload" },
+  { label: "initialChange", type: "variable", detail: "Tag-change initial sample flag" },
+  { label: "previousValue", type: "variable", detail: "Previous qualified tag value" },
+  { label: "newValue", type: "variable", detail: "New qualified tag value" },
+  { label: "missedEvents", type: "variable", detail: "Coalesced tag changes while a handler was busy" },
   { label: "result", type: "variable", detail: "Execution result" },
   { label: "print", type: "function" },
   ...["import", "from", "def", "return", "if", "for"].map(label => ({ label, type: "keyword" })),
@@ -104,6 +104,8 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
   const [status, setStatus] = useState<EventStatus | null>(null);
   const [logs, setLogs] = useState<RunLog[]>([]);
   const [monitorError, setMonitorError] = useState("");
+  const [messagePayload, setMessagePayload] = useState('{\n  "message": "Workshop request"\n}');
+  const [cancellingRun, setCancellingRun] = useState("");
   const [confirm, setConfirm] = useState<"" | "reload" | "delete">("");
   const mounted = useRef(true);
   const loadEpoch = useRef(0);
@@ -120,6 +122,7 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
   const language = browserScript ? "javascript" : "python";
   const currentCode = selected?.code ?? consoleCode;
   const canRun = gatewayAdmin && !busy && !loading && pythonAvailable && !browserScript && !defaultError && (!selected || !dirty && (source === "draft" || Boolean(publication?.published)));
+  const canTestMessage = gatewayAdmin && !busy && !loading && pythonAvailable && !dirty && !defaultError && selected?.type === "gateway" && selected.event === "message" && selected.enabled && publication?.published && publication.revision === draft?.revision;
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const load = useCallback(async () => {
@@ -184,6 +187,18 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
     if (!selected || busy) return;
     setDraft(previous => previous && ({ ...previous, resources: previous.resources.map(resource => resource.id === selected.id ? { ...resource, ...patch } : resource) }));
   };
+  const changeEvent = (event: ScriptResource["event"]) => {
+    if (!selected || busy) return;
+    const next = { ...selected, event };
+    for (const key of ["intervalMs", "delayType", "tagPaths", "changeTriggers", "cron", "timeZone", "requiredPermission"] as const) delete next[key];
+    if (selected.type === "gateway") {
+      if (event === "timer") Object.assign(next, { intervalMs: 1000, delayType: "fixedDelay" });
+      if (event === "tagChange") Object.assign(next, { tagPaths: ["[default]Workshop/GatewayEvents/Counter"], changeTriggers: ["value"] });
+      if (event === "scheduled") Object.assign(next, { cron: "*/5 * * * *", timeZone: "UTC" });
+      if (event === "message") next.requiredPermission = "operate";
+    }
+    setDraft(previous => previous && ({ ...previous, resources: previous.resources.map(resource => resource.id === selected.id ? next : resource) }));
+  };
   const add = (type: ScriptType) => {
     if (!draft || busy || draft.resources.length >= 100) return;
     if (defaultError) { setError("Finish correcting parameter JSON before adding a resource. Your unfinished text is retained in the editor."); return; }
@@ -194,7 +209,7 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
     const resource: ScriptResource = {
       id: id(type), name, type, enabled: type === "library", parameters: {},
       ...(type === "library" ? {} : { event: "startup" as const }),
-      ...(type === "gateway" ? { intervalMs: 1000 } : {}),
+      ...(type === "gateway" ? { timeoutMs: 10000, threading: "dedicated" as const } : {}),
       code: type === "library" ? "def describe(value):\n    return str(value)\n" : type === "gateway" ? "logger = system.util.getLogger(\"gateway\")\nlogger.info(\"Gateway event executed\")\n" : "// JavaScript executes in this operator browser.\napp.notify(\"Operator session ready\");\n",
     };
     setDraft({ ...draft, resources: [...draft.resources, resource] }); open(resource);
@@ -240,6 +255,29 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
     } catch (reason) { if (mounted.current) setError(message(reason)); }
     finally { if (mounted.current) setBusy(""); }
   };
+  const testMessage = async () => {
+    if (!canTestMessage || !selected) return;
+    let payload: unknown;
+    try {
+      payload = JSON.parse(messagePayload);
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Message payload must be a JSON object.");
+    } catch (reason) { setError(message(reason)); return; }
+    setBusy("run"); setError(""); setOutputTab("output");
+    try {
+      const next = await api<ScriptResult>(`/scripts/messages/${encodeURIComponent(selected.name)}/request`, "POST", { payload, revision: publication!.revision });
+      if (mounted.current) setResult(next);
+    } catch (reason) { if (mounted.current) setError(message(reason)); }
+    finally { if (mounted.current) setBusy(""); }
+  };
+  const cancelRun = async (runId: string) => {
+    if (!gatewayAdmin || cancellingRun) return;
+    setCancellingRun(runId); setError("");
+    try {
+      await api(`/scripts/events/runs/${encodeURIComponent(runId)}/cancel`, "POST", {});
+      if (mounted.current) notify("Cancellation requested. Review the run result; completed side effects are not undone.");
+    } catch (reason) { if (mounted.current) setError(message(reason)); }
+    finally { if (mounted.current) setCancellingRun(""); }
+  };
   const remove = () => {
     if (!selected || !draft || busy) return;
     setDraft({ ...draft, resources: draft.resources.filter(resource => resource.id !== selected.id) });
@@ -252,6 +290,7 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
     { label: "app.notify", type: "function", detail: "Show a message" },
     { label: "app.navigate", type: "function", detail: "Open a published screen by ID" },
     { label: "app.refresh", type: "function", detail: "Refresh runtime data" },
+    { label: "app.sendMessage", type: "function", detail: "Send locally: (messageType, payload = {}, {scope: 'screen'}); session events use session scope" },
     { label: "app.state.get", type: "function", detail: "Read a declared session or screen state property" },
     { label: "app.state.set", type: "function", detail: "Update typed local state and its bindings" },
     { label: "app.state.reset", type: "function", detail: "Restore one property or a scope to declared defaults" },
@@ -295,17 +334,51 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
         <div className="script-output scripting-output"><div className="output-tabs"><button className={outputTab === "output" ? "active" : ""} onClick={() => setOutputTab("output")}>Output</button><button className={outputTab === "result" ? "active" : ""} onClick={() => setOutputTab("result")}>Result</button><button className={outputTab === "events" ? "active" : ""} onClick={() => setOutputTab("events")}>Gateway events</button><span>{busy === "run" ? "Running with the gateway timeout…" : result ? `${result.success ? "Completed" : "Failed"} · ${result.durationMs} ms` : ""}</span><button className="icon-button" aria-label="Clear script output" onClick={() => { setResult(null); setError(""); }}><Icon name="trash" size={14} /></button></div>
           {outputTab === "events" ? <div className="script-event-output">
             {monitorError && <p className="error-text">{monitorError}</p>}
+            {status?.journalError && <p className="scripting-alert" role="alert">Run history could not be saved: {status.journalError}</p>}
             <h3>Gateway scheduler {status?.activeRevision == null ? "· Not active" : `· Revision ${status.activeRevision}`}</h3>
-            {status?.resources.length ? <table className="script-event-table"><thead><tr><th>Event</th><th>Status</th><th>Last run</th><th>Next run</th></tr></thead><tbody>{status.resources.map(resource => <tr key={resource.id}><td>{resource.name}<br /><span className="muted">{resource.event}</span></td><td>{resource.running ? "Running" : !resource.enabled ? "Disabled" : resource.lastSuccess === false ? "Last run failed" : "Ready"}</td><td>{time(resource.lastRunAt)}</td><td>{time(resource.nextRunAt)}</td></tr>)}</tbody></table> : <p>No published gateway events.</p>}
-            <h3>Recent runs · Retained until gateway restart</h3>
+            {status?.resources.length ? <table className="script-event-table"><thead><tr><th>Event</th><th>Status</th><th>Last run</th><th>Next run</th><th>Runs</th></tr></thead><tbody>{status.resources.map(resource => <tr key={resource.id}><td>{resource.name}<br /><span className="muted">{resource.event}</span></td><td>{resource.running ? "Running" : resource.queued ? "Queued" : !resource.enabled ? "Disabled" : resource.lastSuccess === false ? "Last run failed" : "Ready"}{gatewayAdmin && resource.running && resource.currentRunId && <button className="button script-cancel-run" disabled={Boolean(cancellingRun)} onClick={() => void cancelRun(resource.currentRunId!)}>{cancellingRun === resource.currentRunId ? "Cancelling…" : "Cancel run"}</button>}</td><td>{time(resource.lastRunAt)}</td><td>{time(resource.nextRunAt)}</td><td>{resource.executionCount ?? "—"}{Boolean(resource.missedEvents) && <small>{resource.missedEvents} missed events</small>}</td></tr>)}</tbody></table> : <p>No published gateway events.</p>}
+            <h3>Recent runs · Latest 100 retained across gateway restarts</h3>
             {!logs.length && <p>No resource runs recorded yet.</p>}
-            {logs.map(log => <details className="script-event-run" key={log.runId}><summary><span>{log.name} · {log.event}</span><span className={log.status === "failed" ? "error-text" : ""}>{log.status} · {time(log.startedAt)}</span></summary><p>{log.source} r{log.revision} · {log.durationMs} ms</p><pre>{log.stdout}{log.stderr}</pre>{log.result !== undefined && <pre>{JSON.stringify(log.result, null, 2)}</pre>}{log.resultTruncated && <p>Result truncated by the gateway log limit.</p>}</details>)}
+            {logs.map(log => <details className="script-event-run" key={log.runId}><summary><span>{log.name} · {log.event}</span><span className={log.status === "failed" ? "error-text" : ""}>{log.status} · {time(log.startedAt)}</span></summary><p>{log.source} r{log.revision} · {log.durationMs} ms</p>{gatewayAdmin && log.status === "running" && <button className="button script-cancel-run" disabled={Boolean(cancellingRun)} onClick={() => void cancelRun(log.runId)}>{cancellingRun === log.runId ? "Cancelling…" : "Cancel run"}</button>}<pre>{log.stdout}{log.stderr}</pre>{log.result !== undefined && <pre>{JSON.stringify(log.result, null, 2)}</pre>}{log.resultTruncated && <p>Result truncated by the gateway log limit.</p>}</details>)}
           </div> : <pre className={`console ${result && !result.success ? "error-text" : ""}`}>{busy === "run" ? "Executing saved code on the gateway…" : outputTab === "result" ? result ? JSON.stringify(result.result ?? null, null, 2) : "Return a value through result to inspect it here." : result ? `${result.stdout || ""}${result.stderr || ""}` || "Completed without console output." : browserScript ? "Browser events run in the published operator runtime. Their output is separate from gateway Python runs." : "Ctrl+Enter runs the saved resource or console. Python workers have a bounded execution time."}</pre>}
         </div>
         </>}
       </section>
       <aside className="script-properties" aria-label="Script properties"><fieldset disabled={Boolean(busy) || loading}>
-        {selected ? <><h2>Resource settings</h2><label>Name<input aria-label="Script resource name" value={selected.name} maxLength={selected.type === "library" ? 64 : 100} onChange={event => edit({ name: event.target.value })} /></label><p className="script-property-note">{selected.type === "library" ? "Use one Python identifier. Module names form the published project namespace." : "Names identify events in the resource tree and diagnostics."}</p><label className="script-enabled-setting"><input type="checkbox" checked={selected.enabled} onChange={event => edit({ enabled: event.target.checked })} />Enabled after publication</label>{selected.type !== "library" && <label>Event<select aria-label="Script event" value={selected.event || "startup"} onChange={event => edit({ event: event.target.value as ScriptResource["event"] })}><option value="startup">Startup</option>{selected.type === "gateway" ? <option value="timer">Timer · fixed delay</option> : <option value="screenOpen">Screen open</option>}</select></label>}{selected.type === "gateway" && selected.event === "timer" && <label>Delay (milliseconds)<input aria-label="Gateway timer interval" type="number" min={100} max={86400000} step={1} value={selected.intervalMs ?? 1000} onChange={event => edit({ intervalMs: Number(event.target.value) })} /></label>}<label>Declared parameter defaults<textarea aria-label="Script parameter defaults" spellCheck={false} rows={7} value={defaultText} onChange={event => {
+        {selected ? <><h2>Resource settings</h2>
+        <label>Name<input aria-label="Script resource name" value={selected.name} maxLength={selected.type === "library" ? 64 : 100} onChange={event => edit({ name: event.target.value })} /></label>
+        <p className="script-property-note">{selected.type === "library" ? "Use one Python identifier. Module names form the published project namespace." : selected.event === "message" ? "This unique resource name is the published message handler name." : "Names identify events in the resource tree and diagnostics."}</p>
+        <label className="script-enabled-setting"><input type="checkbox" checked={selected.enabled} onChange={event => edit({ enabled: event.target.checked })} />Enabled after publication</label>
+        {selected.type !== "library" && <label>Event<select aria-label="Script event" value={selected.event || "startup"} onChange={event => changeEvent(event.target.value as ScriptResource["event"])}>{selected.type === "gateway" ? gatewayEvents.map(item => <option key={item.event} value={item.event}>{item.title}</option>) : <><option value="startup">Startup</option><option value="screenOpen">Screen open</option></>}</select></label>}
+        {selected.type === "gateway" && <div className="script-gateway-settings">
+          <p className="script-property-note">{gatewayEvents.find(item => item.event === (selected.event ?? "startup"))?.description}</p>
+          <label>Execution timeout (milliseconds)<input aria-label="Gateway event timeout" type="number" min={100} max={300000} step={1} value={selected.timeoutMs ?? 10000} onChange={event => edit({ timeoutMs: Number(event.target.value) })} /></label>
+          <label>Execution lane<select aria-label="Gateway event threading" value={selected.threading ?? "dedicated"} onChange={event => edit({ threading: event.target.value as ScriptResource["threading"] })}><option value="dedicated">Dedicated to this resource</option><option value="shared">Shared within this project</option></select></label>
+          <p className="script-property-note">Dedicated resources can run independently. Shared resources wait for the project's shared lane. Execution never overlaps the same resource.</p>
+          {selected.event === "timer" && <>
+            <label>Interval (milliseconds)<input aria-label="Gateway timer interval" type="number" min={100} max={86400000} step={1} value={selected.intervalMs ?? 1000} onChange={event => edit({ intervalMs: Number(event.target.value) })} /></label>
+            <label>Timing<select aria-label="Gateway timer delay type" value={selected.delayType ?? "fixedDelay"} onChange={event => edit({ delayType: event.target.value as ScriptResource["delayType"] })}><option value="fixedDelay">Fixed delay after completion</option><option value="fixedRate">Fixed rate, skip missed intervals</option></select></label>
+          </>}
+          {selected.event === "tagChange" && <>
+            <label>Tag paths, one per line<textarea aria-label="Gateway event tag paths" rows={5} spellCheck={false} value={(selected.tagPaths ?? []).join("\n")} onChange={event => edit({ tagPaths: event.target.value.split(/\r?\n/) })} /></label>
+            <p className="script-property-note">Use 1–64 unique paths such as [default]Line/Speed. A terminal folder/* watches that folder. Configure the tags separately.</p>
+            <div className="script-trigger-options" role="group" aria-label="Tag change triggers"><span>Trigger on</span>{(["value", "quality", "timestamp"] as const).map(trigger => <label key={trigger} className="script-enabled-setting"><input type="checkbox" checked={(selected.changeTriggers ?? ["value"]).includes(trigger)} onChange={event => {
+              const existing = selected.changeTriggers ?? ["value"];
+              edit({ changeTriggers: event.target.checked ? [...existing, trigger] : existing.filter(item => item !== trigger) });
+            }} />{trigger.charAt(0).toUpperCase() + trigger.slice(1)}</label>)}</div>
+          </>}
+          {selected.event === "scheduled" && <>
+            <label>Cron schedule<input aria-label="Gateway event cron schedule" value={selected.cron ?? ""} spellCheck={false} placeholder="*/5 * * * *" onChange={event => edit({ cron: event.target.value })} /></label>
+            <p className="script-property-note">Minute · hour · day of month · month · day of week. Example: 0 2 * * * runs daily at 02:00.</p>
+            <label>Time zone<input aria-label="Gateway event time zone" value={selected.timeZone ?? ""} spellCheck={false} placeholder="Gateway local time zone" onChange={event => edit({ timeZone: event.target.value || undefined })} /></label>
+            <p className="script-property-note">Use UTC or a gateway-supported time zone ID. An omitted zone uses the gateway's local zone; new schedules start with UTC.</p>
+          </>}
+          {selected.event === "message" && <>
+            <label>Required permission<select aria-label="Message handler permission" value={selected.requiredPermission ?? "operate"} onChange={event => edit({ requiredPermission: event.target.value as ScriptResource["requiredPermission"] })}><option value="operate">Project Operate</option><option value="admin">Gateway administrator</option></select></label>
+            {gatewayAdmin && <div className="script-message-test"><h2>Test published handler</h2><label>JSON payload<textarea aria-label="Message test payload" rows={6} spellCheck={false} value={messagePayload} onChange={event => setMessagePayload(event.target.value)} /></label><button className="button" disabled={!canTestMessage} onClick={() => void testMessage()}><Icon name="play" size={14} />Send test request</button><p className="script-property-note">Save and publish this enabled handler first. This request executes the published code, with the payload above. Unsaved edits are never sent.</p></div>}
+          </>}
+        </div>}
+        <label>Declared parameter defaults<textarea aria-label="Script parameter defaults" spellCheck={false} rows={7} value={defaultText} onChange={event => {
           const text = event.target.value; setDefaultText(text);
           try { edit({ parameters: parseParameters(text) }); setDefaultError(""); }
           catch (reason) { setDefaultError(message(reason)); }
@@ -313,7 +386,8 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
         {gatewayAdmin && !browserScript && <><h2>Run parameters</h2><textarea aria-label="Script run parameters" spellCheck={false} rows={7} value={runParameterText} onChange={event => setRunParameterText(event.target.value)} /><p className="script-property-note">Passed to Python as <code>parameters</code>. Resource runs use saved code; save your edits first.</p></>}
         <h2>{browserScript ? "Browser scope" : "Gateway scope"}</h2><p>{browserScript ? "JavaScript receives event, parameters, session and app. app.notify(message), app.navigate(screenId) and app.refresh() act in this runtime tab. Gateway Python APIs are not available." : "Python executes with the gateway account’s OS access. Only trusted local authors should use this workspace; worker processes are not a security sandbox."}</p>
         {browserScript && <><p className="script-property-note"><code>app.state.get("session", "name")</code> reads a declared property. <code>app.state.set(scope, name, value)</code> updates bindings. <code>app.state.reset(scope, name)</code> restores its default; omit the name to reset the scope. Use <code>"session"</code> for this tab or <code>"screen"</code> for the active screen. Values must match their declared types.</p><p className="script-property-note">The existing <code>session</code> object remains separate script memory; assignments to it do not update bindings. Browser scripts are trusted same-origin JavaScript, not sandboxed code. Application state is local to this browser and is not an authorization source.</p></>}
-        <p className="script-property-note">Nested library packages, a debugger, tag-change/message handlers and broader lifecycle events remain planned. Completion hints are not a full language server.</p>
+        {selected?.type === "gateway" && <p className="script-property-note">Python receives <code>event</code> as a dictionary with attribute access: type, reason, timestamp, actor, resources and executionCount. Tag events add tagPath, initialChange, previousValue, newValue, changes and missedEvents. Message requests add <code>payload</code>.</p>}
+        <p className="script-property-note">Nested library packages, a debugger and durable job delivery remain planned. Completion hints are not a full language server.</p>
       </fieldset></aside>
     </div>
   </div>;

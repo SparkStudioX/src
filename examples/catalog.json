@@ -6,9 +6,169 @@
       "kind": "source-commit",
       "value": "4e58e436ef3817458427e23a81d14a65ff1d190a"
     },
-    "note": "Use the SparkStudio build identified by the workshop bundle or a newer compatible build with the listed features. The original v0.1.0-preview.1 installer predates this catalog's baseline; its version number alone does not establish compatibility."
+    "note": "Use the companion SparkStudio 0.2.0-preview.9 release or a newer compatible gateway for this collection. The source baseline identifies the original collection's lower feature boundary, not support for subsequently added examples. The bundle's actual source revision and each workshop's prerequisites identify its full requirements; project format 1 alone does not establish feature compatibility."
   },
   "workshops": [
+    {
+      "id": "lifecycle-session-messaging",
+      "title": "Lifecycle and session messaging workshop",
+      "summary": "Python mount/cleanup, unified action authoring and transient gateway messages across independently identified operator tabs.",
+      "source": "examples/lifecycle-session-messaging.json",
+      "distribution": "portable",
+      "features": [
+        "Python component mount/unmount",
+        "unified Actions & Events editor",
+        "gateway broadcast and targeted tab messaging",
+        "same-project session discovery",
+        "independent template receivers",
+        "compile-only syntax checking",
+        "typed Python form value assignment"
+      ],
+      "prerequisites": [
+        "Use the companion SparkStudio 0.2.0-preview.9 release or a newer compatible build, with its bundled Python runtime.",
+        "Import then publish the project; sign into two operator tabs with Operate permission.",
+        "The optional gateway message script imports disabled and requires separate review, enabling and script publication."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "session-messaging",
+      "guide": "docs/architecture/LIFECYCLE_SESSION_WORKSHOP.md",
+      "walkthrough": [
+        "Verify both template receivers show their Python mount text, then broadcast a note to two operator tabs.",
+        "Identify the open tabs and send to one explicit session ID; only its receivers change.",
+        "Rename a button using self.text, leave the screen and return to fresh mounted receivers.",
+        "Populate the message field through Python self.value and confirm the next broadcast uses that value.",
+        "Inspect all event families and native actions in one staged Actions & Events dialog.",
+        "Check valid and invalid Python syntax without running or saving the edited code, then Cancel.",
+        "Optionally enable and publish Workshop broadcast, invoke it with Test published handler, then disable and republish."
+      ]
+    },
+    {
+      "id": "python-component-events",
+      "title": "Python component events workshop",
+      "summary": "Load synthetic work orders, validate quantities and handle local messages with Python input and property events in independent forms.",
+      "source": "examples/python-component-events.json",
+      "distribution": "portable",
+      "features": [
+        "Python input change and commit handlers",
+        "Python property-change handlers with previous/current values and origin",
+        "Python component-message receivers",
+        "typed private state and input bindings",
+        "independent template placements and repeated rows"
+      ],
+      "prerequisites": [
+        "Use the companion SparkStudio 0.2.0-preview.9 release or a newer compatible build, with bundled CPython. Older Python-button-only builds do not support these handlers.",
+        "Import, review and explicitly publish the project. Operators need Operate permission; Designer Preview requires an administrator to enable Live actions.",
+        "Synthetic records and session drafts require no database, tags, device or internet connection. Local drafts reset on navigation or reload; this example does not persist production records."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "python-component-events",
+      "guide": "docs/architecture/PYTHON_COMPONENT_EVENTS.md",
+      "walkthrough": [
+        "Select WO1002 in Station A. The Python commit handler loads Mounting bracket and target 24, while Station B stays on its original order.",
+        "Read the property-event line after loading an order. It records the part change and its origin.",
+        "Set quantity to 0 or above its target. The Python change handler shows a validation message and disables Store session draft. Correct it and store a local draft.",
+        "Edit Operator note and watch its Python change handler update the neighboring label.",
+        "Press Reset through message. Its Python receiver resets this form's quantity and local draft only.",
+        "Open repeated stations and repeat in Row 1. Compare Row 2 and a second operator browser tab; no local state is shared between them.",
+        "Open Actions & Events, compare Python and JavaScript for input, property and message handlers, then export and re-import the authored definitions. Reload restores defaults."
+      ]
+    },
+    {
+      "id": "python-ui",
+      "title": "Python UI workshop",
+      "summary": "Change local display properties and declared state from published Python button actions; compare independent template rows with an optional shared gateway tag.",
+      "source": "examples/python-ui.json",
+      "distribution": "portable",
+      "features": [
+        "Python self.text and system.ui property and state helpers",
+        "same-form self.getSibling and parent.getChild proxies",
+        "declared parent custom state",
+        "template and repeated-row isolation",
+        "local UI effects versus shared gateway data"
+      ],
+      "prerequisites": [
+        "Use the companion SparkStudio 0.2.0-preview.9 release or a newer compatible build with its bundled CPython runtime. Review and explicitly publish the project; the operator needs Operate permission for Python buttons.",
+        "The core exercise needs no tags, devices, database or internet connection. Designer Preview begins read-only; a gateway administrator must explicitly enable Live actions to run Python there.",
+        "The optional shared-title display intentionally reports unavailable until a String memory tag is configured at [default]Workshops/PythonUi/SharedTitle. The package creates no tags and contains no gateway-write action.",
+        "Follow the feature guide to add the optional shared tag-write button after gateway setup. That deliberate extension changes shared gateway data; all subscribed sessions see the shared title."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "python-ui",
+      "guide": "docs/architecture/PYTHON_UI.md",
+      "walkthrough": [
+        "Import and explicitly publish the workshop. Open two operator tabs and confirm both start with the authored titles.",
+        "Press Rename this button. Its Python self.text assignment changes the clicked button to hi in this tab only; the result also reads self.text back. The second tab keeps the original button caption.",
+        "Edit New title in the first tab, then press Set sibling title or Set title via system.ui. Only that tab's unbound Local property title changes; the second tab retains its original title.",
+        "Press Set bound state title. Its Text binding follows the declared screen title state. Inspect the Python source and compare direct property assignments with state bindings.",
+        "Set a property title and private state in Station A. Confirm Station B remains unchanged. Repeat in Row 1 and verify Row 2 remains independent.",
+        "Refresh the operator tab to restore local authored defaults. Export the project and re-import it: transient state and property overrides are not saved.",
+        "Optionally follow the guide to create the shared String memory tag and add its Python write action. Set a shared title, then compare both operator tabs: the tag-bound display updates everywhere while local titles remain separate."
+      ]
+    },
+    {
+      "id": "component-messaging",
+      "title": "Component messaging workshop",
+      "summary": "Send local browser messages from buttons and input events; compare private template and row delivery, screen broadcasts, popup sessions and receiver cleanup.",
+      "source": "examples/component-messaging.json",
+      "distribution": "portable",
+      "features": [
+        "native message button actions",
+        "JavaScript app.sendMessage and component handlers",
+        "instance, screen and session scopes",
+        "template and repeated-row isolation",
+        "popup propagation and subscription cleanup"
+      ],
+      "prerequisites": [
+        "Use the companion SparkStudio 0.2.0-preview.9 release or a newer compatible build; older gateway-only messaging builds do not support this workshop.",
+        "Import into an isolated gateway, review and explicitly publish the project. Designer Preview starts with authored handlers blocked; enable Live actions to test there.",
+        "The workshop requires no Python, tags, device, database or internet connection. Session delivery stays inside one operator browser tab and its open popup."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "component-messaging",
+      "guide": "docs/architecture/COMPONENT_MESSAGING.md",
+      "walkthrough": [
+        "Import and explicitly publish the workshop. Open the operator application; all receiver lines begin with waiting.",
+        "In Station A, press Send instance, then change Message text and commit it. Only Station A's Instance line changes. Repeat in Row 1 and verify Row 2 remains unchanged.",
+        "Toggle Send screen in any station. The main screen and all four station Screen lines change, while their Instance and Session lines retain their prior values.",
+        "Open the message popup and press Send popup screen. Only its Screen line changes. Press Send session from popup: the popup, main screen and all station Session lines change.",
+        "Compare a second operator browser tab: it receives no messages from the first. A message scope must exactly match a handler's configured scope.",
+        "Close the popup, choose Leave and test cleanup, and toggle Send session with no receivers. Confirm Accepted 0 handler(s). Return to fresh stations and confirm earlier messages are not replayed.",
+        "Choose Edit actions & events on a receiver in Designer and open Messages to inspect its declared state assignment. Inspect a native button's message type, scope and JSON payload in the same editor. Save, export and re-import to check the definitions remain editable."
+      ]
+    },
+    {
+      "id": "gateway-events",
+      "title": "Gateway events workshop",
+      "summary": "Seven disabled Python event examples with explicit publication, schedules, tag observations, message echo and restart-surviving diagnostics.",
+      "source": "examples/gateway-events.json",
+      "distribution": "portable",
+      "features": [
+        "startup, update and shutdown handlers",
+        "fixed-delay and fixed-rate timers",
+        "tag value, quality and timestamp observers",
+        "named message request handlers",
+        "cron scheduling and time zones",
+        "dedicated or shared execution lanes",
+        "run cancellation and durable bounded logs"
+      ],
+      "prerequisites": [
+        "Use the companion SparkStudio 0.2.0-preview.9 release or a newer compatible build implementing all seven gateway event types; preview.8 and earlier do not include this feature.",
+        "A gateway administrator and available CPython worker are required for execution and the published message tester. Every included script starts disabled and unpublished.",
+        "The optional tag-change exercise requires a separately configured memory tag at [default]Workshop/GatewayEvents/Counter. The package contains no gateway tags and its scripts do not write them.",
+        "Timer, lifecycle, message and schedule examples need no device, external database or internet connection. Exercise gateway stop/restart only on a disposable gateway."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "gateway-events",
+      "guide": "docs/architecture/GATEWAY_EVENTS.md",
+      "walkthrough": [
+        "Import the .sparkproj into an isolated gateway and open Scripting. Confirm seven gateway resources are present, disabled and not published; publish the read-only screen separately if desired.",
+        "Review Startup, Update and Timer, enable them, save and Publish scripts. Inspect activation and timer logs, then perform a resource save and inspect the update actor and resources.",
+        "Enable Workshop echo, save and publish, then send a JSON object through Test published handler. Confirm Result echoes it; unsaved edits disable this test.",
+        "Create the optional memory tag separately, enable the observer, then change the test tag and inspect initialChange, qualified values, changes and missedEvents.",
+        "Enable Scheduled and inspect its UTC next run. Compare fixed delay with fixed rate, which skips missed intervals instead of replaying a backlog.",
+        "On an isolated gateway, enable Shutdown and stop gracefully; restart and inspect retained run logs. Disable events and publish again when finished."
+      ]
+    },
     {
       "id": "scheduled-backups",
       "title": "Scheduled backup workshop",
@@ -394,8 +554,17 @@
       "summary": "Preview literal text changes across screens and templates, apply selected properties and undo the entire batch.",
       "source": "examples/bulk-replacement.json",
       "distribution": "portable",
-      "features": ["project replacement previews", "selective display-text replacement", "literal case-sensitive and case-insensitive matching", "atomic project undo", "draft and publication separation"],
-      "prerequisites": ["Use the companion Designer build with Search project → Replace… and the Replace in project dialog.", "No configured tags, database, assets, scripts, Python runtime or network access are required."],
+      "features": [
+        "project replacement previews",
+        "selective display-text replacement",
+        "literal case-sensitive and case-insensitive matching",
+        "atomic project undo",
+        "draft and publication separation"
+      ],
+      "prerequisites": [
+        "Use the companion Designer build with Search project → Replace… and the Replace in project dialog.",
+        "No configured tags, database, assets, scripts, Python runtime or network access are required."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "replace-home",
       "guide": "docs/architecture/BULK_REPLACEMENT.md",
@@ -415,8 +584,19 @@
       "summary": "Preview screen and template renames, inspect deletion blockers, review code-text warnings and undo grouped changes.",
       "source": "examples/resource-changes.json",
       "distribution": "portable",
-      "features": ["resource rename and deletion previews", "structured dependency blockers", "grouped component deletion", "code-text warning acknowledgment", "atomic project undo", "draft and publication separation"],
-      "prerequisites": ["Use the companion gateway build with resource change previews.", "No configured tags, external database, assets or network access are required.", "The optional read-only Python button requires the bundled Python runtime and operator permission."],
+      "features": [
+        "resource rename and deletion previews",
+        "structured dependency blockers",
+        "grouped component deletion",
+        "code-text warning acknowledgment",
+        "atomic project undo",
+        "draft and publication separation"
+      ],
+      "prerequisites": [
+        "Use the companion gateway build with resource change previews.",
+        "No configured tags, external database, assets or network access are required.",
+        "The optional read-only Python button requires the bundled Python runtime and operator permission."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "changes-home",
       "guide": "docs/architecture/RESOURCE_CHANGES.md",
@@ -436,8 +616,16 @@
       "summary": "Find screens, templates, component properties and query uses; distinguish explicit dependencies from script-text matches.",
       "source": "examples/project-search.json",
       "distribution": "portable",
-      "features": ["project resource search", "structured references", "direct Designer navigation", "named-query property bindings"],
-      "prerequisites": ["Use the companion Designer build with Search project. No configured gateway tags or external database is required.", "The optional read-only Python button needs the bundled Python runtime and permission to run it."],
+      "features": [
+        "project resource search",
+        "structured references",
+        "direct Designer navigation",
+        "named-query property bindings"
+      ],
+      "prerequisites": [
+        "Use the companion Designer build with Search project. No configured gateway tags or external database is required.",
+        "The optional read-only Python button needs the bundled Python runtime and permission to run it."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "search-home",
       "guide": "docs/architecture/PROJECT_SEARCH.md",
@@ -455,8 +643,15 @@
       "summary": "A small order form calculates a total and changes its layout through property bindings and browser input events.",
       "source": "examples/component-workshop.json",
       "distribution": "portable",
-      "features": ["component property sheets", "scalar expression bindings", "input change and commit events", "saved component groups"],
-      "prerequisites": ["No gateway tags, database, external equipment or Python action is required."],
+      "features": [
+        "component property sheets",
+        "scalar expression bindings",
+        "input change and commit events",
+        "saved component groups"
+      ],
+      "prerequisites": [
+        "No gateway tags, database, external equipment or Python action is required."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "component-workshop",
       "guide": "docs/architecture/PROPERTY_SHEET_EVENTS.md",
@@ -472,8 +667,15 @@
       "summary": "One local reading drives a numeric LED, progress bar, cylindrical tank, level indicator and thermometer.",
       "source": "examples/process-displays.json",
       "distribution": "portable",
-      "features": ["process display components", "numeric value and range bindings", "unavailable data presentation"],
-      "prerequisites": ["No configured gateway tags, database, external equipment or Python action is required.", "Leave the synthetic [default]ProcessWorkshop/Unavailable path undefined; it deliberately supplies the exercise's unavailable-data case."],
+      "features": [
+        "process display components",
+        "numeric value and range bindings",
+        "unavailable data presentation"
+      ],
+      "prerequisites": [
+        "No configured gateway tags, database, external equipment or Python action is required.",
+        "Leave the synthetic [default]ProcessWorkshop/Unavailable path undefined; it deliberately supplies the exercise's unavailable-data case."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "process-displays",
       "guide": "docs/architecture/COMPONENTS.md",
@@ -489,8 +691,16 @@
       "summary": "An editable transfer diagram combines pipes, shapes, equipment symbols and an equipment popup.",
       "source": "examples/process-graphics.json",
       "distribution": "portable",
-      "features": ["drawing components", "pipe flow and equipment state", "parameterized popup actions", "geometry property sheets"],
-      "prerequisites": ["No configured gateway tags, database, external equipment or Python action is required.", "Leave the synthetic [default]Graphics/MissingSignal path undefined; it deliberately supplies the exercise's unavailable-data case."],
+      "features": [
+        "drawing components",
+        "pipe flow and equipment state",
+        "parameterized popup actions",
+        "geometry property sheets"
+      ],
+      "prerequisites": [
+        "No configured gateway tags, database, external equipment or Python action is required.",
+        "Leave the synthetic [default]Graphics/MissingSignal path undefined; it deliberately supplies the exercise's unavailable-data case."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "process-graphics",
       "guide": "docs/architecture/DRAWING.md",
@@ -506,8 +716,17 @@
       "summary": "A segmented mode selector drives a mapped indicator beside an intentionally unmapped state and a masked input.",
       "source": "examples/state-controls.json",
       "distribution": "portable",
-      "features": ["multi-state button", "multi-state indicator", "password input", "published Python button actions"],
-      "prerequisites": ["The bundled Python runtime and operator Operate permission are needed for Preview local form.", "Use disposable sample text in the masked field; this workshop is not an authentication form.", "No gateway tags, database or external equipment is required."],
+      "features": [
+        "multi-state button",
+        "multi-state indicator",
+        "password input",
+        "published Python button actions"
+      ],
+      "prerequisites": [
+        "The bundled Python runtime and operator Operate permission are needed for Preview local form.",
+        "Use disposable sample text in the masked field; this workshop is not an authentication form.",
+        "No gateway tags, database or external equipment is required."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "state-controls",
       "guide": "docs/architecture/COMPONENTS.md",
@@ -523,8 +742,16 @@
       "summary": "A station form appears once and in saved rows with typed limits, permissions and inherited presentation properties.",
       "source": "examples/template-properties.json",
       "distribution": "portable",
-      "features": ["typed public template parameters", "template instance and repeater properties", "inherited enabled and visible state", "published Python button actions"],
-      "prerequisites": ["The bundled Python runtime and operator Operate permission are needed for the read-only preview buttons.", "No gateway tags, database or external equipment is required."],
+      "features": [
+        "typed public template parameters",
+        "template instance and repeater properties",
+        "inherited enabled and visible state",
+        "published Python button actions"
+      ],
+      "prerequisites": [
+        "The bundled Python runtime and operator Operate permission are needed for the read-only preview buttons.",
+        "No gateway tags, database or external equipment is required."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "template-property-workshop",
       "guide": "docs/architecture/TEMPLATES.md",
@@ -540,8 +767,17 @@
       "summary": "Nested equipment cards, repeated saved rows and contextual popups keep form inputs in their own containing instance.",
       "source": "examples/nested-forms.json",
       "distribution": "portable",
-      "features": ["nested templates", "saved-row repeaters", "typed template parameters", "popup form provenance", "published Python button actions"],
-      "prerequisites": ["The bundled Python runtime and operator Operate permission are needed for read-only submission previews.", "No gateway tags, database or external equipment is required."],
+      "features": [
+        "nested templates",
+        "saved-row repeaters",
+        "typed template parameters",
+        "popup form provenance",
+        "published Python button actions"
+      ],
+      "prerequisites": [
+        "The bundled Python runtime and operator Operate permission are needed for read-only submission previews.",
+        "No gateway tags, database or external equipment is required."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "nested-forms",
       "guide": "docs/architecture/NESTED_FORMS.md",
@@ -557,8 +793,17 @@
       "summary": "A machine choice and batch quantity drive nested parameter expressions while saved rows retain their own identities.",
       "source": "examples/template-parameter-bindings.json",
       "distribution": "portable",
-      "features": ["template parameter fx bindings", "typed expression results", "dependent form reset", "nested templates and saved rows", "published Python button actions"],
-      "prerequisites": ["The bundled Python runtime and operator Operate permission are needed for read-only submission previews.", "No gateway tags, database or external equipment is required."],
+      "features": [
+        "template parameter fx bindings",
+        "typed expression results",
+        "dependent form reset",
+        "nested templates and saved rows",
+        "published Python button actions"
+      ],
+      "prerequisites": [
+        "The bundled Python runtime and operator Operate permission are needed for read-only submission previews.",
+        "No gateway tags, database or external equipment is required."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "parameter-fx-workshop",
       "guide": "docs/architecture/TEMPLATE_PARAMETER_BINDINGS.md",
@@ -574,8 +819,16 @@
       "summary": "A station desk, review screen and inspection popup demonstrate shared session choices and fresh screen-local counters.",
       "source": "examples/application-state.json",
       "distribution": "portable",
-      "features": ["typed session state", "typed screen state", "browser state helpers", "state property bindings", "screen and popup navigation"],
-      "prerequisites": ["No gateway tags, database, external equipment or Python action is required."],
+      "features": [
+        "typed session state",
+        "typed screen state",
+        "browser state helpers",
+        "state property bindings",
+        "screen and popup navigation"
+      ],
+      "prerequisites": [
+        "No gateway tags, database, external equipment or Python action is required."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "application-state",
       "guide": "docs/architecture/APPLICATION_STATE.md",
@@ -591,8 +844,17 @@
       "summary": "Mirrored inputs across root and nested forms share typed state while local invalid drafts and screen notes remain isolated.",
       "source": "examples/input-state-bindings.json",
       "distribution": "portable",
-      "features": ["two-way input state bindings", "typed state validation", "nested form isolation", "screen and popup state", "published Python button actions"],
-      "prerequisites": ["The bundled Python runtime and operator Operate permission are needed for read-only submission previews.", "No gateway tags, database or external equipment is required."],
+      "features": [
+        "two-way input state bindings",
+        "typed state validation",
+        "nested form isolation",
+        "screen and popup state",
+        "published Python button actions"
+      ],
+      "prerequisites": [
+        "The bundled Python runtime and operator Operate permission are needed for read-only submission previews.",
+        "No gateway tags, database or external equipment is required."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "input-state-bindings",
       "guide": "docs/architecture/INPUT_STATE_BINDINGS.md",
@@ -608,8 +870,17 @@
       "summary": "Side-by-side and repeated equipment panels each own private quantities, notes and reset behavior.",
       "source": "examples/instance-state.json",
       "distribution": "portable",
-      "features": ["typed private template state", "two-way input state bindings", "nested and repeated instances", "instance context reset", "published Python button actions"],
-      "prerequisites": ["The bundled Python runtime and operator Operate permission are needed for read-only submission previews.", "No gateway tags, database or external equipment is required."],
+      "features": [
+        "typed private template state",
+        "two-way input state bindings",
+        "nested and repeated instances",
+        "instance context reset",
+        "published Python button actions"
+      ],
+      "prerequisites": [
+        "The bundled Python runtime and operator Operate permission are needed for read-only submission previews.",
+        "No gateway tags, database or external equipment is required."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "private-panels",
       "guide": "docs/architecture/INSTANCE_STATE.md",
@@ -625,8 +896,17 @@
       "summary": "Session station, screen batch and each panel's private extra quantity feed reusable forms directly through parameter bindings.",
       "source": "examples/template-parameter-state.json",
       "distribution": "portable",
-      "features": ["state sources in template parameter bindings", "session screen and private state", "typed nested parameters", "popup context capture", "published Python button actions"],
-      "prerequisites": ["The bundled Python runtime and operator Operate permission are needed for read-only submission previews.", "No gateway tags, database or external equipment is required."],
+      "features": [
+        "state sources in template parameter bindings",
+        "session screen and private state",
+        "typed nested parameters",
+        "popup context capture",
+        "published Python button actions"
+      ],
+      "prerequisites": [
+        "The bundled Python runtime and operator Operate permission are needed for read-only submission previews.",
+        "No gateway tags, database or external equipment is required."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "state-parameter-workshop",
       "guide": "docs/architecture/TEMPLATE_PARAMETER_STATE.md",
@@ -642,8 +922,16 @@
       "summary": "Independent panels distinguish user edits from observed property changes and demonstrate popup cleanup and bounded failures.",
       "source": "examples/component-events.json",
       "distribution": "portable",
-      "features": ["component Mounted and Unmounted handlers", "Property changed handlers", "private instance state", "async cancellation and feedback-loop limits"],
-      "prerequisites": ["No gateway tags, database, external equipment or Python action is required.", "The diagnostics screen intentionally produces timeout and feedback-loop errors; return to the panels or restart Preview to reset the demonstration."],
+      "features": [
+        "component Mounted and Unmounted handlers",
+        "Property changed handlers",
+        "private instance state",
+        "async cancellation and feedback-loop limits"
+      ],
+      "prerequisites": [
+        "No gateway tags, database, external equipment or Python action is required.",
+        "The diagnostics screen intentionally produces timeout and feedback-loop errors; return to the panels or restart Preview to reset the demonstration."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "component-events",
       "guide": "docs/architecture/COMPONENT_LIFECYCLE.md",
@@ -659,8 +947,18 @@
       "summary": "A built-in synthetic read query drives reusable panels, numeric values, geometry, color and visibility with explicit error cases.",
       "source": "examples/query-properties.json",
       "distribution": "portable",
-      "features": ["scalar named-query property bindings", "typed query parameter expressions", "result transforms", "on-change and polling refresh", "query bindings in templates and popups"],
-      "prerequisites": ["The built-in sample query provider is required; no external database or connection setup is needed.", "The bundled Python runtime and operator Operate permission are needed only for the explicit Refresh query data button.", "No gateway tags or external equipment is required."],
+      "features": [
+        "scalar named-query property bindings",
+        "typed query parameter expressions",
+        "result transforms",
+        "on-change and polling refresh",
+        "query bindings in templates and popups"
+      ],
+      "prerequisites": [
+        "The built-in sample query provider is required; no external database or connection setup is needed.",
+        "The bundled Python runtime and operator Operate permission are needed only for the explicit Refresh query data button.",
+        "No gateway tags or external equipment is required."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "query-property-workshop",
       "guide": "docs/architecture/QUERY_PROPERTIES.md",
@@ -676,8 +974,17 @@
       "summary": "A synthetic SQLite project demonstrates typed parameters, read deadlines, cancellation and recovery.",
       "source": "examples/query-testing.json",
       "distribution": "setup-required",
-      "features": ["typed read parameters", "Designer read deadlines", "explicit read cancellation", "SQLite interruption and recovery"],
-      "prerequisites": ["Use a disposable gateway with an administrator and create the declared managed SQLite connection/database using the guide. Project packages do not carry database files or connections.", "Load the three named reads and workshop screen as described in the guide; no Python runtime, external equipment or SQL Server is needed.", "Run the intentionally slow read only from Designer. The operator table uses the fast records query."],
+      "features": [
+        "typed read parameters",
+        "Designer read deadlines",
+        "explicit read cancellation",
+        "SQLite interruption and recovery"
+      ],
+      "prerequisites": [
+        "Use a disposable gateway with an administrator and create the declared managed SQLite connection/database using the guide. Project packages do not carry database files or connections.",
+        "Load the three named reads and workshop screen as described in the guide; no Python runtime, external equipment or SQL Server is needed.",
+        "Run the intentionally slow read only from Designer. The operator table uses the fast records query."
+      ],
       "gatewayWrites": "sqlite-setup",
       "entryScreenId": "query-workshop",
       "guide": "docs/architecture/QUERY_TESTING.md",
@@ -694,8 +1001,17 @@
       "summary": "An operator form explicitly saves a shift name, target rate, mode and enabled flag into synthetic gateway memory tags.",
       "source": "examples/application-form.json",
       "distribution": "setup-required",
-      "features": ["form input components", "tag-backed form defaults", "published Python button actions", "memory-tag writes"],
-      "prerequisites": ["Set up the four synthetic [default]Application memory tags declared in the source fixture; .sparkproj does not carry tag definitions or values.", "The bundled Python runtime and operator Operate permission are required to save settings.", "Use the authenticated development loader on an isolated gateway; it adds resources to the default project."],
+      "features": [
+        "form input components",
+        "tag-backed form defaults",
+        "published Python button actions",
+        "memory-tag writes"
+      ],
+      "prerequisites": [
+        "Set up the four synthetic [default]Application memory tags declared in the source fixture; .sparkproj does not carry tag definitions or values.",
+        "The bundled Python runtime and operator Operate permission are required to save settings.",
+        "Use the authenticated development loader on an isolated gateway; it adds resources to the default project."
+      ],
       "gatewayWrites": "memory-tags",
       "entryScreenId": "application-form",
       "guide": "docs/architecture/SCRIPTING.md",
@@ -711,8 +1027,17 @@
       "summary": "A text area, spinner, slider, radio group, date/time input and toggle save explicit synthetic work-order values.",
       "source": "examples/operator-inputs.json",
       "distribution": "setup-required",
-      "features": ["operator input components", "local wall-clock date/time input", "published Python button actions", "memory-tag writes"],
-      "prerequisites": ["Set up the six synthetic [default]InputWorkshop memory tags declared in the source fixture; these gateway resources are not in a project package.", "The bundled Python runtime and operator Operate permission are required for the save action.", "Use the authenticated development loader on an isolated gateway; it adds resources to the default project."],
+      "features": [
+        "operator input components",
+        "local wall-clock date/time input",
+        "published Python button actions",
+        "memory-tag writes"
+      ],
+      "prerequisites": [
+        "Set up the six synthetic [default]InputWorkshop memory tags declared in the source fixture; these gateway resources are not in a project package.",
+        "The bundled Python runtime and operator Operate permission are required for the save action.",
+        "Use the authenticated development loader on an isolated gateway; it adds resources to the default project."
+      ],
       "gatewayWrites": "memory-tags",
       "entryScreenId": "operator-inputs",
       "guide": "docs/architecture/COMPONENTS.md",
@@ -728,8 +1053,17 @@
       "summary": "Local form expressions drive text, color and visibility while one synthetic memory tag gates a read-only Python action.",
       "source": "examples/property-bindings.json",
       "distribution": "setup-required",
-      "features": ["scalar expression bindings", "typed custom properties", "tag quality and Boolean references", "published Python button actions"],
-      "prerequisites": ["Create the declared Boolean memory tag [default]BindingWorkshop/Permit; the loader creates it only if absent.", "The example's Python action only returns form values; the gateway write is the initial memory-tag setup.", "The bundled Python runtime and operator Operate permission are needed for Apply quantity."],
+      "features": [
+        "scalar expression bindings",
+        "typed custom properties",
+        "tag quality and Boolean references",
+        "published Python button actions"
+      ],
+      "prerequisites": [
+        "Create the declared Boolean memory tag [default]BindingWorkshop/Permit; the loader creates it only if absent.",
+        "The example's Python action only returns form values; the gateway write is the initial memory-tag setup.",
+        "The bundled Python runtime and operator Operate permission are needed for Apply quantity."
+      ],
       "gatewayWrites": "memory-tags",
       "entryScreenId": "property-binding-workshop",
       "guide": "docs/architecture/PROPERTY_BINDINGS.md",
@@ -745,8 +1079,18 @@
       "summary": "Two workcenter forms and saved-row order cards use parameterized tag paths and explicit memory-tag save actions.",
       "source": "examples/reusable-applications.json",
       "distribution": "setup-required",
-      "features": ["shared templates", "saved-row repeaters", "parameterized tag paths", "published Python button actions", "memory-tag writes"],
-      "prerequisites": ["Set up the twelve synthetic Workcenters and Orders memory tags declared in the source fixture; project packages do not include them.", "The bundled Python runtime and operator Operate permission are required for save and release actions.", "Use the authenticated development loader on an isolated gateway; it adds resources to the default project. Author navigation between its two regular screens if needed."],
+      "features": [
+        "shared templates",
+        "saved-row repeaters",
+        "parameterized tag paths",
+        "published Python button actions",
+        "memory-tag writes"
+      ],
+      "prerequisites": [
+        "Set up the twelve synthetic Workcenters and Orders memory tags declared in the source fixture; project packages do not include them.",
+        "The bundled Python runtime and operator Operate permission are required for save and release actions.",
+        "Use the authenticated development loader on an isolated gateway; it adds resources to the default project. Author navigation between its two regular screens if needed."
+      ],
       "gatewayWrites": "memory-tags",
       "entryScreenId": "workcenters",
       "guide": "docs/architecture/TEMPLATES.md",
@@ -762,8 +1106,18 @@
       "summary": "A bundled local drawing leads to workcenter and order dialogs that retain the main screen's draft context.",
       "source": "examples/assets-popups.json",
       "distribution": "setup-required",
-      "features": ["local image assets", "parameterized modal popups", "shared template forms", "published Python button actions", "memory-tag writes"],
-      "prerequisites": ["Load the authored examples/assets/assembly-cell.png asset and the eight synthetic Workcenters and Orders memory tags declared in the source fixture.", "Images can be carried by .sparkproj, but its memory-tag definitions and values require separate gateway setup.", "The bundled Python runtime and operator Operate permission are required for popup save and release actions."],
+      "features": [
+        "local image assets",
+        "parameterized modal popups",
+        "shared template forms",
+        "published Python button actions",
+        "memory-tag writes"
+      ],
+      "prerequisites": [
+        "Load the authored examples/assets/assembly-cell.png asset and the eight synthetic Workcenters and Orders memory tags declared in the source fixture.",
+        "Images can be carried by .sparkproj, but its memory-tag definitions and values require separate gateway setup.",
+        "The bundled Python runtime and operator Operate permission are required for popup save and release actions."
+      ],
       "gatewayWrites": "memory-tags",
       "entryScreenId": "equipment-desk",
       "guide": "docs/architecture/ASSETS_POPUPS.md",
@@ -779,8 +1133,19 @@
       "summary": "Synthetic SQLite records drive query-backed list and tree selections, table paging and independent station forms.",
       "source": "examples/data-controls.json",
       "distribution": "setup-required",
-      "features": ["managed SQLite database", "named read queries", "query list and tree controls", "table paging and row-to-form selection", "published Python button actions", "connection test history, dependencies and enable/disable"],
-      "prerequisites": ["Use tools/load-data-controls-example.mjs with authenticated administrator access on an isolated development gateway. It creates a separate project, sqlite-data-controls connection and data-controls.db with synthetic production_records.", "The reserved project name, connection ID and database path must be unused; the loader refuses existing configured resources and publishes the new project immediately.", "The bundled Python runtime and operator Operate permission are needed for read-only form previews. Runtime actions do not update the database."],
+      "features": [
+        "managed SQLite database",
+        "named read queries",
+        "query list and tree controls",
+        "table paging and row-to-form selection",
+        "published Python button actions",
+        "connection test history, dependencies and enable/disable"
+      ],
+      "prerequisites": [
+        "Use tools/load-data-controls-example.mjs with authenticated administrator access on an isolated development gateway. It creates a separate project, sqlite-data-controls connection and data-controls.db with synthetic production_records.",
+        "The reserved project name, connection ID and database path must be unused; the loader refuses existing configured resources and publishes the new project immediately.",
+        "The bundled Python runtime and operator Operate permission are needed for read-only form previews. Runtime actions do not update the database."
+      ],
       "gatewayWrites": "sqlite-setup",
       "entryScreenId": "data-controls",
       "guide": "docs/architecture/QUERY_CONTROLS.md",

@@ -1,5 +1,7 @@
-import type { InputValue, RuntimeParameters, RuntimeStateApi, RuntimeStateValues, StateDefinitions, StateScope } from "./types";
+import type { InputValue, PythonUiLocalEffect, PythonUiProperties, PythonUiSnapshot, RuntimeParameters, RuntimeStateApi, RuntimeStateValues, StateDefinitions, StateScope } from "./types";
 import { ComponentEventCoordinator } from "./componentEventModel";
+import { ComponentMessageBus, createComponentMessageSender } from "./componentMessageModel";
+import type { ComponentMessageSender } from "./componentMessageModel";
 
 const own = (value: object, key: string) => Object.hasOwn(value, key);
 const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -30,15 +32,22 @@ export interface StateScopeHandle {
   readonly definitions: StateDefinitions;
   values: RuntimeParameters;
   revisions: Record<string, number>;
+  properties: PythonUiProperties;
+  propertyRevisions: Record<string, number>;
 }
 export interface StateContext {
   key: string; values: RuntimeStateValues; api: RuntimeStateApi;
+  sendMessage: ComponentMessageSender;
   screenScope: StateScopeHandle;
   instanceScope?: StateScopeHandle;
   ownerScopes: StateScopeHandle[];
   isCurrent: () => boolean;
   /** Internal binding stamp, including an explicit reset to an unchanged value. */
   revision: (scope: StateScope, key: string) => number | undefined;
+  propertyOverrides: PythonUiProperties;
+  uiSnapshot: () => PythonUiSnapshot;
+  uiRevision: (effect: PythonUiLocalEffect) => number | undefined;
+  commitUi: (effects: PythonUiLocalEffect[], expected: number[], commitInputs?: () => void) => void;
 }
 interface ScopeLifetime { screenGeneration: number; epoch: number }
 let storeSequence = 0;
@@ -46,6 +55,7 @@ let storeSequence = 0;
 /** One browser project run; no storage, gateway writes or user identity is held here. */
 export class ApplicationStateStore {
   readonly componentEvents = new ComponentEventCoordinator();
+  readonly componentMessages = new ComponentMessageBus(this.componentEvents);
   private readonly id = ++storeSequence;
   private generation = 0;
   private screenGeneration = 0;
@@ -72,6 +82,7 @@ export class ApplicationStateStore {
     const defaults = stateDefaults(definitions);
     this.projectKey = key; this.generation++; this.scopes = new WeakSet(); this.main = undefined;
     this.componentEvents.reset();
+    this.componentMessages.reset();
     this.definitions = structuredClone(definitions ?? {}); this.session = Object.freeze(defaults);
     this.sessionRevisions = {};
   }
@@ -82,6 +93,7 @@ export class ApplicationStateStore {
     stateDefaults(definitions);
     this.screenGeneration++;
     this.componentEvents.reset();
+    this.componentMessages.reset();
     this.scopes = new WeakSet();
     this.main = this.createScope(documentId, definitions);
     return this.main;
@@ -89,12 +101,12 @@ export class ApplicationStateStore {
   createScope(documentId: string, definitions?: StateDefinitions): StateScopeHandle {
     const values = Object.freeze(stateDefaults(definitions));
     const scope = { key: `${this.id}:${this.generation}:${++this.sequence}`, sourceKey: JSON.stringify([documentId, definitions ?? {}]),
-      generation: this.generation, definitions: structuredClone(definitions ?? {}), values, revisions: {} };
+      generation: this.generation, definitions: structuredClone(definitions ?? {}), values, revisions: {}, properties: {}, propertyRevisions: {} };
     this.handles.set(scope, { screenGeneration: this.screenGeneration, epoch: 0 });
     this.scopes.add(scope); return scope;
   }
   closeScope(scope: StateScopeHandle) {
-    if (this.scopes.delete(scope)) this.handles.get(scope)!.epoch++;
+    if (this.scopes.delete(scope)) { this.handles.get(scope)!.epoch++; scope.properties = {}; scope.propertyRevisions = {}; }
   }
   // Effect setup may be repeated by React StrictMode without a new render.
   resumeScope(scope: StateScopeHandle) {
@@ -153,8 +165,50 @@ export class ApplicationStateStore {
         publish(target, next);
       },
     };
+    const form = instance ?? scope;
+    const uiRevision = (effect: PythonUiLocalEffect): number | undefined => {
+      if (!live()) return undefined;
+      if (effect.kind === "property") return form.propertyRevisions[JSON.stringify([effect.componentId, effect.property])] ?? 0;
+      declared(effect.scope, effect.key);
+      return (effect.scope === "session" ? this.sessionRevisions : local(effect.scope).revisions)[effect.key] ?? 0;
+    };
+    const commitUi = (effects: PythonUiLocalEffect[], expected: number[], commitInputs?: () => void) => {
+      if (!live()) throw new Error("This action's UI scope has closed. Its UI changes were discarded.");
+      if (effects.length !== expected.length || effects.some((effect, index) => uiRevision(effect) !== expected[index]))
+        throw new Error("The UI changed while the Python action was running. Its UI changes were discarded.");
+      // Construct every next value before publishing any change. Listeners see one complete batch.
+      const nextState: Partial<Record<StateScope, RuntimeParameters>> = {};
+      const nextProperties = structuredClone(form.properties);
+      for (const effect of effects) {
+        if (effect.kind === "state") {
+          if (!scalarValid(declared(effect.scope, effect.key).type, effect.value)) throw new Error(`State '${effect.key}' has an invalid UI effect value.`);
+          const values = nextState[effect.scope] ?? { ...(effect.scope === "session" ? this.session : local(effect.scope).values) };
+          values[effect.key] = effect.value; nextState[effect.scope] = values;
+        } else {
+          const values = { ...nextProperties[effect.componentId], [effect.property]: effect.value };
+          Object.defineProperty(nextProperties, effect.componentId, { value: values, enumerable: true, configurable: true, writable: true });
+        }
+      }
+      commitInputs?.();
+      for (const target of Object.keys(nextState) as StateScope[]) {
+        if (target === "session") this.session = Object.freeze(nextState[target]!);
+        else local(target).values = Object.freeze(nextState[target]!);
+      }
+      form.properties = nextProperties;
+      for (const effect of effects) {
+        if (effect.kind === "state") touch(effect.scope, [effect.key]);
+        else { const key = JSON.stringify([effect.componentId, effect.property]); form.propertyRevisions[key] = (form.propertyRevisions[key] ?? 0) + 1; }
+      }
+      if (effects.length || commitInputs) for (const listener of [...this.listeners]) listener();
+    };
     return { key: instance ? `${scope.key}/${instance.key}` : scope.key, screenScope: scope, instanceScope: instance, ownerScopes, isCurrent: live,
+      sendMessage: createComponentMessageSender(this.componentMessages, { screenKey: scope.key, instanceKey: instance?.key ?? scope.key }, live),
       values: { session: this.session, screen: scope.values, ...(instance ? { instance: instance.values } : {}) }, api,
+      propertyOverrides: form.properties, uiRevision, commitUi,
+      uiSnapshot: () => {
+        if (!live()) throw new Error("This action's UI scope has closed.");
+        return structuredClone({ state: { session: this.session, screen: scope.values, ...(instance ? { instance: instance.values } : {}) }, properties: form.properties });
+      },
       revision: (target, key) => { if (!live()) return undefined; declared(target, key); return (target === "session" ? this.sessionRevisions : local(target).revisions)[key] ?? 0; } };
   }
 }

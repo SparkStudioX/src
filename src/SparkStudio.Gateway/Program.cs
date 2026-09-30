@@ -33,6 +33,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayReadiness>(
 builder.Services.AddSingleton(new GatewayDeployment(builder.Configuration, builder.Environment, dataDir));
 builder.Services.AddSingleton(new GatewayObservations(dataDir));
 builder.Services.AddSingleton<PreviewSessions>();
+builder.Services.AddSingleton<RuntimeSessionMessaging>();
 builder.Services.AddSingleton(sp => new ProjectCatalog(dataDir, sp.GetRequiredService<IDataProtectionProvider>()));
 builder.Services.AddSingleton(_ => new ConnectorService(dataDir, recovery.EnsureOperationsAllowed));
 builder.Services.AddSingleton(sp => new TagEngine(sp.GetRequiredService<ProjectCatalog>().GatewayStore,
@@ -70,7 +71,7 @@ app.Use(async (context, next) =>
     try { await next(); }
     catch (Exception ex) when (!context.Response.HasStarted && ex is not OperationCanceledException)
     {
-        context.Response.StatusCode = ex switch { BadHttpRequestException bad => bad.StatusCode, KeyNotFoundException => 404, ArgumentException or JsonException or FormatException => 400, InvalidOperationException => 409, ReadQueryTimeoutException => 504, _ => 502 };
+        context.Response.StatusCode = ex switch { BadHttpRequestException bad => bad.StatusCode, UnauthorizedAccessException => 403, KeyNotFoundException => 404, ArgumentException or JsonException or FormatException => 400, InvalidOperationException => 409, ReadQueryTimeoutException => 504, _ => 502 };
         await context.Response.WriteAsJsonAsync(new { error = ex.Message });
     }
 });
@@ -137,13 +138,21 @@ static void MapProjectEndpoints(RouteGroupBuilder routes)
 {
 routes.MapTagEngineeringEndpoints();
 routes.MapPreviewEndpoints();
+routes.MapPythonComponentEventEndpoints();
+routes.MapRuntimeSessionMessageEndpoints();
 routes.MapGet("/health", (PythonRunner python) => new { status = "ok", version = typeof(PythonRunner).Assembly
     .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
     .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "unknown",
     pythonAvailable = python.Available, demoMode = true, deployment = "local-development" }).Access("signedIn", "context");
 routes.MapGet("/project", (ProjectStore store) => store.GetProject()).Access("design");
 routes.MapGet("/assets", (LocalAssetStore assets) => assets.List()).Access("design");
-routes.MapPost("/assets", (AssetUpload upload, LocalAssetStore assets) => assets.Add(upload)).Access("design", audit: true);
+routes.MapPost("/assets", (AssetUpload upload, LocalAssetStore assets, ScriptResourceStore scripts, HttpContext context) =>
+{
+    var prior = assets.List().Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+    var saved = assets.Add(upload);
+    if (!prior.Contains(saved.Id)) scripts.NotifyUpdate(ScriptProjectUpdates.Resource(GatewayAccess.Actor(context).Username, "asset", saved.Id, true));
+    return saved;
+}).Access("design", audit: true);
 routes.MapGet("/assets/{**id}", (string id, HttpContext context, LocalAssetStore assets) =>
 {
     var asset = assets.Read(id);
@@ -160,23 +169,34 @@ routes.MapGet("/runtime/assets/{**id}", (string id, HttpContext context, LocalAs
     context.Response.Headers.CacheControl = "private, no-store";
     return Results.File(asset.Data, asset.Metadata.ContentType);
 }).Access("view", "operator");
-routes.MapPut("/project", (JsonObject project, ProjectStore store, HttpContext context) =>
+routes.MapPut("/project", (JsonObject project, ProjectStore store, ScriptResourceStore scripts, HttpContext context) =>
 {
     if (!GatewayAccess.Actor(context).GatewayAdmin && ProjectStore.Optional(project, "name") != ProjectStore.Optional(store.GetProject(), "name"))
         throw new BadHttpRequestException("Gateway administrator permission is required to rename a project.", 403);
-    return store.SaveProject(project);
+    var before = store.GetProject();
+    var saved = store.SaveProject(project);
+    var notice = ScriptProjectUpdates.Project(GatewayAccess.Actor(context).Username, before, saved);
+    if (notice.Resources["manifestChanged"]!.GetValue<bool>() || new[] { "added", "removed", "modified" }.Any(key => notice.Resources[key]!.AsArray().Count > 0))
+        scripts.NotifyUpdate(notice);
+    return saved;
 }).Access("design", audit: true);
 routes.MapGet("/project/publication", (PublicationStore publication) => publication.Metadata()).Access("read", "context");
 routes.MapGet("/project/history", (PublicationStore publication) => publication.History()).Access("design");
 routes.MapPost("/project/history/{id}/restore", (string id, PublicationRollbackRequest request, PublicationStore publication) => publication.Rollback(id, request.ExpectedPublishedAt)).Access("publish", audit: true);
-routes.MapPost("/project/publish", (PublishRequest request, ProjectStore store, PublicationStore publication) => publication.Publish(store, request.Revision)).Access("publish", audit: true);
+routes.MapPost("/project/publish", (PublishRequest request, ProjectStore store, PublicationStore publication, ScriptResourceStore scripts, HttpContext context) =>
+{
+    var before = publication.Metadata();
+    var saved = publication.Publish(store, request.Revision);
+    if (!JsonNode.DeepEquals(before, publication.Metadata())) scripts.NotifyUpdate(ScriptProjectUpdates.Resource(GatewayAccess.Actor(context).Username, "publication", "application", false, "projectPublished"));
+    return saved;
+}).Access("publish", audit: true);
 routes.MapGet("/runtime/project", (PublicationStore publication) => publication.GetProject()).Access("view", "operator");
 routes.MapGet("/runtime/queries", (string? publishedAt, PublicationStore publication) => publication.GetQueries(publishedAt)).Access("view", "operator");
 routes.MapPost("/runtime/queries/{id}/execute", (string id, QueryRequest request, PublicationStore publication, QueryExecutor queries, CancellationToken cancellation)
     => queries.ExecuteDefinitionAsync(publication.GetQuery(id, request.PublishedAt), request.Parameters, cancellation)).Access("view", "operator");
 routes.MapPost("/runtime/screens/{screenId}/components/{componentId}/action", async (string screenId, string componentId, RuntimeActionRequest request, RuntimeActions actions, HttpContext context, CancellationToken cancellation) =>
 {
-    var result = await actions.ExecuteAsync(screenId, componentId, request.Parameters, request.Inputs, request.PublishedAt, cancellation, request.InstanceId, request.RowId, request.PopupOrigin, request.InstancePath, request.BindingInputs, request.BindingState);
+    var result = await actions.ExecuteAsync(screenId, componentId, request.Parameters, request.Inputs, request.PublishedAt, cancellation, request.InstanceId, request.RowId, request.PopupOrigin, request.InstancePath, request.BindingInputs, request.BindingState, request.Ui);
     context.Items["spark.actionOutcome"] = result["success"]?.GetValue<bool>() == true ? "Completed" : "Action failed";
     return result;
 }).Access("operate", "operator", audit: true);
@@ -208,7 +228,13 @@ routes.MapPost("/connections/{id}/database", (string id, CreateDatabaseRequest r
 routes.MapGet("/connections/{id}/schema", (string id, ProjectStore store, ConnectorService connector, CancellationToken cancellation)
     => connector.BrowseSqliteSchemaAsync(store.GetConnection(id), cancellation)).Access("admin");
 routes.MapGet("/queries", (ProjectStore store) => store.GetQueries()).Access("design");
-routes.MapPut("/queries/{id}", (string id, JsonObject query, ProjectStore store) => store.SaveQuery(id, query)).Access("design", audit: true);
+routes.MapPut("/queries/{id}", (string id, JsonObject query, ProjectStore store, ScriptResourceStore scripts, HttpContext context) =>
+{
+    var before = store.GetQueries().OfType<JsonObject>().FirstOrDefault(item => ProjectStore.Optional(item, "id") == id);
+    var saved = store.SaveQuery(id, query);
+    if (!JsonNode.DeepEquals(before, saved)) scripts.NotifyUpdate(ScriptProjectUpdates.Resource(GatewayAccess.Actor(context).Username, "query", id, before is null));
+    return saved;
+}).Access("design", audit: true);
 routes.MapPost("/queries/{id}/execute", (string id, QueryRequest request, QueryExecutor queries, ProjectStore store, HttpContext context, CancellationToken cancellation) =>
 {
     var definition = store.GetQuery(id);
@@ -216,14 +242,21 @@ routes.MapPost("/queries/{id}/execute", (string id, QueryRequest request, QueryE
     return queries.ExecuteScriptDefinitionAsync(definition, request.Parameters, cancellation, request.TimeoutMs);
 }).Access("design");
 routes.MapGet("/scripts/resources", (ScriptResourceStore scripts) => scripts.GetDraft()).Access("design");
-routes.MapPut("/scripts/resources", (JsonObject draft, ScriptResourceStore scripts) => scripts.SaveDraft(draft)).Access("design", audit: true);
+routes.MapPost("/scripts/validate", (ScriptSyntaxRequest request, PythonRunner python, CancellationToken cancellation)
+    => python.ValidateSyntaxAsync(request.Code, cancellation)).Access("design");
+routes.MapPut("/scripts/resources", (JsonObject draft, ScriptResourceStore scripts, HttpContext context) => scripts.SaveDraft(draft, GatewayAccess.Actor(context).Username)).Access("design", audit: true);
 routes.MapGet("/scripts/publication", (ScriptResourceStore scripts) => scripts.Metadata()).Access("design");
-routes.MapPost("/scripts/publish", (PublishRequest request, ScriptResourceStore scripts) => scripts.Publish(request.Revision)).Access("publish", audit: true);
+routes.MapPost("/scripts/publish", (PublishRequest request, ScriptResourceStore scripts, HttpContext context) => scripts.Publish(request.Revision, GatewayAccess.Actor(context).Username)).Access("publish", audit: true);
+routes.MapScriptMessageEndpoints();
 routes.MapGet("/scripts/events/status", (ProjectRuntime runtime) => runtime.Events.Status()).Access("design");
 routes.MapGet("/scripts/events/logs", (ProjectRuntime runtime) => runtime.Events.Logs()).Access("design");
-routes.MapPost("/scripts/resources/{id}/run", (string id, ScriptRunRequest request, ProjectRuntime runtime, CancellationToken cancellation) => runtime.Events.RunAsync(id, request, cancellation)).Access("admin", audit: true);
+routes.MapPost("/scripts/resources/{id}/run", (string id, ScriptRunRequest request, ProjectRuntime runtime, HttpContext context, CancellationToken cancellation)
+    => runtime.Events.RunAsync(id, request, cancellation, GatewayAccess.Actor(context).Username)).Access("admin", audit: true);
 routes.MapGet("/runtime/scripts", (ScriptResourceStore scripts) => scripts.GetClientResources()).Access("view", "operator");
-routes.MapPost("/scripts/run", (ScriptRequest request, PythonRunner python, CancellationToken cancellation) => python.RunAsync(request.Code, request.Parameters, request.Inputs, cancellation)).Access("admin", audit: true);
+routes.MapPost("/scripts/run", (ScriptRequest request, PythonRunner python, ScriptResourceStore scripts, ProjectStore store, HttpContext context, CancellationToken cancellation)
+    => python.RunWithLibrariesAsync(request.Code, request.Parameters, request.Inputs, scripts.CaptureLibraries(), cancellation,
+        eventContext: new JsonObject { ["type"] = "manual", ["reason"] = "console", ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
+            ["actor"] = GatewayAccess.Actor(context).Username }, uiContext: PythonUiContext.ForPreview(store, request.UiContext, request.Ui))).Access("admin", audit: true);
 routes.MapGet("/events", async (HttpContext context, TagEngine tags, SecurityStore security) =>
 {
     context.Response.ContentType = "text/event-stream";
@@ -248,9 +281,12 @@ public record RenameProjectRequest(string Name, int Revision);
 public record ArchiveProjectRequest(bool Archived);
 public record QueryRequest(Dictionary<string, JsonElement>? Parameters, string? PublishedAt = null, int? TimeoutMs = null);
 public record CreateDatabaseRequest(bool InitializeSampleData = false);
-public record ScriptRequest(string Code, Dictionary<string, JsonElement>? Parameters, Dictionary<string, JsonElement>? Inputs);
+[System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
+public record ScriptRequest(string Code, Dictionary<string, JsonElement>? Parameters, Dictionary<string, JsonElement>? Inputs, JsonObject? Ui = null, JsonObject? UiContext = null);
+[System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
+public record ScriptSyntaxRequest(string Code);
 public record PublishRequest(int Revision);
 [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
 public record RuntimeActionRequest(Dictionary<string, JsonElement>? Parameters, Dictionary<string, JsonElement>? Inputs, string? PublishedAt, string? InstanceId = null, string? RowId = null, PopupOrigin? PopupOrigin = null,
     IReadOnlyList<InstancePathStep>? InstancePath = null, IReadOnlyList<Dictionary<string, JsonElement>>? BindingInputs = null,
-    IReadOnlyList<ParameterBindingState>? BindingState = null);
+    IReadOnlyList<ParameterBindingState>? BindingState = null, JsonObject? Ui = null);

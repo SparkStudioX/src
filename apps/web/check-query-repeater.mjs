@@ -8,7 +8,8 @@ import ts from 'typescript';
 
 const require = createRequire(import.meta.url);
 const moduleUrl = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
-const hooks = moduleUrl(`export { createElement } from ${JSON.stringify(pathToFileURL(require.resolve('react')).href)}; export const useState=v=>globalThis.__repeaterHooks.useState(v); export const useRef=v=>globalThis.__repeaterHooks.useRef(v); export const useEffect=(run,deps)=>globalThis.__repeaterHooks.useEffect(run,deps);
+const hooks = moduleUrl(`export * from ${JSON.stringify(pathToFileURL(require.resolve('react')).href)}; export const useState=v=>globalThis.__repeaterHooks.useState(v); export const useRef=v=>globalThis.__repeaterHooks.useRef(v); export const useEffect=(run,deps)=>globalThis.__repeaterHooks.useEffect(run,deps);
+export const useMemo=run=>run(); export const useCallback=run=>run;
 // Cell tests run without a provider, preserving the context's declared default.
 export const createContext=value=>({defaultValue:value,Provider:({children})=>children});export const useContext=context=>context.defaultValue;`);
 const requests = moduleUrl('export const api=(...args)=>globalThis.__repeaterRequest(...args);');
@@ -21,7 +22,7 @@ function loader(mode) {
     const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
       .replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
       .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_match, prefix, _quote, dependency) => {
-        const target = (mode === 'hook' && name === 'useQueryRepeater' || mode === 'cells' && ['templates', 'applicationState', 'inputStateBindings'].includes(name)) && dependency === 'react' ? hooks
+        const target = (mode === 'hook' && name === 'useQueryRepeater' || mode === 'cells') && dependency === 'react' ? hooks
           : mode === 'hook' && name === 'useQueryRepeater' && dependency === './api' ? requests
           : ['render', 'cells'].includes(mode) && name === 'templates' && dependency === './useQueryRepeater' ? rowsHook
           : dependency.startsWith('./') ? url(dependency.slice(2)) : pathToFileURL(require.resolve(dependency)).href;
@@ -300,6 +301,24 @@ await check('typed cell actions and child event contexts keep scalar types and i
   assert.equal(calls[0][1].parameters.amount, 6); assert.equal(calls[0][1].parameters.active, false);
   props.templates = [{ ...typedTemplate, parameterTypes: { ...typedTemplate.parameterTypes, title: 'string' } }];
   assert.notEqual(cells()[0].key, first.key);
+});
+
+await check('saved templates and rows keep mounted owners across connection changes while query-owned rows invalidate', () => {
+  const parentHooks = localHooks(), props = {...viewProps};
+  const cells = () => { parentHooks.begin(); const wrapper = CellView(props); const frame = wrapper.type(wrapper.props);
+    const host = descendants(frame, node => typeof node.type === 'function' && node.type.name === 'TemplateInstances')[0];
+    return descendants(host.type(host.props), node => typeof node.type === 'function' && node.type.name === 'TemplateInstanceCell'); };
+  for (const type of ['template', 'repeater']) {
+    props.component = {...host, type, props: {templateId: 'card', ...(type === 'repeater' ? {rows: [{id: 'saved', parameters: {title: 'Saved'}}]} : {})}};
+    props.communicationLost = true; globalThis.__repeaterRows = {key: 'offline-query-hook', rows: [], loading: false, error: ''};
+    const offline = cells().map(node => node.key);
+    props.communicationLost = false; globalThis.__repeaterRows = {key: 'online-query-hook', rows: [], loading: false, error: ''};
+    assert.deepEqual(cells().map(node => node.key), offline, `${type} must not unmount and rerun Python merely because tag transport connected`);
+  }
+  props.component = host;
+  globalThis.__repeaterRows = {key: 'query-before', rows: [{id: 'a', parameters: {title: 'A'}}], loading: false, error: ''};
+  const before = cells()[0].key; globalThis.__repeaterRows.key = 'query-after';
+  assert.notEqual(cells()[0].key, before, 'an actual query owner still expires its row context');
 });
 
 delete globalThis.__repeaterHooks; delete globalThis.__repeaterRequest; delete globalThis.__repeaterRows;

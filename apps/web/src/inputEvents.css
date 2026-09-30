@@ -1,5 +1,14 @@
 .component-input-event-status { position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 6px; font-size: 10px; line-height: 1.35; color: var(--ink); background: var(--surface-subtle); border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .component-input-event-status.error { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
+/* Keep execution feedback in its own strip, clear of the input value. */
+.bound-component.has-input-event-status { padding-bottom: 20px; }
+.bound-component.has-input-event-status > .bound-component-content { overflow: hidden; }
+.bound-component.has-input-event-status > .component-input-event-status { height: 20px; }
+.bound-component.has-input-event-status .render-input { padding-top: 0; padding-bottom: 0; }
+.bound-component.has-input-event-status .render-input > label:not(.render-checkbox),
+.bound-component.has-input-event-status .spinner-field { gap: 3px; }
+.bound-component.has-input-event-status .render-input input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.bound-component.has-input-event-status .render-input select { height: 32px; min-height: 28px; }
 .input-events-dialog { width: min(1040px, calc(100vw - 40px)); max-width: none; max-height: calc(100dvh - 40px); margin: auto; padding: 0; color: var(--ink); background: var(--panel); border: 1px solid var(--border-strong); border-radius: 8px; }
 .input-events-dialog[open] { display: flex; flex-direction: column; }
 .input-events-dialog::backdrop { background: rgba(12, 21, 36, .5); }
@@ -18,6 +27,10 @@
 .input-events-source .source-editor-host { height: 355px; }
 .input-events-description { margin: 0 0 12px; min-height: 35px; font-size: 11px; line-height: 1.6; color: var(--text-secondary); }
 .input-events-error { margin-top: 10px; padding: 9px 11px; border: 1px solid var(--danger-border); border-radius: 4px; font-size: 11px; color: var(--danger); background: var(--danger-bg); }
+.event-script-language { display: grid; gap: 7px; margin-bottom: 14px; }
+.event-script-language label { display: flex; align-items: center; gap: 12px; font-size: 12px; font-weight: 600; }
+.event-script-language select { min-width: 190px; padding: 7px 10px; color: var(--ink); background: var(--panel); border: 1px solid var(--border); border-radius: 4px; }
+.event-script-language p { margin: 0; font-size: 11px; line-height: 1.6; color: var(--text-secondary); }
 .input-events-context { border-left: 1px solid var(--border); padding: 16px; background: var(--surface-subtle); font-size: 11px; line-height: 1.6; }
 .input-events-context h3 { font-size: 12px; margin: 0 0 10px; }
 .input-events-context h4 { font-size: 11px; margin: 16px 0 7px; }

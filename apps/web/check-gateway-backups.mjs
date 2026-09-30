@@ -102,7 +102,7 @@ try {
     assert.equal(ui.button('Create download').props.disabled, true); assert.equal(ui.button('Back up to destination').props.disabled, true);
     ui.change('Set archive passphrase', true); ui.change('New archive passphrase', 'synthetic-archive-passphrase');
     assert.equal(ui.field('New archive passphrase').props.type, 'password'); assert.equal(ui.field('Confirm archive passphrase').props.type, 'password');
-    assert.match(ui.text(), /Database contents, audit history and runtime files are excluded/);
+    assert.match(ui.text(), /Configuration only; database files are excluded/);
   });
   await check('status polling retains unsaved settings and secrets and exposes cross-session revision conflicts', async () => {
     const ui = start(fixture({ hasArchivePassphrase: true, hasDestinationPassword: true })); await settle(); ui.render();

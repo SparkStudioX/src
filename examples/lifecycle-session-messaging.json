@@ -1,0 +1,49 @@
+{
+  "name": "Lifecycle and session messaging workshop",
+  "tags": [],
+  "navigation": {"mode":"none","startupScreenId":"session-messaging","items":[]},
+  "scripts": {"revision":0,"resources":[
+    {"id":"workshop-broadcast","name":"Workshop broadcast","type":"gateway","enabled":false,"event":"message","timeoutMs":2000,"threading":"dedicated","requiredPermission":"admin","parameters":{},"code":"result = system.ui.sendMessage(\"workshop.notice\", {\"text\": payload.get(\"text\", \"Broadcast from the gateway event\")})"}
+  ]},
+  "templates": [{
+    "id":"message-card","name":"Python lifecycle receiver","width":546,"height":172,"parameters":{"station":"A"},
+    "components":[
+      {"id":"card","type":"rectangle","x":0,"y":0,"width":546,"height":172,"props":{"fillColor":"#edf1fa","strokeColor":"#c4d2e4","strokeWidth":1,"cornerRadius":8}},
+      {"id":"station","type":"label","x":20,"y":12,"width":506,"height":35,"props":{"text":"RECEIVER {station}","fontSize":17,"foregroundColor":"#41577e"}},
+      {"id":"receiver","type":"label","x":20,"y":55,"width":506,"height":94,"props":{
+        "text":"Waiting for Python mount","fontSize":23,"foregroundColor":"#223148",
+        "componentEvents":{
+          "mount":{"language":"python","code":"self.text = \"Mounted receiver \" + parameters[\"station\"]\nprint(\"Mounted\", parameters[\"station\"])"},
+          "unmount":{"language":"python","code":"print(\"Cleanup\", parameters[\"station\"], \"last text:\", self.text)"}
+        },
+        "messageHandlers":[{"id":"notice","messageType":"workshop.notice","scope":"session","language":"python","code":"self.text = parameters[\"station\"] + \": \" + str(event.payload.get(\"text\", \"No text\"))"}]
+      }}
+    ]
+  }],
+  "screens":[
+    {"id":"session-messaging","name":"Lifecycle and messages","width":1200,"height":970,"components":[
+      {"id":"surface","type":"rectangle","x":0,"y":0,"width":1200,"height":970,"props":{"fillColor":"#ffffff","strokeColor":"#c4d2e4","strokeWidth":1}},
+      {"id":"heading","type":"label","x":32,"y":20,"width":1136,"height":50,"props":{"text":"Python events · One editor · Multiple operator tabs","fontSize":30,"foregroundColor":"#223148"}},
+      {"id":"intro","type":"label","x":32,"y":84,"width":1136,"height":62,"props":{"text":"Open this published application in two tabs. Each has its own gateway identity. Broadcast reaches both; a target reaches only that tab.","fontSize":18,"foregroundColor":"#41577e"}},
+      {"id":"note","type":"textInput","x":32,"y":168,"width":550,"height":74,"props":{"text":"Message text","fieldKey":"note","defaultValue":"Shift handoff ready","maxLength":160}},
+      {"id":"broadcast","type":"button","x":612,"y":188,"width":556,"height":48,"props":{"text":"Broadcast to this project's operator tabs","action":"script","script":"receipt = system.ui.sendMessage(\"workshop.notice\", {\"text\": inputs[\"note\"]})\nresult = {\"message\": \"Queued for \" + str(receipt[\"queued\"]) + \" operator tabs\", \"receipt\": receipt}","backgroundColor":"#4f63c8","foregroundColor":"#ffffff"}},
+      {"id":"identify","type":"button","x":32,"y":270,"width":300,"height":46,"props":{"text":"Identify open tabs","action":"script","script":"sessions = system.ui.getSessionInfo()\nfor session in sessions:\n    system.ui.sendMessage(\"workshop.identity\", {\"sessionId\": session[\"sessionId\"]}, sessionId=session[\"sessionId\"])\nresult = {\"message\": \"Identified \" + str(len(sessions)) + \" tabs\"}","backgroundColor":"#41577e","foregroundColor":"#ffffff"}},
+      {"id":"tab-id","type":"label","x":362,"y":270,"width":806,"height":48,"props":{"text":"Choose Identify open tabs to display this tab's ID","fontSize":17,"foregroundColor":"#223148","messageHandlers":[{"id":"identity","messageType":"workshop.identity","scope":"session","language":"python","code":"self.text = str(event.payload[\"sessionId\"])"}]}},
+      {"id":"target","type":"textInput","x":32,"y":344,"width":550,"height":74,"props":{"text":"Target session ID (copy from either tab)","fieldKey":"target","defaultValue":"","maxLength":32}},
+      {"id":"send-target","type":"button","x":612,"y":364,"width":556,"height":48,"props":{"text":"Send to the target tab only","action":"script","script":"target = inputs[\"target\"].strip()\nif not target:\n    raise ValueError(\"Identify the tabs and enter a target session ID first.\")\nreceipt = system.ui.sendMessage(\"workshop.notice\", {\"text\": inputs[\"note\"]}, sessionId=target)\nresult = {\"message\": \"Queued for \" + str(receipt[\"queued\"]) + \" target tabs\", \"receipt\": receipt}","backgroundColor":"#4f63c8","foregroundColor":"#ffffff"}},
+      {"id":"station-a","type":"template","x":32,"y":458,"width":546,"height":172,"props":{"templateId":"message-card","parameters":{"station":"A"}}},
+      {"id":"station-b","type":"template","x":622,"y":458,"width":546,"height":172,"props":{"templateId":"message-card","parameters":{"station":"B"}}},
+      {"id":"rename","type":"button","x":32,"y":667,"width":546,"height":48,"props":{"text":"Rename this button with self.text","action":"script","script":"self.text = \"Hello from Python\"","backgroundColor":"#41577e","foregroundColor":"#ffffff"}},
+      {"id":"leave","type":"button","x":622,"y":667,"width":546,"height":48,"props":{"text":"Leave this screen · run cleanup","action":"navigate","targetScreenId":"away","backgroundColor":"#41577e","foregroundColor":"#ffffff"}},
+      {"id":"fill-message","type":"button","x":32,"y":750,"width":546,"height":48,"props":{"text":"Populate the message field with Python","action":"script","script":"self.getSibling(\"note\").value = \"Prepared by Python\"","backgroundColor":"#41577e","foregroundColor":"#ffffff"}},
+      {"id":"value-help","type":"label","x":622,"y":750,"width":546,"height":68,"props":{"text":"self.text edits a caption. self.value edits an unbound form value in this tab, without firing another input event.","fontSize":17,"foregroundColor":"#41577e"}},
+      {"id":"help","type":"label","x":32,"y":842,"width":1136,"height":94,"props":{"text":"Designer → select a control → Edit actions & events. Check syntax compiles without running your code. Mount initializes each receiver; Unmounted records captured text. Messages are transient notifications, not shared storage. No devices, databases or gateway configuration are changed.","fontSize":17,"foregroundColor":"#41577e"}}
+    ]},
+    {"id":"away","name":"Receivers closed","width":1200,"height":500,"components":[
+      {"id":"surface","type":"rectangle","x":0,"y":0,"width":1200,"height":500,"props":{"fillColor":"#ffffff","strokeColor":"#c4d2e4","strokeWidth":1}},
+      {"id":"heading","type":"label","x":32,"y":32,"width":1136,"height":56,"props":{"text":"Those component receivers are now unmounted","fontSize":30,"foregroundColor":"#223148"}},
+      {"id":"help","type":"label","x":32,"y":120,"width":1136,"height":120,"props":{"text":"Send another message from the other tab. This screen has no notice handler, so returning will show a fresh mount rather than replaying it. The gateway tab identity stays the same during screen navigation. Unmount cleanup is bounded and best effort; it cannot modify a retired screen.","fontSize":22,"foregroundColor":"#41577e"}},
+      {"id":"back","type":"button","x":32,"y":310,"width":530,"height":54,"props":{"text":"Return · mount fresh receivers","action":"navigate","targetScreenId":"session-messaging","backgroundColor":"#4f63c8","foregroundColor":"#ffffff"}}
+    ]}
+  ]
+}

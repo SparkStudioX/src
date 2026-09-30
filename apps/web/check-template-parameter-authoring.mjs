@@ -273,9 +273,10 @@ function visitApp(node) {
 }
 visitApp(appAst);
 assert.ok(previewActionSource && popupExecuteSource, 'Designer action callbacks exist');
-const compileCallback = source => ts.transpileModule(`const previewCommunication = { busy: false, session: { mode: "live-actions" } }; return (${source});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-const makePreviewAction = new Function('gatewayAdmin', 'screen', 'project', 'previewActionBusy', 'editorParameterError', 'editorParameters', 'currentPreviewInputs', 'validateInputs', 'setPreviewActionBusy', 'actionKey', 'api', 'notify', 'window', compileCallback(previewActionSource));
-const makePopupExecute = new Function('gatewayAdmin', 'api', compileCallback(popupExecuteSource));
+const uiHelpers = await import(staticModules('pythonUiModel'));
+const compileCallback = source => ts.transpileModule(`const {pythonUiRequest, pythonUiPreviewContext, applyPythonUiResult} = uiHelpers; const previewCommunication = { busy: false, session: { mode: "live-actions" } }; return (${source});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+const makePreviewAction = new Function('uiHelpers', 'gatewayAdmin', 'screen', 'project', 'previewActionBusy', 'editorParameterError', 'editorParameters', 'currentPreviewInputs', 'validateInputs', 'setPreviewActionBusy', 'actionKey', 'api', 'notify', 'window', compileCallback(previewActionSource)).bind(null, uiHelpers);
+const makePopupExecute = new Function('uiHelpers', 'gatewayAdmin', 'api', compileCallback(popupExecuteSource)).bind(null, uiHelpers);
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 for (const failure of [false, true]) {
   const request = deferred(), notifications = [], busy = [], refreshes = []; let current = true, calls = 0;
@@ -285,7 +286,7 @@ for (const failure of [false, true]) {
   current = false;
   if (failure) request.reject(new Error('Old action failed')); else request.resolve({ success: true, result: { message: 'Old action succeeded' } });
   await pending;
-  assert.equal(calls, 1); assert.deepEqual(notifications, []); assert.deepEqual(refreshes, []); assert.deepEqual(busy, ['action', '']);
+  assert.equal(calls, 1); assert.deepEqual(notifications, []); assert.deepEqual(refreshes, failure ? [] : ['sparkstudio:refresh-data']); assert.deepEqual(busy, ['action', '']);
 }
 passed++; console.log('PASS Designer suppresses stale action success and error notifications but releases its busy flag');
 {

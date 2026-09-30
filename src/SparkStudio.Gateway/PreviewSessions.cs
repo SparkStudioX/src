@@ -93,10 +93,11 @@ public static class PreviewCommunication
             var sessions = context.RequestServices.GetRequiredService<PreviewSessions>();
             sessions.Require(context, liveActions: policy?.Operation == "script");
             var route = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText;
-            // All mutations use an explicit preview route. Even a live capability cannot
-            // be presented to publication, generic script, operator or administration APIs.
+            // All mutations use an explicit preview route. Tag reads and compile-only
+            // syntax checking are safe POST reads; neither executes authored scripts.
+            // Even a live capability cannot authorize generic script execution or editing.
             if (policy is null && !HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method)
-                && route != "/api/tags/read")
+                && route != "/api/tags/read" && route is not ("/api/scripts/validate" or "/api/projects/{projectId}/scripts/validate"))
                 throw new BadHttpRequestException("This operation is unavailable from Designer Preview. Exit Preview before editing gateway or project configuration.", 403);
         }
         await next();
@@ -116,11 +117,13 @@ public static class PreviewCommunication
             // ExecuteDefinitionAsync rejects updates and uses the connector read path.
             return await queries.ExecuteDefinitionAsync(store.GetQuery(id), request.Parameters, linked.Token);
         }).WithMetadata(new PreviewEndpoint("query")).Access("design");
-        routes.MapPost("/preview/scripts/run", async (ScriptRequest request, HttpContext context, PreviewSessions sessions, PythonRunner python, CancellationToken cancellation) =>
+        routes.MapPost("/preview/scripts/run", async (ScriptRequest request, HttpContext context, PreviewSessions sessions, PythonRunner python,
+            ProjectStore store, ScriptResourceStore scripts, CancellationToken cancellation) =>
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellation, sessions.Require(context, liveActions: true));
             linked.Token.ThrowIfCancellationRequested();
-            return await python.RunAsync(request.Code, request.Parameters, request.Inputs, linked.Token);
+            return await python.RunWithLibrariesAsync(request.Code, request.Parameters, request.Inputs, scripts.CaptureLibraries(), linked.Token,
+                uiContext: PythonUiContext.ForPreview(store, request.UiContext, request.Ui));
         }).WithMetadata(new PreviewEndpoint("script")).Access("admin", audit: true);
     }
 }

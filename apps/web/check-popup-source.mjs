@@ -19,7 +19,7 @@ function url(name) {
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
     .replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
     .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_match, prefix, _quote, dependency) => {
-      const target = ['Popup', 'applicationState', 'inputStateBindings'].includes(name) && dependency === 'react' ? hooks
+      const target = ['Popup', 'applicationState', 'inputStateBindings', 'useQueryPropertyBindings'].includes(name) && dependency === 'react' ? hooks
         : name === 'Popup' && dependency === './useQueryRepeater' ? rows
         : name === 'Popup' && dependency === './Icon' ? icon
         : name === 'Popup' && dependency === './templates' ? moduleUrl(`export {actionKey} from ${JSON.stringify(url('templateModel'))}; export function ProjectComponentView(){return null;}`)
@@ -69,7 +69,7 @@ function harness({ popup = makePopup(), execute = async () => ({ success: true, 
   const props = { project, popup, tags: [], communicationLost: false, queryScope: 'runtime', onClose: () => closed.push(true), onNavigate() {},
     onBusyChange() {}, onStale: () => stale.push(true), onExecute: async action => { executions.push(action); return execute(action); } };
   return { props, dispatched, executions, stale, closed,
-    render(changes = {}) { cursor = 0; const tree = Popup({ ...props, ...changes }); assert.equal(tree.props.value, undefined); return tree.props.children; },
+    render(changes = {}) { cursor = 0; const tree = Popup({ ...props, ...changes }); assert.equal(tree.props.value, undefined); return descendants(tree, node => node.type === 'dialog')[0]; },
     commit() { while (pending.length) pending.shift()(); },
     fields(tree) { return Object.fromEntries(descendants(tree, node => typeof node.type === 'function' && node.type.name === 'ProjectComponentView').map(node => [node.props.component.id, node.props])); },
     stop() { effects.forEach(effect => effect?.cleanup?.()); },
@@ -141,7 +141,7 @@ await check('a template parameter change fences an in-flight popup result withou
   const instance = {instanceId:'embedded',template:target,parameters:h.props.popup.parameters,inputs:{note:''},isCurrent:()=>current,bindingInputs:[{}]};
   h.fields(h.render()).submit.onAction(target.components[1],instance);h.commit();await flush();
   assert.equal(h.executions.length,1);current=false;finish({success:true,result:{message:'stale result'}});await flush();
-  const tree=h.render();assert.doesNotMatch(content(tree),/stale result/);assert.deepEqual(h.dispatched,[]);
+  const tree=h.render();assert.doesNotMatch(content(tree),/stale result/);assert.deepEqual(h.dispatched,['sparkstudio:refresh-data']);
   assert.equal(h.fields(tree).submit.interactionLocked,false);h.stop();
 });
 

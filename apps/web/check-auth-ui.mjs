@@ -45,7 +45,7 @@ function moduleUrl(name) {
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
     transformers: seeded.has(name) ? { before: [seedState] } : undefined }).outputText
     .replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
-    .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_full, prefix, _quote, dependency) => `${prefix}${JSON.stringify(dependency === 'react' && (seeded.has(name) || ['applicationState', 'inputStateBindings'].includes(name)) ? hooks : dependency.startsWith('./') ? moduleUrl(dependency.slice(2)) : pathToFileURL(require.resolve(dependency)).href)}`);
+    .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_full, prefix, _quote, dependency) => `${prefix}${JSON.stringify(dependency === 'react' && (seeded.has(name) || ['applicationState', 'inputStateBindings', 'LocalizationContext', 'useRuntimeSessionMessaging', 'useQueryPropertyBindings'].includes(name)) ? hooks : dependency.startsWith('./') ? moduleUrl(dependency.slice(2)) : pathToFileURL(require.resolve(dependency)).href)}`);
   const url = asModule(code); modules.set(name, url); return url;
 }
 const { operatorProjectLink, runtimePresentation } = await import(moduleUrl('operatorAccessModel'));
@@ -89,8 +89,8 @@ await check('operator catalog exposes applications without draft or management c
   state(identity('operator',{view:true,design:true},true),{catalog,loading:false});
   const html=render(Projects);
   assert.match(html,/Open application/); assert.match(html,/Switch user/);
-  assert.match(html,/class="projects-brand" href="\/\?audience=operator"/);
-  assert.doesNotMatch(html,/Open designer|Saved draft|Rename|Duplicate|Archive|New project|Import \.sparkproj|Export \.sparkproj|Show archived|href="\/security"/);
+  assert.match(html,/class="workspace-brand" href="\/\?audience=operator"/);
+  assert.doesNotMatch(html,/Open designer|Saved draft|Rename|Duplicate|Archive|New project|Import \.sparkproj|Export \.sparkproj|Show archived|href="\/(?:security|gateway)"/);
   assert.doesNotMatch(html,/>draft</);
 });
 await check('default-project fallback links preserve the selected sign-in audience', () => {
@@ -103,13 +103,14 @@ await check('engineering project cards require each project design permission an
   state(identity('engineering',{design:true}),{catalog,loading:false});
   const html=render(Projects);
   assert.match(html,/href="\/designer\/plant"/); assert.match(html,/Export \.sparkproj/);
-  assert.doesNotMatch(html,/href="\/designer\/other"|Rename|Duplicate|New project|Import \.sparkproj|Show archived|href="\/security"/);
+  assert.doesNotMatch(html,/href="\/designer\/other"|Rename|Duplicate|New project|Import \.sparkproj|Show archived|href="\/(?:security|gateway)"/);
 });
 await check('gateway administrators retain catalog and security management', () => {
   state(identity('engineering',{design:true,publish:true},true),{catalog,loading:false});
   const html=render(Projects);
   for(const text of ['New project','Import .sparkproj','Rename','Duplicate','Archive','Show archived']) assert.ok(html.includes(text),text);
-  assert.match(html,/href="\/security"/);
+  assert.match(html,/class="workspace-header-link" href="\/gateway">Settings<\/a>/);
+  assert.doesNotMatch(html,/href="\/security"/);
 });
 await check('runtime viewers see disabled forms and Python actions while navigation and popups stay available', () => {
   globalThis.window={location:{search:'?view=controls'}};

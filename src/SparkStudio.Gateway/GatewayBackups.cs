@@ -23,6 +23,9 @@ public sealed class GatewayBackups : BackgroundService
     private readonly RecoveryQuarantine recovery;
     private readonly SecurityStore security;
     private readonly CancellationTokenSource shutdown;
+    private readonly CancellationToken shutdownToken;
+    private readonly object shutdownGate = new();
+    private bool disposed;
     private BackupSettingsDocument document;
     private BackupRunDocument state = new(1, null, null, null, null);
     private string diskRevision = "unreadable";
@@ -35,6 +38,7 @@ public sealed class GatewayBackups : BackgroundService
         protector = protection.CreateProtector("SparkStudio.BackupSettings.v1");
         settingsPath = Path.Combine(this.directory, "backup-settings.json"); statePath = Path.Combine(this.directory, "backup-state.json");
         workDirectory = Path.Combine(this.directory, "backup-work"); shutdown = CancellationTokenSource.CreateLinkedTokenSource(lifetime.ApplicationStopping);
+        shutdownToken = shutdown.Token;
         document = new(1, Guid.NewGuid(), Guid.NewGuid().ToString("N"), Defaults(), null, null);
         lock (GatewayConfigurationLock.SyncRoot)
         {
@@ -101,7 +105,7 @@ public sealed class GatewayBackups : BackgroundService
     {
         recovery.EnsureOperationsAllowed();
         if (configurationError is not null) throw new InvalidOperationException(configurationError);
-        if (shutdown.IsCancellationRequested) throw new InvalidOperationException("Gateway shutdown is in progress.");
+        if (shutdownToken.IsCancellationRequested) throw new InvalidOperationException("Gateway shutdown is in progress.");
         if (activeRun is { IsCompleted: false }) throw new InvalidOperationException("A backup is already running.");
         if (document.ProtectedArchivePassphrase is null) throw new ArgumentException("Save an archive passphrase before creating a backup.");
         if (deliver && string.IsNullOrWhiteSpace(document.Settings.Destination.Address)) throw new ArgumentException("Configure a destination first.");
@@ -109,7 +113,7 @@ public sealed class GatewayBackups : BackgroundService
         var run = new BackupRunStatus(Guid.NewGuid().ToString("N"), "running", DateTimeOffset.UtcNow, null, "Capturing gateway configuration…");
         state = state with { LastRun = run, LastScheduledDate = scheduledDate ?? state.LastScheduledDate };
         Write(statePath, state);
-        activeRun = Task.Run(() => RunAsync(captured, run, deliver, actor, shutdown.Token), CancellationToken.None);
+        activeRun = Task.Run(() => RunAsync(captured, run, deliver, actor, shutdownToken), CancellationToken.None);
     }
 
     private async Task RunAsync(BackupSettingsDocument settings, BackupRunStatus run, bool deliver, SecurityUser? actor, CancellationToken token)
@@ -201,7 +205,7 @@ public sealed class GatewayBackups : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, shutdown.Token);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, shutdownToken);
         while (!linked.IsCancellationRequested)
         {
             lock (GatewayConfigurationLock.SyncRoot)
@@ -218,11 +222,23 @@ public sealed class GatewayBackups : BackgroundService
     }
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
-        shutdown.Cancel(); await base.StopAsync(cancellationToken);
+        lock (shutdownGate) { if (!disposed) shutdown.Cancel(); }
+        await base.StopAsync(cancellationToken);
         Task? current; lock (GatewayConfigurationLock.SyncRoot) current = activeRun;
         if (current is not null) { try { await current.WaitAsync(cancellationToken); } catch (OperationCanceledException) { } }
     }
-    public override void Dispose() { shutdown.Cancel(); shutdown.Dispose(); base.Dispose(); }
+    public override void Dispose()
+    {
+        // DI owns this instance through both its concrete registration and IHostedService.
+        // Repeated host cleanup must not cancel a token source that was already disposed.
+        lock (shutdownGate)
+        {
+            if (disposed) return;
+            disposed = true;
+            try { shutdown.Cancel(); }
+            finally { shutdown.Dispose(); base.Dispose(); }
+        }
+    }
 
     public static string? DueDate(BackupScheduleSettings settings, string? lastDate, DateTimeOffset utc)
     {

@@ -14,6 +14,31 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     private readonly DateTimeOffset started = DateTimeOffset.UtcNow;
     private readonly ConcurrentDictionary<string, WatchRegistration> watches = new(StringComparer.Ordinal);
     private readonly object stateGate = new();
+    // Subscribers enqueue notifications only; Python never executes on the tag thread.
+    public event Action<TagValue?, TagValue>? ValueChanged;
+    private void SetValue(TagValue next)
+    {
+        lock (stateGate)
+        {
+            values.TryGetValue(next.Path, out var previous);
+            values[next.Path] = next;
+            var handlers = ValueChanged;
+            if (handlers is null || previous is not null && previous.Quality == next.Quality && previous.Timestamp == next.Timestamp
+                && JsonSerializer.Serialize(previous.Value) == JsonSerializer.Serialize(next.Value)) return;
+            foreach (Action<TagValue?, TagValue> handler in handlers.GetInvocationList())
+                try { handler(previous, next); }
+                catch (Exception error) { logger.LogWarning("Tag event subscriber failed ({ErrorType}).", error.GetType().Name); }
+        }
+    }
+    private void RemoveValue(string path)
+    {
+        lock (stateGate)
+        {
+            if (!values.TryGetValue(path, out var previous)) return;
+            SetValue(previous with { Value = null, Quality = "Bad_NotFound", Timestamp = DateTimeOffset.UtcNow });
+            values.TryRemove(path, out _);
+        }
+    }
     private long configurationGeneration;
     private long expressionGeneration = -1;
     private TagExpressions.Plan[] expressionPlans = [];
@@ -34,6 +59,14 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
         public Task? CancellationRequested;
     }
     public TagValue[] Snapshot() => values.Values.OrderBy(x => x.Path, StringComparer.Ordinal).ToArray();
+    public TagValue[] SubscribeWithSnapshot(Action<TagValue?, TagValue> handler)
+    {
+        lock (stateGate)
+        {
+            ValueChanged += handler;
+            return Snapshot();
+        }
+    }
     public JsonObject SaveDefinition(JsonObject definition)
     {
         lock (stateGate)
@@ -42,9 +75,9 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             var path = ProjectStore.Required(saved, "path");
             InvalidateWatches(watch => watch.Plan.Bindings.Any(binding => binding.Path == path));
             configurationGeneration++;
-            if (ProjectStore.Required(saved, "kind") == "memory") values[path] = MemoryValue(saved, DateTimeOffset.UtcNow);
+            if (ProjectStore.Required(saved, "kind") == "memory") SetValue(MemoryValue(saved, DateTimeOffset.UtcNow));
             else if (ProjectStore.Required(saved, "kind") == "expression")
-                values[path] = new(path, null, ProjectStore.Required(saved, "dataType"), saved["enabled"]?.GetValue<bool>() == false ? "Bad_Disabled" : "Bad_WaitingForInitialData", DateTimeOffset.UtcNow, "expression");
+                SetValue(new(path, null, ProjectStore.Required(saved, "dataType"), saved["enabled"]?.GetValue<bool>() == false ? "Bad_Disabled" : "Bad_WaitingForInitialData", DateTimeOffset.UtcNow, "expression"));
             else
             {
                 var disabled = store.GetConnections().OfType<JsonObject>().Any(item => ProjectStore.Optional(item, "id") == ProjectStore.Optional(saved, "connectionId") && item["enabled"]?.GetValue<bool>() == false);
@@ -63,8 +96,8 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             foreach (var definition in store.GetTagDefinitions().OfType<JsonObject>().Where(item => changed.Contains(ProjectStore.Required(item, "path"))))
             {
                 var path = ProjectStore.Required(definition, "path");
-                if (TagDefinitionValidator.Kind(definition) == "memory") values[path] = MemoryValue(definition, DateTimeOffset.UtcNow);
-                else values[path] = new(path, null, ProjectStore.Optional(definition, "dataType") ?? "Unknown", recovery?.Active == true && TagDefinitionValidator.Kind(definition) == "opcua" ? "Bad_RecoveryMode" : TagDefinitionValidator.Enabled(definition) ? "Bad_WaitingForInitialData" : "Bad_Disabled", DateTimeOffset.UtcNow, TagDefinitionValidator.Kind(definition));
+                if (TagDefinitionValidator.Kind(definition) == "memory") SetValue(MemoryValue(definition, DateTimeOffset.UtcNow));
+                else SetValue(new(path, null, ProjectStore.Optional(definition, "dataType") ?? "Unknown", recovery?.Active == true && TagDefinitionValidator.Kind(definition) == "opcua" ? "Bad_RecoveryMode" : TagDefinitionValidator.Enabled(definition) ? "Bad_WaitingForInitialData" : "Bad_Disabled", DateTimeOffset.UtcNow, TagDefinitionValidator.Kind(definition)));
             }
             configurationGeneration++;
             return result;
@@ -77,7 +110,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             if (!store.DeleteTag(path)) return false;
             InvalidateWatches(watch => watch.Plan.Bindings.Any(binding => binding.Path == path));
             configurationGeneration++;
-            values.TryRemove(path, out _);
+            RemoveValue(path);
             return true;
         }
     }
@@ -139,12 +172,12 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                 if (path == "[default]Setpoints/TargetSpeed")
                 {
                     if (input[index].ValueKind != JsonValueKind.Number || !input[index].TryGetDouble(out var number) || !double.IsFinite(number) || number < 0 || number > 500) return "Bad_OutOfRange";
-                    values[path] = new(path, number, "Double", "Good", DateTimeOffset.UtcNow, "memory"); return "Good";
+                    SetValue(new(path, number, "Double", "Good", DateTimeOffset.UtcNow, "memory")); return "Good";
                 }
                 try
                 {
                     var saved = store.WriteMemoryTag(path, input[index]);
-                    values[path] = MemoryValue(saved, DateTimeOffset.UtcNow);
+                    SetValue(MemoryValue(saved, DateTimeOffset.UtcNow));
                     return "Good";
                 }
                 catch (KeyNotFoundException) { return "Bad_NotFound"; }
@@ -156,10 +189,10 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     {
         var now = DateTimeOffset.UtcNow;
         var seconds = (now - started).TotalSeconds;
-        values.TryAdd("[default]Setpoints/TargetSpeed", new("[default]Setpoints/TargetSpeed", 85d, "Double", "Good", now, "memory"));
+        lock (stateGate) if (!values.ContainsKey("[default]Setpoints/TargetSpeed")) SetValue(new("[default]Setpoints/TargetSpeed", 85d, "Double", "Good", now, "memory"));
         for (var line = 1; line <= 2; line++)
         {
-            void Set(string name, object value, string type) { var p = $"[default]Line/Line{line}/{name}"; values[p] = new(p, value, type, "Good", now, "simulated"); }
+            void Set(string name, object value, string type) { var p = $"[default]Line/Line{line}/{name}"; SetValue(new(p, value, type, "Good", now, "simulated")); }
             Set("Speed", Math.Round(72 + line * 8 + Math.Sin(seconds / 7 + line) * 7, 1), "Double");
             Set("Temperature", Math.Round(38 + line * 4 + Math.Sin(seconds / 14 + line) * 3, 1), "Double");
             Set("ProductionCount", 12000 + line * 1600 + (int)(seconds * (line + 1)), "Int32");
@@ -186,7 +219,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                 {
                     if (expressionDue.TryGetValue(plan.Path, out var due) && now < due) continue;
                     var next = TagExpressions.Evaluate(plan, snapshot, now, snapshot.GetValueOrDefault(plan.Path));
-                    values[plan.Path] = next; snapshot[plan.Path] = next;
+                    SetValue(next); snapshot[plan.Path] = next;
                     expressionDue[plan.Path] = now.AddMilliseconds(plan.Interval);
                 }
             }
@@ -230,7 +263,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                             && previous.Quality == next.Quality && previous.DataType == next.DataType
                             && JsonSerializer.Serialize(previous.Value) == JsonSerializer.Serialize(next.Value))
                             next = next with { Timestamp = previous.Timestamp };
-                        values[next.Path] = next;
+                        SetValue(next);
                     }
                 }
                 // Restored credentials may be unreadable on another Windows identity. Do not
@@ -254,7 +287,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                     if (generation != configurationGeneration) continue;
                     var definedPaths = definitions.Select(definition => ProjectStore.Required(definition, "path")).ToHashSet(StringComparer.Ordinal);
                     foreach (var path in values.Keys.Where(path => !path.StartsWith("[default]Line/") && !path.StartsWith("[default]Setpoints/") && !definedPaths.Contains(path)))
-                        values.TryRemove(path, out _);
+                        RemoveValue(path);
                     foreach (var definition in definitions.Where(definition => TagDefinitionValidator.Kind(definition) == "opcua" && (recovery?.Active == true || definition["enabled"]?.GetValue<bool>() == false
                         || disabledConnections.Contains(ProjectStore.Required(definition, "connectionId")))))
                         SetUnavailable(ProjectStore.Required(definition, "path"), recovery?.Active == true ? "Bad_RecoveryMode" : "Bad_Disabled");
@@ -285,7 +318,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     private void SetUnavailable(string path, string quality)
     {
         values.TryGetValue(path, out var previous);
-        values[path] = new(path, previous?.Value, previous?.DataType ?? "Unknown", quality, previous?.Timestamp ?? DateTimeOffset.UtcNow, "opcua");
+        SetValue(new(path, previous?.Value, previous?.DataType ?? "Unknown", quality, previous?.Timestamp ?? DateTimeOffset.UtcNow, "opcua"));
     }
 
     private async Task RunWatch(WatchRegistration watch)
@@ -301,7 +334,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                         var byNode = batch.ToDictionary(value => value.NodeId, StringComparer.Ordinal);
                         foreach (var binding in watch.Plan.Bindings)
                             if (byNode.TryGetValue(binding.NodeId, out var value))
-                                values[binding.Path] = new(binding.Path, value.Value, value.DataType, value.Quality, value.Timestamp, "opcua");
+                                SetValue(new(binding.Path, value.Value, value.DataType, value.Quality, value.Timestamp, "opcua"));
                         watch.LastNotification = DateTimeOffset.UtcNow;
                     }
                 },

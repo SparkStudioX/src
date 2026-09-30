@@ -32,7 +32,7 @@ const { DocumentProperties } = await import(interactive('DocumentProperties'));
 const { StateDefinitionsEditor } = await import(interactive('StateDefinitionsEditor'));
 const { PropertyBindingsEditor } = await import(interactive('PropertyBindingsEditor'));
 const { InputStateBindingEditor } = await import(interactive('InputStateBindingEditor'));
-const { default: InputEventsEditor } = await import(interactive('InputEventsEditor'));
+const { default: ComponentActionsEditor } = await import(interactive('ComponentActionsEditor'));
 const { checkpoint, restoreHistory } = await import(real('canvasEditing'));
 const noOp = () => {};
 const declarations = { note: { type: 'string', value: 'Ready' }, count: { type: 'number', value: 0 }, armed: { type: 'boolean', value: false } };
@@ -153,10 +153,11 @@ check('parameter fx reads only containing state and keeps child-private names un
 
 check('input event help describes private state only for template authoring', () => {
   for (const available of [false, true]) {
-    const ui = drive(InputEventsEditor, { component: input, components: [input], inputs: { quantity: 0 }, parameters: {}, instanceStateAvailable: available, onApply: noOp, onClose: noOp });
+    const ui = drive(ComponentActionsEditor, { component: input, components: [input], screens: [], inputs: { quantity: 0 }, parameters: {}, instanceStateAvailable: available, onApply: noOp, onClose: noOp });
+    ui.change('Event script language', 'javascript');
     const completions = JSON.parse(ui.find(node => node.type === 'script-editor').props['data-completions']);
     assert.equal(completions.find(item => item.label === 'app.state.get').detail.includes('instance'), available);
-    assert.equal(ui.all().some(node => node.type === 'code' && React.Children.toArray(node.props.children).join('') === 'app.state.get("instance", "name")'), available);
+    assert.equal(ui.all().some(node => node.type === 'p' && React.Children.toArray(node.props.children).includes(", or this template's private instance state")), available);
   }
 });
 delete globalThis.document;
@@ -166,7 +167,7 @@ check('actual Designer wiring supplies a private preview scope only for a shared
   let argument, eventAttribute;
   function visit(node) {
     if (ts.isCallExpression(node) && node.expression.getText(ast) === 'useApplicationState') argument = node.arguments[3]?.getText(ast);
-    if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(ast) === 'InputEventsEditor') eventAttribute = node.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText(ast) === 'instanceStateAvailable')?.initializer.expression.getText(ast);
+    if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(ast) === 'ComponentActionsEditor') eventAttribute = node.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText(ast) === 'instanceStateAvailable')?.initializer.expression.getText(ast);
     ts.forEachChild(node, visit);
   }
   visit(ast); assert.ok(argument && eventAttribute);

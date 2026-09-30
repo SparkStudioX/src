@@ -85,7 +85,7 @@ export async function buildWorkshop(root, entry, exportedAt) {
 export function packWorkshop(source, entry, exportedAt) {
   assert.equal(entry.distribution, 'portable', 'Setup-required examples must not be packaged as standalone workshops.');
   assert.ok(Number.isFinite(Date.parse(exportedAt)), 'Invalid package timestamp.');
-  const fields = ['name', 'screen', 'screens', 'templates', 'parameters', 'navigation', 'sessionState', 'styles', 'authoringDefaults', 'localization', 'queries', 'assets', 'tags'];
+  const fields = ['name', 'screen', 'screens', 'templates', 'parameters', 'navigation', 'sessionState', 'styles', 'authoringDefaults', 'localization', 'queries', 'assets', 'tags', 'scripts'];
   assert.ok(Object.keys(source).every(key => fields.includes(key)), 'Unknown example fields require explicit package review.');
   assert.ok(!source.tags?.length, 'Gateway tags cannot be embedded in a project package.');
   assert.ok(!source.assets?.length, 'Asset-backed workshops need explicit distribution support before becoming portable.');
@@ -98,14 +98,59 @@ export function packWorkshop(source, entry, exportedAt) {
     assert.ok(Object.keys(query).every(key => ['id', 'name', 'connectionId', 'sql', 'kind', 'parameters'].includes(key)), 'Unknown query field.');
     return { ...query, kind: 'query', parameters: query.parameters.map(parameter => ({ ...parameter, type: parameter.type ?? 'string' })) };
   });
-  const scripts = { revision: 0, resources: [] };
+  const scripts = packScriptDraft(source.scripts);
   const manifest = { format: 'sparkstudio-project', formatVersion: 1, content: 'draft-only', projectName: project.name, exportedAt,
     connectionDependencies: queries.length ? [{ id: 'sample', name: 'Built-in sample' }] : [] };
   const bytes = writeZip(new Map([['manifest.json', json(manifest)], ['project.json', json(project)], ['queries.json', json(queries)], ['scripts-draft.json', json(scripts)]]));
   return { project, queries, scripts, bytes };
 }
+function packScriptDraft(source) {
+  if (source === undefined) return { revision: 0, resources: [] };
+  assert.ok(source && typeof source === 'object' && !Array.isArray(source) && Object.keys(source).every(key => ['revision', 'resources'].includes(key)), 'Workshop scripts must be an explicit draft.');
+  assert.equal(source.revision, 0, 'Authored script drafts must start at revision zero.');
+  assert.ok(Array.isArray(source.resources) && source.resources.length <= 100, 'Invalid authored script resources.');
+  const common = ['id', 'name', 'type', 'code', 'enabled', 'parameters', 'event', 'timeoutMs', 'threading'];
+  const options = { startup: [], update: [], shutdown: [], timer: ['intervalMs', 'delayType'], tagChange: ['tagPaths', 'changeTriggers'], message: ['requiredPermission'], scheduled: ['cron', 'timeZone'] };
+  const ids = new Set(), messageNames = new Set(); let totalCode = 0;
+  for (const resource of source.resources) {
+    assert.ok(resource && typeof resource === 'object' && !Array.isArray(resource), 'Invalid authored script resource.');
+    assert.equal(resource.type, 'gateway', 'Portable script-resource support currently covers reviewed gateway events only.');
+    assert.equal(resource.enabled, false, 'Portable gateway events must be disabled; activation requires explicit review and script publication.');
+    assert.ok(Object.hasOwn(options, resource.event), 'Unsupported gateway event.');
+    assert.ok(Object.keys(resource).every(key => common.includes(key) || options[resource.event].includes(key)), 'Unknown or unrelated script option.');
+    assert.match(resource.id, safeId); assert.ok(!ids.has(resource.id), 'Duplicate script ID.'); ids.add(resource.id);
+    assert.ok(typeof resource.name === 'string' && resource.name.trim() && resource.name.length <= 100 && !/[\x00-\x1f\x7f]/.test(resource.name), 'Invalid script name.');
+    assert.ok(typeof resource.code === 'string' && Buffer.byteLength(resource.code) <= 65536, 'Script code exceeds its limit.'); totalCode += Buffer.byteLength(resource.code);
+    assert.ok(Number.isInteger(resource.timeoutMs) && resource.timeoutMs >= 100 && resource.timeoutMs <= 300000, 'Invalid script timeout.');
+    assert.ok(['dedicated', 'shared'].includes(resource.threading), 'Invalid script threading.');
+    assert.ok(resource.parameters && typeof resource.parameters === 'object' && !Array.isArray(resource.parameters) && Object.keys(resource.parameters).length <= 64, 'Invalid script parameters.');
+    for (const [name, value] of Object.entries(resource.parameters)) {
+      assert.match(name, /^[A-Za-z_][A-Za-z0-9_]{0,63}$/);
+      assert.ok(value === null || typeof value === 'boolean' || typeof value === 'string' && value.length <= 4096 || typeof value === 'number' && Number.isFinite(value) && (!Number.isInteger(value) || Number.isSafeInteger(value)), 'Script defaults must be bounded scalar values.');
+    }
+    if (resource.event === 'timer') {
+      assert.ok(Number.isInteger(resource.intervalMs) && resource.intervalMs >= 100 && resource.intervalMs <= 86400000, 'Invalid timer interval.');
+      assert.ok(['fixedDelay', 'fixedRate'].includes(resource.delayType), 'Invalid timer delay type.');
+    }
+    if (resource.event === 'tagChange') {
+      assert.ok(Array.isArray(resource.tagPaths) && resource.tagPaths.length >= 1 && resource.tagPaths.length <= 64 && new Set(resource.tagPaths).size === resource.tagPaths.length, 'Invalid tag paths.');
+      assert.ok(resource.tagPaths.every(value => typeof value === 'string' && value.length <= 512 && /^\[[^\]\s]+\].+/.test(value) && !/[\x00-\x1f\x7f]/.test(value)), 'Tag paths must be absolute.');
+      assert.ok(Array.isArray(resource.changeTriggers) && resource.changeTriggers.length >= 1 && resource.changeTriggers.length <= 3 && new Set(resource.changeTriggers).size === resource.changeTriggers.length && resource.changeTriggers.every(value => ['value', 'quality', 'timestamp'].includes(value)), 'Invalid tag-change triggers.');
+    }
+    if (resource.event === 'message') {
+      assert.ok(['operate', 'admin'].includes(resource.requiredPermission), 'Invalid message permission.');
+      assert.ok(!messageNames.has(resource.name), 'Duplicate message handler name.'); messageNames.add(resource.name);
+    }
+    if (resource.event === 'scheduled') {
+      assert.ok(typeof resource.cron === 'string' && resource.cron.trim().split(/\s+/).length === 5 && /^[0-9*/,\- ]+$/.test(resource.cron), 'Cron needs five numeric fields.');
+      assert.ok(typeof resource.timeZone === 'string' && resource.timeZone.trim() && resource.timeZone.length <= 100, 'Scheduled events need an explicit time zone.');
+    }
+  }
+  assert.ok(totalCode <= 512 * 1024, 'Script draft code exceeds its total limit.');
+  return structuredClone(source);
+}
 function guide(entry, version, compatibility) {
-  return `# ${entry.title}\n\n${entry.summary}\n\nWorkshop bundle: ${version}. Requires SparkStudio project format ${compatibility.packageFormat} and the feature baseline ${compatibility.baseline.value}. Use a matching or newer gateway build; the older public preview installer is not sufficient.\n\n## Open this workshop\n\n1. Sign in to engineering as a gateway administrator and open Projects.\n2. Choose Import .sparkproj and select projects/${entry.id}.sparkproj. Import creates an independent, unpublished project.\n3. Open the imported project in Designer, inspect its property sheets and scripts, then use Preview.\n4. Publish the saved project when ready. Open Operator application from the left navigation.\n\nPreview starts read-only: native inputs, pure bindings, read queries and navigation work. Authored JavaScript and Python exercises require an administrator to explicitly enable Live actions, or an explicitly published operator application.\n\n## Prerequisites\n\n${entry.prerequisites.map(value => `- ${value}`).join('\n') || '- No external devices, databases or Internet connection.'}\n\n## Try it\n\n${entry.walkthrough.map((value, index) => `${index + 1}. ${value}`).join('\n')}\n\n## What is saved\n\nThe package contains authored project defaults, read-query definitions and component scripts. Operator state is transient. It contains no accounts, credentials, device configuration, gateway tags or database files. Import never publishes or starts gateway scripts. Review scripts before running an example.\n\nFeature guide: [${entry.title}](../${entry.guide}). Authoring source: [${entry.id}.json](../${entry.source}).\n`;
+  return `# ${entry.title}\n\n${entry.summary}\n\nWorkshop bundle: ${version}. Requires SparkStudio project format ${compatibility.packageFormat}. ${compatibility.note} Original collection baseline: ${compatibility.baseline.value}.\n\n## Open this workshop\n\n1. Sign in to engineering as a gateway administrator and open Projects.\n2. Choose Import .sparkproj and select projects/${entry.id}.sparkproj. Import creates an independent, unpublished project.\n3. Open the imported project in Designer, inspect its property sheets and scripts, then use Preview.\n4. Publish the saved project when ready. Open Operator application from the left navigation.\n\nPreview starts read-only: native inputs, pure bindings, read queries and navigation work. Authored JavaScript and Python exercises require an administrator to explicitly enable Live actions, or an explicitly published operator application.\n\n## Prerequisites\n\n${entry.prerequisites.map(value => `- ${value}`).join('\n') || '- No external devices, databases or Internet connection.'}\n\n## Try it\n\n${entry.walkthrough.map((value, index) => `${index + 1}. ${value}`).join('\n')}\n\n## What is saved\n\nThe package contains authored project defaults, read-query definitions and component scripts. Where included, gateway script resources are disabled drafts: enable and publish them separately after review. Operator state is transient. It contains no accounts, credentials, device configuration, gateway tags or database files. Import never publishes or starts gateway scripts. Review scripts before running an example.\n\nFeature guide: [${entry.title}](../${entry.guide}). Authoring source: [${entry.id}.json](../${entry.source}).\n`;
 }
 export async function buildBundleFiles(root, catalog, { version, exportedAt, sourceRevision, sourceDirty }) {
   assert.match(version, /^[A-Za-z0-9][A-Za-z0-9.+-]{0,63}$/); assert.match(sourceRevision, /^[a-f0-9]{40}$/);
@@ -119,9 +164,25 @@ export async function buildBundleFiles(root, catalog, { version, exportedAt, sou
   }
   const setupRequired = catalog.workshops.filter(item => item.distribution === 'setup-required');
   files.set('catalog.json', json(catalog));
-  files.set('README.md', Buffer.from(`# SparkStudio workshops ${version}\n\n${workshops.length} standalone, synthetic workshop projects. Import individual .sparkproj files through Projects, or copy this whole bundle to an air-gapped workstation. No Node.js or build tools are required to import a project.\n\n## Compatibility\n\nRequires project format ${catalog.compatibility.packageFormat} and features present in gateway source revision ${catalog.compatibility.baseline.value} or a compatible newer release. Bundle labels are not gateway version numbers. The older public preview installer does not contain this feature baseline. Source revision for this bundle: ${sourceRevision}${sourceDirty ? ' (working tree changes present; development build)' : ''}.\n\n## Import\n\nRead a guide below, then use Projects → Import package. Every import creates a separate unpublished project. Review and Preview it, then Publish to open its operator application. Import does not modify existing projects or configure gateway resources.\n\nPreview starts read-only: native inputs, pure bindings, read queries and navigation work. Authored JavaScript and Python exercises require an administrator to explicitly enable Live actions, or an explicitly published operator application.\n\n## Included projects\n\n${workshops.map(item => `- [${item.title}](${item.guide.path}) — [project](${item.package.path})`).join('\n')}\n\n## Examples requiring setup\n\nThese are cataloged but not included as standalone projects because their gateway prerequisites are not portable:\n\n${setupRequired.map(item => `- **${item.title}**: ${item.prerequisites.join(' ')}`).join('\n')}\n\n## Integrity and source\n\nSHA256SUMS covers every loose payload file except itself; the adjacent .zip.sha256 file covers the distributable ZIP. manifest.json records per-file hashes, source revision and compatibility. Source: https://github.com/SparkStudioX/src. Future matching release bundles are distributed from https://github.com/SparkStudioX/releases.\n`));
+  files.set('README.md', Buffer.from(`# SparkStudio workshops ${version}\n\n${workshops.length} standalone, synthetic workshop projects. Import individual .sparkproj files through Projects, or copy this whole bundle to an air-gapped workstation. No Node.js or build tools are required to import a project.\n\n## Compatibility\n\nRequires project format ${catalog.compatibility.packageFormat}. ${catalog.compatibility.note} Original collection baseline: ${catalog.compatibility.baseline.value}. Development bundle labels are not gateway version numbers. Source revision for this bundle: ${sourceRevision}${sourceDirty ? ' (working tree changes present; development build)' : ''}.\n\n## Import\n\nRead a guide below, then use Projects → Import package. Every import creates a separate unpublished project. Review and Preview it, then Publish to open its operator application. Import does not modify existing projects or configure gateway resources.\n\nPreview starts read-only: native inputs, pure bindings, read queries and navigation work. Authored JavaScript and Python exercises require an administrator to explicitly enable Live actions, or an explicitly published operator application.\n\n## Included projects\n\n${workshops.map(item => `- [${item.title}](${item.guide.path}) — [project](${item.package.path})`).join('\n')}\n\n## Examples requiring setup\n\nThese are cataloged but not included as standalone projects because their gateway prerequisites are not portable:\n\n${setupRequired.map(item => `- **${item.title}**: ${item.prerequisites.join(' ')}`).join('\n')}\n\n## Integrity and source\n\nSHA256SUMS covers every loose payload file except itself; the adjacent .zip.sha256 file covers the distributable ZIP. manifest.json records per-file hashes, source revision and compatibility. Source: https://github.com/SparkStudioX/src. Matching release bundles are distributed from https://github.com/SparkStudioX/releases.\n`));
   const manifest = { format: 'sparkstudio-workshops', formatVersion: 1, version, exportedAt, sourceRevision, sourceDirty, compatibility: catalog.compatibility, workshops, setupRequired,
     files: [...files].map(([name, bytes]) => describe(name, bytes)).sort((a, b) => a.path.localeCompare(b.path, 'en')) };
   files.set('manifest.json', json(manifest)); files.set('SHA256SUMS', Buffer.from([...files].sort(([a], [b]) => a.localeCompare(b, 'en')).map(([name, bytes]) => `${sha256(bytes)}  ${name}`).join('\n') + '\n'));
   return { files, manifest };
+}
+
+/** Loose packages have one maintained home; versioned ZIP entries keep their portable layout. */
+export function localWorkshopFiles(files, manifest) {
+  const local = new Map();
+  for (const [name, bytes] of files) {
+    if (name.startsWith('projects/') && name.endsWith('.sparkproj')) local.set(path.posix.basename(name), bytes);
+    else if (name.startsWith('guides/')) local.set(name, Buffer.from(bytes.toString().replace(/select projects\//g, 'select artifacts/sparkproj/')));
+    else if (name.startsWith('examples/') || name.startsWith('docs/')) local.set(name, bytes);
+  }
+  const packages = manifest.workshops.map(item => ({ id: item.id, title: item.title, file: path.posix.basename(item.package.path),
+    guide: item.guide.path, sha256: item.package.sha256, size: item.package.size, bundle: manifest.version }));
+  local.set('index.json', json({ format: 'sparkstudio-local-workshops', description: 'Current maintained project packages. Rebuild from the authored example catalog.',
+    sourceRevision: manifest.sourceRevision, sourceDirty: manifest.sourceDirty, compatibility: manifest.compatibility, packages }));
+  local.set('README.md', Buffer.from(`# SparkStudio project packages\n\nThis is the only maintained location for loose .sparkproj files. Import a package through Projects → Import .sparkproj, review it, then publish it.\n\nThese packages require the matching compatible gateway build; see index.json for source identity and compatibility.\n\n${packages.map(item => `- [${item.title}](${item.file}) · [Guide](${item.guide})`).join('\n')}\n\nRebuild with node tools/build-workshops.mjs --version <new-version>. Versioned release ZIPs remain under artifacts/workshops/ and are verified independently of these current packages.\n`));
+  return local;
 }

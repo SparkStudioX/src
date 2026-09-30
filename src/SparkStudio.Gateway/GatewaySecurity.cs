@@ -87,6 +87,14 @@ public static class GatewaySecurity
     public static SecurityUser? CurrentUser(HttpContext context) => Item(context, UserKey) as SecurityUser;
     public static string? CurrentSessionAdministrationId(HttpContext context) => (Item(context, SessionKey) as SecuritySession)?.AdministrationId;
 
+    // A subscription retains only the identity needed for revalidation, never a completed HTTP request.
+    public static Func<bool> CaptureSessionValidator(HttpContext context)
+    {
+        if (Item(context, SessionKey) is not SecuritySession session) throw new UnauthorizedAccessException("Sign in to continue.");
+        var store = context.RequestServices.GetRequiredService<SecurityStore>();
+        return () => store.ResolveSession(session.Id, session.Audience) is not null;
+    }
+
     public static bool SessionStillValid(HttpContext context)
     {
         if (Item(context, SessionKey) is not SecuritySession session) return false;

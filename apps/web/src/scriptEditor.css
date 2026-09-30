@@ -65,5 +65,16 @@
 .script-properties p { color: var(--text-secondary); font-size: 11px; line-height: 1.7; }
 .script-properties .script-property-note { font-size: 10px; color: var(--muted); margin: 7px 0 12px; }
 .script-properties .script-remove { color: var(--danger); width: 100%; margin: 12px 0 4px; font-size: 10px; }
+.script-gateway-settings { min-width: 0; grid-column: 1 / -1; border-block: 1px solid var(--border); padding-block: 6px; }
+.script-trigger-options { border: 1px solid var(--border); border-radius: 4px; padding: 10px; margin-block: 12px; font-size: 11px; }
+.script-trigger-options .script-enabled-setting { margin-top: 8px; }
+.script-message-test { padding-top: 4px; }
+.script-message-test .button { margin-top: 8px; width: 100%; }
+.script-event-table small { display: block; color: var(--muted); margin-top: 4px; }
+.script-cancel-run { display: block; font-size: 10px; margin-top: 6px; padding: 5px 8px; }
 @media (max-width: 1400px) { .scripting-grid { grid-template-columns: 185px minmax(280px, 1fr); }.script-properties { grid-column: 1 / -1; }.script-properties fieldset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; }.script-properties h2 { grid-column: 1 / -1; }.script-properties .script-remove { max-width: 230px; } }
 @media (max-width: 800px) { .scripting-grid { display: flex; flex-direction: column; }.script-resource-tree, .script-editor-pane, .script-properties { width: 100%; }.script-resource-tree { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }.console-resource, .script-tree-note { grid-column: 1 / -1; }.script-document-heading { flex-wrap: wrap; }.script-properties fieldset { display: block; }.source-editor-host { height: 360px; }.script-tree-heading { font-size: 9px; padding-left: 8px; }.script-tree-heading > span { gap: 4px; }.script-resource-item { padding: 8px; } }
+.source-editor-validation { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.source-editor-validation .button { flex: none; padding: 5px 9px; font-size: 12px; }
+.source-editor-validation .syntax-invalid { color: var(--danger, #b42318); overflow-wrap: anywhere; }
+.source-editor-validation .syntax-valid { color: var(--text); }

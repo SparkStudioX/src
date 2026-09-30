@@ -8,13 +8,16 @@ import { resolvePath } from "./api";
 import { useFormInputs } from "./inputStateBindings";
 import { queryRowFormKey } from "./queryRepeater";
 import { parameterBindingInputs, parameterBindingState, resolveParameterBindings } from "./templateParameterBindings";
-import { useComponentEvents } from "./ComponentEvents";
+import { useComponentEvents, usePythonComponentEvents } from "./ComponentEvents";
+import type { PythonEventTransport } from "./pythonComponentEvents";
+import { isPythonUnmount } from "./pythonComponentEvents";
 import { QueryPropertyProvider, useQueryPropertyBindings, useQueryPropertyContext } from "./useQueryPropertyBindings";
 import { useQueryRepeater } from "./useQueryRepeater";
 import { useVisualStyles } from "./VisualStyleContext";
 import { applyVisualStyle } from "./visualStyles";
 import { useLocalization } from "./LocalizationContext";
 import { localizeComponent } from "./localization";
+import { applyPythonUiOverrides } from "./pythonUiModel";
 import Icon from "./Icon";
 import type {
   CanvasComponent,
@@ -29,6 +32,7 @@ import type {
   ResolvedTemplateRow,
   RuntimeParameters,
   ScriptResult,
+  PythonUiAction,
   TableCellEdit,
 } from "./types";
 import {
@@ -74,7 +78,8 @@ export interface ProjectComponentProps {
   ) => void;
   onAutomaticScopedInputChange?: (scope: string, fieldKey: string, value: InputValue) => void;
   onNavigate: (screenId: string) => void;
-  onAction?: (component: CanvasComponent, instance?: InstanceAction) => void;
+  onAction?: (component: CanvasComponent, instance?: InstanceAction, uiAction?: PythonUiAction) => void;
+  onPythonEvent?: PythonEventTransport;
   onTableEdit?: (component: CanvasComponent, edit: TableCellEdit, instance?: InstanceAction) => Promise<ScriptResult>;
   onOpenPopup?: (component: CanvasComponent, instance?: InstanceAction) => void;
   onClosePopup?: () => void;
@@ -99,7 +104,7 @@ export function ProjectComponentView(props: ProjectComponentProps) {
   return (
     <BoundComponent
       {...props}
-      onAction={(component) => props.onAction?.(component)}
+      onAction={(component, uiAction) => props.onAction?.(component, undefined, uiAction)}
       onTableEdit={props.onTableEdit ? edit => props.onTableEdit!(props.component, edit) : undefined}
       onOpenPopup={(component) => props.onOpenPopup?.(component)}
       actionBusy={props.actionBusyId === props.component.id}
@@ -115,7 +120,7 @@ function BoundTemplateInstance(props: TemplateInstanceProps) {
   const localization = useLocalization();
   const localized = localizeComponent(props.component, localization.catalog, localization.locale);
   const styled = applyVisualStyle(localized.component, styles, props.inheritedAppearance);
-  const authored = styled.component;
+  const authored = props.preview ? applyPythonUiOverrides(styled.component, applicationState) : styled.component;
   const result = evaluateComponentBindings(authored, {
     components: props.components ?? [props.component], tags: props.tags, parameters: props.parameters,
     inputs: props.inputs ?? {}, communicationLost: props.communicationLost, state: applicationState?.values,
@@ -127,8 +132,11 @@ function BoundTemplateInstance(props: TemplateInstanceProps) {
   const queryWaiting = errors.length > 0 && errors.every(([target]) => querySamples[target as keyof typeof querySamples]?.status === "loading");
   const queryErrors = errors.filter(([target]) => Object.hasOwn(props.component.props.queryBindings ?? {}, target));
   const queryRefreshing = Object.values(querySamples).some(sample => sample?.status === "ready" && sample.refreshing);
+  const python = usePythonComponentEvents({ component: props.component, components: props.components ?? [props.component], parameters: props.parameters,
+    identity: JSON.stringify([props.component, props.parameters, props.publishedAt, props.preview, props.queryScope]),
+    enabled: props.preview && !props.readOnly, transport: props.onPythonEvent, onAutomaticInputChange: props.onAutomaticInputChange });
   useComponentEvents({ component: props.component, evaluated: result.component, components: props.components ?? [props.component], errors: result.errors,
-    parameters: props.parameters, inputs: props.inputs ?? {}, preview: props.preview, scopeKey: props.queryScope, onAutomaticInputChange: props.onAutomaticInputChange });
+    parameters: props.parameters, inputs: props.inputs ?? {}, preview: props.preview, scopeKey: props.queryScope, onAutomaticInputChange: props.onAutomaticInputChange, python });
   const appearance = result.component.props;
   const visible = appearance.visible !== false;
   const enabled = appearance.enabled !== false && errors.length === 0;
@@ -139,7 +147,8 @@ function BoundTemplateInstance(props: TemplateInstanceProps) {
     ...result.component, x: props.component.x, y: props.component.y, width: props.component.width, height: props.component.height,
   };
   const template = props.templates?.find(item => item.id === view.props.templateId);
-  const caption = appearance.bindings?.text || appearance.queryBindings?.text ? appearance.text ?? "" : resolvePath(appearance.text || template?.name || "Template instance", props.parameters);
+  const caption = appearance.bindings?.text || appearance.queryBindings?.text || Object.hasOwn(applicationState?.propertyOverrides[props.component.id] ?? {}, "text")
+    ? appearance.text ?? "" : resolvePath(appearance.text || template?.name || "Template instance", props.parameters);
   const canInteract = props.preview && enabled && visible && !props.interactionLocked;
   const gate = useRef(false);
   const writeGate = useRef(false);
@@ -166,7 +175,7 @@ function BoundTemplateInstance(props: TemplateInstanceProps) {
       <TemplateInstances {...props} component={view} inheritedAppearance={inheritedAppearance}
         onAutomaticScopedInputChange={props.onAutomaticScopedInputChange ?? props.onScopedInputChange}
         interactionLocked={props.interactionLocked || !enabled || !visible}
-        onAction={(leaf, instance) => { if (writeGate.current) props.onAction?.(leaf, instance); }}
+        onAction={(leaf, instance, uiAction) => { if (writeGate.current) props.onAction?.(leaf, instance, uiAction); }}
         onTableEdit={canInteract && !props.readOnly && props.onTableEdit ? (leaf, edit, instance) => writeGate.current
           ? props.onTableEdit!(leaf, edit, instance) : Promise.reject(new Error("This template form is no longer interactive.")) : undefined}
         onOpenPopup={(leaf, instance) => { if (gate.current) props.onOpenPopup?.(leaf, instance); }}
@@ -290,7 +299,9 @@ function TemplateInstances(props: TemplateInstanceProps) {
         }}
       >
         {resolvedRows.map(({ row, context }) => {
-          const queryContext = JSON.stringify([props.screenId, component.id, component.type, props.parentPath, preview, publishedAt, queryRows.key,
+          // A saved template/row has no query owner. Connection transitions must
+          // not remount it just because the dormant query hook's key changed.
+          const queryContext = JSON.stringify([props.screenId, component.id, component.type, props.parentPath, preview, publishedAt, queryBacked ? queryRows.key : undefined,
             component.props.parameterBindings, boundAncestor ? parentBindingInputs : undefined, hasStateSource ? parentBindingState : undefined, template.instanceState]);
           // Every descendant of a query row owns local edits too. Reusing those
           // edits after its template or effective form context changes is unsafe.
@@ -308,7 +319,7 @@ function TemplateInstances(props: TemplateInstanceProps) {
 /** Dynamic rows own their edits. A changed key remounts just that form, and a removed row releases it. */
 function TemplateInstanceCell({ component, templates, template, row, context, dynamic, scale, cellHeight, screenId, tags,
   scopedInputs = {}, onScopedInputChange, onAutomaticScopedInputChange, communicationLost = false, preview, queryScope, publishedAt,
-  onNavigate, onAction, onTableEdit, onOpenPopup, onClosePopup, actionBusyId, interactionLocked, inheritedAppearance, readOnly,
+  onNavigate, onAction, onPythonEvent, onTableEdit, onOpenPopup, onClosePopup, actionBusyId, interactionLocked, inheritedAppearance, readOnly,
   parentPath = [], templateAncestors = [], dynamicAncestor = false,
   querySourceParameters, parentBindingInputs, parentBindingState,
 }: TemplateInstanceProps & { template: Template; row?: TemplateRow | ResolvedTemplateRow; context: RuntimeParameters; dynamic: boolean; scale: number; cellHeight: number }) {
@@ -377,6 +388,7 @@ function TemplateInstanceCell({ component, templates, template, row, context, dy
                         inheritedAppearance={inheritedAppearance} interactionLocked={interactionLocked} readOnly={readOnly}
                         queryScope={queryScope} publishedAt={publishedAt} communicationLost={communicationLost}
                         onScopedInputChange={onScopedInputChange} onNavigate={onNavigate} onAction={onAction}
+                        onPythonEvent={onPythonEvent ? (target, invocation, nested) => onPythonEvent(target, invocation, nested ?? instance) : undefined}
                         onAutomaticScopedInputChange={onAutomaticScopedInputChange}
                         onTableEdit={onTableEdit} onOpenPopup={onOpenPopup} onClosePopup={onClosePopup} actionBusyId={actionBusyId} />
                     ) : (
@@ -394,7 +406,9 @@ function TemplateInstanceCell({ component, templates, template, row, context, dy
                         onNavigate={onNavigate}
                         onInputChange={form.assign}
                         onAutomaticInputChange={form.assignAutomatic}
-                        onAction={() => { if (lifetime.current && inputGate.current) onAction?.(leaf, instance); }}
+                        onAction={(_component, uiAction) => { if (lifetime.current && inputGate.current) onAction?.(leaf, instance, uiAction); }}
+                        onPythonEvent={onPythonEvent ? (target, invocation) => (lifetime.current || isPythonUnmount(invocation.eventHandler)) && !readOnly
+                          ? onPythonEvent(target, invocation, instance) : Promise.reject(new Error("This template event owner has closed.")) : undefined}
                         onTableEdit={onTableEdit ? edit => lifetime.current && inputGate.current ? onTableEdit(leaf, edit, instance)
                           : Promise.reject(new Error("This template form is no longer interactive.")) : undefined}
                         onOpenPopup={() => { if (lifetime.current) onOpenPopup?.(leaf, instance); }}

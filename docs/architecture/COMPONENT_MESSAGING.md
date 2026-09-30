@@ -1,10 +1,10 @@
 # Component messaging
 
-Component messages route a JSON object to mounted components in the current browser project run. A button can send a saved message and browser JavaScript can call `app.sendMessage`. Receivers use their own form, parameter and state context. Supported components may receive in JavaScript or Python; Python executes saved code on the gateway with Operate permission and validated UI effects. Password controls and template/repeater wrappers remain JavaScript-only. Routing remains local to the browser run regardless of receiver language. See [Python component events](PYTHON_COMPONENT_EVENTS.md).
+Component messages route a JSON object to mounted components. A native message button and browser JavaScript `app.sendMessage` route within the current browser project run. Gateway Python `system.ui.sendMessage` can instead send to active operator tabs for the same project, or one selected tab. Both routes invoke the same saved component receivers in their own form, parameter and state context. Components, including template/repeater wrappers, may receive in JavaScript or Python; Python executes saved code on the gateway with Operate permission and validated UI effects. Password-control message handlers can change appearance or flags but cannot read or write password text/value; their automatic input snapshot excludes secrets. See [Python component events](PYTHON_COMPONENT_EVENTS.md).
 
 ## Send from a button
 
-Select a Button, choose the **Send message** action, and set its message type, scope and JSON object payload. For a button-to-label example, use type `workshop.note`, scope `screen`, and payload `{ "text": "Hello", "from": "Button" }`. Its saved properties are:
+Select a Button, choose **Edit actions & events → On click**, select the **Send message** action, and set its message type, scope and JSON object payload. For a button-to-label example, use type `workshop.note`, scope `screen`, and payload `{ "text": "Hello", "from": "Button" }`. Its saved properties are:
 
 ```json
 {
@@ -21,7 +21,7 @@ The payload is literal JSON. Use a browser event when it needs current input or 
 
 ## Send from JavaScript
 
-JavaScript input events, component lifecycle/message handlers and browser startup/screen-open scripts receive `app.sendMessage`. Python message-send helpers are not included. For example, a template input's JavaScript commit event can send its new value to another control in that same template instance:
+JavaScript input events, component lifecycle/message handlers and browser startup/screen-open scripts receive `app.sendMessage`. This local helper does not contact other browser tabs. For example, a template input's JavaScript commit event can send its new value to another control in that same template instance:
 
 ```javascript
 const receipt = app.sendMessage(
@@ -44,7 +44,7 @@ Subscriptions match both message type and scope exactly. A screen listener does 
 
 ## Receive in a component
 
-Select the receiving component and choose **Edit message handlers**. Use **Add handler** to create a stable ID, then set the message type, scope and language. New supported handlers default to Python; existing JavaScript remains unchanged. The language selector keeps separate source drafts and applies only the selected language. Apply, save and publish. IDs are unique within the component. A component may listen for the same type at different scopes, but cannot repeat the same type-and-scope pair.
+Select the receiving component and choose **Edit actions & events → Messages**. Use **Add handler** to create a stable ID, then set the message type, scope and language. New supported handlers default to Python; existing JavaScript remains unchanged. The language selector keeps separate source drafts and applies only the selected language. Apply the complete action/event draft, save and publish. IDs are unique within the component. A component may listen for the same type at different scopes, but cannot repeat the same type-and-scope pair.
 
 A Python receiver can change its unbound text directly:
 
@@ -52,7 +52,7 @@ A Python receiver can change its unbound text directly:
 self.text = str(event.payload["text"])
 ```
 
-Python requires Operate permission in the published application or administrator-enabled Live actions in Preview. Password controls and template/repeater wrappers cannot own Python handlers; their ordinary child components can. Mount/unmount remains JavaScript-only.
+Python requires Operate permission in the published application or administrator-enabled Live actions in Preview. Wrappers use their containing form; ordinary child components use their template instance or repeater row. Password-control receivers retain redacted text/value access. Mount/unmount also support Python, subject to their separate lifecycle and teardown rules.
 
 For a JavaScript receiver, declare a string state key such as screen `note`, bind the label's Text to that key, and use this body:
 
@@ -79,11 +79,11 @@ Each recipient gets its own payload copy. Mutating a sender's object after sendi
 
 ## Bounds and lifecycle
 
-Each component supports at most 16 handlers. Handler IDs contain 1–80 ASCII letters, digits, underscores or hyphens, starting with a letter or underscore. Message types are trimmed text of 1–80 characters without control characters. Bodies are nonempty source text of at most 65,536 characters. Saving validates the definition shape; the editor additionally checks JavaScript syntax without execution. CPython checks Python syntax when the live event executes. Unknown fields, unsupported scopes/languages and misplaced definitions are rejected before saving or importing.
+Each component supports at most 16 handlers. Handler IDs contain 1–80 ASCII letters, digits, underscores or hyphens, starting with a letter or underscore. Message types are trimmed text of 1–80 characters without control characters. Bodies are nonempty source text of at most 65,536 characters. Saving validates the definition shape. **Check syntax** in the shared source editor parses JavaScript locally or asks CPython to compile Python without executing it; failures show diagnostics and positions. Syntax validation is not proof of successful execution. Unknown fields, unsupported scopes/languages and misplaced definitions are rejected before saving or importing.
 
 Payloads must be JSON objects with at most 64 KiB of serialized UTF-8 JSON, 4,096 nodes and 16 nested levels. The root is depth zero and counts as one node. Arrays, objects, primitive values and null each count; object keys do not. Numbers must be finite, and integer values must be exactly representable as safe JavaScript integers. The browser rejects cycles, non-JSON values, class instances, getters, sparse arrays and hidden or symbol properties before serialization.
 
-One project run supports up to 4,096 registered handlers. Each component shares a 32-item serial queue for automatic lifecycle, property and message events. JavaScript has a two-second asynchronous deadline. Python has a two-second gateway execution limit and a three-second browser response guard including transport. A shared coordinator limits continuous property/message cascades to 128 events and event rate to 512 per second; message sends also have a 512-per-second limit. Queue rejection or a loop guard reduces accepted delivery counts and emits diagnostics. Reopen the screen or restart Preview after correcting a sender loop.
+One project run supports up to 4,096 registered handlers. Each component shares a 32-item serial queue for automatic lifecycle, property and message events. JavaScript has a two-second asynchronous deadline. Python has a combined two-second gateway queue-and-execution limit and a three-second browser response guard including transport; gateway admission is bounded separately as described in [Python component events](PYTHON_COMPONENT_EVENTS.md). A shared coordinator limits continuous property/message cascades to 128 events and event rate to 512 per second; message sends also have a 512-per-second limit. Queue rejection or a loop guard reduces accepted delivery counts and emits diagnostics. Reopen the screen or restart Preview after correcting a sender loop.
 
 Unmounting a component, closing its popup, leaving the screen, switching Preview mode or replacing the project run retires its subscriptions. Stale helpers cannot send into a new run, and timed-out handlers cannot use helpers to write late results. There is no persistence, replay or delivery to a screen that is not mounted.
 
@@ -91,7 +91,40 @@ Designer Preview starts in **Live read-only** with authored JavaScript and messa
 
 Python receiver invocations share the component's bounded Python queue and retain gateway permission, deadline and concurrency checks. Failed, expired or conflicting UI responses do not apply partial effects. Gateway tag/database writes are immediate and cannot be rolled back by discarding a UI response. Browser and Python scripts are trusted authored code, not sandboxes.
 
-The `app.sendMessage` API routes inside the browser. It may invoke a saved Python component receiver through the gateway, but does not invoke gateway message resources, deliver across browser tabs or gateways, or target remote servers. Gateway-to-operator push is outside this feature. See [gateway events](GATEWAY_EVENTS.md) for Python gateway message request handlers.
+The `app.sendMessage` API routes inside the browser. It may invoke a saved Python component receiver through the gateway, but does not invoke gateway message resources or deliver across tabs. For gateway-to-operator sends use the Python API below. See [gateway events](GATEWAY_EVENTS.md) for the separate `system.util.sendMessage`/`sendRequest` API that invokes gateway message resources.
+
+## Send from gateway Python to operator tabs
+
+Project gateway events, published Python button/component handlers, libraries called by those handlers, and authorized Python console/Live Preview executions can use:
+
+```python
+# Every currently connected operator tab of this project.
+receipt = system.ui.sendMessage("orders.changed", {"orderId": "WO-104", "text": "Order updated"})
+print(receipt["status"], receipt["queued"], receipt["dropped"])
+
+# Inventory contains only active operator tabs of this project.
+sessions = system.ui.getSessionInfo()
+for session in sessions:
+    print(session["sessionId"], session["username"], session["publishedAt"])
+
+# Send to one server-issued tab identity from that inventory.
+if sessions:
+    receipt = system.ui.sendMessage("orders.changed", {"text": "Selected station"}, sessionId=sessions[0]["sessionId"])
+```
+
+`sendMessage(messageType, payload=None, sessionId=None)` defaults the payload to `{}` and recipients to every active same-project operator tab. `getSessionInfo()` returns a list containing `sessionId`, `projectId`, `publishedAt` and `username`. No project override is accepted: the running script's project supplies routing authority. Tabs of another project are not listed and cannot receive, even if their ID is known. Designer Preview can send deliberately through Live actions, but it does not register itself as an operator recipient.
+
+Gateway messages always enter each recipient's local bus with scope **session**. Configure the receiving component's handler with that exact type and scope. Current main-screen, template-row and popup receivers participate; unmounted screens do not. The gateway does not execute or return a receiver's result synchronously. Each recipient still uses its own state, current form and permissions. A viewer can run permitted local JavaScript receivers, but receipt of a message never grants Operate permission to execute a Python receiver.
+
+The returned receipt has `messageId`, `eligible`, `queued`, `dropped` and `status`. Status is `queued`, `queueFull` or `noRecipients`. `queued` means admitted to an in-memory tab mailbox, not delivered, executed or committed. A disconnected target returns `noRecipients`; a full queue reports dropped recipients. Messages are best effort: no durable queue, acknowledgement of browser execution, replay, retry or exactly-once guarantee is supplied. A message already sent is an immediate gateway side effect; a later script error or discarded UI response does not retract it. Use authoritative tags/database records for application state and use messages as notifications to refresh or display that state.
+
+### Session transport and boundaries
+
+The runtime registers with `POST /api/projects/{projectId}/runtime/sessions` and the current `publishedAt`. The server issues a fresh random tab ID bound to that project, publication, account and authenticated operator login. This is distinct from the authentication cookie and from browser-local state. The runtime opens authenticated SSE at `/runtime/sessions/{sessionId}/messages`; it multiplexes `ready`, `tags` and `message` events on one connection. Cleanup uses `DELETE /runtime/sessions/{sessionId}`. Registration and deletion require the usual operator View permission and CSRF token. Reads require the same authenticated owner, project and live permission. There is no anonymous or browser-authored broadcast endpoint.
+
+Disconnect closes the mailbox and discards queued work. Reconnect registers a new ID; IDs must not be saved as durable station identifiers. Revoked login, account/permission changes, project archive or publication replacement retire the old connection. Browser identity and publication guards discard late stream events after navigation or replacement. A same-project screen change leaves the tab connection active and routes subsequent messages to the new mounted listeners. Changing projects or reloading replaces the connection.
+
+Payload shape, type and 64 KiB/4,096-value/16-level limits match local messages. Each tab mailbox holds at most 32 messages, with 512 pending gateway-wide. Sends are limited to 128 per project per second and 512 per gateway per second; exceeding a send limit raises a Python error. A queued message expires after five seconds. Pending or stalled connections expire after 30 seconds without stream progress. Registration is bounded to 32 tabs per operator login, 256 per project and 1,024 gateway-wide. These bounds prevent unbounded backlog; they are not a recommended production sizing claim.
 
 ## Workshop
 

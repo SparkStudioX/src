@@ -2,14 +2,65 @@ import { useEffect, useRef, useState } from "react";
 import { useApplicationStateContext } from "./applicationState";
 import type { ApplicationStateContext } from "./applicationState";
 import { ComponentEventCoordinator, ComponentEventLifecycle, componentEventSamples } from "./componentEventModel";
+import { capturePythonUiAction } from "./pythonUiModel";
+import { completePythonEvent, isPythonUnmount, PythonComponentEventQueue, PythonMountBarrier, withoutPasswordInputs } from "./pythonComponentEvents";
+import { scriptFailureMessage } from "./api";
+import type { PythonEventRunner, PythonEventTransport, EventOrigin } from "./pythonComponentEvents";
 import type { CanvasComponent, InputValue, InputValues, RuntimeParameters } from "./types";
+import type { AutomaticInputAssignment } from "./inputStateBindings";
 import "./componentEvents.css";
+
+/** Captures fresh UI revisions when a queued Python event starts, retaining its owner's lifetime. */
+export function usePythonComponentEvents(options: {
+  component: CanvasComponent; components: CanvasComponent[]; parameters: RuntimeParameters;
+  identity: string; enabled: boolean; transport?: PythonEventTransport; onAutomaticInputChange?: AutomaticInputAssignment;
+}): PythonEventRunner | undefined {
+  const state = useApplicationStateContext();
+  const queue = useRef<PythonComponentEventQueue | null>(null);
+  if (!queue.current) queue.current = new PythonComponentEventQueue();
+  const lifetime = useRef({ active: true, epoch: 0, identity: options.identity });
+  const mountRef = useRef<{ identity: string; barrier: PythonMountBarrier } | null>(null);
+  if (!mountRef.current || mountRef.current.identity !== options.identity)
+    mountRef.current = { identity: options.identity, barrier: new PythonMountBarrier() };
+  const mountBarrier = mountRef.current.barrier;
+  lifetime.current.identity = options.identity;
+  useEffect(() => { lifetime.current.active = true; return () => { lifetime.current.active = false; lifetime.current.epoch++; }; }, []);
+  if (!state || !options.enabled || !options.transport) return undefined;
+  // Retained render snapshots survive a parent scope retiring before React runs
+  // child cleanup. The gateway validates them as reads, never as authority.
+  const cleanupUi = options.component.props.componentEvents?.unmount?.language === "python"
+    ? structuredClone({ state: state.values, properties: state.propertyOverrides }) : undefined;
+  return async (handler, event, inputs, parameters, signal) => {
+    const epoch = lifetime.current.epoch;
+    const mounting = handler.family === "lifecycle" && handler.type === "mount";
+    if (!mounting && !isPythonUnmount(handler) && options.component.props.componentEvents?.mount?.language === "python")
+      await mountBarrier.wait(signal);
+    try { return await queue.current!.run(signal, async currentSignal => {
+      if (isPythonUnmount(handler)) {
+        if (!cleanupUi) throw new Error("No captured Python cleanup context is available.");
+        const action = { ui: cleanupUi, isCurrent: () => false, apply() { throw new Error("Unmount cannot change retired UI state."); } };
+        const result = await options.transport!(options.component, { eventHandler: handler, event,
+          inputs: withoutPasswordInputs(options.components, inputs), parameters, uiAction: action, signal: currentSignal });
+        if (result.success) window.dispatchEvent(new Event("sparkstudio:refresh-data"));
+        if (!result.success) throw new Error(scriptFailureMessage(result.stderr));
+        if (result.uiEffects?.length) throw new Error("Unmount returned forbidden local UI effects.");
+        return result.stdout?.trim().slice(0, 2500) ?? "";
+      }
+      const live = () => !currentSignal.aborted && lifetime.current.active && lifetime.current.epoch === epoch && lifetime.current.identity === options.identity;
+      const action = capturePythonUiAction(state, options.components, live, { assign: options.onAutomaticInputChange, parameters: options.parameters });
+      return completePythonEvent(() => options.transport!(options.component, { eventHandler: handler, event,
+        inputs: withoutPasswordInputs(options.components, inputs), parameters, uiAction: action, signal: currentSignal }), action, currentSignal,
+        () => window.dispatchEvent(new Event("sparkstudio:refresh-data")));
+    }); } finally { if (mounting) mountBarrier.finish(); }
+  };
+}
 
 /** Automatic events use local helpers independently of user interaction gates. */
 export function useComponentEvents(options: {
   component: CanvasComponent; evaluated: CanvasComponent; components: CanvasComponent[]; errors: Record<string, string>;
   parameters: RuntimeParameters; inputs: InputValues; inputValue?: InputValue | null; inputError?: string | null;
   preview: boolean; scopeKey?: string; onAutomaticInputChange?: (field: string, value: InputValue) => void;
+  python?: PythonEventRunner;
 }) {
   const state = useApplicationStateContext();
   const ref = useRef<ComponentEventLifecycle | null>(null);
@@ -18,13 +69,18 @@ export function useComponentEvents(options: {
   if (!fallback.current) fallback.current = new ComponentEventCoordinator();
   const coordinator = state?.store?.componentEvents ?? fallback.current;
   const key = JSON.stringify([state?.key, options.scopeKey, options.component.id, options.component.type,
-    options.component.props.componentEvents, options.parameters,
+    options.component.props.componentEvents, options.component.props.messageHandlers, options.parameters, Boolean(options.python),
     options.components.map(component => [component.id, component.type, component.props.fieldKey, component.props.stateBinding,
       component.props.min, component.props.max, component.props.options, component.props.optionsSource])]);
-  const samples = componentEventSamples(options.component, options.evaluated, options.errors, options.parameters, options.inputValue, options.inputError);
-  const enabled = options.preview && Boolean(options.component.props.componentEvents);
+  const samples = componentEventSamples(options.component, options.evaluated, options.errors, options.parameters, options.inputValue, options.inputError,
+    state?.propertyOverrides[options.component.id]);
+  const origins = Object.fromEntries((options.component.props.componentEvents?.propertyChange?.properties ?? []).map(property => [property,
+    options.component.props.bindings?.[property] || options.component.props.queryBindings?.[property] ? "binding"
+      : Object.hasOwn(state?.propertyOverrides[options.component.id] ?? {}, property) ? "script" : property === "value" ? "input" : "configuration"])) as Record<string, EventOrigin>;
+  const enabled = options.preview && Boolean(options.component.props.componentEvents || options.component.props.messageHandlers?.length);
   ref.current.prepare(enabled ? { key, component: options.component, components: options.components, inputs: options.inputs, parameters: options.parameters,
-    state: state?.api, stateValues: state?.values, isCurrent: state?.isCurrent, setInput: options.onAutomaticInputChange, coordinator } : undefined, samples);
+    state: state?.api, stateValues: state?.values, isCurrent: state?.isCurrent, setInput: options.onAutomaticInputChange, coordinator, python: options.python, origins,
+    messages: state ? { bus: state.store.componentMessages, screenKey: state.screenScope.key, instanceKey: state.instanceScope?.key ?? state.screenScope.key } : undefined } : undefined, samples);
   useEffect(() => { const runner = ref.current!; runner.activate(); return () => runner.deactivate(); }, []);
   // Commit on each resolved sample or source snapshot change. Handler execution
   // itself is scheduled outside React's effect stack by the lifecycle.

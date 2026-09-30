@@ -26,7 +26,8 @@ function load(name, harness = false) {
   }}).outputText.replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
     .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, dependency) => {
       const stub = harness && name === 'inputStateBindings' && dependency === 'react' ? hookUrl : harness && name === 'templates' ? ({react: hookUrl, './BoundComponent': leafUrl,
-        './applicationState': stateUrl, './useQueryRepeater': queryUrl, './ComponentEvents': url('export const useComponentEvents=()=>{};'),
+        './applicationState': stateUrl, './useQueryRepeater': queryUrl, './ComponentEvents': url('export const useComponentEvents=()=>{}; export const usePythonComponentEvents=()=>undefined;'),
+        './VisualStyleContext': url('export const useVisualStyles=()=>undefined;'), './LocalizationContext': url('export const useLocalization=()=>({});'),
         './useQueryPropertyBindings': url('export const useQueryPropertyBindings=()=>({});export const useQueryPropertyContext=()=>undefined;export const QueryPropertyProvider=({children})=>children;')})[dependency] : undefined;
       return prefix + JSON.stringify(stub ?? (dependency.startsWith('./') ? load(dependency.slice(2), harness) : pathToFileURL(require.resolve(dependency)).href));
     });
@@ -250,7 +251,8 @@ await check('four-level rendering and bindings share the containing screen state
   const label = c('state', 'label', {bindings: {text: {expression: 'count', references: {count: {kind: 'screenState', key: 'count'}}}, x: {expression: 'count * 10', references: {count: {kind: 'screenState', key: 'count'}}}}});
   const templates = [1, 2, 3, 4].map(n => t(`t${n}`, n === 4 ? [label] : [embed(`i${n + 1}`, `t${n + 1}`)]));
   const root = embed('i1', 't1');
-  const html = renderToStaticMarkup(React.createElement(ApplicationStateProvider, {value: {key: 'containing-screen', values: {session: {}, screen: {count: 7}}}},
+  const store = new ApplicationStateStore(); store.configure('nested-test'); const scope = store.activateScreen('containing-screen', {count: {type: 'number', value: 7}});
+  const html = renderToStaticMarkup(React.createElement(ApplicationStateProvider, {value: {...store.context(scope), store}},
     React.createElement(RealView, {...base, component: root, components: [root], templates, onNavigate() {}})));
   assert.match(html, />7</); assert.match(html, /left:70px/); assert.doesNotMatch(html, /Binding error/);
   assert.equal((html.match(/data-instance-path=/g) || []).length, 4);

@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet(5091)][int]$Port = 5091,
-    [string]$ExpectedVersion = '0.2.0-preview.8',
+    [string]$ExpectedVersion = '0.2.0-preview.9',
     [string]$BuildResultPath,
     [string]$WorkshopDirectory
 )

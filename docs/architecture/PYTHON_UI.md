@@ -2,7 +2,7 @@
 
 ## Contract
 
-A button's **Run Python event** executes CPython on the gateway. Python input change/commit, property-change and component-message handlers use the same scoped UI bridge; see [Python component events](PYTHON_COMPONENT_EVENTS.md) for their event data and saved-handler invocation contract. The gateway can return a validated batch of presentation changes to the calling browser. This lets an application author use Python for both a local heading change and a shared data update without executing Python in the browser.
+A button's **Run Python script** action executes CPython on the gateway. Python input change/commit, mount/unmount, property-change and component-message handlers use the same scoped UI bridge; see [Python component events](PYTHON_COMPONENT_EVENTS.md) for their event data and saved-handler invocation contract. The gateway can return a validated batch of presentation, form-value and state changes to the calling browser; unmount is read-only because its component has retired. This lets an application author use Python for both a local heading change and a shared data update without executing Python in the browser.
 
 The UI context belongs to the calling component's current screen, popup or concrete template/repeater instance. A message handler uses its receiving component's context. It is not a global component tree. A property assignment does not change the saved project, the publication or another operator's screen. Shared application data belongs in gateway tags or database records, with each interested screen binding to that data.
 
@@ -10,7 +10,9 @@ This increment uses a request snapshot and response effects. It does not maintai
 
 ## Authoring
 
-Select a button, choose **Run Python event**, and edit its existing Python event. Save before testing a new component in Designer Live Preview. Publish to make the action available to operators.
+Select a button, choose **Edit actions & events → On click → Run Python script**, and edit its source alongside the component's lifecycle and message handlers. Apply records all action/event changes in one undo step; Cancel discards them. Save before testing a new component in Designer Live Preview. Publish to make the action available to operators.
+
+**Check syntax** compiles Python on the gateway without executing it; JavaScript is parsed locally. Use Live Preview to check runtime behavior and component context.
 
 To change the calling button's text:
 
@@ -54,14 +56,26 @@ Outside a template, `self.parent.custom` refers to screen state. A popup has its
 | `system.ui.setState(scope, key, value)` | Stage a typed state change for `session`, `screen` or `instance` |
 | `system.ui.getProperty(componentId, property)` | Read an authored unbound scalar or prior runtime override, including this invocation's writes |
 | `system.ui.setProperty(componentId, property, value)` | Stage an allowed property change in the calling form |
+| `self.value`, `self.props.value` | Read the captured non-password input value, or stage a validated edit to an unbound writable input |
 
-Property support is deliberately explicit: `text`, `enabled`, `visible`, `color`, `backgroundColor`, `foregroundColor`, `borderColor`, `borderWidth` and `fontSize`. Text is at most 4,096 characters. Flags require Boolean values; colors require a hex color; border width is 0–32 and font size is 1–256. Password components and template/repeater wrappers are not property targets. Input values arrive separately in the `inputs` snapshot; this UI API does not simulate typing or submit another action.
+Presentation property support is deliberately explicit: `text`, `enabled`, `visible`, `color`, `backgroundColor`, `foregroundColor`, `borderColor`, `borderWidth` and `fontSize`. Text is at most 4,096 characters. Flags require Boolean values; colors require a hex color; border width is 0–32 and font size is 1–256. Password components expose appearance and flags, but text/value are blocked. Template/repeater wrappers expose this same presentation subset within their containing form; their template IDs, row data and child forms remain inaccessible.
 
-Password controls and template/repeater wrappers also cannot own automatic Python handlers; ordinary child components inside templates and repeated rows can. Mount/unmount remains JavaScript-only. Explicit button submissions validate their form before execution. Automatic Python events receive bounded snapshots of incomplete form edits, including empty numeric text, so their scripts can implement validation; those snapshots omit password fields and are not validated submissions.
+Template/repeater wrappers support Python lifecycle/property/message handlers in their containing form; `self.parent.custom` refers to that form's screen/template state. Ordinary child components retain private instance/row context. Password controls permit redacted lifecycle/property/message Python but not Python input change/commit. Explicit button submissions validate their form before execution and can carry deliberately submitted passwords through `inputs`; `self` never exposes password text/value. Automatic Python events receive bounded snapshots of incomplete form edits, including empty numeric text, so their scripts can implement validation; those snapshots omit password fields and are not validated submissions.
 
-Reading or writing a property with an expression or query binding is rejected. Update its state, tag or query source instead. This prevents a Python assignment from silently detaching or hiding a live binding. Property reads do not promise computed CSS or browser DOM values.
+## Local input values
 
-Generic gateway events and the script console have no calling UI context. These helpers report that the UI context is unavailable there. They do not guess a browser session or broadcast a local effect.
+For non-password inputs, `self.value`, `self.props.value` and `system.ui.getProperty(componentId, "value")` read the invocation's captured input value. Reads may return `None` or incomplete numeric text from an automatic edit. Assignments validate the target's scalar type, numeric range, static choices and date format; text is limited to 4,096 characters. For example:
+
+```python
+self.getSibling("quantity").value = 12
+self.getSibling("note").value = "Ready for inspection"
+```
+
+The change is staged as a dedicated input effect and applied atomically with the invocation's other UI effects. It does not synthesize change/commit events, submit another action or alter saved defaults. Subsequent `self.value` reads see staged writes; `inputs` remains the original snapshot. Targets must be in the same form. Password, non-input, read-only, tag-seeded, state-bound, query-choice/mapped or expression/query-bound values reject assignment; update their source explicitly. A newer edit to any targeted field invalidates the whole response, including edits away and back to the original value. Unrelated field edits are preserved. Forms in separate popups, template placements and repeater rows remain independent. Unmount input assignments are rejected along with all other retired UI changes.
+
+Reading or writing a presentation property with an expression or query binding is rejected. Update its state, tag or query source instead. This prevents a Python assignment from silently detaching or hiding a live binding. Property reads do not promise computed CSS or browser DOM values. Non-password input `value` reads use the captured form value even when it has a binding; assignments still reject bound targets.
+
+Generic gateway events and the script console have no calling UI context. The state/property helpers above report that the UI context is unavailable there; they do not guess a browser session or broadcast a local effect. The separate notification helpers `system.ui.sendMessage` and `system.ui.getSessionInfo` are available in the executing project's Python context even without a calling component. They address active same-project operator tabs and invoke session-scoped handlers, as described in [component messaging](COMPONENT_MESSAGING.md).
 
 ## Shared changes across operators
 
@@ -83,7 +97,7 @@ Avoid using a shared tag for personal form drafts, selections or popup visibilit
 
 ## Execution, ownership and failure
 
-1. The browser captures typed state and existing property overrides for the calling form at click time.
+1. The browser captures typed state, current form values and existing property overrides for the calling form at click time.
 2. Runtime resolves the button, source code, declarations and target components from one published project snapshot. Operate permission, operator audience, CSRF and publication checks remain in force.
 3. CPython runs on the gateway. Every UI helper call is validated against that captured project context. Valid writes are staged and visible to later reads within the invocation.
 4. Only a successful action returns the staged `uiEffects`. The browser validates the complete batch before applying any change.
@@ -91,7 +105,7 @@ Avoid using a shared tag for personal form drafts, selections or popup visibilit
 
 Designer Live Preview uses the existing administrator-only script endpoint with a saved-draft component identity. The gateway resolves that identity against its saved project and validates the same UI contract. Both saved screens and standalone templates can be previewed; a standalone template has private instance state and no containing screen declarations. Save structural changes before testing. Read-only Preview does not execute the Python action. Preview effects belong only to that Preview run.
 
-The steps above describe button requests. Automatic Python events send a handler selector and event snapshot through their runtime or Preview event endpoints; they never submit executable Python from the browser. The gateway resolves the saved handler and its context, while retaining the same atomic effects, permission, publication and lifetime checks. Their bounded queues and execution limits are described in [Python component events](PYTHON_COMPONENT_EVENTS.md).
+The steps above describe button requests. Automatic Python events send a handler selector and event snapshot through their runtime or Preview event endpoints; they never submit executable Python from the browser. The gateway resolves the saved handler and its context, while retaining the same atomic effects, permission, publication and lifetime checks. Unmounted is a bounded exception to live ownership: it reads the captured departing form, and property/form-value/state assignments fail at the gateway rather than modifying retired UI. Cleanup retains authorization and revision checks and is best effort on navigation, tab close or connection loss. Their bounded queues and execution limits are described in [Python component events](PYTHON_COMPONENT_EVENTS.md).
 
 Failed scripts, invalid UI operations and timeouts discard staged UI effects. Tag writes and database updates retain their existing immediate behavior and are not rolled back by a later Python failure or a discarded browser response. Consequently an action must not treat a local UI acknowledgement as evidence that a business transaction was committed or reversed.
 
@@ -115,11 +129,14 @@ Successful responses can include up to 128 changed targets, bounded to 64 KiB. R
 ```json
 [
   {"kind": "state", "scope": "screen", "key": "title", "value": "Ready"},
-  {"kind": "property", "componentId": "direct-title", "property": "text", "value": "Ready"}
+  {"kind": "property", "componentId": "direct-title", "property": "text", "value": "Ready"},
+  {"kind": "input", "componentId": "note", "value": "Prepared by Python"}
 ]
 ```
 
-The gateway generates these validated effects separately from the script's `result`. An arbitrary returned object cannot create UI effects. The feature adds no general browser-command endpoint and no cross-session UI broadcast facility.
+The gateway generates these validated effects separately from the script's `result`. An arbitrary returned object cannot create UI effects. This response applies only to its originating form. Cross-session notifications use the explicit `system.ui.sendMessage` API and saved component receivers; they do not broadcast arbitrary property assignments or returned UI effect batches.
+
+Input values stay in the existing request `inputs` snapshot, not in `ui.properties`. An input effect names a captured component; the saved component definition supplies its field key, type and constraints. The browser rechecks its current definition and field revision before committing the batch.
 
 ## Workshop and acceptance
 

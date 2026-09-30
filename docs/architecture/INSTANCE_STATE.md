@@ -58,7 +58,7 @@ Individual components display their live binding diagnostics. The saved-graph he
 
 ## Workshop
 
-The independently authored [instance-state workshop](../../examples/instance-state.json) contains two shared templates, two screens and a popup. It needs no database, tags or equipment. Load it with the existing authenticated example-loader workflow, or import the local `artifacts/sparkproj/instance-state.sparkproj` (when present after consolidation; fresh versioned builds use `artifacts/workshops/<version>/projects/`):
+The independently authored [instance-state workshop](../../examples/instance-state.json) contains two shared templates, two screens and a popup. It needs no database, tags or equipment. Load it with the existing authenticated example-loader workflow, or import the local `artifacts/sparkproj/instance-state.sparkproj`:
 
 ```powershell
 node tools/load-example.mjs instance-state

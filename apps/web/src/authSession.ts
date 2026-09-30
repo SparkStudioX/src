@@ -8,6 +8,8 @@ let session: { audience: AuthAudience; projectId: string | null; csrfToken: stri
 };
 let generation = 0;
 const responseGenerations = new WeakMap<Response, number>();
+/** Stream callbacks must reject old credentials before React's effect cleanup runs. */
+export const authSessionRevision = (): number => generation;
 
 /** Tokens stay in memory; cookies remain managed by the gateway and browser. */
 export function configureAuthSession(next: typeof session): void {

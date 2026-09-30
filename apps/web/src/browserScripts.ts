@@ -4,10 +4,11 @@ import { requirePreviewScriptPermission } from "./previewRequest";
 import type { Project, RuntimeStateApi, Screen } from "./types";
 import { BrowserScriptLifecycle } from "./browserScriptModel";
 import type { BrowserPublication } from "./browserScriptModel";
+import type { ComponentMessageSender } from "./componentMessageModel";
 
 // Project authors are trusted. These scripts execute in the operator's browser,
 // with that origin's privileges; this convenience API is not a security sandbox.
-export function useBrowserScripts(project: Project | null, screen: Screen | undefined, notify:(message:string)=>void, navigate:(id:string)=>void, state?:RuntimeStateApi, scopeKey?:string) {
+export function useBrowserScripts(project: Project | null, screen: Screen | undefined, notify:(message:string)=>void, navigate:(id:string)=>void, state?:RuntimeStateApi, scopeKey?:string, sendMessage?:ComponentMessageSender) {
   const [publication,setPublication]=useState<BrowserPublication | null>(null);
   const lifecycle=useRef<BrowserScriptLifecycle | null>(null);
   const current=useRef({project,screen,notify,navigate});
@@ -24,6 +25,7 @@ export function useBrowserScripts(project: Project | null, screen: Screen | unde
     screenName:screen.name,
     state,
     scopeKey,
+    sendMessage,
     notify:message=>current.current.notify(message),
     navigate:id=>{
       if (current.current.project?.screens.some(item=>item.id===id && item.kind!=="popup")) current.current.navigate(id);

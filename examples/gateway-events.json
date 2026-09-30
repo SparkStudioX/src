@@ -1,0 +1,34 @@
+{
+  "name": "Gateway events workshop",
+  "navigation": { "mode": "none", "startupScreenId": "gateway-events", "items": [] },
+  "queries": [],
+  "templates": [],
+  "scripts": {
+    "revision": 0,
+    "resources": [
+      { "id": "event-startup", "name": "Workshop startup", "type": "gateway", "enabled": false, "event": "startup", "timeoutMs": 10000, "threading": "dedicated", "parameters": {}, "code": "logger = system.util.getLogger(\"workshop.events\")\nlogger.info(\"Startup: \" + event.reason)\nresult = {\"type\": event.type, \"reason\": event.reason, \"timestamp\": event.timestamp}\n" },
+      { "id": "event-update", "name": "Workshop update", "type": "gateway", "enabled": false, "event": "update", "timeoutMs": 10000, "threading": "shared", "parameters": {}, "code": "print(\"Project update by\", event.actor)\nresult = {\"reason\": event.reason, \"resources\": event.resources}\n" },
+      { "id": "event-shutdown", "name": "Workshop shutdown", "type": "gateway", "enabled": false, "event": "shutdown", "timeoutMs": 1000, "threading": "dedicated", "parameters": {}, "code": "print(\"Orderly shutdown:\", event.reason)\nresult = {\"type\": event.type, \"timestamp\": event.timestamp}\n" },
+      { "id": "event-timer", "name": "Workshop timer", "type": "gateway", "enabled": false, "event": "timer", "timeoutMs": 10000, "threading": "dedicated", "intervalMs": 10000, "delayType": "fixedDelay", "parameters": {}, "code": "print(\"Timer execution\", event.executionCount)\nresult = {\"executionCount\": event.executionCount, \"timestamp\": event.timestamp}\n" },
+      { "id": "event-tag-change", "name": "Workshop tag change", "type": "gateway", "enabled": false, "event": "tagChange", "timeoutMs": 10000, "threading": "dedicated", "tagPaths": ["[default]Workshop/GatewayEvents/Counter"], "changeTriggers": ["value"], "parameters": {}, "code": "print(\"Tag changed:\", event.tagPath, \"initial:\", event.initialChange)\nprevious = event.previousValue\ncurrent = event.newValue\nresult = {\"tagPath\": str(event.tagPath), \"previous\": previous.value if previous else None, \"current\": current.value if current else None, \"quality\": str(current.quality) if current else None, \"timestamp\": current.timestamp.isoformat() if current else None, \"changes\": event.changes, \"missedEvents\": event.missedEvents}\n" },
+      { "id": "event-message", "name": "Workshop echo", "type": "gateway", "enabled": false, "event": "message", "timeoutMs": 10000, "threading": "dedicated", "requiredPermission": "admin", "parameters": {}, "code": "print(\"Message request by\", event.actor)\nresult = {\"received\": payload, \"executionCount\": event.executionCount}\n" },
+      { "id": "event-scheduled", "name": "Workshop scheduled", "type": "gateway", "enabled": false, "event": "scheduled", "timeoutMs": 10000, "threading": "dedicated", "cron": "*/5 * * * *", "timeZone": "UTC", "parameters": {}, "code": "print(\"Scheduled event:\", event.timestamp)\nresult = {\"type\": event.type, \"timestamp\": event.timestamp}\n" }
+    ]
+  },
+  "screens": [
+    {
+      "id": "gateway-events", "name": "Gateway events", "width": 1120, "height": 790,
+      "components": [
+        { "id": "events-heading", "type": "label", "x": 32, "y": 24, "width": 1056, "height": 52, "props": { "text": "Gateway events · Python without an open browser", "fontSize": 29 } },
+        { "id": "events-intro", "type": "label", "x": 32, "y": 92, "width": 1056, "height": 80, "props": { "text": "Open Designer → Scripting. Seven disabled examples are included. Review each one, enable deliberately, save, then Publish scripts. Publishing this screen does not activate the scripts.", "fontSize": 19 } },
+        { "id": "events-lifecycle", "type": "label", "x": 32, "y": 202, "width": 500, "height": 134, "props": { "text": "LIFECYCLE\nStartup records activation. Update records an author and changed resources. Shutdown records an orderly stop when the host has time to finish.", "fontSize": 20 } },
+        { "id": "events-timing", "type": "label", "x": 578, "y": 202, "width": 510, "height": 134, "props": { "text": "TIMING\nTimer starts at a 10-second fixed delay. Scheduled runs every five minutes in UTC. Inspect next-run times in Gateway events diagnostics.", "fontSize": 20 } },
+        { "id": "events-tags", "type": "label", "x": 32, "y": 364, "width": 500, "height": 158, "props": { "text": "TAG CHANGE\nFor this optional exercise, create a memory tag at [default]Workshop/GatewayEvents/Counter. Enable the observer, then change that test tag. The script only records its values.", "fontSize": 19 } },
+        { "id": "events-message", "type": "label", "x": 578, "y": 364, "width": 510, "height": 158, "props": { "text": "MESSAGES\nEnable and publish Workshop echo. Send a JSON object with Test published handler in Scripting. The administrator-only handler echoes it to Result.", "fontSize": 20 } },
+        { "id": "events-diagnostics", "type": "label", "x": 32, "y": 552, "width": 1056, "height": 88, "props": { "text": "OBSERVE\nGateway events shows active work, next runs and the latest 100 run logs across restarts. Cancellation stops remaining work; it cannot undo completed actions.", "fontSize": 19 } },
+        { "id": "events-check", "type": "checkbox", "x": 32, "y": 676, "width": 1056, "height": 44, "props": { "text": "I reviewed the scripts and their triggers before publishing", "fieldKey": "reviewed", "defaultValue": false } },
+        { "id": "events-note", "type": "label", "x": 32, "y": 730, "width": 1056, "height": 38, "props": { "text": "Synthetic examples only. No device commands, database writes, connections or credentials. This checkbox is local browser state.", "fontSize": 15 } }
+      ]
+    }
+  ]
+}

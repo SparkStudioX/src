@@ -2,6 +2,7 @@
 // Verify generated workshops through the real importer and publisher on an isolated gateway.
 // Imports are archived afterward. No imported action or gateway/client script is executed.
 // SPARKSTUDIO_TEST_AUTH_FILE=.data/... node --import ./tools/test-auth-session.mjs tools/test-workshop-packages.mjs artifacts/workshops/<version>
+// node tools/test-workshop-packages.mjs artifacts/workshops/<version> --verify-only
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile, realpath, stat } from 'node:fs/promises';
@@ -9,19 +10,20 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readZip, sha256 } from './workshop-packages.mjs';
 
-assert.ok(process.argv.length >= 3 && process.argv.length <= 4, 'Provide the generated bundle directory and an optional isolated gateway URL.');
+assert.ok(process.argv.length >= 3 && process.argv.length <= 4, 'Provide the generated bundle directory and optionally --verify-only or an isolated gateway URL.');
+const verifyOnly = process.argv[3] === '--verify-only';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const allowedRoot = await realpath(path.join(root, 'artifacts', 'workshops'));
 const directory = await realpath(path.resolve(process.argv[2]));
 assert.ok(directory.startsWith(allowedRoot + path.sep), 'Generated workshop bundles must be inside artifacts/workshops.');
-const base = new URL(process.argv[3] ?? 'http://127.0.0.1:5091');
+const base = new URL(verifyOnly ? 'http://127.0.0.1:5091' : process.argv[3] ?? 'http://127.0.0.1:5091');
 assert.equal(base.protocol, 'http:');
 assert.ok(['localhost', '127.0.0.1'].includes(base.hostname));
 assert.equal(base.port, '5091', 'Workshop integration checks require the isolated gateway on port 5091.');
 assert.equal(base.pathname, '/');
 assert.ok(!base.username && !base.password && !base.hash && !base.search);
 
-async function bundleFile(relative) {
+async function artifactFile(relative) {
   assert.equal(typeof relative, 'string');
   assert.ok(relative.length > 0 && !relative.includes('\\') && !path.isAbsolute(relative) && relative.split('/').every(part => part && part !== '.' && part !== '..'), 'Bundle paths must be safe relative file names.');
   const resolved = await realpath(path.join(directory, ...relative.split('/')));
@@ -30,13 +32,28 @@ async function bundleFile(relative) {
   return readFile(resolved);
 }
 
-const manifest = JSON.parse(await bundleFile('manifest.json'));
+const manifestBytes = await artifactFile('manifest.json');
+const manifest = JSON.parse(manifestBytes);
 assert.equal(manifest.format, 'sparkstudio-workshops');
 assert.equal(manifest.formatVersion, 1);
+assert.match(manifest.version, /^[A-Za-z0-9][A-Za-z0-9.+-]{0,63}$/);
 assert.equal(manifest.compatibility.packageFormat, 1);
 assert.ok(Array.isArray(manifest.workshops) && manifest.workshops.length > 0);
 assert.equal(new Set(manifest.workshops.map(item => item.id)).size, manifest.workshops.length, 'Workshop identifiers must be unique.');
 assert.ok(Array.isArray(manifest.files) && manifest.files.length > 0);
+const bundleName = `SparkStudio-Workshops-${manifest.version}.zip`;
+const bundleBytes = await artifactFile(bundleName);
+assert.equal((await artifactFile(bundleName + '.sha256')).toString('utf8'), `${sha256(bundleBytes)}  ${bundleName}\n`, 'The standalone ZIP checksum must match its downloadable bytes.');
+const bundleArchive = readZip(bundleBytes);
+// A release is immutable. The maintained artifacts/sparkproj files may have
+// advanced since it was built, so verify and import the bytes inside its ZIP.
+function bundleFile(relative) {
+  assert.equal(typeof relative, 'string');
+  assert.ok(bundleArchive.has(relative), `Standalone ZIP is missing ${relative}`);
+  return bundleArchive.get(relative);
+}
+assert.deepEqual(bundleFile('manifest.json'), manifestBytes, 'The outer manifest must match the archived manifest.');
+assert.deepEqual(bundleFile('SHA256SUMS'), await artifactFile('SHA256SUMS'), 'The outer payload checksums must match the archived checksums.');
 const checksums = new Map();
 for (const line of (await bundleFile('SHA256SUMS')).toString('utf8').trim().split(/\r?\n/)) {
   const match = /^([a-f0-9]{64})  (.+)$/.exec(line);
@@ -56,15 +73,21 @@ for (const file of manifest.files) {
   assert.equal(checksums.get(file.path), file.sha256, `Unlisted checksum: ${file.path}`);
 }
 assert.deepEqual([...checksums.keys()].sort(), [...indexedFiles, 'manifest.json'].sort(), 'The checksum list must cover exactly the manifest and indexed payload files.');
-const bundleName = `SparkStudio-Workshops-${manifest.version}.zip`;
-const bundleBytes = await bundleFile(bundleName);
-assert.equal((await bundleFile(bundleName + '.sha256')).toString('utf8'), `${sha256(bundleBytes)}  ${bundleName}\n`, 'The standalone ZIP checksum must match its downloadable bytes.');
-const bundleArchive = readZip(bundleBytes);
-for (const relative of [...checksums.keys(), 'SHA256SUMS']) {
-  assert.ok(bundleArchive.has(relative), `Standalone ZIP is missing ${relative}`);
-  assert.deepEqual(bundleArchive.get(relative), await bundleFile(relative), `Standalone ZIP differs: ${relative}`);
-}
 assert.equal(bundleArchive.size, checksums.size + 1, 'Standalone ZIP must contain exactly the checksummed files and SHA256SUMS.');
+if (verifyOnly) {
+  for (const workshop of manifest.workshops) {
+    assert.equal(workshop.package.path, `projects/${workshop.id}.sparkproj`);
+    assert.ok(indexedFiles.has(workshop.package.path) && indexedFiles.has(workshop.guide.path), 'Every package and walkthrough must be indexed.');
+    for (const payload of [workshop.package, workshop.guide]) {
+      const bytes = bundleFile(payload.path);
+      assert.equal(bytes.length, payload.size, `Workshop file size mismatch: ${payload.path}`);
+      assert.equal(sha256(bytes), payload.sha256, `Workshop checksum mismatch: ${payload.path}`);
+    }
+    readZip(bundleFile(workshop.package.path));
+  }
+  console.log(`${manifest.workshops.length} archived workshop packages verified; outer manifest, ZIP checksum and every archived payload hash match. No gateway requests made.`);
+  process.exit(0);
+}
 
 const run = randomUUID().replaceAll('-', '').slice(0, 10);
 const created = [];
@@ -91,6 +114,11 @@ function operatorProject(project, publishedAt) {
   for (const document of [...result.screens, ...(result.templates ?? [])]) for (const component of document.components) {
     delete component.props.script;
     if (component.props.tableEdit) delete component.props.tableEdit.script;
+    for (const events of [component.props.events, component.props.componentEvents])
+      for (const handler of Object.values(events ?? {}))
+        if (handler.language === 'python') delete handler.code;
+    for (const handler of component.props.messageHandlers ?? [])
+      if (handler.language === 'python') delete handler.code;
   }
   return { ...result, publishedAt };
 }

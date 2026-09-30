@@ -1,0 +1,725 @@
+{
+  "name": "Component messaging workshop",
+  "tags": [],
+  "templates": [
+    {
+      "id": "message-card",
+      "name": "Message station",
+      "width": 544,
+      "height": 292,
+      "parameters": {
+        "station": "A"
+      },
+      "instanceState": {
+        "instanceNote": {
+          "type": "string",
+          "value": "Instance · waiting"
+        },
+        "screenNote": {
+          "type": "string",
+          "value": "Screen · waiting"
+        },
+        "sessionNote": {
+          "type": "string",
+          "value": "Session · waiting"
+        }
+      },
+      "components": [
+        {
+          "id": "title",
+          "type": "label",
+          "x": 18,
+          "y": 10,
+          "width": 508,
+          "height": 32,
+          "props": {
+            "text": "Station {station}",
+            "fontSize": 24
+          }
+        },
+        {
+          "id": "note",
+          "type": "textInput",
+          "x": 18,
+          "y": 47,
+          "width": 508,
+          "height": 70,
+          "props": {
+            "text": "Message text — edit and commit for this instance",
+            "fieldKey": "note",
+            "defaultValue": "Hello",
+            "maxLength": 80,
+            "events": {
+              "commit": {
+                "language": "javascript",
+                "code": "app.sendMessage(\"workshop.note\", { text: event.value, from: parameters.station }, { scope: \"instance\" });"
+              }
+            }
+          }
+        },
+        {
+          "id": "send-instance",
+          "type": "button",
+          "x": 18,
+          "y": 130,
+          "width": 156,
+          "height": 38,
+          "props": {
+            "text": "Send instance",
+            "backgroundColor": "#4f63c8",
+            "foregroundColor": "#ffffff",
+            "action": "message",
+            "message": {
+              "messageType": "workshop.note",
+              "scope": "instance",
+              "payload": {
+                "text": "Hello from a button",
+                "from": "Instance button"
+              }
+            }
+          }
+        },
+        {
+          "id": "send-screen",
+          "type": "toggle",
+          "x": 184,
+          "y": 130,
+          "width": 166,
+          "height": 38,
+          "props": {
+            "text": "Send screen",
+            "fieldKey": "sendScreen",
+            "defaultValue": false,
+            "events": {
+              "change": {
+                "language": "javascript",
+                "code": "if (event.value) {\n  app.sendMessage(\"workshop.note\", { text: inputs.note, from: parameters.station }, { scope: \"screen\" });\n  app.setInput(\"sendScreen\", false);\n}"
+              }
+            }
+          }
+        },
+        {
+          "id": "send-session",
+          "type": "toggle",
+          "x": 360,
+          "y": 130,
+          "width": 166,
+          "height": 38,
+          "props": {
+            "text": "Send session",
+            "fieldKey": "sendSession",
+            "defaultValue": false,
+            "events": {
+              "change": {
+                "language": "javascript",
+                "code": "if (event.value) {\n  app.sendMessage(\"workshop.note\", { text: inputs.note, from: parameters.station }, { scope: \"session\" });\n  app.setInput(\"sendSession\", false);\n}"
+              }
+            }
+          }
+        },
+        {
+          "id": "instance-receiver",
+          "type": "label",
+          "x": 18,
+          "y": 183,
+          "width": 508,
+          "height": 28,
+          "props": {
+            "text": "Instance · waiting",
+            "fontSize": 15,
+            "bindings": {
+              "text": {
+                "expression": "note",
+                "references": {
+                  "note": {
+                    "kind": "instanceState",
+                    "key": "instanceNote"
+                  }
+                }
+              }
+            },
+            "messageHandlers": [
+              {
+                "id": "receive",
+                "messageType": "workshop.note",
+                "scope": "instance",
+                "language": "javascript",
+                "code": "app.state.set(\"instance\", \"instanceNote\", \"Instance · \" + String(event.payload.text) + \" · \" + String(event.payload.from));"
+              }
+            ]
+          }
+        },
+        {
+          "id": "screen-receiver",
+          "type": "label",
+          "x": 18,
+          "y": 218,
+          "width": 508,
+          "height": 28,
+          "props": {
+            "text": "Screen · waiting",
+            "fontSize": 15,
+            "bindings": {
+              "text": {
+                "expression": "note",
+                "references": {
+                  "note": {
+                    "kind": "instanceState",
+                    "key": "screenNote"
+                  }
+                }
+              }
+            },
+            "messageHandlers": [
+              {
+                "id": "receive",
+                "messageType": "workshop.note",
+                "scope": "screen",
+                "language": "javascript",
+                "code": "app.state.set(\"instance\", \"screenNote\", \"Screen · \" + String(event.payload.text) + \" · \" + String(event.payload.from));"
+              }
+            ]
+          }
+        },
+        {
+          "id": "session-receiver",
+          "type": "label",
+          "x": 18,
+          "y": 253,
+          "width": 508,
+          "height": 28,
+          "props": {
+            "text": "Session · waiting",
+            "fontSize": 15,
+            "bindings": {
+              "text": {
+                "expression": "note",
+                "references": {
+                  "note": {
+                    "kind": "instanceState",
+                    "key": "sessionNote"
+                  }
+                }
+              }
+            },
+            "messageHandlers": [
+              {
+                "id": "receive",
+                "messageType": "workshop.note",
+                "scope": "session",
+                "language": "javascript",
+                "code": "app.state.set(\"instance\", \"sessionNote\", \"Session · \" + String(event.payload.text) + \" · \" + String(event.payload.from));"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "id": "component-messaging",
+      "name": "Component messaging",
+      "width": 1160,
+      "height": 980,
+      "state": {
+        "screenNote": {
+          "type": "string",
+          "value": "Screen · waiting"
+        },
+        "sessionNote": {
+          "type": "string",
+          "value": "Session · waiting"
+        }
+      },
+      "components": [
+        {
+          "id": "title",
+          "type": "label",
+          "x": 24,
+          "y": 18,
+          "width": 1112,
+          "height": 44,
+          "props": {
+            "text": "Send a message. Observe its scope.",
+            "fontSize": 32
+          }
+        },
+        {
+          "id": "root-screen-receiver",
+          "type": "label",
+          "x": 24,
+          "y": 76,
+          "width": 544,
+          "height": 28,
+          "props": {
+            "text": "Screen · waiting",
+            "fontSize": 15,
+            "bindings": {
+              "text": {
+                "expression": "note",
+                "references": {
+                  "note": {
+                    "kind": "screenState",
+                    "key": "screenNote"
+                  }
+                }
+              }
+            },
+            "messageHandlers": [
+              {
+                "id": "receive",
+                "messageType": "workshop.note",
+                "scope": "screen",
+                "language": "javascript",
+                "code": "app.state.set(\"screen\", \"screenNote\", \"Screen · \" + String(event.payload.text) + \" · \" + String(event.payload.from));"
+              }
+            ]
+          }
+        },
+        {
+          "id": "root-session-receiver",
+          "type": "label",
+          "x": 592,
+          "y": 76,
+          "width": 544,
+          "height": 28,
+          "props": {
+            "text": "Session · waiting",
+            "fontSize": 15,
+            "bindings": {
+              "text": {
+                "expression": "note",
+                "references": {
+                  "note": {
+                    "kind": "screenState",
+                    "key": "sessionNote"
+                  }
+                }
+              }
+            },
+            "messageHandlers": [
+              {
+                "id": "receive",
+                "messageType": "workshop.note",
+                "scope": "session",
+                "language": "javascript",
+                "code": "app.state.set(\"screen\", \"sessionNote\", \"Session · \" + String(event.payload.text) + \" · \" + String(event.payload.from));"
+              }
+            ]
+          }
+        },
+        {
+          "id": "root-send-screen",
+          "type": "button",
+          "x": 24,
+          "y": 125,
+          "width": 250,
+          "height": 38,
+          "props": {
+            "text": "Send screen from button",
+            "action": "message",
+            "message": {
+              "messageType": "workshop.note",
+              "scope": "screen",
+              "payload": {
+                "text": "Hello from a button",
+                "from": "Main button"
+              }
+            }
+          }
+        },
+        {
+          "id": "open-popup",
+          "type": "button",
+          "x": 292,
+          "y": 125,
+          "width": 250,
+          "height": 38,
+          "props": {
+            "text": "Open message popup",
+            "action": "openPopup",
+            "targetScreenId": "message-popup"
+          }
+        },
+        {
+          "id": "away",
+          "type": "button",
+          "x": 560,
+          "y": 125,
+          "width": 250,
+          "height": 38,
+          "props": {
+            "text": "Leave and test cleanup",
+            "action": "navigate",
+            "targetScreenId": "messaging-away"
+          }
+        },
+        {
+          "id": "intro",
+          "type": "label",
+          "x": 24,
+          "y": 177,
+          "width": 1112,
+          "height": 28,
+          "props": {
+            "text": "Commit text or press Send instance. Only that station's Instance line changes.",
+            "fontSize": 16
+          }
+        },
+        {
+          "id": "station-a",
+          "type": "template",
+          "x": 24,
+          "y": 218,
+          "width": 544,
+          "height": 308,
+          "props": {
+            "text": "Station A message panel",
+            "templateId": "message-card",
+            "parameters": {
+              "station": "A"
+            },
+            "backgroundColor": "#f3f6fc",
+            "borderColor": "#8299c0",
+            "borderWidth": 1
+          }
+        },
+        {
+          "id": "station-b",
+          "type": "template",
+          "x": 592,
+          "y": 218,
+          "width": 544,
+          "height": 308,
+          "props": {
+            "text": "Station B message panel",
+            "templateId": "message-card",
+            "parameters": {
+              "station": "B"
+            },
+            "backgroundColor": "#f3f6fc",
+            "borderColor": "#8299c0",
+            "borderWidth": 1
+          }
+        },
+        {
+          "id": "rows-caption",
+          "type": "label",
+          "x": 24,
+          "y": 547,
+          "width": 1112,
+          "height": 28,
+          "props": {
+            "text": "Repeated stations have the same isolation. Screen reaches every station on this screen.",
+            "fontSize": 16
+          }
+        },
+        {
+          "id": "stations",
+          "type": "repeater",
+          "x": 24,
+          "y": 589,
+          "width": 1112,
+          "height": 308,
+          "props": {
+            "text": "Repeated message stations",
+            "templateId": "message-card",
+            "parameters": {},
+            "rows": [
+              {
+                "id": "row-one",
+                "parameters": {
+                  "station": "Row 1"
+                }
+              },
+              {
+                "id": "row-two",
+                "parameters": {
+                  "station": "Row 2"
+                }
+              }
+            ],
+            "columns": 2,
+            "gap": 24,
+            "backgroundColor": "#f3f6fc",
+            "borderColor": "#8299c0",
+            "borderWidth": 1
+          }
+        },
+        {
+          "id": "help",
+          "type": "label",
+          "x": 24,
+          "y": 919,
+          "width": 1112,
+          "height": 42,
+          "props": {
+            "text": "Open the popup and send Session to reach both surfaces in this browser tab. Scope names match exactly.",
+            "fontSize": 16
+          }
+        }
+      ]
+    },
+    {
+      "id": "message-popup",
+      "name": "Message popup",
+      "kind": "popup",
+      "width": 700,
+      "height": 360,
+      "state": {
+        "screenNote": {
+          "type": "string",
+          "value": "Screen · waiting"
+        },
+        "sessionNote": {
+          "type": "string",
+          "value": "Session · waiting"
+        }
+      },
+      "components": [
+        {
+          "id": "title",
+          "type": "label",
+          "x": 24,
+          "y": 16,
+          "width": 652,
+          "height": 36,
+          "props": {
+            "text": "Popup messages",
+            "fontSize": 28
+          }
+        },
+        {
+          "id": "popup-note",
+          "type": "textInput",
+          "x": 24,
+          "y": 60,
+          "width": 652,
+          "height": 72,
+          "props": {
+            "text": "Commit text to send only to this popup's screen",
+            "fieldKey": "popupNote",
+            "defaultValue": "Hello from popup",
+            "maxLength": 80,
+            "events": {
+              "commit": {
+                "language": "javascript",
+                "code": "app.sendMessage(\"workshop.note\", { text: event.value, from: \"Popup input\" }, { scope: \"screen\" });"
+              }
+            }
+          }
+        },
+        {
+          "id": "popup-session",
+          "type": "button",
+          "x": 24,
+          "y": 145,
+          "width": 310,
+          "height": 38,
+          "props": {
+            "text": "Send session from popup",
+            "action": "message",
+            "message": {
+              "messageType": "workshop.note",
+              "scope": "session",
+              "payload": {
+                "text": "Hello from a button",
+                "from": "Popup button"
+              }
+            }
+          }
+        },
+        {
+          "id": "popup-screen",
+          "type": "button",
+          "x": 354,
+          "y": 145,
+          "width": 322,
+          "height": 38,
+          "props": {
+            "text": "Send popup screen",
+            "action": "message",
+            "message": {
+              "messageType": "workshop.note",
+              "scope": "screen",
+              "payload": {
+                "text": "Hello from a button",
+                "from": "Popup button"
+              }
+            }
+          }
+        },
+        {
+          "id": "popup-screen-receiver",
+          "type": "label",
+          "x": 24,
+          "y": 204,
+          "width": 652,
+          "height": 28,
+          "props": {
+            "text": "Screen · waiting",
+            "fontSize": 15,
+            "bindings": {
+              "text": {
+                "expression": "note",
+                "references": {
+                  "note": {
+                    "kind": "screenState",
+                    "key": "screenNote"
+                  }
+                }
+              }
+            },
+            "messageHandlers": [
+              {
+                "id": "receive",
+                "messageType": "workshop.note",
+                "scope": "screen",
+                "language": "javascript",
+                "code": "app.state.set(\"screen\", \"screenNote\", \"Screen · \" + String(event.payload.text) + \" · \" + String(event.payload.from));"
+              }
+            ]
+          }
+        },
+        {
+          "id": "popup-session-receiver",
+          "type": "label",
+          "x": 24,
+          "y": 240,
+          "width": 652,
+          "height": 28,
+          "props": {
+            "text": "Session · waiting",
+            "fontSize": 15,
+            "bindings": {
+              "text": {
+                "expression": "note",
+                "references": {
+                  "note": {
+                    "kind": "screenState",
+                    "key": "sessionNote"
+                  }
+                }
+              }
+            },
+            "messageHandlers": [
+              {
+                "id": "receive",
+                "messageType": "workshop.note",
+                "scope": "session",
+                "language": "javascript",
+                "code": "app.state.set(\"screen\", \"sessionNote\", \"Session · \" + String(event.payload.text) + \" · \" + String(event.payload.from));"
+              }
+            ]
+          }
+        },
+        {
+          "id": "close",
+          "type": "button",
+          "x": 24,
+          "y": 299,
+          "width": 652,
+          "height": 38,
+          "props": {
+            "text": "Close popup",
+            "action": "closePopup"
+          }
+        }
+      ]
+    },
+    {
+      "id": "messaging-away",
+      "name": "Receiver cleanup",
+      "width": 1000,
+      "height": 420,
+      "state": {
+        "receipt": {
+          "type": "string",
+          "value": "No message sent yet."
+        }
+      },
+      "components": [
+        {
+          "id": "title",
+          "type": "label",
+          "x": 32,
+          "y": 24,
+          "width": 936,
+          "height": 44,
+          "props": {
+            "text": "No receivers on this screen",
+            "fontSize": 30
+          }
+        },
+        {
+          "id": "help",
+          "type": "label",
+          "x": 32,
+          "y": 90,
+          "width": 936,
+          "height": 74,
+          "props": {
+            "text": "Close the popup before leaving the stations. Send below: Accepted 0 confirms the old receivers were removed. Returning starts fresh; earlier messages are not replayed.",
+            "fontSize": 18
+          }
+        },
+        {
+          "id": "send-away",
+          "type": "toggle",
+          "x": 32,
+          "y": 188,
+          "width": 450,
+          "height": 52,
+          "props": {
+            "text": "Send session with no receivers",
+            "fieldKey": "sendAway",
+            "defaultValue": false,
+            "events": {
+              "change": {
+                "language": "javascript",
+                "code": "if (event.value) {\n  const receipt = app.sendMessage(\"workshop.note\", { text: \"Sent while away\", from: \"Away\" }, { scope: \"session\" });\n  app.state.set(\"screen\", \"receipt\", \"Accepted \" + receipt.accepted + \" handler(s).\");\n  app.setInput(\"sendAway\", false);\n}"
+              }
+            }
+          }
+        },
+        {
+          "id": "receipt",
+          "type": "label",
+          "x": 520,
+          "y": 188,
+          "width": 448,
+          "height": 52,
+          "props": {
+            "text": "No message sent yet.",
+            "fontSize": 22,
+            "bindings": {
+              "text": {
+                "expression": "receipt",
+                "references": {
+                  "receipt": {
+                    "kind": "screenState",
+                    "key": "receipt"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "back",
+          "type": "button",
+          "x": 32,
+          "y": 306,
+          "width": 936,
+          "height": 48,
+          "props": {
+            "text": "Return to fresh stations",
+            "action": "navigate",
+            "targetScreenId": "component-messaging"
+          }
+        }
+      ]
+    }
+  ]
+}

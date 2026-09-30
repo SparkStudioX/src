@@ -52,6 +52,17 @@ export type StateScope = "session" | "screen" | "instance";
 export interface InputStateBinding { scope: StateScope; key: string }
 export type StateDefinitions = Record<string, CustomProperty>;
 export interface RuntimeStateValues { session: RuntimeParameters; screen: RuntimeParameters; instance?: RuntimeParameters }
+export type PythonUiProperty = "text" | "enabled" | "visible" | "color" | "backgroundColor" | "foregroundColor" | "borderColor" | "borderWidth" | "fontSize";
+export type PythonUiProperties = Record<string, Partial<Record<PythonUiProperty, InputValue>>>;
+export interface PythonUiSnapshot { state: RuntimeStateValues; properties: PythonUiProperties }
+export type PythonUiLocalEffect = { kind: "state"; scope: StateScope; key: string; value: InputValue }
+  | { kind: "property"; componentId: string; property: PythonUiProperty; value: InputValue };
+export type PythonUiEffect = PythonUiLocalEffect | { kind: "input"; componentId: string; value: InputValue };
+export interface PythonUiAction {
+  readonly ui: PythonUiSnapshot;
+  isCurrent: () => boolean;
+  apply: (effects: unknown) => void;
+}
 /** Only explicitly referenced values from a template's containing scopes. */
 export type ParameterBindingState = Partial<RuntimeStateValues>;
 export interface RuntimeStateApi {
@@ -61,15 +72,29 @@ export interface RuntimeStateApi {
 }
 export type InputEventType = "change" | "commit";
 export interface InputEventScript {
-  language: "javascript";
+  language: "javascript" | "python";
   code: string;
 }
 export type ComponentEventProperty = BindingTarget;
-export interface ComponentEventScript { language: "javascript"; code: string }
+export interface ComponentEventScript { language: "javascript" | "python"; code: string }
 export interface ComponentEvents {
   mount?: ComponentEventScript;
   unmount?: ComponentEventScript;
   propertyChange?: ComponentEventScript & { properties: ComponentEventProperty[] };
+}
+export type ComponentMessageScope = "instance" | "screen" | "session";
+export interface ComponentMessageHandler {
+  id: string;
+  messageType: string;
+  scope: ComponentMessageScope;
+  language: "javascript" | "python";
+  code: string;
+}
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export interface ComponentMessageAction {
+  messageType: string;
+  scope: ComponentMessageScope;
+  payload: Record<string, JsonValue>;
 }
 export type BindingTarget = "text" | "enabled" | "visible" | "color"
   | "x" | "y" | "width" | "height" | "fontSize"
@@ -164,6 +189,7 @@ export interface CanvasComponent {
     textKey?: string;
     stateBinding?: InputStateBinding;
     componentEvents?: ComponentEvents;
+    messageHandlers?: ComponentMessageHandler[];
     events?: Partial<Record<InputEventType, InputEventScript>>;
     customProperties?: Record<string, CustomProperty>;
     enabled?: boolean;
@@ -210,7 +236,8 @@ export interface CanvasComponent {
     stateValue?: string;
     states?: { value: string; label: string; color: string }[];
     optionsSource?: QueryOptionsSource;
-    action?: "navigate" | "script" | "openPopup" | "closePopup";
+    action?: "navigate" | "script" | "openPopup" | "closePopup" | "message";
+    message?: ComponentMessageAction;
     assetId?: string;
     fit?: "contain" | "cover" | "fill";
     alt?: string;
@@ -326,6 +353,7 @@ export interface PopupAction {
   inputs: InputValues;
   instance?: InstanceAction;
   popup: PopupState;
+  uiAction?: PythonUiAction;
 }
 export interface Tag {
   path: string;
@@ -396,6 +424,27 @@ export interface ScriptResult {
   stderr: string;
   result?: unknown;
   durationMs: number;
+  uiEffects?: PythonUiEffect[];
+}
+export type ScriptType = "library" | "gateway" | "client";
+export type GatewayScriptEvent = "startup" | "update" | "shutdown" | "timer" | "tagChange" | "message" | "scheduled";
+export interface ScriptResource {
+  id: string;
+  name: string;
+  type: ScriptType;
+  code: string;
+  enabled: boolean;
+  event?: GatewayScriptEvent | "screenOpen";
+  intervalMs?: number;
+  timeoutMs?: number;
+  threading?: "dedicated" | "shared";
+  delayType?: "fixedDelay" | "fixedRate";
+  tagPaths?: string[];
+  changeTriggers?: ("value" | "quality" | "timestamp")[];
+  cron?: string;
+  timeZone?: string;
+  requiredPermission?: "operate" | "admin";
+  parameters: Record<string, string | number | boolean | null>;
 }
 export interface BrowseNode {
   nodeId: string;

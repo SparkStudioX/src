@@ -50,6 +50,7 @@ export function ComponentView({
   actionBusy = false,
   interactionLocked = false,
   readOnly = false,
+  literalText = false,
   onOpenPopup,
   onClosePopup,
 }: {
@@ -70,6 +71,8 @@ export function ComponentView({
   actionBusy?: boolean;
   interactionLocked?: boolean;
   readOnly?: boolean;
+  /** Transient Python UI text is literal, including braces and an empty string. */
+  literalText?: boolean;
   onOpenPopup?: (component: CanvasComponent) => void;
   onClosePopup?: () => void;
 }) {
@@ -79,11 +82,11 @@ export function ComponentView({
   const { type } = component;
   const props = {
     ...component.props,
-    text: Object.hasOwn(component.props.bindings ?? {}, "text") || Object.hasOwn(component.props.queryBindings ?? {}, "text")
+    text: literalText || Object.hasOwn(component.props.bindings ?? {}, "text") || Object.hasOwn(component.props.queryBindings ?? {}, "text")
       ? component.props.text ?? ""
       : resolvePath(component.props.text || "", parameters),
   };
-  const caption = (fallback: string) => Object.hasOwn(component.props.bindings ?? {}, "text") || Object.hasOwn(component.props.queryBindings ?? {}, "text")
+  const caption = (fallback: string) => literalText || Object.hasOwn(component.props.bindings ?? {}, "text") || Object.hasOwn(component.props.queryBindings ?? {}, "text")
     ? props.text
     : props.text || fallback;
   const tag = tags.find(
@@ -407,10 +410,11 @@ export function ComponentView({
         disabled={
           actionBusy ||
           interactionLocked ||
-          (props.action === "script" && (communicationLost || readOnly))
+          (props.action === "script" && (communicationLost || readOnly)) ||
+          (props.action === "message" && readOnly)
         }
         onClick={() =>
-          props.action === "script"
+          props.action === "script" || props.action === "message"
             ? !readOnly && onAction?.(component)
             : props.action === "openPopup"
               ? onOpenPopup?.(component)
@@ -422,7 +426,7 @@ export function ComponentView({
         {actionBusy ? "Running…" : caption("Button")}
         <Icon
           name={
-            props.action === "script"
+            props.action === "script" || props.action === "message"
               ? "play"
               : props.action === "openPopup"
                 ? "external"

@@ -2,7 +2,7 @@
 
 Gateway events execute Python on the gateway without an operator browser. Open **Designer → Scripting → Gateway events** to add an event or select one from the resource tree. Every new event starts disabled. Select its trigger, configure its properties, review the code, enable it deliberately, then **Save resources → Publish scripts**. Saving a draft does not replace the active script publication. Publishing screens is a separate operation and does not publish script resources.
 
-This feature requires the companion gateway-events build; preview.8 and earlier do not contain these additions. Scripts use CPython 3, with no Java or Jython scripting dependency. They run with the gateway account's OS access. Python workers, deadlines and execution lanes are reliability controls, not a sandbox for untrusted code.
+This feature requires the companion SparkStudio **0.2.0-preview.9** release or a newer compatible gateway; preview.8 and earlier do not contain these additions. Scripts use CPython 3, with no Java or Jython scripting dependency. They run with the gateway account's OS access. Python workers, deadlines and execution lanes are reliability controls, not a sandbox for untrusted code.
 
 ## Event types
 
@@ -48,7 +48,7 @@ Each invocation uses a fresh Python worker. Module globals do not persist betwee
 
 ## Message testing and diagnostics
 
-Gateway handlers use the Python `system.util` API. Browser components use the separate local `app.sendMessage(...)` API and staged component handler editor; see [component messaging](COMPONENT_MESSAGING.md). The browser bus does not deliver to gateway handlers, other tabs or other operator clients. Gateway-to-browser delivery is a later increment.
+Gateway message resources use the Python `system.util` API. Browser components use the separate local `app.sendMessage(...)` API and the shared Actions & Events editor. That local bus does not deliver to gateway resources or other browser tabs. For gateway-to-operator notifications, Python also provides `system.ui.sendMessage(messageType, payload={}, sessionId=None)` and `system.ui.getSessionInfo()`. Sends address connected operator tabs of the executing project, or one selected server-issued tab identity, and invoke session-scoped component handlers. Receipts count queued recipients rather than handler execution; delivery is transient and bounded. See [component messaging](COMPONENT_MESSAGING.md) for the complete contract and examples.
 
 Select a message handler as an engineering administrator. Save and publish its enabled revision, enter a JSON object under **Test published handler**, then choose **Send test request**. The tester calls the published handler and displays its output and result. It is unavailable while there are unsaved changes, when the publication differs from the saved draft, or when the handler is disabled. It never sends the code in the editor.
 
@@ -92,4 +92,4 @@ The independently authored `gateway-events.sparkproj` contains a read-only check
 6. Enable **Workshop shutdown** and publish. Stop the disposable gateway gracefully, restart it, then inspect the retained shutdown/startup records. Forced termination is not an equivalent test. Shutdown completion remains best effort.
 7. Disable the example events, save and publish when finished. Remove the optional memory tag separately if it is no longer needed. Archiving the workshop stops its scheduler.
 
-Run `node tools/build-workshops.mjs --version gateway-events-dev` to build a local bundle from authored sources; choose a fresh version directory for each build. Generated artifacts stay under `artifacts/workshops/`. The source catalog records feature compatibility and the optional memory-tag prerequisite. See [Scripting](SCRIPTING.md) for reusable libraries, browser events and resource limits.
+Run `node tools/build-workshops.mjs --version gateway-events-dev` to build from authored sources; choose a fresh version label for each build. The maintained package is `artifacts/sparkproj/gateway-events.sparkproj`. Immutable ZIPs and release metadata stay under `artifacts/workshops/`. The source catalog records feature compatibility and the optional memory-tag prerequisite. See [Scripting](SCRIPTING.md) for reusable libraries, browser events and resource limits.

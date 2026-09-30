@@ -7,6 +7,7 @@ namespace SparkStudio.Gateway;
 
 public sealed record ScriptRunRequest(int Revision, string? Source, Dictionary<string, JsonElement>? Parameters);
 public sealed record ScriptRunSnapshot(JsonObject Resource, int Revision, string Source, IReadOnlyDictionary<string, string> Libraries);
+public sealed record ScriptUpdateNotice(string Actor, JsonObject Resources, string Reason);
 
 /// <summary>Script resources have an independent draft and explicitly published snapshot.</summary>
 public sealed class ScriptResourceStore
@@ -16,6 +17,8 @@ public sealed class ScriptResourceStore
     private JsonObject draft;
     private JsonObject? published;
     public event Action? Published;
+    public event Action<ScriptUpdateNotice>? Updated;
+    public string DataDirectory => directory;
     private static readonly Regex Identifier = new("^[A-Za-z_][A-Za-z0-9_]{0,63}$", RegexOptions.CultureInvariant);
     private static readonly Regex ResourceId = new("^[A-Za-z_][A-Za-z0-9_-]{0,79}$", RegexOptions.CultureInvariant);
     private static readonly HashSet<string> PythonKeywords = new("False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield".Split(' '), StringComparer.Ordinal);
@@ -52,17 +55,40 @@ public sealed class ScriptResourceStore
     public JsonObject? CapturePublished() { lock (gate) return published?.DeepClone().AsObject(); }
     public IReadOnlyDictionary<string, string> CaptureLibraries() { lock (gate) return ScriptLibrary.Capture(published); }
 
-    public JsonObject SaveDraft(JsonObject value)
+    public JsonObject SaveDraft(JsonObject value, string actor = "system")
     {
+        JsonObject result;
+        ScriptUpdateNotice? notice;
         lock (gate)
         {
             var revision = Revision(draft);
             if (Revision(value) != revision) throw new InvalidOperationException("Script resources changed. Reload before saving.");
             var next = Normalize(value, checked(revision + 1));
+            notice = Changes(draft, next, actor, "scriptsSaved");
             Persist("scripts-draft.json", next);
             draft = next;
-            return draft.DeepClone().AsObject();
+            result = draft.DeepClone().AsObject();
         }
+        if (notice is not null) NotifyUpdate(notice);
+        return result;
+    }
+
+    public void NotifyUpdate(ScriptUpdateNotice notice) =>
+        Updated?.Invoke(notice with { Resources = notice.Resources.DeepClone().AsObject() });
+
+    private static ScriptUpdateNotice? Changes(JsonObject before, JsonObject after, string actor, string reason)
+    {
+        var previous = Resources(before).ToDictionary(resource => ProjectStore.Required(resource, "id"), StringComparer.Ordinal);
+        var current = Resources(after).ToDictionary(resource => ProjectStore.Required(resource, "id"), StringComparer.Ordinal);
+        static JsonNode Describe(JsonObject resource) => new JsonObject
+        {
+            ["id"] = resource["id"]!.DeepClone(), ["name"] = resource["name"]!.DeepClone(), ["type"] = resource["type"]!.DeepClone()
+        };
+        var added = new JsonArray(current.Where(pair => !previous.ContainsKey(pair.Key)).Select(pair => Describe(pair.Value)).ToArray());
+        var removed = new JsonArray(previous.Where(pair => !current.ContainsKey(pair.Key)).Select(pair => Describe(pair.Value)).ToArray());
+        var modified = new JsonArray(current.Where(pair => previous.TryGetValue(pair.Key, out var old) && !JsonNode.DeepEquals(old, pair.Value)).Select(pair => Describe(pair.Value)).ToArray());
+        return added.Count + removed.Count + modified.Count == 0 ? null : new(actor,
+            new JsonObject { ["added"] = added, ["removed"] = removed, ["modified"] = modified, ["manifestChanged"] = false }, reason);
     }
 
     public JsonObject Metadata()
@@ -72,7 +98,7 @@ public sealed class ScriptResourceStore
             : new JsonObject { ["published"] = true, ["revision"] = Revision(published), ["draftRevision"] = Revision(draft), ["publishedAt"] = published["publishedAt"]!.DeepClone() };
     }
 
-    public JsonObject Publish(int revision)
+    public JsonObject Publish(int revision, string actor = "system")
     {
         JsonObject result;
         lock (gate)
@@ -89,6 +115,8 @@ public sealed class ScriptResourceStore
             published = next;
             result = Metadata();
         }
+        // SaveDraft already reports resource changes. Publication replaces the active
+        // generation without delivering the same resource update a second time.
         Published?.Invoke();
         return result;
     }
@@ -160,6 +188,7 @@ public sealed class ScriptResourceStore
         if (value["resources"] is not JsonArray list || list.Count > 100) throw new ArgumentException("Script resources must be an array of at most 100 entries.");
         var ids = new HashSet<string>(StringComparer.Ordinal);
         var libraryNames = new HashSet<string>(StringComparer.Ordinal);
+        var messageNames = new HashSet<string>(StringComparer.Ordinal);
         var resources = new JsonArray();
         var bytes = 0;
         foreach (var item in list)
@@ -189,20 +218,17 @@ public sealed class ScriptResourceStore
                 ValidateParameter(JsonSerializer.SerializeToElement(parameter));
             }
             var next = new JsonObject { ["id"] = id, ["name"] = name, ["type"] = type, ["code"] = code, ["enabled"] = enabled, ["parameters"] = parameters.DeepClone() };
-            if (type != "library")
+            if (type == "gateway")
+            {
+                foreach (var (key, setting) in GatewayScriptOptions.Normalize(resource)) next[key] = setting?.DeepClone();
+                if (next["event"]!.GetValue<string>() == "message" && !messageNames.Add(name))
+                    throw new ArgumentException("Gateway message handler names must be unique.");
+            }
+            else if (type == "client")
             {
                 var trigger = resource.ContainsKey("event") ? Text(resource, "event", 20) : "startup";
-                if (type == "gateway" ? trigger is not ("startup" or "timer") : trigger is not ("startup" or "screenOpen"))
-                    throw new ArgumentException("Gateway events are startup or timer; client events are startup or screenOpen.");
+                if (trigger is not ("startup" or "screenOpen")) throw new ArgumentException("Client events are startup or screenOpen.");
                 next["event"] = trigger;
-                if (type == "gateway" && trigger == "timer")
-                {
-                    var interval = 1000;
-                    if (resource.ContainsKey("intervalMs") && (resource["intervalMs"] is not JsonValue scalar || !scalar.TryGetValue<int>(out interval)))
-                        throw new ArgumentException("Timer intervalMs must be an integer.");
-                    if (interval is < 100 or > 86400000) throw new ArgumentException("Timer intervalMs must be between 100 and 86400000.");
-                    next["intervalMs"] = interval;
-                }
             }
             resources.Add(next);
         }

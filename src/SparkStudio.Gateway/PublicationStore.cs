@@ -116,6 +116,7 @@ public sealed partial class PublicationStore
                 {
                     props.Remove("script");
                     if (props["tableEdit"] is JsonObject edit) edit.Remove("script");
+                    PythonComponentEvents.HideSources(props);
                 }
             result["publishedAt"] = current["publishedAt"]!.DeepClone();
             return result;
@@ -179,6 +180,7 @@ public sealed partial class PublicationStore
                 ["screenParameters"] = ProjectTemplates.ScreenParameters(screen).DeepClone(), ["popupOrigin"] = opener,
                 ["templateScopes"] = templateScopes, ["inputs"] = new JsonArray(inputs),
                 ["queries"] = (current["scriptQueries"] ?? current["queries"])!.DeepClone() };
+            if (!tableEdit) result["uiContext"] = PythonUiContext.Describe(project, screen, scope, componentId, templateScopes.Count > 0);
             if (tableEdit)
             {
                 result["table"] = props.DeepClone();

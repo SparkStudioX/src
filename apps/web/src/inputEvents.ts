@@ -1,7 +1,10 @@
 import type { RuntimeParameters, RuntimeStateApi } from "./types";
-import { requirePreviewScriptPermission } from "./previewRequest";
+import type { ComponentMessageSender } from "./componentMessageModel";
+import { previewScriptsAllowed, requirePreviewScriptPermission } from "./previewRequest";
 import { isInput, validateInputs } from "./inputs";
 import type { CanvasComponent, InputEventScript, InputEventType, InputValue, InputValues } from "./types";
+import type { ComponentEventCoordinator } from "./componentEventModel";
+import type { PythonEventRunner } from "./pythonComponentEvents";
 
 export interface InputEventPayload {
   type: InputEventType;
@@ -9,13 +12,17 @@ export interface InputEventPayload {
   fieldKey: string;
   value: InputValue;
   previousValue: InputValue | null;
+  origin: "user";
 }
 export interface InputEventApp {
+  sendMessage: ComponentMessageSender;
   notify: (message: unknown) => void;
   setInput: (fieldKey: string, value: unknown) => void;
   state: RuntimeStateApi;
+  signal: AbortSignal;
 }
 export interface InputEventContext {
+  sendMessage?: ComponentMessageSender;
   key: string;
   component: CanvasComponent;
   components: CanvasComponent[];
@@ -24,7 +31,11 @@ export interface InputEventContext {
   setInput: (fieldKey: string, value: InputValue) => void;
   notify: (message: string) => void;
   error: (message: string) => void;
+  clearStatus?: () => void;
   state?: RuntimeStateApi;
+  python?: PythonEventRunner;
+  coordinator?: ComponentEventCoordinator;
+  isCurrent?: () => boolean;
 }
 export type InputEventExecutor = (script: InputEventScript, event: InputEventPayload, inputs: InputValues, parameters: RuntimeParameters, app: InputEventApp) => unknown | Promise<unknown>;
 
@@ -40,6 +51,7 @@ export function inputAssignmentError(components: CanvasComponent[], fieldKey: st
 // helpers restrict form effects, but are not a JavaScript security sandbox.
 export const executeInputEvent: InputEventExecutor = (script, event, inputs, parameters, app) => {
   requirePreviewScriptPermission();
+  if (script.language !== "javascript") throw new Error("Python events require the gateway event transport.");
   const execute = new Function("event", "inputs", "parameters", "app", `"use strict"; return (async () => {\n${script.code}\n})();`);
   return execute(event, inputs, parameters, app);
 };
@@ -54,8 +66,9 @@ export class InputEventLifecycle {
   private observedValue: InputValue | null = null;
   private currentValue: InputValue | null = null;
   private committedValue: InputValue | null = null;
+  private invocations = new Set<AbortController>();
 
-  constructor(private readonly execute: InputEventExecutor = executeInputEvent) {}
+  constructor(private readonly execute: InputEventExecutor = executeInputEvent, private readonly timeoutMs = 2000) {}
 
   activate() { this.active = true; }
   deactivate() {
@@ -64,12 +77,14 @@ export class InputEventLifecycle {
     this.context = null;
   }
   private invalidate() {
+    for (const controller of this.invocations) controller.abort();
+    this.invocations.clear();
     this.generation++;
     this.pending = 0;
     this.queue = Promise.resolve();
   }
   setContext(context: InputEventContext | null, value: InputValue | null) {
-    if (this.context?.key !== context?.key || Boolean(this.context) !== Boolean(context)) {
+    if (this.context?.isCurrent?.() === false || this.context?.key !== context?.key || Boolean(this.context) !== Boolean(context)) {
       this.invalidate();
       this.observedValue = this.currentValue = this.committedValue = value;
     } else if (!Object.is(value, this.observedValue)) {
@@ -107,25 +122,36 @@ export class InputEventLifecycle {
   private enqueue(type: InputEventType, value: InputValue, previousValue: InputValue | null) {
     const context = this.context;
     const script = context?.component.props.events?.[type];
-    if (!context || !script?.code.trim()) return;
-    if (script.language !== "javascript" || script.code.length > 65536) {
-      context.error("Input events require JavaScript with at most 65,536 characters.");
+    if (!context || !script || script.language !== "python" && !script.code?.trim() || !previewScriptsAllowed()) return;
+    if (!["javascript", "python"].includes(script.language) || (script.code?.length ?? 0) > 65536) {
+      context.error("Input events require Python or JavaScript with at most 65,536 characters.");
       return;
     }
+    if (script.language === "python" && context.component.type === "passwordInput") { context.error("Password inputs cannot run automatic Python events."); return; }
+    if (context.coordinator && !context.coordinator.accept("input")) return;
     if (this.pending >= 32) {
       context.error("Input event queue is full (32 events). New events were skipped; reduce long-running handlers.");
       return;
     }
     const generation = this.generation;
-    const live = () => this.active && this.generation === generation && this.context?.key === context.key;
+    const controller = new AbortController(); this.invocations.add(controller);
+    const unregister = context.coordinator?.register(() => controller.abort());
+    const live = () => !controller.signal.aborted && this.active && this.generation === generation && this.context?.key === context.key && context.isCurrent?.() !== false;
     const fieldKey = context.component.props.fieldKey || context.component.id;
-    const event = { type, componentId: context.component.id, fieldKey, value, previousValue };
+    const event: InputEventPayload = { type, componentId: context.component.id, fieldKey, value, previousValue, origin: "user" };
     const inputs = structuredClone({ ...context.inputs, [fieldKey]: value });
     const parameters = structuredClone(context.parameters);
     this.pending++;
+    const finish = context.coordinator?.queued();
     this.queue = this.queue.then(async () => {
       if (!live()) return;
       const app: InputEventApp = {
+        signal: controller.signal,
+        sendMessage: (messageType, payload, options) => {
+          if (!live()) return { messageId: "", accepted: 0 };
+          if (!context.sendMessage) throw new Error("Component messaging is unavailable in this context.");
+          return context.sendMessage(messageType, payload, options);
+        },
         notify: (message) => { if (live()) this.context!.notify(String(message).slice(0, 2500)); },
         state: {
           get: (scope, key) => {
@@ -156,11 +182,27 @@ export class InputEventLifecycle {
           current.setInput(key, next as InputValue);
         },
       };
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        await this.execute(script, event, inputs, parameters, app);
+        if (script.language === "python") {
+          if (!context.python) throw new Error("Python component events are unavailable in this context.");
+          const output = await context.python({ family: "input", type }, event, inputs, parameters, controller.signal);
+          if (live()) {
+            context.clearStatus?.();
+            if (output) { context.notify(output); context.coordinator?.report(context.component.id, output, "info"); }
+          }
+        } else await Promise.race([Promise.resolve(this.execute(script, event, inputs, parameters, app)), new Promise<never>((_, reject) => {
+          timer = setTimeout(() => { reject(new Error(`Input event timed out after ${this.timeoutMs} ms; its helpers have been revoked.`)); controller.abort(); }, this.timeoutMs);
+        })]);
       } catch (error) {
-        if (live()) this.context!.error(`${type}: ${error instanceof Error ? error.message : String(error)}`.slice(0, 2500));
+        if (this.active && this.generation === generation && context.isCurrent?.() !== false) {
+          const message = `${type}: ${error instanceof Error ? error.message : String(error)}`.slice(0, 2500);
+          this.context!.error(message); context.coordinator?.report(context.component.id, message);
+        }
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+        this.invocations.delete(controller);
       }
-    }).finally(() => { if (this.generation === generation) this.pending--; });
+    }).finally(() => { this.invocations.delete(controller); unregister?.(); finish?.(); if (this.generation === generation) this.pending--; });
   }
 }

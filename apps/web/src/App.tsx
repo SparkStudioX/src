@@ -3,6 +3,9 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { api, currentProjectId, displayValue, eventStreamUrl, id, projectPage, projectStorageKey, resolvePath } from "./api";
 import { useAuth } from "./Auth";
 import { ApplicationStateProvider, useApplicationState, useApplicationStateContext } from "./applicationState";
+import { applyPythonUiResult, pythonUiPreviewContext, pythonUiRequest } from "./pythonUiModel";
+import { runSavedPythonEvent } from "./pythonComponentEvents";
+import type { PythonEventTransport } from "./pythonComponentEvents";
 import { SessionIdentity } from "./OperatorAccess";
 import { AccountSettingsDialog } from "./AccountSettings";
 import { ProjectImportDialog } from "./Projects";
@@ -27,6 +30,7 @@ import type {
   RuntimeParameters,
   Screen,
   ScriptResult,
+  PythonUiAction,
   Tag,
   Template,
 } from "./types";
@@ -45,10 +49,8 @@ import { isInput, validateInputs } from "./inputs";
 import { useFormInputs } from "./inputStateBindings";
 import { alignSelected, arrangementCount, checkpoint, distributeSelected, duplicateSelected, expandGroupSelection, groupSelected, marqueeBounds, marqueeSelection, matchSelectedSize, moveSelected, parseGridSize, projectContent, resizeComponent, resizeGroup, restoreHistory, selectComponentType, selectionBounds, toggleGroupSelection, ungroupSelected } from "./canvasEditing";
 import type { MatchingSize, ProjectHistory, SelectionBounds } from "./canvasEditing";
-import ComponentEventEditor from "./ComponentEventEditor";
-import ComponentLifecycleEditor from "./ComponentLifecycleEditor";
+import ComponentActionsEditor from "./ComponentActionsEditor";
 import { ComponentEventDiagnostics } from "./ComponentEvents";
-import InputEventsEditor from "./InputEventsEditor";
 import { componentGeometry } from "./propertyBindings";
 import { PropertyBindingsEditor } from "./PropertyBindingsEditor";
 import { QueryPropertyProvider, useQueryPropertyBindings } from "./useQueryPropertyBindings";
@@ -292,8 +294,6 @@ export default function App() {
   const savedContentRef = useRef("");
   const savingRef = useRef(false);
   const [eventEditorId, setEventEditorId] = useState<string | null>(null);
-  const [inputEventEditorId, setInputEventEditorId] = useState<string | null>(null);
-  const [lifecycleEventEditorId, setLifecycleEventEditorId] = useState<string | null>(null);
   const projectRef = useRef(project);
   projectRef.current = project;
   const updateHistory = useCallback((next: ProjectHistory) => {
@@ -386,8 +386,6 @@ export default function App() {
       setDirty(false);
       updateHistory({ past: [], future: [] });
       setEventEditorId(null);
-      setInputEventEditorId(null);
-      setLifecycleEventEditorId(null);
       setSelectedId(null);
     } catch (error) {
       setLoadError(
@@ -502,7 +500,7 @@ export default function App() {
   const selection = screen?.components.filter((component) => selectedIds.includes(component.id)) || [];
   const selectedUnitCount = arrangementCount(screen?.components || [], selectedIds);
   const selectedGroupId = selection.length > 1 && selection[0].groupId && selection.every(component => component.groupId === selection[0].groupId) ? selection[0].groupId : null;
-  useEffect(() => { setSelectedIds([]); setEventEditorId(null); setInputEventEditorId(null); setLifecycleEventEditorId(null); }, [screen?.id, editingTemplateId, preview]);
+  useEffect(() => { setSelectedIds([]); setEventEditorId(null); }, [screen?.id, editingTemplateId, preview]);
   const navigateSearch = (target: SearchTarget) => {
     if (!project || previewActionBusy) return;
     setSearchOpen(false);
@@ -549,6 +547,7 @@ export default function App() {
   const runPreviewAction = async (
     component: CanvasComponent,
     instance?: InstanceAction,
+    uiAction?: PythonUiAction,
   ) => {
     if (instance?.isCurrent?.() === false) return;
     if (!gatewayAdmin) { notify("A gateway administrator must sign in to run draft Python code.", true); return; }
@@ -570,15 +569,20 @@ export default function App() {
         code: component.props.script || "",
         parameters: actionParameters,
         inputs: actionInputs,
+        ...pythonUiRequest(uiAction),
+        ...(uiAction ? { uiContext: pythonUiPreviewContext(editingTemplate ? { templateId: editingTemplate.id } : { screenId: screen.id }, component.id, instance) } : {}),
       });
+      if (execution.success) window.dispatchEvent(new Event("sparkstudio:refresh-data"));
       if (instance?.isCurrent?.() === false) return;
+      if (uiAction && !uiAction.isCurrent()) return;
+      applyPythonUiResult(uiAction, execution);
       const resultMessage =
         typeof execution.result === "object" &&
         execution.result !== null &&
         "message" in execution.result
           ? String((execution.result as { message: unknown }).message)
           : execution.stdout ||
-            (execution.result === undefined
+            (execution.result == null
               ? "Action completed."
               : JSON.stringify(execution.result));
       notify(
@@ -587,7 +591,6 @@ export default function App() {
           : (execution.stderr || "Action failed.").slice(0, 1500),
         !execution.success,
       );
-      if (execution.success) window.dispatchEvent(new Event("sparkstudio:refresh-data"));
     } catch (error) {
       if (instance?.isCurrent?.() === false) return;
       notify(error instanceof Error ? error.message : String(error), true);
@@ -805,7 +808,7 @@ export default function App() {
   const redo = useCallback(() => travelHistory("redo"), [travelHistory]);
   useEffect(() => {
     const handle = (event: KeyboardEvent) => {
-      if (workspace !== "designer" || eventEditorId || inputEventEditorId || lifecycleEventEditorId) return;
+      if (workspace !== "designer" || eventEditorId) return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
         void save();
@@ -823,7 +826,7 @@ export default function App() {
     };
     window.addEventListener("keydown", handle);
     return () => window.removeEventListener("keydown", handle);
-  }, [save, undo, redo, workspace, eventEditorId, inputEventEditorId, lifecycleEventEditorId]);
+  }, [save, undo, redo, workspace, eventEditorId]);
 
   const addComponent = (type: ComponentType, tagPath?: string) => {
     if (!screen) return;
@@ -1775,9 +1778,13 @@ export default function App() {
                   inputs={currentPreviewInputs}
                   onInputChange={previewForm.assign}
                   onAutomaticInputChange={previewForm.assignAutomatic}
-                  onAction={(component, instance) =>
-                    void runPreviewAction(component, instance)
+                  onAction={(component, instance, uiAction) =>
+                    void runPreviewAction(component, instance, uiAction)
                   }
+                  onPythonEvent={(component, invocation, instance) => gatewayAdmin && previewCommunication.session?.mode === "live-actions"
+                    ? runSavedPythonEvent({ scope: "designer", ...(editingTemplate ? { templateId: editingTemplate.id } : { screenId: screen.id }),
+                      parameters: project.parameters }, component, invocation, instance)
+                    : Promise.reject(new Error("Python events require a gateway administrator and Live actions Preview."))}
                   onOpenPopup={(component, instance) => {
                     if (previewActionBusy || previewPopup || editorParameterError) return;
                     try {
@@ -1930,11 +1937,11 @@ export default function App() {
                       onGeometryChange={patch => updateComponent(selected.id, patch)}
                     />
                     <div className="inspector-section">
-                      <h3>Component events</h3>
-                      <button type="button" className="button component-lifecycle-open" onClick={() => setLifecycleEventEditorId(selected.id)}>
-                        Edit lifecycle &amp; property events ({Object.values(selected.props.componentEvents || {}).filter(event => event?.code?.trim()).length})
+                      <h3>Actions &amp; events</h3>
+                      <button type="button" className="button component-actions-open" onClick={() => setEventEditorId(selected.id)}>
+                        <Icon name="code" size={14} /> Edit actions &amp; events
                       </button>
-                      <p className="component-lifecycle-hint">Automatic browser scripts for mounted, watched property changes and cleanup. User input events remain separate.</p>
+                      <p className="component-lifecycle-hint">Configure actions, input events, lifecycle events and message handlers together. Apply creates one undo step.</p>
                     </div>
                     {isDrawingComponent(selected.type) && <DrawingEditor key={`drawing:${selected.id}`} component={selected} onChange={updateProps} notify={notify} />}
                     {isTemplateInstance(selected.type) && (
@@ -2233,7 +2240,7 @@ export default function App() {
                         <>
                           <Field
                             label="Field name"
-                            hint="Available to button events as inputs['fieldName']."
+                            hint="Available in event form snapshots as inputs['fieldName']. Automatic Python events omit password fields."
                           >
                             <input
                               value={selected.props.fieldKey || ""}
@@ -2370,115 +2377,6 @@ export default function App() {
                           </Field>}
                         </>
                       )}
-                      {isInput(selected.type) && <Field label="Input events" hint="Browser JavaScript runs on user edits and commits. Apply, then Save and Publish.">
-                        <button className="button input-events-open" onClick={() => setInputEventEditorId(selected.id)}><Icon name="code" size={14} /> Edit events ({Object.keys(selected.props.events || {}).length})</button>
-                      </Field>}
-                      {(selected.type === "button" || selected.type === "equipmentSymbol") && (
-                        <Field label="On click">
-                          <select
-                            value={selected.props.action || (selected.type === "equipmentSymbol" ? "" : "navigate")}
-                            onChange={(event) =>
-                              updateProps({
-                                action: (event.target.value || undefined) as CanvasComponent["props"]["action"],
-                                parameters: undefined,
-                                targetScreenId: undefined,
-                                ...(event.target.value === "script"
-                                  ? {
-                                      script:
-                                        selected.props.script ||
-                                        "result = {'message': 'Action completed'}",
-                                    }
-                                  : {}),
-                              })
-                            }
-                          >
-                            {selected.type === "equipmentSymbol" && <option value="">None</option>}
-                            <option value="navigate">Open a screen</option>
-                            {selected.type === "button" && <option value="script">Run Python event</option>}
-                            <option
-                              value="openPopup"
-                              disabled={
-                                !editingTemplate && screen?.kind === "popup"
-                              }
-                            >
-                              Open a popup
-                            </option>
-                            {selected.type === "button" && <option value="closePopup">Close popup</option>}
-                          </select>
-                        </Field>
-                      )}
-                      {(selected.type === "button" || selected.type === "equipmentSymbol" && Boolean(selected.props.action)) &&
-                        selected.props.action !== "script" &&
-                        selected.props.action !== "closePopup" && (
-                          <Field
-                            label={
-                              selected.props.action === "openPopup"
-                                ? "Popup screen"
-                                : "Destination screen"
-                            }
-                          >
-                            <select
-                              value={selected.props.targetScreenId || ""}
-                              onChange={(event) =>
-                                updateProps({
-                                  targetScreenId: event.target.value,
-                                  parameters: undefined,
-                                })
-                              }
-                            >
-                              <option value="">Select screen…</option>
-                              {project.screens
-                                .filter((item) =>
-                                  selected.props.action === "openPopup"
-                                    ? item.kind === "popup"
-                                    : item.kind !== "popup",
-                                )
-                                .map((item) => (
-                                  <option key={item.id} value={item.id}>
-                                    {item.name}
-                                  </option>
-                                ))}
-                            </select>
-                          </Field>
-                        )}
-                      {(selected.type === "button" || selected.type === "equipmentSymbol") &&
-                        selected.props.action === "openPopup" && (
-                          <JsonEditor
-                            label="Popup parameter overrides"
-                            value={selected.props.parameters || {}}
-                            onSave={(value) => {
-                              const parameters = textParameters(value);
-                              const target = project.screens.find(
-                                (item) =>
-                                  item.id === selected.props.targetScreenId,
-                              );
-                              if (
-                                Object.keys(parameters).some(
-                                  (key) =>
-                                    !Object.hasOwn(
-                                      target?.parameters || {},
-                                      key,
-                                    ),
-                                )
-                              )
-                                throw new Error(
-                                  "Overrides must use parameters declared by the target popup screen.",
-                                );
-                              updateProps({ parameters });
-                            }}
-                            notify={notify}
-                          />
-                        )}
-                      {selected.type === "button" &&
-                        selected.props.action === "script" && (
-                          <Field
-                            label="onClick event · Python"
-                            hint="Use inputs['fieldName'], parameters, and system.*. Publish to approve the event for operators."
-                          >
-                            <button className="button component-event-open" onClick={() => setEventEditorId(selected.id)}><Icon name="code" size={15} /> Edit onClick event</button>
-                            <pre className="component-event-summary">{selected.props.script?.trim() || "No script authored."}</pre>
-                          </Field>
-                        )}
                       {selected.type === "table" && (
                         <><Field label="Named query">
                           <select
@@ -2685,42 +2583,18 @@ export default function App() {
           <span className="statusbar-version">EARLY PREVIEW</span>
         </footer>
       </div>
-      {lifecycleEventEditorId && screen?.components.find(component => component.id === lifecycleEventEditorId) && <ComponentLifecycleEditor
-        key={lifecycleEventEditorId}
-        component={screen.components.find(component => component.id === lifecycleEventEditorId)!}
-        components={screen.components}
-        inputs={currentPreviewInputs}
-        parameters={editorParameters}
-        instanceStateAvailable={Boolean(editingTemplate)}
-        onApply={events => {
-          const component = screen.components.find(item => item.id === lifecycleEventEditorId);
-          if (component && JSON.stringify(events) !== JSON.stringify(component.props.componentEvents || {})) updateComponent(component.id, { props: { ...component.props, componentEvents: Object.keys(events).length ? events : undefined } });
-          setLifecycleEventEditorId(null);
-        }}
-        onClose={() => setLifecycleEventEditorId(null)}
-      />}
-      {inputEventEditorId && screen?.components.find(component => component.id === inputEventEditorId) && <InputEventsEditor
-        key={inputEventEditorId}
-        component={screen.components.find(component => component.id === inputEventEditorId)!}
-        components={screen.components}
-        inputs={currentPreviewInputs}
-        parameters={editorParameters}
-        instanceStateAvailable={Boolean(editingTemplate)}
-        onApply={events => {
-          const component = screen.components.find(item => item.id === inputEventEditorId);
-          if (component && JSON.stringify(events || {}) !== JSON.stringify(component.props.events || {})) updateComponent(component.id, {props:{...component.props,events}});
-          setInputEventEditorId(null);
-        }}
-        onClose={() => setInputEventEditorId(null)}
-      />}
-      {eventEditorId && screen?.components.find(component => component.id === eventEditorId) && <ComponentEventEditor
+      {eventEditorId && screen?.components.find(component => component.id === eventEditorId) && <ComponentActionsEditor
         key={eventEditorId}
         component={screen.components.find(component => component.id === eventEditorId)!}
+        components={screen.components}
+        screens={project?.screens ?? []}
         inputs={currentPreviewInputs}
         parameters={editorParameters}
-        onApply={(script) => {
+        instanceStateAvailable={Boolean(editingTemplate)}
+        popupAllowed={Boolean(editingTemplate) || screen.kind !== "popup"}
+        onApply={props => {
           const component = screen.components.find(item => item.id === eventEditorId);
-          if (component && script !== (component.props.script || "")) updateComponent(component.id, { props: { ...component.props, script } });
+          if (component && JSON.stringify(props) !== JSON.stringify(component.props)) updateComponent(component.id, { props });
           setEventEditorId(null);
         }}
         onClose={() => setEventEditorId(null)}
@@ -2784,6 +2658,8 @@ export default function App() {
               code: action.component.props.script || "",
               parameters: action.instance?.parameters || action.parameters,
               inputs: action.inputs,
+              ...pythonUiRequest(action.uiAction),
+              ...(action.uiAction ? { uiContext: pythonUiPreviewContext({ screenId: action.screen.id }, action.component.id, action.instance) } : {}),
             });
             if (action.instance?.isCurrent?.() === false) throw new Error("The template parameters changed while this action was running.");
             return result;
@@ -2908,6 +2784,7 @@ function Canvas({
   onInputChange,
   onAutomaticInputChange,
   onAction,
+  onPythonEvent,
   onOpenPopup,
   onClosePopup,
   actionBusyId,
@@ -2932,7 +2809,8 @@ function Canvas({
   inputs: InputValues;
   onInputChange: (fieldKey: string, value: InputValue) => void;
   onAutomaticInputChange: (fieldKey: string, value: InputValue) => void;
-  onAction: (component: CanvasComponent, instance?: InstanceAction) => void;
+  onAction: (component: CanvasComponent, instance?: InstanceAction, uiAction?: PythonUiAction) => void;
+  onPythonEvent: PythonEventTransport;
   onOpenPopup: (component: CanvasComponent, instance?: InstanceAction) => void;
   onClosePopup: () => void;
   actionBusyId: string;
@@ -3166,6 +3044,7 @@ function Canvas({
                 onInputChange={onInputChange}
                 onAutomaticInputChange={onAutomaticInputChange}
                 onAction={onAction}
+                onPythonEvent={onPythonEvent}
                 onOpenPopup={onOpenPopup}
                 onClosePopup={onClosePopup}
                 actionBusyId={actionBusyId}

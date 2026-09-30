@@ -63,7 +63,7 @@ export function StateDefinitionsEditor({ scope, definitions = {}, references = {
       ? "Each template placement and repeater row owns separate values. They reset when its bound context changes or it closes. Nested templates have their own state; their parent's private values are not inherited. Only these defaults are saved."
       : scope === "session"
       ? "Values are shared by this project's screens and popups in one browser tab. They survive screen navigation and reset when the application reloads or the user changes."
-      : "Values belong to each open screen or popup. They reset when you leave the screen or close the popup. Templates use their containing screen's state."} Define typed defaults here, read them with fx bindings, and update them from browser scripts.</p>
+      : "Values belong to each open screen or popup. They reset when you leave the screen or close the popup. Templates use their containing screen's state."} Define typed defaults here, read them with fx bindings, and update them through Python component scripts or browser scripts.</p>
     {!draft && <>
       <div className="state-definition-summary">
         {entries.map(([name, entry]) => <div className="state-definition-summary-row" key={name}>

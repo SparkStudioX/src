@@ -1,0 +1,399 @@
+{
+  "name": "Python UI workshop",
+  "tags": [],
+  "templates": [
+    {
+      "id": "python-title-card",
+      "name": "Python title station",
+      "width": 512,
+      "height": 274,
+      "parameters": {
+        "station": "A"
+      },
+      "instanceState": {
+        "title": {
+          "type": "string",
+          "value": "State · initial"
+        }
+      },
+      "components": [
+        {
+          "id": "station",
+          "type": "label",
+          "x": 16,
+          "y": 8,
+          "width": 480,
+          "height": 29,
+          "props": {
+            "text": "Station {station}",
+            "fontSize": 23
+          }
+        },
+        {
+          "id": "title-input",
+          "type": "textInput",
+          "x": 16,
+          "y": 44,
+          "width": 480,
+          "height": 70,
+          "props": {
+            "text": "New title",
+            "fieldKey": "title",
+            "defaultValue": "Station updated",
+            "maxLength": 120
+          }
+        },
+        {
+          "id": "row-title",
+          "type": "label",
+          "x": 16,
+          "y": 121,
+          "width": 232,
+          "height": 35,
+          "props": {
+            "text": "Property · initial",
+            "fontSize": 18
+          }
+        },
+        {
+          "id": "state-title",
+          "type": "label",
+          "x": 260,
+          "y": 121,
+          "width": 236,
+          "height": 35,
+          "props": {
+            "text": "State · initial",
+            "fontSize": 18,
+            "bindings": {
+              "text": {
+                "expression": "title",
+                "references": {
+                  "title": {
+                    "kind": "instanceState",
+                    "key": "title"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "set-row-property",
+          "type": "button",
+          "x": 16,
+          "y": 174,
+          "width": 232,
+          "height": 44,
+          "props": {
+            "text": "Set property title",
+            "action": "script",
+            "script": "self.parent.getChild(\"row-title\").props.text = str(inputs[\"title\"])\nresult = {\"message\": \"Only this form property changed.\"}",
+            "backgroundColor": "#4f63c8",
+            "foregroundColor": "#ffffff"
+          }
+        },
+        {
+          "id": "set-row-state",
+          "type": "button",
+          "x": 260,
+          "y": 174,
+          "width": 236,
+          "height": 44,
+          "props": {
+            "text": "Set private state",
+            "action": "script",
+            "script": "self.parent.custom.title = str(inputs[\"title\"])\nresult = {\"message\": \"Only this instance state changed.\"}",
+            "backgroundColor": "#4f63c8",
+            "foregroundColor": "#ffffff"
+          }
+        },
+        {
+          "id": "scope-note",
+          "type": "label",
+          "x": 16,
+          "y": 230,
+          "width": 480,
+          "height": 28,
+          "props": {
+            "text": "Each placement and repeated row owns separate UI state.",
+            "fontSize": 13
+          }
+        }
+      ]
+    }
+  ],
+  "screen": {
+    "id": "python-ui",
+    "name": "Python UI",
+    "width": 1120,
+    "height": 1190,
+    "state": {
+      "title": {
+        "type": "string",
+        "value": "Local state · initial"
+      }
+    },
+    "components": [
+      {
+        "id": "workshop-heading",
+        "type": "label",
+        "x": 32,
+        "y": 20,
+        "width": 1056,
+        "height": 48,
+        "props": {
+          "text": "Python UI · local views, shared data",
+          "fontSize": 32
+        }
+      },
+      {
+        "id": "intro",
+        "type": "label",
+        "x": 32,
+        "y": 78,
+        "width": 1056,
+        "height": 58,
+        "props": {
+          "text": "Python runs on the gateway. Its validated UI changes return only to the calling form. Open a second operator tab to compare.",
+          "fontSize": 18
+        }
+      },
+      {
+        "id": "title-input",
+        "type": "textInput",
+        "x": 32,
+        "y": 158,
+        "width": 480,
+        "height": 70,
+        "props": {
+          "text": "New title",
+          "fieldKey": "title",
+          "defaultValue": "Production overview",
+          "maxLength": 120
+        }
+      },
+      {
+        "id": "rename-self",
+        "type": "button",
+        "x": 578,
+        "y": 180,
+        "width": 510,
+        "height": 44,
+        "props": {
+          "text": "Rename this button · self.text",
+          "action": "script",
+          "script": "self.text = \"hi\"\nresult = {\"message\": \"This button now says \" + self.text, \"buttonText\": self.text}",
+          "backgroundColor": "#4f63c8",
+          "foregroundColor": "#ffffff"
+        }
+      },
+      {
+        "id": "direct-title",
+        "type": "label",
+        "x": 32,
+        "y": 247,
+        "width": 510,
+        "height": 46,
+        "props": {
+          "text": "Local property · initial",
+          "fontSize": 27
+        }
+      },
+      {
+        "id": "state-title",
+        "type": "label",
+        "x": 578,
+        "y": 247,
+        "width": 510,
+        "height": 46,
+        "props": {
+          "text": "Local state · initial",
+          "fontSize": 27,
+          "bindings": {
+            "text": {
+              "expression": "title",
+              "references": {
+                "title": {
+                  "kind": "screenState",
+                  "key": "title"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "set-sibling-title",
+        "type": "button",
+        "x": 32,
+        "y": 317,
+        "width": 330,
+        "height": 44,
+        "props": {
+          "text": "Set sibling title",
+          "action": "script",
+          "script": "self.getSibling(\"direct-title\").props.text = str(inputs[\"title\"])\nresult = {\"message\": \"Changed the calling screen only.\"}",
+          "backgroundColor": "#4f63c8",
+          "foregroundColor": "#ffffff"
+        }
+      },
+      {
+        "id": "set-property-title",
+        "type": "button",
+        "x": 395,
+        "y": 317,
+        "width": 330,
+        "height": 44,
+        "props": {
+          "text": "Set title via system.ui",
+          "action": "script",
+          "script": "system.ui.setProperty(\"direct-title\", \"text\", str(inputs[\"title\"]))\nresult = {\"message\": \"Changed an unbound local property.\"}",
+          "backgroundColor": "#4f63c8",
+          "foregroundColor": "#ffffff"
+        }
+      },
+      {
+        "id": "set-state-title",
+        "type": "button",
+        "x": 758,
+        "y": 317,
+        "width": 330,
+        "height": 44,
+        "props": {
+          "text": "Set bound state title",
+          "action": "script",
+          "script": "system.ui.setState(\"screen\", \"title\", str(inputs[\"title\"]))\nresult = {\"message\": \"Changed declared local state; the binding follows it.\"}",
+          "backgroundColor": "#4f63c8",
+          "foregroundColor": "#ffffff"
+        }
+      },
+      {
+        "id": "local-note",
+        "type": "label",
+        "x": 32,
+        "y": 376,
+        "width": 1056,
+        "height": 40,
+        "props": {
+          "text": "Refresh or reopen to restore authored defaults. These local changes do not edit the saved project or another tab.",
+          "fontSize": 15
+        }
+      },
+      {
+        "id": "station-a",
+        "type": "template",
+        "x": 32,
+        "y": 444,
+        "width": 512,
+        "height": 274,
+        "props": {
+          "templateId": "python-title-card",
+          "parameters": {
+            "station": "A"
+          },
+          "backgroundColor": "#1c2535",
+          "foregroundColor": "#e5ecff",
+          "borderWidth": 1,
+          "borderColor": "#4f5a72"
+        }
+      },
+      {
+        "id": "station-b",
+        "type": "template",
+        "x": 576,
+        "y": 444,
+        "width": 512,
+        "height": 274,
+        "props": {
+          "templateId": "python-title-card",
+          "parameters": {
+            "station": "B"
+          },
+          "backgroundColor": "#1c2535",
+          "foregroundColor": "#e5ecff",
+          "borderWidth": 1,
+          "borderColor": "#4f5a72"
+        }
+      },
+      {
+        "id": "stations",
+        "type": "repeater",
+        "x": 32,
+        "y": 740,
+        "width": 1056,
+        "height": 274,
+        "props": {
+          "templateId": "python-title-card",
+          "columns": 2,
+          "gap": 32,
+          "rows": [
+            {
+              "id": "row-1",
+              "parameters": {
+                "station": "Row 1"
+              }
+            },
+            {
+              "id": "row-2",
+              "parameters": {
+                "station": "Row 2"
+              }
+            }
+          ],
+          "backgroundColor": "#1c2535",
+          "foregroundColor": "#e5ecff",
+          "borderWidth": 1,
+          "borderColor": "#4f5a72"
+        }
+      },
+      {
+        "id": "shared-note",
+        "type": "label",
+        "x": 32,
+        "y": 1035,
+        "width": 1056,
+        "height": 52,
+        "props": {
+          "text": "Optional shared-data exercise: create String memory tag [default]Workshops/PythonUi/SharedTitle. Until then the display below is intentionally unavailable.",
+          "fontSize": 15
+        }
+      },
+      {
+        "id": "shared-title",
+        "type": "label",
+        "x": 32,
+        "y": 1096,
+        "width": 1056,
+        "height": 42,
+        "props": {
+          "text": "Shared title · optional setup",
+          "fontSize": 23,
+          "bindings": {
+            "text": {
+              "expression": "title",
+              "references": {
+                "title": {
+                  "kind": "tag",
+                  "path": "[default]Workshops/PythonUi/SharedTitle"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "shared-help",
+        "type": "label",
+        "x": 32,
+        "y": 1149,
+        "width": 1056,
+        "height": 28,
+        "props": {
+          "text": "Shared title updates in every session. The shared writer requires gateway setup; follow the workshop guide.",
+          "fontSize": 13
+        }
+      }
+    ]
+  }
+}

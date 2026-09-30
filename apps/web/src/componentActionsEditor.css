@@ -1,0 +1,30 @@
+.component-actions-dialog { width: min(1320px, calc(100vw - 40px)); }
+.component-actions-layout { display: grid; grid-template-columns: 175px minmax(0, 1fr); min-height: 0; overflow: hidden; }
+.component-actions-nav { padding: 12px 8px; background: var(--surface-subtle); border-right: 1px solid var(--border); overflow: auto; }
+.component-actions-nav button { display: flex; flex-direction: column; gap: 5px; width: 100%; text-align: left; padding: 12px; border-radius: 5px; color: var(--ink); font-size: 12px; }
+.component-actions-nav button small { color: var(--muted); font-size: 10px; }
+.component-actions-nav button.active { color: var(--accent); background: var(--panel); box-shadow: inset 3px 0 var(--accent); }
+.component-actions-dialog .input-events-body { grid-template-columns: minmax(300px, 1fr) 275px; max-height: calc(100dvh - 224px); }
+.component-actions-dialog .input-events-source > h3 { margin: 0 0 12px; font-size: 14px; }
+.component-actions-dialog .input-events-source .source-editor-host { height: 330px; }
+.component-actions-fields, .component-actions-handler-toolbar { display: grid; gap: 12px; margin-bottom: 16px; font-size: 12px; }
+.component-actions-fields label, .component-actions-handler-toolbar label { display: grid; gap: 6px; }
+.component-actions-fields input, .component-actions-fields select, .component-actions-fields textarea, .component-actions-handler-toolbar select { width: 100%; min-width: 0; color: var(--ink); background: var(--panel); padding: 8px; border: 1px solid var(--border); border-radius: 4px; font: inherit; }
+.component-actions-fields textarea { resize: vertical; font: 12px/1.5 Consolas, monospace; }
+.component-actions-fields p { font-size: 11px; line-height: 1.6; color: var(--text-secondary); margin: 0; }
+.component-actions-handler-toolbar { grid-template-columns: minmax(140px, 1fr) auto auto; align-items: end; }
+.component-actions-open { width: 100%; justify-content: center; }
+@media (max-width: 1000px) { .component-actions-dialog .input-events-body { grid-template-columns: minmax(0, 1fr); }.component-actions-dialog .input-events-context { border-left: 0; border-top: 1px solid var(--border); } }
+@media (max-width: 600px) { .component-actions-layout { grid-template-columns: 115px minmax(0, 1fr); }.component-actions-nav { padding: 6px 3px; }.component-actions-nav button { padding: 9px 7px; }.component-actions-handler-toolbar { grid-template-columns: 1fr; }.component-actions-dialog .input-events-footer span { display: none; } }
+
+.component-event-properties { margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 4px; }
+.component-event-properties legend { padding: 0 5px; color: var(--text-secondary); font-size: 11px; }
+.component-event-properties > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px 10px; max-height: 155px; overflow-y: auto; }
+.component-event-properties label { display: flex; align-items: center; gap: 6px; font-size: 11px; overflow-wrap: anywhere; }
+.component-event-properties input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); }
+.component-event-properties > p, .component-event-count { margin: 8px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.component-event-count { text-align: right; }
+.component-event-count.is-invalid { color: var(--danger); }
+.component-lifecycle-hint { margin: 8px 0 0; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
+
+@media (max-width: 600px) { .component-event-properties > div { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

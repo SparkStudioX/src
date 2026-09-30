@@ -15,6 +15,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 using SparkStudio.Gateway;
 
 var root = Path.Combine(AppContext.BaseDirectory,"fixture"); Directory.CreateDirectory(root);
@@ -136,6 +137,21 @@ Assert(File.ReadAllBytes(statusFile).SequenceEqual(beforeFailure),"Failed comple
 Throws(()=>completedBackup.StartManual(false,actor));
 var heldDownload=completedBackup.Download(completedSnapshot["downloadId"]!.GetValue<string>()); heldDownload.Stream.Dispose();
 Console.WriteLine("PASS post-delivery state persistence failure preserves completed success/retention in memory, warns about restart, retains download and blocks scheduling pending review");
+
+var disposalRoot = Path.Combine(root, "host-disposal"); Directory.CreateDirectory(disposalRoot);
+var services = new ServiceCollection();
+services.AddSingleton(_ => new GatewayBackups(disposalRoot, protection, new RecoveryQuarantine(disposalRoot), new SecurityStore(disposalRoot), lifetime));
+services.AddHostedService(provider => provider.GetRequiredService<GatewayBackups>());
+var provider = services.BuildServiceProvider();
+var owned = provider.GetRequiredService<GatewayBackups>();
+var hosted = provider.GetServices<IHostedService>().Single();
+Assert(ReferenceEquals(owned, hosted), "Test must reproduce the host's dual registration.");
+await hosted.StartAsync(CancellationToken.None);
+await hosted.StopAsync(CancellationToken.None);
+await provider.DisposeAsync();
+Parallel.For(0, 16, _ => owned.Dispose());
+Throws(() => owned.StartManual(false, actor));
+Console.WriteLine("PASS actual singleton/hosted-service disposal and repeated concurrent cleanup do not crash; disposed backup service rejects new work");
 
 static JsonObject Snapshot(GatewayBackups value)=>JsonSerializer.SerializeToNode(value.Snapshot(),new JsonSerializerOptions(JsonSerializerDefaults.Web))!.AsObject();
 static void Assert(bool value,string message){if(!value)throw new Exception(message);}

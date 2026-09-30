@@ -2,7 +2,7 @@
 
 These guides describe the current SparkStudio source, including development work that may be newer than the downloadable installer. The source/documentation review date is **September 30, 2026**. A documented implementation is not a claim that every browser, deployment, integration or failure condition has passed acceptance.
 
-Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md). For installation, use the guide attached to your exact release; [Windows installation](WINDOWS_INSTALLER.md) records the preview.8 boundary. [Verification and roadmap](PARITY.md) separates dated observations from current capability summaries and remaining gates. Earlier ledger entries retain the facts and limitations of their original checks; they are not instructions to start an old development package or assertions about the currently running gateway.
+Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md). For installation, use the guide attached to your exact release; [Windows installation](WINDOWS_INSTALLER.md) records the preview.9 boundary. [Verification and roadmap](PARITY.md) separates dated observations from current capability summaries and remaining gates. Earlier ledger entries retain the facts and limitations of their original checks; they are not instructions to start an old development package or assertions about the currently running gateway.
 
 ## Overview and installation
 
@@ -47,6 +47,7 @@ Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md).
 - [Component messages](COMPONENT_MESSAGING.md)
 - [Python UI actions](PYTHON_UI.md)
 - [Python component events](PYTHON_COMPONENT_EVENTS.md)
+- [Lifecycle and session messaging workshop](LIFECYCLE_SESSION_WORKSHOP.md)
 
 ## Project tools and diagnostics
 
@@ -69,8 +70,8 @@ Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md).
 
 ## Workshops and verification
 
-Use [the example catalog and build instructions](../../examples/README.md) for independently authored workshops. Portable examples import as unpublished projects; setup-required examples also need the documented gateway resources. Match a workshop to its companion build. New Python event workshops are not automatically compatible with the preview.8 installer.
+Use [the example catalog and build instructions](../../examples/README.md) for independently authored workshops. Portable examples import as unpublished projects; setup-required examples also need the documented gateway resources. Match a workshop to its companion build. Use the preview.9 companion bundle for Python component events and lifecycle/session messaging; preview.8 and earlier do not include those features.
 
-Local artifact cleanup consolidated available packages under `artifacts/sparkproj/`, with their guides and provenance in `index.json`. This is not a checked-in directory or a new builder default. A fresh `node tools/build-workshops.mjs --version <version>` still generates `artifacts/workshops/<version>/projects/` and a complete versioned ZIP. Example loaders can generate `artifacts/examples/` separately. Historical artifact paths in dated verification records may have been archived or removed; regenerate outputs from authored sources when needed.
+`artifacts/sparkproj/` is the only maintained location for loose `.sparkproj` packages, with guides and provenance in `index.json`. It is ignored by Git. `node tools/build-workshops.mjs --version <version>` updates this directory and creates an immutable ZIP, manifest and checksums under `artifacts/workshops/<version>/`, without duplicate loose packages. Example loaders import authored JSON directly. Historical artifact paths in dated verification records may have been archived or removed; use the current package directory or the frozen release ZIP.
 
 The September 30 documentation audit reconciled the overview, reusable forms, bindings, state, events, recovery and roadmap summaries against current frontend models/editors, gateway validators/services, Python helpers and existing verification records. It also checked documentation navigation, local links and referenced tool paths. It did not rerun all runtime, installer, network or database acceptance suites. Current source behavior, recorded verification and released binary coverage remain distinct.

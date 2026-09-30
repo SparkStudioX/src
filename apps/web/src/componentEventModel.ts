@@ -3,25 +3,28 @@ import { previewScriptsAllowed, requirePreviewScriptPermission } from "./preview
 import { bindingTargets, propertyValue, supportsBindingTarget } from "./propertyBindings";
 import { isInput } from "./inputs";
 import { inputAssignmentError } from "./inputEvents";
+import { createComponentMessageSender, type ComponentMessageBus, type ComponentMessageSender, type MessageContext } from "./componentMessageModel";
 import type { CanvasComponent, ComponentEventProperty, ComponentEventScript, InputValue, InputValues, RuntimeParameters, RuntimeStateApi, RuntimeStateValues } from "./types";
+import type { EventOrigin, PythonEventRunner } from "./pythonComponentEvents";
 
-export function componentEventProperties(component: CanvasComponent): ComponentEventProperty[] {
-  return [...new Set([...bindingTargets.filter(target => supportsBindingTarget(component.type, target)),
+export function componentEventProperties(component: CanvasComponent, language: "javascript" | "python" = "javascript"): ComponentEventProperty[] {
+  return [...new Set([...bindingTargets.filter(target => supportsBindingTarget(component.type, target) && !(component.type === "passwordInput" && language === "python" && target === "text")),
     ...(isInput(component.type) && component.type !== "passwordInput" ? ["value" as const] : [])])];
 }
 export interface ComponentPropertySample { value: InputValue | null; available: boolean; error: string }
 export type ComponentPropertySamples = Partial<Record<ComponentEventProperty, ComponentPropertySample>>;
 export function componentEventSamples(component: CanvasComponent, evaluated: CanvasComponent, errors: Record<string, string>,
-  parameters: RuntimeParameters, input: InputValue | null | undefined, inputError?: string | null): ComponentPropertySamples {
+  parameters: RuntimeParameters, input: InputValue | null | undefined, inputError?: string | null,
+  literalProperties: Readonly<Record<string, unknown>> = {}): ComponentPropertySamples {
   const samples: ComponentPropertySamples = {};
   for (const property of component.props.componentEvents?.propertyChange?.properties ?? []) {
     let value: unknown, error = errors[property] ?? "";
-    if (!componentEventProperties(component).includes(property)) error = "This component does not expose the watched property.";
+    if (!componentEventProperties(component, component.props.componentEvents?.propertyChange?.language).includes(property)) error = "This component does not expose the watched property.";
     if (property === "value" && isInput(component.type)) { value = input; error ||= inputError ?? ""; }
     else {
       value = propertyValue(evaluated, property);
       if (property === "enabled" || property === "visible") value ??= true;
-      if (typeof value === "string" && !component.props.bindings?.[property] && !component.props.queryBindings?.[property] && ["text", "tagPath", "stateValue", "unit"].includes(property)) value = resolvePath(value, parameters);
+      if (typeof value === "string" && !Object.hasOwn(literalProperties, property) && !component.props.bindings?.[property] && !component.props.queryBindings?.[property] && ["text", "tagPath", "stateValue", "unit"].includes(property)) value = resolvePath(value, parameters);
     }
     const available = !error && (typeof value === "string" || typeof value === "boolean" || typeof value === "number" && Number.isFinite(value) && (!Number.isInteger(value) || Number.isSafeInteger(value)));
     samples[property] = { value: available ? value as InputValue : null, available, error: error || (available ? "" : "The property has no available scalar value.") };
@@ -67,13 +70,13 @@ export class ComponentEventCoordinator {
     for (const cancel of [...this.clients]) cancel();
     this.changed(); return false;
   }
-  accept(type: "mount" | "propertyChange" = "mount"): boolean {
+  accept(type: "mount" | "propertyChange" | "message" | "input" = "mount"): boolean {
     if (this.state.breaker) return false;
     const now = this.now(); this.timestamps = this.timestamps.filter(time => now - time < 1000);
     if (this.timestamps.length >= 512) {
       return this.trip("Automatic component events stopped after 512 events in one second. Fix the event loop, then reopen the screen or restart Preview.");
     }
-    if (type === "propertyChange" && ++this.burst > 128) return this.trip("Automatic component events stopped after 128 property changes without a quiet break. Fix the event loop, then reopen the screen or restart Preview.");
+    if ((type === "propertyChange" || type === "message") && ++this.burst > 128) return this.trip("Automatic component events stopped after 128 property changes or messages without a quiet break. Fix the event loop, then reopen the screen or restart Preview.");
     this.timestamps.push(now); return true;
   }
   queued(): () => void {
@@ -92,9 +95,11 @@ export class ComponentEventCoordinator {
   }
 }
 export interface AutomaticComponentEvent {
-  type: "mount" | "propertyChange" | "unmount"; componentId: string;
+  type: "mount" | "propertyChange" | "unmount" | "message"; componentId: string;
   property?: ComponentEventProperty; value?: InputValue | null; previousValue?: InputValue | null;
   available?: boolean; previousAvailable?: boolean; error?: string; previousError?: string;
+  origin?: EventOrigin;
+  messageType?: string; payload?: Readonly<Record<string, unknown>>; scope?: "instance" | "screen" | "session"; messageId?: string;
 }
 export interface ComponentEventApp {
   notify: (message: unknown) => void;
@@ -102,17 +107,22 @@ export interface ComponentEventApp {
   state: RuntimeStateApi;
   signal: AbortSignal;
   onCleanup: (callback: () => unknown | Promise<unknown>) => void;
+  sendMessage: ComponentMessageSender;
 }
 export interface ComponentEventContext {
   key: string; component: CanvasComponent; components: CanvasComponent[]; inputs: InputValues; parameters: RuntimeParameters;
   state?: RuntimeStateApi; stateValues?: RuntimeStateValues; isCurrent?: () => boolean;
   setInput?: (field: string, value: InputValue) => void;
   coordinator: ComponentEventCoordinator;
+  messages?: MessageContext & { bus: ComponentMessageBus };
+  python?: PythonEventRunner;
+  origins?: Partial<Record<ComponentEventProperty, EventOrigin>>;
 }
 export type ComponentEventExecutor = (script: ComponentEventScript, event: AutomaticComponentEvent, inputs: InputValues,
   parameters: RuntimeParameters, app: ComponentEventApp) => unknown | Promise<unknown>;
 export const executeComponentEvent: ComponentEventExecutor = (script, event, inputs, parameters, app) => {
   requirePreviewScriptPermission();
+  if (script.language !== "javascript") throw new Error("Python events require the gateway event transport.");
   const execute = new Function("event", "inputs", "parameters", "app", `"use strict"; return (async () => {\n${script.code}\n})();`);
   return execute(event, inputs, parameters, app);
 };
@@ -123,6 +133,8 @@ interface EventOwner {
   queue: Promise<void>; pending: number; invocations: Set<Invocation>; cleanups: (() => unknown | Promise<unknown>)[];
   controller: AbortController;
   unregister: () => void; cleanupReading: boolean; cleanupValues?: RuntimeStateValues;
+  unregisterMessages: () => void; messageSignature: string; messageRevision?: number;
+  started: boolean;
 }
 
 /** Trusted JavaScript runs serially. Dead/expired invocations lose all helper authority. */
@@ -136,7 +148,10 @@ export class ComponentEventLifecycle {
     private readonly timeoutMs = 2000, private readonly cleanupTimeoutMs = 1000) {}
   activate() { this.active = true; }
   prepare(context: ComponentEventContext | undefined, samples: ComponentPropertySamples = {}) {
-    if (this.owner && (this.owner.context.key !== context?.key || this.owner.context.coordinator !== context?.coordinator)) {
+    if (this.owner && (this.owner.context.isCurrent?.() === false || this.owner.context.key !== context?.key || this.owner.context.coordinator !== context?.coordinator ||
+      this.owner.context.messages?.bus !== context?.messages?.bus || this.owner.context.messages?.screenKey !== context?.messages?.screenKey ||
+      this.owner.context.messages?.instanceKey !== context?.messages?.instanceKey || this.owner.messageRevision !== context?.messages?.bus.revision ||
+      this.owner.messageSignature !== JSON.stringify(context?.component.props.messageHandlers ?? []))) {
       this.retire(this.owner); this.retiring.push(this.owner); this.owner = undefined;
     }
     this.prepared = context ? { context, samples } : undefined;
@@ -147,17 +162,23 @@ export class ComponentEventLifecycle {
     const { context, samples } = this.prepared;
     if (context.isCurrent?.() === false) return;
     if (!this.owner) {
-      const owner: EventOwner = { context, baseline: frozen(samples), closed: false, blocked: false, scriptsAllowed: previewScriptsAllowed(), queue: Promise.resolve(), pending: 0,
-        invocations: new Set(), cleanups: [], controller: new AbortController(), unregister: () => {}, cleanupReading: false };
+      const owner: EventOwner = { context, baseline: frozen(samples), closed: false, blocked: false, scriptsAllowed: previewScriptsAllowed(), queue: this.cleanupWork, pending: 0,
+        invocations: new Set(), cleanups: [], controller: new AbortController(), unregister: () => {}, cleanupReading: false,
+        unregisterMessages: () => {}, messageSignature: JSON.stringify(context.component.props.messageHandlers ?? []), messageRevision: context.messages?.bus.revision, started: false };
       owner.unregister = context.coordinator.register(() => this.cancel(owner)); this.owner = owner;
+      this.registerMessages(owner);
       this.enqueue(owner, "mount", { type: "mount", componentId: context.component.id });
+      // React StrictMode retires its phantom owner synchronously before this
+      // microtask. It must not send a gateway cleanup for a mount that never ran.
+      queueMicrotask(() => { if (!owner.closed && this.active) owner.started = true; });
       return;
     }
     const owner = this.owner; owner.context = context;
     for (const property of context.component.props.componentEvents?.propertyChange?.properties ?? []) {
       const next = samples[property], previous = owner.baseline[property];
       if (next && previous && !same(next, previous)) this.enqueue(owner, "propertyChange", { type: "propertyChange", componentId: context.component.id,
-        property, value: next.value, previousValue: previous.value, available: next.available, previousAvailable: previous.available, error: next.error, previousError: previous.error });
+        property, value: next.value, previousValue: previous.value, available: next.available, previousAvailable: previous.available, error: next.error, previousError: previous.error,
+        origin: context.origins?.[property] ?? "configuration" });
     }
     owner.baseline = frozen(samples);
   }
@@ -171,6 +192,7 @@ export class ComponentEventLifecycle {
   whenIdle() { return Promise.all([this.owner?.queue, this.cleanupWork]); }
   private cancel(owner: EventOwner) {
     owner.blocked = true;
+    owner.unregisterMessages(); owner.unregisterMessages = () => {};
     owner.controller.abort();
     for (const invocation of owner.invocations) { invocation.active = false; invocation.controller.abort(); }
   }
@@ -183,13 +205,20 @@ export class ComponentEventLifecycle {
     return frozen(Object.fromEntries(Object.entries(context.inputs).filter(([key]) => !forbidden.has(key))));
   }
   private app(owner: EventOwner, invocation: Invocation, cleanup = false): ComponentEventApp {
-    const live = () => this.active && !owner.closed && !owner.blocked && invocation.active && owner.context.isCurrent?.() !== false;
+    const capturedCurrent = owner.context.isCurrent;
+    const live = () => this.active && !owner.closed && !owner.blocked && invocation.active && capturedCurrent?.() !== false && owner.context.isCurrent?.() !== false &&
+      owner.messageRevision === owner.context.messages?.bus.revision;
+    const messages = owner.context.messages;
+    const sendMessage: ComponentMessageSender = messages
+      ? createComponentMessageSender(messages.bus, messages, () => !cleanup && live() && owner.scriptsAllowed)
+      : () => ({ messageId: "", accepted: 0 });
     const closedRead = (scope: Parameters<RuntimeStateApi["get"]>[0], key: string) => {
       const values = owner.cleanupValues?.[scope];
       if (!values || !Object.hasOwn(values, key)) throw new Error(`${scope} state '${key}' is unavailable during cleanup.`);
       return values[key];
     };
     return {
+      sendMessage,
       signal: AbortSignal.any([owner.controller.signal, invocation.controller.signal]),
       notify: message => { if (!cleanup && live()) owner.context.coordinator.report(owner.context.component.id, String(message), "info"); },
       setInput: (field, value) => {
@@ -226,43 +255,93 @@ export class ComponentEventLifecycle {
     } catch (error) { invocation.active = false; invocation.controller.abort(); throw error; }
     finally { if (timer !== undefined) clearTimeout(timer); }
   }
-  private enqueue(owner: EventOwner, type: "mount" | "propertyChange", event: AutomaticComponentEvent) {
-    const context = owner.context, script = context.component.props.componentEvents?.[type];
-    if (!script?.code.trim() || owner.blocked || owner.closed) return;
-    if (script.language !== "javascript" || script.code.length > 65536) { context.coordinator.report(context.component.id, `${type}: events require JavaScript with at most 65,536 characters.`); return; }
-    if (owner.pending >= 32) { context.coordinator.report(context.component.id, "Automatic event queue is full (32 events). New events were skipped."); return; }
-    if (!context.coordinator.accept(type)) return;
+  private registerMessages(owner: EventOwner) {
+    const context = owner.context, messages = context.messages;
+    if (!messages || !owner.scriptsAllowed || owner.closed || owner.blocked) return;
+    const handlers = context.component.props.messageHandlers ?? [];
+    if (handlers.length > 16) { context.coordinator.report(context.component.id, "A component can register at most 16 message handlers."); return; }
+    const signatures = new Set<string>(), removals: (() => void)[] = [];
+    try {
+      for (const handler of handlers) {
+        if (handler.language === "python" && !context.python) continue;
+        const signature = JSON.stringify([handler.messageType, handler.scope]);
+        if (signatures.has(signature)) throw new Error("A component cannot register the same message type and scope twice.");
+        signatures.add(signature);
+        if (!["javascript", "python"].includes(handler.language) || handler.language === "javascript" && !handler.code?.trim() || (handler.code?.length ?? 0) > 65536)
+          throw new Error("Message handlers require Python or JavaScript with at most 65,536 characters.");
+        const script = frozen({ language: handler.language, code: handler.code });
+        removals.push(messages.bus.register(handler.messageType, handler.scope, messages, event => {
+          if (!this.active || owner.closed || owner.blocked || owner.context.isCurrent?.() === false ||
+            owner.messageRevision !== messages.bus.revision || !previewScriptsAllowed()) return false;
+          return this.enqueue(owner, "message", { ...event, componentId: context.component.id }, script, handler.id);
+        }));
+      }
+      owner.unregisterMessages = () => { for (const remove of removals.splice(0)) remove(); };
+    } catch (error) {
+      for (const remove of removals) remove();
+      context.coordinator.report(context.component.id, `message: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  private enqueue(owner: EventOwner, type: "mount" | "propertyChange" | "message", event: AutomaticComponentEvent, suppliedScript?: ComponentEventScript, handlerId?: string): boolean {
+    const context = owner.context, script = suppliedScript ?? (type === "message" ? undefined : context.component.props.componentEvents?.[type]);
+    if (!script || script.language !== "python" && !script.code?.trim() || owner.blocked || owner.closed || !owner.scriptsAllowed) return false;
+    if (script.language === "python" && !context.python) return false;
+    if (!["javascript", "python"].includes(script.language) || (script.code?.length ?? 0) > 65536) { context.coordinator.report(context.component.id, `${type}: use Python or JavaScript with at most 65,536 characters.`); return false; }
+    if (owner.pending >= 32) { context.coordinator.report(context.component.id, "Automatic event queue is full (32 events). New events were skipped."); return false; }
+    // The bus has already charged each addressed message to this same coordinator.
+    if (type !== "message" && !context.coordinator.accept(type)) return false;
     const finish = context.coordinator.queued();
     const inputs = this.inputs(context), parameters = frozen(context.parameters), snapshot = frozen(event);
     owner.pending++;
     owner.queue = owner.queue.then(async () => {
       // A task boundary prevents state feedback from recursively exhausting
       // React's passive-effect update depth before the shared breaker runs.
-      await new Promise<void>(resolve => setTimeout(resolve, 0));
-      if (!this.active || owner.closed || owner.blocked || owner.context.isCurrent?.() === false) return;
+      if (type !== "mount" || script.language !== "python") await new Promise<void>(resolve => setTimeout(resolve, 0));
+      if (!this.active || owner.closed || owner.blocked || context.isCurrent?.() === false || owner.context.isCurrent?.() === false ||
+        owner.messageRevision !== owner.context.messages?.bus.revision || !previewScriptsAllowed()) return;
       const invocation = { active: true, controller: new AbortController() }; owner.invocations.add(invocation);
-      try { await this.bounded(() => this.execute(script, snapshot, inputs, parameters, this.app(owner, invocation)), invocation, this.timeoutMs); }
+      try {
+        const app = this.app(owner, invocation);
+        if (script.language === "python") {
+          if (!context.python) throw new Error("Python component events are unavailable in this context.");
+          const output = await context.python(type === "message" ? { family: "message", handlerId: handlerId! }
+            : type === "mount" ? { family: "lifecycle", type: "mount" } : { family: "propertyChange" }, snapshot, inputs, parameters, app.signal);
+          if (output && !app.signal.aborted && !owner.closed && !owner.blocked && context.isCurrent?.() !== false)
+            context.coordinator.report(context.component.id, output, "info");
+        } else await this.bounded(() => this.execute(script, snapshot, inputs, parameters, app), invocation, this.timeoutMs);
+      }
       catch (error) { if (!owner.closed && !owner.blocked) context.coordinator.report(context.component.id, `${type}${event.property ? ` (${event.property})` : ""}: ${error instanceof Error ? error.message : String(error)}`); }
       finally { owner.invocations.delete(invocation); }
     }).finally(() => { owner.pending--; finish(); });
+    return true;
   }
   private async cleanup(owner: EventOwner) {
     // A read-only owner's unmount script stays disabled even after the outer
     // preview has closed and the transport has returned to authoring mode.
     if (!owner.scriptsAllowed) { owner.cleanups.length = 0; return; }
+    // Cancelled live invocations finish before gateway cleanup starts. Their
+    // signals already prohibit applying effects to this retired owner.
+    await owner.queue;
     owner.cleanupReading = true;
     const context = owner.context, script = context.component.props.componentEvents?.unmount;
-    const invocation = { active: true, controller: new AbortController() }; invocation.controller.abort();
+    const invocation = { active: true, controller: new AbortController() };
     const runs: (() => unknown | Promise<unknown>)[] = [...owner.cleanups.splice(0)];
-    if (script?.code.trim()) runs.unshift(() => {
-      if (script.language !== "javascript" || script.code.length > 65536) throw new Error("Cleanup requires JavaScript with at most 65,536 characters.");
+    if (script && (script.language === "python" || script.code?.trim())) runs.unshift(async () => {
+      if (!["javascript", "python"].includes(script.language) || (script.code?.length ?? 0) > 65536) throw new Error("Cleanup requires Python or JavaScript with at most 65,536 characters.");
+      if (script.language === "python") {
+        if (!owner.started || !context.python) return;
+        const output = await context.python({ family: "lifecycle", type: "unmount" }, frozen({ type: "unmount", componentId: context.component.id }),
+          this.inputs(context), frozen(context.parameters), invocation.controller.signal);
+        if (output && invocation.active) context.coordinator.report(context.component.id, output, "info");
+        return;
+      }
       return this.execute(script, frozen({ type: "unmount", componentId: context.component.id }), this.inputs(context), frozen(context.parameters), this.app(owner, invocation, true));
     });
     try {
       await this.bounded(async () => { for (const run of runs) {
         if (!invocation.active) return;
         try { requirePreviewScriptPermission(); await run(); } catch (error) { context.coordinator.report(context.component.id, `unmount: ${error instanceof Error ? error.message : String(error)}`); }
-      } }, invocation, this.cleanupTimeoutMs);
+      } }, invocation, script?.language === "python" ? Math.max(3500, this.cleanupTimeoutMs) : this.cleanupTimeoutMs);
     } catch (error) { context.coordinator.report(context.component.id, `unmount: ${error instanceof Error ? error.message : String(error)}`); }
     finally { invocation.active = false; owner.cleanupReading = false; }
   }

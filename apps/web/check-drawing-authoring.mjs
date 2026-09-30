@@ -10,8 +10,9 @@ const require = createRequire(import.meta.url), asModule = code => `data:text/ja
 const hookUrl = asModule(`let scopes=new Map(),current='',index=0;
 export const begin=scope=>{current=scope;index=0;if(!scopes.has(scope))scopes.set(scope,[]);};export const clear=()=>{scopes=new Map();};
 export const useState=initial=>{const values=scopes.get(current),at=index++;if(!(at in values))values[at]=typeof initial==='function'?initial():initial;return[values[at],next=>{values[at]=typeof next==='function'?next(values[at]):next;}];};
-export const useRef=initial=>{const values=scopes.get(current),at=index++;return values[at]??={current:initial};};export const useId=()=>'drawing-test';export const useEffect=()=>{};`);
+export const useRef=initial=>{const values=scopes.get(current),at=index++;return values[at]??={current:initial};};export const useId=()=>'drawing-test';export const useEffect=()=>{};export const useMemo=run=>run();`);
 const portalUrl = asModule('export const createPortal=children=>children;');
+const scriptUrl = asModule('export default function ScriptEditor(){return null;}');
 function loader(interactive = false) {
   const modules = new Map();
   return function url(name) {
@@ -19,7 +20,7 @@ function loader(interactive = false) {
     const file = ['tsx', 'ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(file => fs.existsSync(file)); assert.ok(file, name);
     const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
       .replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
-      .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_full, prefix, _quote, dependency) => `${prefix}${JSON.stringify(interactive && dependency === 'react' ? hookUrl : interactive && dependency === 'react-dom' ? portalUrl : dependency.startsWith('./') ? url(dependency.slice(2)) : pathToFileURL(require.resolve(dependency)).href)}`);
+      .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_full, prefix, _quote, dependency) => `${prefix}${JSON.stringify(interactive && dependency === 'react' ? hookUrl : interactive && dependency === 'react-dom' ? portalUrl : interactive && dependency === './ScriptEditor' ? scriptUrl : dependency.startsWith('./') ? url(dependency.slice(2)) : pathToFileURL(require.resolve(dependency)).href)}`);
     const result = asModule(code); modules.set(name, result); return result;
   };
 }
@@ -28,6 +29,7 @@ const { DrawingEditor } = await import(real('DrawingEditor'));
 const { DrawingEditor: Editor } = await import(interactive('DrawingEditor'));
 const { PropertyBindingsEditor } = await import(real('PropertyBindingsEditor'));
 const { PropertyBindingsEditor: Bindings } = await import(interactive('PropertyBindingsEditor'));
+const { default: ActionsEditor } = await import(interactive('ComponentActionsEditor'));
 const { drawingTypes, drawingDefaults, validateDrawingProps, supportsDrawingProperty } = await import(real('drawingComponents'));
 const { checkpoint, restoreHistory } = await import(real('canvasEditing'));
 const { isInput } = await import(real('inputs'));
@@ -35,10 +37,11 @@ const { isProcessDisplay } = await import(real('processDisplays'));
 const { iconNames } = await import(real('Icon'));
 const noOp = () => {}, make = (type = 'polyline', props = {}) => ({ id: 'drawing', type, x: 20, y: 30, width: 260, height: 180, props: { ...drawingDefaults(type), text: 'Equipment route', ...props } });
 const nodes = node => !node || typeof node !== 'object' ? [] : [node, ...React.Children.toArray(node.props?.children).flatMap(nodes)];
-function drive(component, Component = Editor, commit = noOp) {
+function drive(component, Component = Editor, commit = noOp, extra = {}) {
   hooks.clear(); let tree;
   const patches = [], errors = [], props = { component, components: [component], tags: [], parameters: {}, inputs: {}, onGeometryChange: noOp,
-    onChange: patch => { patches.push(patch); commit(patch); }, notify: message => errors.push(message) };
+    onChange: patch => { patches.push(patch); commit(patch); }, onApply: patch => patches.push(patch), onClose: noOp,
+    notify: message => errors.push(message), ...extra };
   function expand(node, path = 'root') {
     if (!node || typeof node !== 'object') return node;
     if (typeof node.type === 'function') { hooks.begin(`${path}:${node.type.name}:${node.key || ''}`); return expand(node.type(node.props), `${path}:${node.type.name}`); }
@@ -67,8 +70,8 @@ let checks = 0; function check(name, run) { run(); checks++; console.log(`PASS $
 check('actual sibling inspector editors have distinct stable identities through Apply, Undo and reselection', () => {
   assert.equal(inspectorEditors.size, 2);
   const code = ts.transpileModule(`return [${inspectorEditors.get('PropertyBindingsEditor')}, ${inspectorEditors.get('DrawingEditor')}];`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None, jsx: ts.JsxEmit.React } }).outputText;
-  const render = new Function('React', 'PropertyBindingsEditor', 'DrawingEditor', 'selected', 'screen', 'tags', 'editorParameters', 'currentPreviewInputs', 'connected', 'updateProps', 'updateComponent', 'notify', 'applicationState', 'editingTemplate', 'project', code);
-  const keys = component => render(React, 'bindings-editor', 'drawing-editor', component, { components: [component] }, [], {}, {}, true, noOp, noOp, noOp, { values: { session: {}, screen: {} } }, false, { templates: [] }).map(editor => editor.key);
+  const render = new Function('React', 'PropertyBindingsEditor', 'DrawingEditor', 'selected', 'screen', 'tags', 'editorParameters', 'currentPreviewInputs', 'connected', 'updateProps', 'updateComponent', 'notify', 'applicationState', 'editingTemplate', 'project', 'queries', code);
+  const keys = component => render(React, 'bindings-editor', 'drawing-editor', component, { components: [component] }, [], {}, {}, true, noOp, noOp, noOp, { values: { session: {}, screen: {} } }, false, { templates: [] }, []).map(editor => editor.key);
   const original = make(), selectedKeys = keys(original);
   assert.equal(new Set(selectedKeys).size, 2, 'Sibling editors must not share a React key');
   const applied = { ...original, props: { ...original.props, points: [{ x: 0, y: 25 }, { x: 100, y: 75 }] } };
@@ -180,24 +183,23 @@ try {
   });
 } finally { if (previousDocument === undefined) delete globalThis.document; else globalThis.document = previousDocument; }
 
-function actualControl(needle, selected, patches, project = { screens: [{ id: 'main', name: 'Main' }, { id: 'detail', name: 'Detail', kind: 'popup', parameters: { machine: '' } }] }) {
-  const expression = expressions.filter(value => value.includes(needle) && value.includes('selected.type === "equipmentSymbol"')).sort((a, b) => a.length - b.length)[0]; assert.ok(expression, needle);
-  const code = ts.transpileModule(`return (${expression});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None, jsx: ts.JsxEmit.React } }).outputText;
-  return new Function('React', 'Field', 'JsonEditor', 'selected', 'updateProps', 'screen', 'project', 'editingTemplate', 'textParameters', 'notify', code)(React, 'label', 'parameter-editor', selected, patch => patches.push(patch), { kind: 'screen' }, project, false, value => value, noOp);
-}
-check('actual equipment action controls offer None, navigation and popup, then clear old target and overrides', () => {
-  const patches = [], component = make('equipmentSymbol'), tree = actualControl('<Field label="On click">', component, patches), select = nodes(tree).find(node => node.type === 'select');
+check('unified equipment action controls offer None, navigation and popup, validate overrides and clear old targets on Apply', () => {
+  const screens = [{ id: 'main', name: 'Main' }, { id: 'detail', name: 'Detail', kind: 'popup', parameters: { machine: '' } }];
+  const ui = drive(make('equipmentSymbol'), ActionsEditor, noOp, { screens });
+  const select = ui.field('Click action');
   assert.equal(select.props.value, ''); assert.deepEqual(nodes(select).filter(node => node.type === 'option').map(node => node.props.value), ['', 'navigate', 'openPopup']);
-  select.props.onChange({ target: { value: 'openPopup' } }); select.props.onChange({ target: { value: '' } });
-  assert.deepEqual(patches, [{ action: 'openPopup', parameters: undefined, targetScreenId: undefined }, { action: undefined, parameters: undefined, targetScreenId: undefined }]);
-  assert.equal(actualControl('"Destination screen"', component, []), false);
+  assert.ok(!ui.all().some(node => node.props?.['aria-label'] === 'Action destination'));
   for (const [action, expected] of [['navigate', 'main'], ['openPopup', 'detail']]) {
-    const target = actualControl('"Destination screen"', make('equipmentSymbol', { action }), []);
-    assert.deepEqual(nodes(target).filter(node => node.type === 'option').map(node => node.props.value), ['', expected]);
+    ui.change('Click action', action);
+    assert.deepEqual(nodes(ui.field('Action destination')).filter(node => node.type === 'option').map(node => node.props.value), ['', expected]);
   }
-  const parameters = actualControl('label="Popup parameter overrides"', make('equipmentSymbol', { action: 'openPopup', targetScreenId: 'detail' }), patches);
-  parameters.props.onSave({ machine: 'P-1' }); assert.deepEqual(patches.at(-1), { parameters: { machine: 'P-1' } });
-  assert.throws(() => parameters.props.onSave({ unknown: 'x' }), /declared/);
+  ui.change('Action destination', 'detail'); ui.change('Popup parameter overrides', '{"unknown":"x"}'); ui.click('Apply actions & events');
+  assert.deepEqual(ui.patches, []); assert.ok(ui.all().some(node => node.props?.role === 'alert' && /declared/.test(node.props.children)));
+  ui.change('Popup parameter overrides', '{"machine":"P-1"}'); ui.click('Apply actions & events');
+  assert.equal(ui.patches[0].action, 'openPopup'); assert.equal(ui.patches[0].targetScreenId, 'detail'); assert.deepEqual(ui.patches[0].parameters, { machine: 'P-1' });
+  const cleared = drive(make('equipmentSymbol', ui.patches[0]), ActionsEditor, noOp, { screens });
+  cleared.change('Click action', ''); cleared.click('Apply actions & events');
+  assert.equal(cleared.patches[0].action, undefined); assert.equal(cleared.patches[0].targetScreenId, undefined); assert.equal(cleared.patches[0].parameters, undefined);
 });
 
 console.log(`${checks} drawing authoring checks passed.`);

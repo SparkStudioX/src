@@ -2,24 +2,32 @@
 
 Each major user-facing feature should ship with an independently authored workshop project, a short exercise guide, compatibility information and a verified import/publish/runtime check. Workshops serve as both learning material and reproducible acceptance examples. Use synthetic data and make any gateway setup or writes explicit.
 
-[catalog.json](catalog.json) is the machine-readable inventory of all 36 source examples. Twenty-four are portable project workshops; twelve require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
+[catalog.json](catalog.json) is the machine-readable inventory of all 41 source examples. Twenty-nine are portable project workshops; twelve require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
 
 ## Use a downloaded workshop
 
 1. Use the SparkStudio build identified by the workshop bundle, or a newer compatible build with its listed features. The first `v0.1.0-preview.1` installer predates this collection. A package's format version describes the archive, not the feature set supported by an older application.
 2. Sign in to Projects as a gateway administrator and choose **Import .sparkproj**. Importing a `.sparkproj` creates a new, unpublished project; it does not replace an existing application or configure gateway resources.
 3. Open the new project in Designer. Review its screens, bindings and scripts, and follow the supplied workshop guide. Preview starts in **Live read-only**: native local inputs, pure bindings, navigation and read queries work; authored browser JavaScript and Python actions are blocked. To exercise those scripts, a gateway administrator must explicitly enable **Live actions**, or you can use the explicitly published operator application with its required permissions. Changing Preview modes resets its forms and popup; leaving Preview revokes its temporary capability.
-4. Publish the project, grant the intended user View access and, where Python buttons are part of the exercise, Operate access. Open its operator application and complete the exercise there too. Engineering and operator sign-in are separate sessions.
+4. Publish the project, grant the intended user View access and, where Python buttons or component events are part of the exercise, Operate access. Open its operator application and complete the exercise there too. Engineering and operator sign-in are separate sessions.
 5. Repeat an exercise by reopening the application or importing a fresh copy. Browser session values are not saved in the package. Examples that write memory tags need their explicitly declared gateway values reset separately.
 
 The portable collection needs no OPC UA server, SQL Server, external database or internet connection during use. Query properties uses the gateway's built-in synthetic sample provider. Process displays and process graphics use deliberately undefined synthetic tag paths for their unavailable-data exercises; leave those paths undefined as their guides specify. Read-only Python preview buttons need the Python runtime shipped with the matching gateway package. Browser-only workshops do not depend on Python actions.
 
 Project packages carry saved screens, templates, queries, script drafts, styles, translations, authoring defaults and referenced local images. They do not contain accounts, grants, credentials, connection configuration, tag definitions or values, databases, active publications/history or live browser state. See [project packages](../docs/architecture/PROJECTS.md) for the complete format and import rules.
 
+The Gateway events workshop includes seven disabled Python resources. Import and screen publication leave them inactive; review, enable, save and **Publish scripts** separately to exercise them. Its optional tag-change exercise requires one memory tag configured outside the package. The other event examples require no equipment or database setup.
+
+The Python UI workshop keeps its core exercise local to the calling browser form: property overrides and declared state are returned by Python without changing the project or other operator tabs. Its optional shared-title display begins unavailable. The [Python UI guide](../docs/architecture/PYTHON_UI.md) explains how to create a separate String memory tag and add a deliberate shared write action; neither gateway setup nor that write action is included in the portable package.
+
 ## Portable collection
 
 | Workshop | What to try | Python actions |
 | --- | --- | --- |
+| [Python UI](python-ui.json) | Rename a button with `self.text`, change local titles from Python, compare independent template rows, then follow the optional shared-tag extension. | Local UI property/state effects only; shared tag writes require explicit guide setup |
+| [Python component events](python-component-events.json) | Load synthetic work orders through input handlers, observe property changes and reset one form through messages. | Input, property and message handlers; independent template and row state |
+| [Component messaging](component-messaging.json) | Send from native buttons and JavaScript input events; compare instance, screen and popup session receivers and cleanup. | None |
+| [Gateway events](gateway-events.json) | Configure startup, update, shutdown, timer, tag-change, message and cron events; inspect retained logs and cancellation. | Seven disabled diagnostic-only scripts; enable and publish deliberately |
 | [Canvas precision](canvas-precision.json) | Select by type, match grouped dimensions and inspect numeric grid coordinates. | None |
 | [Reusable visual styles](visual-styles.json) | Share style resources, compare local/bound overrides and inspect protected references. | None |
 | [Preview communication](preview-communication.json) | Verify default action denial, explicitly enable temporary Live actions and reset back to read-only. | Optional return-only messages |
@@ -42,10 +50,11 @@ Project packages carry saved screens, templates, queries, script drafts, styles,
 | [Two-way input state bindings](input-state-bindings.json) | Mirror accepted values across forms while invalid drafts remain local. | Read-only previews |
 | [Private template instance state](instance-state.json) | Edit and reset each panel's private quantity and nested note. | Read-only previews |
 | [State-driven template parameters](template-parameter-state.json) | Feed reusable forms from session, screen and private state. | Read-only previews |
+| [Python lifecycle and gateway session messages](lifecycle-session-messaging.json) | Mount/cleanup, one Actions & Events editor, broadcast and targeted operator tabs. | Bundled Python; Operate permission |
 | [Component lifecycle and property events](component-events.json) | Compare user/property events, popup cleanup and deliberate bounded failures. | None |
 | [Named-query property bindings](query-properties.json) | Drive values, layout and visibility from synthetic query results. | Read-only refresh button |
 
-The catalog records a common verified feature baseline by source commit rather than guessing a minimum installer version. Each generated bundle records its actual source revision and release label. A workshop may be distributed as an individual `.sparkproj` with its guide or as part of the collection accompanying a release.
+Use the companion **0.2.0-preview.9** release or a newer compatible gateway for this collection. The catalog's source-commit baseline identifies the original collection's lower feature boundary; newer examples also require their listed features. Each generated bundle records its actual source revision and release label. A workshop may be distributed as an individual `.sparkproj` with its guide or as part of the collection accompanying a release.
 
 ## Examples that require gateway setup
 
@@ -81,11 +90,17 @@ node tools/test-workshop-build.mjs
 node tools/build-workshops.mjs --version 2026.09.29
 ```
 
-The output is a fresh `artifacts/workshops/<version>/` folder. The builder refuses to overwrite an existing folder; use a new version label for a new artifact. It reads the catalog and authored definitions, never a running gateway or development project export. Packages carry draft projects only. Asset-backed and gateway-setup examples stay out of the initial standalone collection.
+The builder adds and updates loose packages only in `artifacts/sparkproj/<id>.sparkproj`, with matching guides and a current `index.json`. This is the single maintained package directory. It refuses to overwrite an unindexed or locally edited package with different contents. Each build also creates a fresh `artifacts/workshops/<version>/` release directory containing the ZIP, manifest and checksums, without another set of loose `.sparkproj` files. Use a new version label for each immutable release artifact. The builder reads the catalog and authored definitions, never a running gateway or development project export. Packages carry draft projects only. Asset-backed and gateway-setup examples stay out of the standalone collection.
 
-Each bundle contains `projects/*.sparkproj`, `guides/*.md`, the corresponding authored definitions and feature guides, `catalog.json`, `manifest.json` and `SHA256SUMS`. The walkthroughs work offline; wider links in the feature guides may require the full source checkout. The standalone `SparkStudio-Workshops-<version>.zip` contains the same payload; its adjacent `.sha256` covers the ZIP itself. The manifest records the actual source revision, dirty-worktree status, required feature baseline and every payload hash/size. Build timestamps default to the source commit timestamp for reproducibility; `SOURCE_DATE_EPOCH` can explicitly set them. A bundle label is independent of the gateway version.
+Inside each release ZIP are `projects/*.sparkproj`, `guides/*.md`, the corresponding authored definitions and feature guides, `catalog.json`, `manifest.json` and `SHA256SUMS`. These frozen archive entries are distribution snapshots; the maintained loose packages stay in `artifacts/sparkproj/`. The walkthroughs work offline; wider links in feature guides may require the full source checkout. The adjacent `.sha256` covers the ZIP itself. The manifest records the source revision, dirty-worktree status, required feature baseline and every archived payload hash/size. Verification reads packages from that ZIP so later updates to the maintained directory cannot change an older release. Build timestamps default to the source commit timestamp for reproducibility; `SOURCE_DATE_EPOCH` can explicitly set them. A bundle label is independent of the gateway version.
 
-Before distributing a bundle, validate it against an isolated gateway built from the companion release. Port 5091 and a disposable data directory are required; the verifier creates, publishes and then archives test projects. It does not invoke their action scripts or alter gateway tags/connections:
+Check the frozen archive's manifest, packages and checksums without contacting a gateway:
+
+```powershell
+node tools/test-workshop-packages.mjs artifacts/workshops/2026.09.29 --verify-only
+```
+
+Before distributing a bundle, also validate it against an isolated gateway built from the companion release. Port 5091 and a disposable data directory are required; the verifier creates, publishes and then archives test projects. It does not invoke their action scripts or alter gateway tags/connections:
 
 ```powershell
 $env:SPARKSTUDIO_TEST_AUTH_FILE = '.data/test-evidence/security-test-accounts.json'
@@ -93,6 +108,8 @@ node --import ./tools/test-auth-session.mjs tools/test-workshop-packages.mjs art
 ```
 
 The credential file must come from the existing isolated [security test workflow](../docs/architecture/SECURITY.md#verification-commands). Also exercise each new or changed walkthrough in Designer and runtime; package tests verify structure and gateway compatibility, not every operator interaction. CI runs the offline catalog/package checks without credentials. The gateway verification and walkthroughs remain release checks.
+
+`node tools/test-python-ui-workshop.mjs` creates its own disposable gateway on port 5092 using a gateway build at `artifacts/python-ui-tests/bin/SparkStudio.Gateway/debug` (override with `SPARKSTUDIO_TEST_GATEWAY_DIR`). It verifies fresh authored import/publication, actual CPython UI effects, `self.text`, template/row context, capability-protected Live Preview, rejected snapshots, failure handling and re-export. A separate fixture project creates the optional synthetic shared tag and verifies it through two operator sessions. `--browser` keeps only this fixture running for visual checks; press Enter or create `browser-done` inside the printed fixture directory to stop it. Set `SPARKSTUDIO_TEST_PORT=5093` when a separate fixture already owns 5092; other ports are rejected. The installed gateway and its data are not used.
 
 Build the final distribution from a clean source commit. Attach the ZIP and checksum to a compatible release in **SparkStudioX/releases**, or create a separately versioned workshop release there. State the tested gateway build and feature baseline in its release notes. Keep that repository source-free: upload generated assets and user guides, not application code. To share one workshop, include its `.sparkproj`, guide and package hash from the manifest. No new public release is created by the builder.
 

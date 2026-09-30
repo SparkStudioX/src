@@ -1,0 +1,541 @@
+{
+  "name": "Python component events workshop",
+  "tags": [],
+  "templates": [
+    {
+      "id": "python-order-form",
+      "name": "Python order form",
+      "width": 544,
+      "height": 716,
+      "parameters": {
+        "station": "A"
+      },
+      "instanceState": {
+        "part": {
+          "type": "string",
+          "value": "Valve housing"
+        },
+        "target": {
+          "type": "number",
+          "value": 12
+        },
+        "quantity": {
+          "type": "number",
+          "value": 12
+        },
+        "valid": {
+          "type": "boolean",
+          "value": true
+        },
+        "validation": {
+          "type": "string",
+          "value": "Quantity is within the order target."
+        },
+        "draft": {
+          "type": "string",
+          "value": "No session draft stored."
+        },
+        "targetCaption": {
+          "value": "Target: 12",
+          "type": "string"
+        }
+      },
+      "components": [
+        {
+          "id": "card",
+          "type": "rectangle",
+          "x": 0,
+          "y": 0,
+          "width": 544,
+          "height": 716,
+          "props": {
+            "fillColor": "#ffffff",
+            "strokeColor": "#c4d2e4",
+            "strokeWidth": 1,
+            "cornerRadius": 6
+          }
+        },
+        {
+          "id": "form-title",
+          "type": "label",
+          "x": 20,
+          "y": 12,
+          "width": 504,
+          "height": 32,
+          "props": {
+            "text": "STATION {station}",
+            "fontSize": 22,
+            "foregroundColor": "#223148"
+          }
+        },
+        {
+          "id": "order",
+          "type": "select",
+          "x": 20,
+          "y": 58,
+          "width": 504,
+          "height": 74,
+          "props": {
+            "text": "Work order",
+            "fieldKey": "order",
+            "defaultValue": "WO1001",
+            "options": [
+              {
+                "value": "WO1001",
+                "label": "WO1001 · Valve housing"
+              },
+              {
+                "value": "WO1002",
+                "label": "WO1002 · Mounting bracket"
+              }
+            ],
+            "events": {
+              "commit": {
+                "language": "python",
+                "code": "orders = {\"WO1001\": (\"Valve housing\", 12), \"WO1002\": (\"Mounting bracket\", 24)}\npart, target = orders[event.value]\nself.parent.custom.part = part\nself.parent.custom.target = target\nself.parent.custom.targetCaption = \"Target: \" + str(target)\nself.parent.custom.quantity = target\nself.parent.custom.valid = True\nself.parent.custom.validation = \"Loaded \" + event.value + \"; quantity is within target.\"\nself.parent.custom.draft = \"Order changed; store a new session draft.\"\nprint(\"Loaded\", event.value, \"for station\", parameters[\"station\"])"
+              }
+            }
+          }
+        },
+        {
+          "id": "part",
+          "type": "label",
+          "x": 20,
+          "y": 145,
+          "width": 504,
+          "height": 37,
+          "props": {
+            "text": "Valve housing",
+            "fontSize": 25,
+            "foregroundColor": "#223148",
+            "bindings": {
+              "text": {
+                "expression": "value",
+                "references": {
+                  "value": {
+                    "kind": "instanceState",
+                    "key": "part"
+                  }
+                }
+              }
+            },
+            "componentEvents": {
+              "propertyChange": {
+                "language": "python",
+                "code": "self.getSibling(\"event-log\").text = \"Part changed from \" + str(event.previousValue) + \" to \" + str(event.value) + \" (\" + event.origin + \").\"",
+                "properties": [
+                  "text"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "quantity",
+          "type": "numberInput",
+          "x": 20,
+          "y": 198,
+          "width": 230,
+          "height": 77,
+          "props": {
+            "text": "Quantity",
+            "fieldKey": "quantity",
+            "defaultValue": 12,
+            "min": 0,
+            "max": 1000,
+            "step": 1,
+            "stateBinding": {
+              "scope": "instance",
+              "key": "quantity"
+            },
+            "events": {
+              "change": {
+                "language": "python",
+                "code": "target = self.parent.custom.target\nvalid = isinstance(event.value, (int, float)) and not isinstance(event.value, bool) and 1 <= event.value <= target\nself.parent.custom.valid = valid\nself.parent.custom.validation = \"Quantity is within the order target.\" if valid else \"Enter a quantity between 1 and \" + str(target) + \".\"\nprint(\"Quantity changed\", event.previousValue, \"to\", event.value)"
+              }
+            }
+          }
+        },
+        {
+          "id": "target",
+          "type": "label",
+          "x": 276,
+          "y": 223,
+          "width": 246,
+          "height": 37,
+          "props": {
+            "text": "Target: 12",
+            "fontSize": 22,
+            "foregroundColor": "#223148",
+            "bindings": {
+              "text": {
+                "expression": "caption",
+                "references": {
+                  "caption": {
+                    "kind": "instanceState",
+                    "key": "targetCaption"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "validation",
+          "type": "label",
+          "x": 20,
+          "y": 288,
+          "width": 504,
+          "height": 48,
+          "props": {
+            "text": "Quantity is within the order target.",
+            "fontSize": 16,
+            "foregroundColor": "#223148",
+            "bindings": {
+              "text": {
+                "expression": "value",
+                "references": {
+                  "value": {
+                    "kind": "instanceState",
+                    "key": "validation"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "note",
+          "type": "textInput",
+          "x": 20,
+          "y": 349,
+          "width": 504,
+          "height": 70,
+          "props": {
+            "text": "Operator note",
+            "fieldKey": "note",
+            "defaultValue": "Ready",
+            "maxLength": 80,
+            "events": {
+              "change": {
+                "language": "python",
+                "code": "self.getSibling(\"note-preview\").text = \"Note: \" + event.value"
+              }
+            }
+          }
+        },
+        {
+          "id": "note-preview",
+          "type": "label",
+          "x": 20,
+          "y": 430,
+          "width": 504,
+          "height": 35,
+          "props": {
+            "text": "Note: Ready",
+            "fontSize": 17,
+            "foregroundColor": "#223148"
+          }
+        },
+        {
+          "id": "store-draft",
+          "type": "button",
+          "x": 20,
+          "y": 486,
+          "width": 244,
+          "height": 44,
+          "props": {
+            "backgroundColor": "#4f63c8",
+            "foregroundColor": "#ffffff",
+            "text": "Store session draft",
+            "action": "script",
+            "bindings": {
+              "enabled": {
+                "expression": "value",
+                "references": {
+                  "value": {
+                    "kind": "instanceState",
+                    "key": "valid"
+                  }
+                }
+              }
+            },
+            "script": "quantity = inputs[\"quantity\"]\nif not 1 <= quantity <= self.parent.custom.target:\n    raise ValueError(\"Quantity is outside this order target.\")\nself.parent.custom.draft = \"Stored \" + str(quantity) + \" x \" + self.parent.custom.part + \" in this session.\"\nresult = {\"message\": \"Local draft stored. No database or gateway write.\"}"
+          }
+        },
+        {
+          "id": "send-reset",
+          "type": "button",
+          "x": 280,
+          "y": 486,
+          "width": 244,
+          "height": 44,
+          "props": {
+            "backgroundColor": "#4f63c8",
+            "foregroundColor": "#ffffff",
+            "text": "Reset through message",
+            "action": "message",
+            "message": {
+              "messageType": "orders.reset",
+              "scope": "instance",
+              "payload": {
+                "reason": "Operator requested a reset"
+              }
+            }
+          }
+        },
+        {
+          "id": "draft",
+          "type": "label",
+          "x": 20,
+          "y": 546,
+          "width": 504,
+          "height": 48,
+          "props": {
+            "text": "No session draft stored.",
+            "fontSize": 16,
+            "foregroundColor": "#223148",
+            "bindings": {
+              "text": {
+                "expression": "value",
+                "references": {
+                  "value": {
+                    "kind": "instanceState",
+                    "key": "draft"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "event-log",
+          "type": "label",
+          "x": 20,
+          "y": 610,
+          "width": 504,
+          "height": 60,
+          "props": {
+            "text": "Property and message events will appear here.",
+            "fontSize": 14,
+            "foregroundColor": "#52657e",
+            "messageHandlers": [
+              {
+                "id": "reset",
+                "messageType": "orders.reset",
+                "scope": "instance",
+                "language": "python",
+                "code": "self.parent.custom.quantity = self.parent.custom.target\nself.parent.custom.valid = True\nself.parent.custom.validation = \"Quantity reset to the current target.\"\nself.parent.custom.draft = \"Reset; no session draft stored.\"\nself.text = event.payload.reason + \" at station \" + parameters[\"station\"]\nprint(\"Received\", event.messageType, \"in\", event.scope)"
+              }
+            ]
+          }
+        },
+        {
+          "id": "scope-note",
+          "type": "label",
+          "x": 20,
+          "y": 684,
+          "width": 504,
+          "height": 22,
+          "props": {
+            "text": "Synthetic records · local state · no database writes",
+            "fontSize": 12,
+            "foregroundColor": "#52657e"
+          }
+        }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "id": "python-component-events",
+      "name": "Python work orders",
+      "width": 1180,
+      "height": 970,
+      "components": [
+        {
+          "id": "background",
+          "type": "rectangle",
+          "x": 0,
+          "y": 0,
+          "width": 1180,
+          "height": 970,
+          "props": {
+            "fillColor": "#f5f7fc",
+            "strokeWidth": 1
+          }
+        },
+        {
+          "id": "heading",
+          "type": "label",
+          "x": 30,
+          "y": 20,
+          "width": 1120,
+          "height": 43,
+          "props": {
+            "text": "Work order forms · Python events",
+            "fontSize": 31,
+            "foregroundColor": "#223148"
+          }
+        },
+        {
+          "id": "intro",
+          "type": "label",
+          "x": 30,
+          "y": 76,
+          "width": 1120,
+          "height": 42,
+          "props": {
+            "text": "Choose an order, validate a quantity and store a local draft. Each station has its own Python event context.",
+            "fontSize": 17,
+            "foregroundColor": "#223148"
+          }
+        },
+        {
+          "id": "station-a",
+          "type": "template",
+          "x": 30,
+          "y": 138,
+          "width": 544,
+          "height": 716,
+          "props": {
+            "templateId": "python-order-form",
+            "parameters": {
+              "station": "A"
+            }
+          }
+        },
+        {
+          "id": "station-b",
+          "type": "template",
+          "x": 606,
+          "y": 138,
+          "width": 544,
+          "height": 716,
+          "props": {
+            "templateId": "python-order-form",
+            "parameters": {
+              "station": "B"
+            }
+          }
+        },
+        {
+          "id": "isolation",
+          "type": "label",
+          "x": 30,
+          "y": 870,
+          "width": 1120,
+          "height": 33,
+          "props": {
+            "text": "Compare another operator tab: these form changes stay local. Shared records belong in tags or a database.",
+            "fontSize": 16,
+            "foregroundColor": "#223148"
+          }
+        },
+        {
+          "id": "open-rows",
+          "type": "button",
+          "x": 30,
+          "y": 915,
+          "width": 290,
+          "height": 40,
+          "props": {
+            "backgroundColor": "#4f63c8",
+            "foregroundColor": "#ffffff",
+            "text": "Try repeated stations",
+            "action": "navigate",
+            "targetScreenId": "python-event-rows"
+          }
+        }
+      ]
+    },
+    {
+      "id": "python-event-rows",
+      "name": "Repeated Python forms",
+      "width": 1180,
+      "height": 970,
+      "components": [
+        {
+          "id": "background",
+          "type": "rectangle",
+          "x": 0,
+          "y": 0,
+          "width": 1180,
+          "height": 970,
+          "props": {
+            "fillColor": "#f5f7fc",
+            "strokeWidth": 1
+          }
+        },
+        {
+          "id": "heading",
+          "type": "label",
+          "x": 30,
+          "y": 20,
+          "width": 1120,
+          "height": 43,
+          "props": {
+            "text": "Independent repeated forms",
+            "fontSize": 31,
+            "foregroundColor": "#223148"
+          }
+        },
+        {
+          "id": "intro",
+          "type": "label",
+          "x": 30,
+          "y": 76,
+          "width": 1120,
+          "height": 42,
+          "props": {
+            "text": "Change Row 1, then compare Row 2. Leaving the screen resets its local state and retires pending UI effects.",
+            "fontSize": 17,
+            "foregroundColor": "#223148"
+          }
+        },
+        {
+          "id": "stations",
+          "type": "repeater",
+          "x": 30,
+          "y": 138,
+          "width": 1120,
+          "height": 716,
+          "props": {
+            "templateId": "python-order-form",
+            "columns": 2,
+            "gap": 32,
+            "rows": [
+              {
+                "id": "row-1",
+                "parameters": {
+                  "station": "Row 1"
+                }
+              },
+              {
+                "id": "row-2",
+                "parameters": {
+                  "station": "Row 2"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "back",
+          "type": "button",
+          "x": 30,
+          "y": 915,
+          "width": 290,
+          "height": 40,
+          "props": {
+            "backgroundColor": "#4f63c8",
+            "foregroundColor": "#ffffff",
+            "text": "Back to work orders",
+            "action": "navigate",
+            "targetScreenId": "python-component-events"
+          }
+        }
+      ]
+    }
+  ]
+}

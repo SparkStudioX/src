@@ -1,4 +1,4 @@
-SparkStudio 0.2.0-preview.8 - unsigned Windows preview
+SparkStudio 0.2.0-preview.9 - unsigned Windows preview
 
 Preview.8 adds a Generate a self-signed certificate option for HTTPS: no existing certificate, private key, DNS or internet connection is needed when using a stable IPv4 address. It retains encrypted configuration backup downloads, daily SMB/FTP/FTPS delivery, retention, and offline recovery with quarantine. See this release's installation, network access, scheduled backup and recovery guides. Elevated preview.8 service upgrade, operator-PC certificate trust and remote SMB/FTPS acceptance remain pending.
 

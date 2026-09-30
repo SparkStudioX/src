@@ -80,4 +80,4 @@ The independently authored [query-property workshop](../../examples/query-proper
 node tools/load-example.mjs query-properties
 ```
 
-The local `artifacts/sparkproj/query-properties.sparkproj` (when present after consolidation; fresh versioned builds use `artifacts/workshops/<version>/projects/`) is an importable alternative. Verification is recorded in [PARITY.md](PARITY.md). Dataset-valued property bindings, deeper query-backed repeater sources, broader refresh scheduling and atomic screen/query/script releases remain separate roadmap work.
+The local `artifacts/sparkproj/query-properties.sparkproj` is an importable alternative. Verification is recorded in [PARITY.md](PARITY.md). Dataset-valued property bindings, deeper query-backed repeater sources, broader refresh scheduling and atomic screen/query/script releases remain separate roadmap work.

@@ -2,13 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { VisualStyleProvider } from "./VisualStyleContext";
 import { LocalizationProvider, useLocaleSelection, LocaleSelector } from "./LocalizationContext";
-import { api, ApiError, eventStreamUrl, projectPage, resolvePath, scriptFailureMessage } from "./api";
+import { api, ApiError, projectPage, resolvePath, scriptFailureMessage } from "./api";
 import { useAuth } from "./Auth";
 import { SessionIdentity } from "./OperatorAccess";
 import { runtimePresentation } from "./operatorAccessModel";
 import { ApplicationStateProvider, useApplicationState } from "./applicationState";
 import { useFormInputs } from "./inputStateBindings";
 import { ComponentEventDiagnostics } from "./ComponentEvents";
+import { applyPythonUiResult, pythonUiRequest } from "./pythonUiModel";
+import { runSavedPythonEvent } from "./pythonComponentEvents";
+import { useRuntimeSessionMessaging } from "./useRuntimeSessionMessaging";
 import {
   actionKey,
   componentContexts,
@@ -32,6 +35,7 @@ import type {
   PopupState,
   Publication,
   ScriptResult,
+  PythonUiAction,
   Tag,
   TableCellEdit,
 } from "./types";
@@ -120,6 +124,12 @@ export default function OperatorRuntime() {
   const viewportRef = useRef<HTMLDivElement>(null);
   const lastReceived = useRef(0);
   const currentProject = useRef<PublishedProject | null>(null);
+  const receiveTags = useCallback((next: Tag[]) => {
+    if (!Array.isArray(next)) return;
+    const received = new Date();
+    lastReceived.current = received.getTime();
+    setTags(next); setLastUpdate(received); setConnected(true);
+  }, []);
   useEffect(() => () => { currentProject.current = null; }, []);
   const clearUnavailableProject = useCallback(() => {
     currentProject.current = null;
@@ -165,11 +175,7 @@ export default function OperatorRuntime() {
     let stopped = false;
     const receive = (next: Tag[]) => {
       if (stopped || !Array.isArray(next)) return;
-      const received = new Date();
-      lastReceived.current = received.getTime();
-      setTags(next);
-      setLastUpdate(received);
-      setConnected(true);
+      receiveTags(next);
     };
     const poll = () => {
       void api<Tag[]>("/tags")
@@ -179,14 +185,6 @@ export default function OperatorRuntime() {
         });
     };
     poll();
-    const events = new EventSource(eventStreamUrl());
-    events.addEventListener("tags", (event) => {
-      try {
-        receive(JSON.parse((event as MessageEvent).data) as Tag[]);
-      } catch {
-        /* A later event or polling request can recover. */
-      }
-    });
     const polling = setInterval(poll, 4000);
     const clock = setInterval(() => {
       setNow(new Date());
@@ -212,12 +210,11 @@ export default function OperatorRuntime() {
     }, 15000);
     return () => {
       stopped = true;
-      events.close();
       clearInterval(polling);
       clearInterval(clock);
       clearInterval(publicationCheck);
     };
-  }, [clearUnavailableProject]);
+  }, [clearUnavailableProject, receiveTags]);
   useEffect(() => {
     const handleFullscreen = () =>
       setFullscreen(Boolean(document.fullscreenElement));
@@ -228,6 +225,10 @@ export default function OperatorRuntime() {
 
   const screen = project?.screens.find(item => item.id === runtimeScreenId(project, screenId));
   const applicationState = useApplicationState(project, screen, JSON.stringify([project?.id, project?.revision, project?.publishedAt]));
+  useRuntimeSessionMessaging(project?.id, project?.publishedAt, receiveTags, message => {
+    if (!applicationState.isCurrent() || message.projectId !== currentProject.current?.id || message.publishedAt !== currentProject.current?.publishedAt) return;
+    applicationState.store.componentMessages.receiveSessionMessage(message.messageId, message.messageType, message.payload);
+  }, message => applicationState.store.componentEvents.report("Gateway messaging", message, "error"));
   const menuItems = project ? runtimeMenuItems(project) : [];
   const activeParameters = screen
     ? screenParameters(screen, parameters)
@@ -237,7 +238,7 @@ export default function OperatorRuntime() {
     if (project?.screens.some(item => item.id === target && item.kind !== "popup")) {
       setScreenId(target); setActionStatus(null);
     }
-  }, applicationState.api, applicationState.key);
+  }, applicationState.api, applicationState.key, applicationState.sendMessage);
   const form = useFormInputs({ document: screen, tags, parameters: activeParameters, edits: screen ? inputsByScreen[screen.id] : undefined,
     communicationLost: !connected, state: applicationState, active: canOperate && !actionBusyId,
     onEdit: (fieldKey, value) => {
@@ -261,6 +262,7 @@ export default function OperatorRuntime() {
   const runAction = async (
     component: CanvasComponent,
     instance?: InstanceAction,
+    uiAction?: PythonUiAction,
   ) => {
     if (!canOperate || !screen || !project || actionBusyId || instance?.isCurrent?.() === false) return;
     const localInputs = instance?.inputs || currentInputs;
@@ -284,16 +286,20 @@ export default function OperatorRuntime() {
           inputs: localInputs,
           publishedAt: project.publishedAt,
           ...instanceRequestScope(instance),
+          ...pythonUiRequest(uiAction),
         },
       );
+      if (execution.success) window.dispatchEvent(new Event("sparkstudio:refresh-data"));
       if (currentProject.current !== project || instance?.isCurrent?.() === false) return;
+      if (uiAction && !uiAction.isCurrent()) return;
+      applyPythonUiResult(uiAction, execution);
       const resultMessage =
         typeof execution.result === "object" &&
         execution.result !== null &&
         "message" in execution.result
           ? String((execution.result as { message: unknown }).message)
           : execution.stdout ||
-            (execution.result === undefined
+            (execution.result == null
               ? "Action completed."
               : JSON.stringify(execution.result));
       setActionStatus({
@@ -303,7 +309,6 @@ export default function OperatorRuntime() {
           : scriptFailureMessage(execution.stderr)
         ).slice(0, 2500),
       });
-      if (execution.success) window.dispatchEvent(new Event("sparkstudio:refresh-data"));
     } catch (reason) {
       if (currentProject.current !== project || instance?.isCurrent?.() === false) return;
       if (reason instanceof ApiError && reason.status === 404) clearUnavailableProject();
@@ -545,7 +550,7 @@ export default function OperatorRuntime() {
             <strong>
               {actionStatus.success ? "Action completed. " : "Action failed. "}
             </strong>
-            {actionStatus.message}
+            {!(actionStatus.success && actionStatus.message === "Action completed.") && actionStatus.message}
           </span>
           <button
             aria-label="Dismiss action result"
@@ -651,9 +656,12 @@ export default function OperatorRuntime() {
                       inputs={currentInputs}
                       onInputChange={form.assign}
                       onAutomaticInputChange={form.assignAutomatic}
-                      onAction={(component, instance) =>
-                        void runAction(component, instance)
+                      onAction={(component, instance, uiAction) =>
+                        void runAction(component, instance, uiAction)
                       }
+                      onPythonEvent={(component, invocation, instance) => canOperate && currentProject.current === project
+                        ? runSavedPythonEvent({ scope: "runtime", screenId: screen.id, parameters, publishedAt: project.publishedAt }, component, invocation, instance)
+                        : Promise.reject(new Error("Your account cannot run Python events in this application."))}
                       onTableEdit={canOperate ? editTable : undefined}
                       actionBusyId={actionBusyId}
                       interactionLocked={Boolean(actionBusyId)}
@@ -741,6 +749,7 @@ export default function OperatorRuntime() {
                 inputs: action.inputs,
                 publishedAt: project.publishedAt,
                 ...instanceRequestScope(action.instance),
+                ...pythonUiRequest(action.uiAction),
               },
             ) : Promise.reject(new Error("Your account has read-only access to this project."))
           }

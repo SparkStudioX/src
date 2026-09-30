@@ -116,7 +116,7 @@ export function buildProjectSearch(project: Project, queries: NamedQuery[], scri
     const binding = componentProperty && ["bindings", "queryBindings", "parameterBindings", "stateBinding"].includes(path[1]);
     const code = (target.kind === "script" && path[0] === "code") || (target.kind === "query" && path[0] === "sql")
       || (componentProperty && ((path[1] === "script" && path.length === 2) || (path[1] === "tableEdit" && path[2] === "script")
-        || (["events", "componentEvents"].includes(path[1]) && path.at(-1) === "code")));
+        || (["events", "componentEvents", "messageHandlers"].includes(path[1]) && path.at(-1) === "code")));
     add(nextTarget, code && componentProperty ? "script" : binding ? "binding" : category, property, location,
       `${property} ${leafText(value)}`, { ...(code ? { textOnly: true } : {}), ...(reference ? { reference, missing: knownMissing(reference, source?.document) } : {}) });
   }

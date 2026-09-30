@@ -4,19 +4,20 @@ using System.Text.Json.Nodes;
 namespace SparkStudio.Gateway;
 
 /// <summary>Executes the published action with only the fields declared by its published screen.</summary>
-public sealed class RuntimeActions(PublicationStore publications, PythonRunner python, QueryExecutor queries)
+public sealed partial class RuntimeActions(PublicationStore publications, PythonRunner python, QueryExecutor queries)
 {
     public async Task<JsonObject> ExecuteAsync(string screenId, string componentId,
         Dictionary<string, JsonElement>? parameters, Dictionary<string, JsonElement>? inputs,
         string? publishedAt, CancellationToken cancellation, string? instanceId = null, string? rowId = null, PopupOrigin? popupOrigin = null,
         IReadOnlyList<InstancePathStep>? instancePath = null, IReadOnlyList<Dictionary<string, JsonElement>>? bindingInputs = null,
-        IReadOnlyList<ParameterBindingState>? bindingState = null)
+        IReadOnlyList<ParameterBindingState>? bindingState = null, JsonObject? ui = null)
     {
         if (string.IsNullOrWhiteSpace(publishedAt))
             throw new ArgumentException("Reload the published screen before executing an action.");
         // GetAction returns a detached snapshot so a concurrent publication cannot mix
         // an action's source with another publication's input definitions.
         var action = publications.GetAction(screenId, componentId, publishedAt, instanceId, rowId, popupOrigin, instancePath);
+        var uiContext = new PythonUiContext(action["uiContext"]!.AsObject(), ui);
         var resolvedParameters = await ResolveContextAsync(action, parameters, bindingInputs, popupOrigin?.BindingInputs, bindingState, popupOrigin?.BindingState, cancellation);
         var capturedQueries = action["queries"]!.AsArray().OfType<JsonObject>().ToArray();
 
@@ -59,7 +60,7 @@ public sealed class RuntimeActions(PublicationStore publications, PythonRunner p
             InputDefinitionValidator.ValidateQuerySelection(key, ProjectStore.Required(definition, "type"), source, result, resolvedInputs[key].GetString()!);
         }
 
-        return await python.RunAsync(action["code"]!.GetValue<string>(), resolvedParameters, resolvedInputs, cancellation, action["queries"]!.AsArray());
+        return await python.RunAsync(action["code"]!.GetValue<string>(), resolvedParameters, resolvedInputs, cancellation, action["queries"]!.AsArray(), uiContext);
     }
 
     public async Task<JsonObject> ExecuteTableEditAsync(string screenId, string componentId, TableEditRequest request, CancellationToken cancellation)
@@ -99,6 +100,9 @@ public sealed class RuntimeActions(PublicationStore publications, PythonRunner p
         var rootParameters = new Dictionary<string, JsonElement>(context, StringComparer.Ordinal);
         var capturedQueries = action["queries"]!.AsArray().OfType<JsonObject>().ToArray();
         Overlay(context, action["screenParameters"] as JsonObject, rootParameters);
+        if (action["standaloneParameters"] is JsonObject standalone)
+            foreach (var (key, value) in ProjectTemplates.ResolveParameters(standalone, context))
+                context[key] = TemplateParameterTypes.Coerce(key, value, action["standaloneParameterTypes"] as JsonObject);
         if (action["popupOrigin"] is JsonObject opener)
         {
             var caller = new Dictionary<string, JsonElement>(rootParameters, StringComparer.Ordinal);

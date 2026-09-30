@@ -4,7 +4,8 @@ namespace SparkStudio.Gateway;
 
 /// <summary>Each project owns its execution context; gateway tags and connections are shared.</summary>
 public sealed class ProjectRuntimeRegistry(ProjectCatalog catalog, TagEngine tags, ConnectorService connectors,
-    IConfiguration configuration, ILoggerFactory loggers, IHostApplicationLifetime lifetime, RecoveryQuarantine? recovery = null) : IHostedService, IDisposable
+    IConfiguration configuration, ILoggerFactory loggers, IHostApplicationLifetime lifetime, RecoveryQuarantine? recovery = null,
+    RuntimeSessionMessaging? sessionMessaging = null) : IHostedService, IDisposable
 {
     private readonly object gate = new();
     private readonly Dictionary<string, ProjectRuntime> runtimes = new(StringComparer.Ordinal);
@@ -16,9 +17,22 @@ public sealed class ProjectRuntimeRegistry(ProjectCatalog catalog, TagEngine tag
         {
             var workspace = catalog.Get(id);
             if (runtimes.TryGetValue(id, out var existing)) return existing;
+            if (lifetime.ApplicationStopping.IsCancellationRequested) throw new InvalidOperationException("Gateway is stopping; new project runtimes cannot start.");
             var queries = new QueryExecutor(workspace.Store, connectors);
             var python = new PythonRunner(tags, queries, workspace.Scripts, configuration, recovery);
-            var events = new ScriptEventService(workspace.Scripts, python, loggers.CreateLogger<ScriptEventService>());
+            if (sessionMessaging is not null)
+            {
+                python.UiMessageDispatch = (messageType, payload, sessionId) => sessionMessaging.Send(id, messageType, payload, sessionId);
+                python.UiSessionInfo = () => sessionMessaging.GetSessionInfo(id);
+            }
+            var events = new ScriptEventService(workspace.Scripts, python, loggers.CreateLogger<ScriptEventService>(), tags) { MessageScope = id };
+            python.MessageDispatch = (target, name, payload, oneWay, actor, cancellation, chain) =>
+            {
+                var destination = string.IsNullOrWhiteSpace(target) || target == id ? events : Get(target).Events;
+                cancellation.ThrowIfCancellationRequested();
+                return oneWay ? Task.FromResult(destination.SendMessage(name, payload, actor, null, chain))
+                    : destination.DispatchMessageAsync(name, payload, actor, null, cancellation, chain);
+            };
             var runtime = new ProjectRuntime(workspace, queries, python, events, new RuntimeActions(workspace.Publication, python, queries));
             if (recovery?.Active != true) events.StartAsync(lifetime.ApplicationStopping).GetAwaiter().GetResult();
             runtimes.Add(id, runtime);

@@ -35,7 +35,7 @@ The state type must match the input, and its default must satisfy that input's v
 
 ## Input change and commit events
 
-All fourteen inputs can declare JavaScript **Value changed** (`change`) and **Value committed** (`commit`) handlers. Non-password inputs also support gateway Python; new supported handlers default to Python and existing JavaScript is preserved. Each language has a separate editor draft, not automatic code translation. Apply records one undo step; Cancel discards changes. Save and Publish deploy the definitions. Default Preview blocks scripts; administrator Live actions Preview can run them, and Python resolves saved draft code. See [Python component events](PYTHON_COMPONENT_EVENTS.md). The payload and `app` examples below describe JavaScript.
+All fourteen inputs can declare JavaScript **Value changed** (`change`) and **Value committed** (`commit`) handlers through **Edit actions & events**. The same dialog contains lifecycle and message handlers. Non-password inputs also support gateway Python; new supported handlers default to Python and existing JavaScript is preserved. Each language has a separate source draft, not automatic code translation. Apply records the complete action/event draft as one undo step; Cancel discards changes. Save and Publish deploy the definitions. Default Preview blocks scripts; administrator Live actions Preview can run them, and Python resolves saved draft code. See [Python component events](PYTHON_COMPONENT_EVENTS.md). The payload and `app` examples below describe JavaScript.
 
 Handlers receive:
 

@@ -121,6 +121,7 @@ const redirectApi = asModule(`export const api=path=>globalThis.__redirect.reque
 const emptyDefault = asModule('export default ()=>null;');
 const redirectDeps = {
   react:redirectHooks, './api':redirectApi, './Icon':emptyDefault,
+  './WorkspaceHeader':emptyDefault,
   './Theme':asModule('export const ThemePicker=()=>null;'),
   './Auth':asModule('export const useAuth=()=>({});'),
   './OperatorAccess':asModule('export const SessionIdentity=()=>null;'),

@@ -5,6 +5,8 @@ import Icon from "./Icon";
 import { validateInputs } from "./inputs";
 import { useFormInputs } from "./inputStateBindings";
 import { ComponentEventDiagnostics } from "./ComponentEvents";
+import { applyPythonUiResult } from "./pythonUiModel";
+import { isPythonUnmount, runSavedPythonEvent } from "./pythonComponentEvents";
 import { actionKey, ProjectComponentView } from "./templates";
 import { componentGeometry } from "./propertyBindings";
 import { QueryPropertyProvider, useQueryPropertyBindings } from "./useQueryPropertyBindings";
@@ -19,6 +21,7 @@ import type {
   PopupState,
   Project,
   ScriptResult,
+  PythonUiAction,
   Tag,
   TableCellEdit,
 } from "./types";
@@ -125,7 +128,7 @@ export default function Popup({
   const close = () => {
     if (!busy) onClose();
   };
-  const run = async (component: CanvasComponent, instance?: InstanceAction) => {
+  const run = async (component: CanvasComponent, instance?: InstanceAction, uiAction?: PythonUiAction) => {
     if (busy || sourceLocked || readOnly || instance?.isCurrent?.() === false) return;
     const values = instance?.inputs || inputs;
     const invalid = validateInputs(
@@ -148,15 +151,19 @@ export default function Popup({
         inputs: values,
         instance,
         popup,
+        uiAction,
       });
+      if (execution.success) window.dispatchEvent(new Event("sparkstudio:refresh-data"));
       if (!active.current || instance?.isCurrent?.() === false) return;
+      if (uiAction && !uiAction.isCurrent()) return;
+      applyPythonUiResult(uiAction, execution);
       const resultMessage =
         typeof execution.result === "object" &&
         execution.result !== null &&
         "message" in execution.result
           ? String((execution.result as { message: unknown }).message)
           : execution.stdout ||
-            (execution.result === undefined
+            (execution.result == null
               ? "Action completed."
               : JSON.stringify(execution.result));
       setFeedback({
@@ -166,7 +173,6 @@ export default function Popup({
           : scriptFailureMessage(execution.stderr)
         ).slice(0, 2500),
       });
-      if (execution.success) window.dispatchEvent(new Event("sparkstudio:refresh-data"));
     } catch (error) {
       if (!active.current || instance?.isCurrent?.() === false) return;
       if (error instanceof ApiError && error.status === 409) {
@@ -335,7 +341,13 @@ export default function Popup({
                       [scope]: { ...previous[scope], [field]: value },
                     }))
                   }
-                  onAction={(leaf, instance) => void run(leaf, instance)}
+                  onAction={(leaf, instance, uiAction) => void run(leaf, instance, uiAction)}
+                  onPythonEvent={(component, invocation, instance) => (active.current || isPythonUnmount(invocation.eventHandler)) && !sourceLocked && !readOnly
+                    ? runSavedPythonEvent({ scope: queryScope, screenId: screen.id, parameters: popup.rootParameters,
+                      popupOrigin: popup.origin, publishedAt: project.publishedAt }, component, invocation, instance).catch(error => {
+                        if (active.current && error instanceof ApiError && error.status === 409) onStale?.();
+                        throw error;
+                      }) : Promise.reject(new Error("This popup is unavailable for Python events."))}
                   onTableEdit={onTableEdit && !readOnly && !sourceLocked ? editTable : undefined}
                   actionBusyId={busy}
                   interactionLocked={Boolean(busy) || sourceLocked && component.props.action !== "closePopup"}

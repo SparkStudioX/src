@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Completion } from "@codemirror/autocomplete";
 import ScriptEditor from "./ScriptEditor";
+import { pythonSystemCompletions } from "./eventScriptAuthoring";
 import { parseTableEditValue, validateTableEditDefinition } from "./tableEditing";
 import type { CanvasComponent, TableEditDefinition } from "./types";
 import "./tableEditingEditor.css";
@@ -14,10 +15,10 @@ const parsedNumber = (value: string) => {
 };
 const completions: Completion[] = [
   { label: "inputs", type: "variable", detail: "Validated edit and gateway-reconstructed source row" },
+  ...["column", "value", "oldValue", "rowKey", "version", "row"].map(key => ({ label: `inputs[${JSON.stringify(key)}]`, type: "property", detail: "Validated table commit context" })),
   { label: "parameters", type: "variable", detail: "Resolved screen/template parameters" },
   { label: "result", type: "variable", detail: "Result or message returned after the handler succeeds" },
-  { label: "system.db.runNamedQuery", type: "function", detail: "Execute a published named query; check the affected-row count" },
-  { label: "system.util.getLogger", type: "function", detail: "Create a named logger" },
+  ...pythonSystemCompletions,
   { label: "print", type: "function", detail: "Write execution output" },
   ...["if", "else", "raise", "RuntimeError", "True", "False", "None", "import", "from"].map(label => ({ label, type: "keyword" })),
 ];
@@ -83,6 +84,7 @@ function TableEditingDialog({ component, onChange, notify, onClose }: {
       </fieldset>)}<button type="button" className="button" disabled={columns.length >= 64} onClick={add}>Add editable field</button><p className="table-editing-help">Submitted values cannot be null. Empty text is allowed unless required. Constraints validate the proposed value before the handler runs.</p>
     </section><section className="table-editing-handler" aria-label="Cell commit handler"><h3>Gateway Python handler</h3><ScriptEditor value={script} language="python" onChange={setScript} onSave={apply} completions={completions} />
       <p className="table-editing-help">Publish and use the operator runtime to test writes. There is no Run action in this editor. Scripts are limited to 64,000 characters.</p>
+      <p className="table-editing-help">This commit handler receives validated <code>inputs</code> and <code>parameters</code>, with the same gateway <code>system.*</code> functions used by Python actions and events. It does not receive component <code>self</code> or an automatic <code>event</code> payload.</p>
       <details className="table-editing-context" open><summary>Validated commit context</summary><dl><dt><code>inputs["column"]</code></dt><dd>Exact editable source key.</dd><dt><code>inputs["value"]</code></dt><dd>New value after its declared type and constraints are checked.</dd><dt><code>inputs["oldValue"]</code></dt><dd>Previous source value; it may be null.</dd><dt><code>inputs["rowKey"]</code></dt><dd>Stable string or integer identity of the selected row.</dd><dt><code>inputs["version"]</code></dt><dd>Version of the gateway-reconstructed source row.</dd><dt><code>inputs["row"]</code></dt><dd>Complete source row reconstructed by the gateway, including hidden query columns.</dd></dl><p>The gateway rechecks the row before running this handler. Your named update must still compare both its key and version in the database and advance the version. Check the affected-row count and raise an error unless exactly one row changed. A prior row check alone does not make the database update atomic.</p><p><code>parameters</code> contains the resolved screen/template context. The published handler is trusted gateway code; it must validate its business rules and choose the permitted update.</p></details>
     </section></div> : <div className="table-editing-disabled"><p>Enable editing to declare fields and a Python commit handler.</p>{saved && <p>Applying while disabled removes this table's saved editing configuration. Cancel keeps it unchanged.</p>}</div>}
     <footer>{error ? <p className="table-editing-error" role="alert">{error}</p> : <p>Apply updates one project draft entry. Ctrl+S applies this dialog.</p>}<button type="button" className="button" onClick={onClose}>Cancel</button><button type="button" className="button primary" disabled={Boolean(error)} onClick={apply}>Apply editing</button></footer>

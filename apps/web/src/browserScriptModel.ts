@@ -1,4 +1,5 @@
 import type { RuntimeStateApi } from "./types";
+import type { ComponentMessageSender } from "./componentMessageModel";
 
 export interface BrowserResource {
   id: string;
@@ -13,6 +14,7 @@ export interface BrowserPublication {
   resources: BrowserResource[];
 }
 export interface BrowserScriptContext {
+  sendMessage?: ComponentMessageSender;
   projectKey: string;
   screenId: string;
   screenName: string;
@@ -29,6 +31,7 @@ export interface BrowserEvent {
   revision: number;
 }
 export interface BrowserScriptApp {
+  sendMessage: ComponentMessageSender;
   notify: (message: unknown) => void;
   navigate: (id: string) => void;
   refresh: () => void;
@@ -98,6 +101,11 @@ export class BrowserScriptLifecycle {
         this.queue = this.queue.then(async () => {
           if (!live()) return;
           const app: BrowserScriptApp = {
+            sendMessage: (messageType, payload, options) => {
+              if (!live()) return { messageId: "", accepted: 0 };
+              if (!context.sendMessage) throw new Error("Component messaging is unavailable in this context.");
+              return context.sendMessage(messageType, payload, options);
+            },
             notify: message => { if (live()) this.context!.notify(String(message).slice(0, 2500)); },
             navigate: id => { if (live()) this.context!.navigate(id); },
             refresh: () => { if (live()) this.context!.refresh(); },
