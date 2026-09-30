@@ -166,7 +166,7 @@ function validateDefinition(binding: PropertyBinding): Node {
       if ((ref.kind === "sessionState" || ref.kind === "screenState" || ref.kind === "instanceState") && (ref.key.trim() !== ref.key || !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(ref.key))) fail(`Reference '${name}' needs a declared state name.`);
       if (ref.kind === "custom" && (!alias(ref.key) || (own(ref, "componentId") && !safeKey(ref.componentId)))) fail(`Reference '${name}' needs a valid custom property and component ID.`);
     } else if (ref.kind === "tag") {
-      if (typeof ref.path !== "string" || !ref.path.trim() || ref.path.length > 1024) fail(`Reference '${name}' needs a tag path up to 1024 characters.`);
+      validateTagAddress(ref.path);
     } else fail(`Reference '${name}' has an unsupported source.`);
   }
   for (const name of parsed.names) if (!own(binding.references, name)) fail(`Reference '${name}' is not declared.`);
@@ -282,15 +282,30 @@ function resolveReference(ref: BindingReference, component: CanvasComponent, con
     return { value: scalar(values[ref.key]) };
   }
   if (context.communicationLost) return fail("Gateway connection is offline.");
-  const path = ref.path.replace(/\{([^{}]+)\}/g, (_match, key: string) => {
-    if (!safeKey(key) || !own(context.parameters, key)) return fail(`Tag path parameter '${key}' was not found.`);
-    return String(context.parameters[key]);
-  });
-  if (path.length > 1024) fail("The resolved tag path exceeds 1024 characters.");
+  const path = resolveTagAddress(ref.path, context.parameters);
   const tag = context.tags.find(item => item.path === path);
   if (!tag) return fail(`Tag '${path}' was not found.`);
   if (!/^good(?:$|[_ (])/i.test(tag.quality)) return fail(`Tag '${path}' quality is ${tag.quality || "unknown"}.`);
   return { value: scalar(tag.value), ...(tag.source === "simulated" ? { simulated: true as const } : {}) };
+}
+
+/** Single-pass parameter indirection. Values cannot inject another substitution or control characters. */
+export function validateTagAddress(path: string, parameters?: BindingContext["parameters"]): void {
+  if (typeof path !== "string" || !path.trim() || path.length > 1024 || /[\x00-\x1f\x7f]/.test(path))
+    fail("A tag address needs 1–1024 characters without control characters.");
+  let count = 0;
+  const literal = path.replace(/\{([^{}]+)\}/g, (_match, key: string) => {
+    count++;
+    if (!safeKey(key) || parameters && !own(parameters, key)) fail(`Tag path parameter '${key}' is not declared.`);
+    return "";
+  });
+  if (count > 16 || /[{}]/.test(literal)) fail("A tag address supports at most 16 complete parameter placeholders.");
+}
+export function resolveTagAddress(path: string, parameters: BindingContext["parameters"]): string {
+  validateTagAddress(path, parameters);
+  const result = path.replace(/\{([^{}]+)\}/g, (_match, key: string) => String(scalar(parameters[key])));
+  if (!result.trim() || result.length > 1024 || /[{}\x00-\x1f\x7f]/.test(result)) fail("The resolved tag address must be bounded text without unresolved placeholders or control characters.");
+  return result;
 }
 
 /** Shared bounded expression evaluator; the caller validates its target type. */

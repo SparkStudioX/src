@@ -55,11 +55,13 @@ public sealed partial class PublicationStore
             }
             return new JsonObject { ["current"] = Metadata(), ["retention"] = 20,
                 ["warnings"] = warnings,
-                ["scope"] = "Screen, template, style, project settings, button code and named-query snapshots. Script-library publications and gateway jobs are separate and are not rolled back.",
+                ["scope"] = "Complete application snapshots include screens, templates, styles, project settings, button code, all named queries, Python libraries and gateway/browser script resources. Tags, connections, credentials and database data are external and are not restored.",
                 ["entries"] = new JsonArray(records.Select(record => (JsonNode)new JsonObject {
                     ["id"] = record["id"]!.DeepClone(), ["recordedAt"] = record["recordedAt"]!.DeepClone(),
                     ["publishedAt"] = record["snapshot"]!["publishedAt"]!.DeepClone(),
                     ["revision"] = record["snapshot"]!["project"]!["revision"]!.DeepClone(),
+                    ["scriptsRevision"] = record["snapshot"]!["scripts"]?["revision"]?.DeepClone(),
+                    ["complete"] = record["snapshot"]!["scripts"] is JsonObject && record["snapshot"]!["legacyScriptCompatibility"]?.GetValue<bool>() != true,
                     ["name"] = record["snapshot"]!["project"]!["name"]!.DeepClone(),
                     ["current"] = publication?["publishedAt"]?.GetValue<string>() == record["snapshot"]!["publishedAt"]!.GetValue<string>()
                 }).ToArray()) };
@@ -103,12 +105,17 @@ public sealed partial class PublicationStore
             if (records.Count <= 1) throw new ArgumentException("The publication with its current history snapshot exceeds 32 MiB. Reduce project or query resources before publishing.");
             records.RemoveAt(records.Count - 1);
         }
-        File.WriteAllBytes(path + ".tmp", bytes);
+        using (var staged = new FileStream(path + ".tmp", FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+        {
+            staged.Write(bytes);
+            staged.Flush(flushToDisk: true);
+        }
         File.Move(path + ".tmp", path, true);
         publication = next;
     }
-    public JsonObject Rollback(string id, string expectedPublishedAt)
+    public JsonObject Rollback(string id, string expectedPublishedAt, bool acknowledgeLegacy = false)
     {
+        JsonObject result;
         lock (gate)
         {
             if (!Guid.TryParseExact(id, "N", out _)) throw new ArgumentException("Invalid publication history ID.");
@@ -117,13 +124,24 @@ public sealed partial class PublicationStore
             var saved = HistoryRecords().FirstOrDefault(item => item["id"]?.GetValue<string>() == id)
                 ?? throw new KeyNotFoundException("Publication history entry not found.");
             var snapshot = (JsonObject)saved["snapshot"]!.DeepClone();
+            if (snapshot["scripts"] is not JsonObject || snapshot["legacyScriptCompatibility"]?.GetValue<bool>() == true)
+            {
+                if (!acknowledgeLegacy) throw new ArgumentException("This legacy snapshot excludes script resources. Review the compatibility warning and explicitly acknowledge the legacy restore.");
+                // Preserve the active resources in the same durable replacement; never
+                // silently switch back to an obsolete scripts-published.json file.
+                snapshot["scripts"] = scripts?.CapturePublished() ?? new JsonObject { ["revision"] = 0, ["resources"] = new JsonArray() };
+                snapshot["legacyScriptCompatibility"] = true;
+            }
+            snapshot["scripts"] = ScriptResourceStore.ValidatePublication(snapshot["scripts"]!.AsObject());
             ValidateScreens(snapshot["project"]!.AsObject());
             ComponentQueryBindingValidator.ValidateQueries(snapshot["project"]!.AsObject(), snapshot["queries"]!.AsArray());
             snapshot["publishedAt"] = DateTimeOffset.UtcNow.ToString("O");
             CommitWithHistory(snapshot);
-            return Metadata();
+            result = Metadata();
         }
+        scripts?.NotifyPublished();
+        return result;
     }
 }
 
-public sealed record PublicationRollbackRequest(string ExpectedPublishedAt);
+public sealed record PublicationRollbackRequest(string ExpectedPublishedAt, bool AcknowledgeLegacy = false);

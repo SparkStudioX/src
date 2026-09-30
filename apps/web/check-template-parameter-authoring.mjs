@@ -31,6 +31,7 @@ function loader(interactive = false) {
 }
 const staticModules = loader();
 const { DocumentProperties, ProjectProperties } = await import(staticModules('DocumentProperties'));
+const { DocumentProperties: InteractiveDocument, ProjectProperties: InteractiveProject } = await import(loader(true)('DocumentProperties'));
 const { TemplateParameterOverrides } = await import(staticModules('TemplateParametersEditor'));
 const { TemplateParametersEditor: InteractiveDefinitions, TemplateParameterOverrides: InteractiveOverrides } = await import(loader(true)('TemplateParametersEditor'));
 const { PropertyBindingsEditor: InteractiveBindings } = await import(loader(true)('PropertyBindingsEditor'));
@@ -67,6 +68,20 @@ check('typed authoring belongs to template documents; screen and project default
   const projectHtml = renderToStaticMarkup(React.createElement(ProjectProperties, { project: { id: 'app', name: 'App', revision: 1, parameters: { flag: 'false' }, screens: [screen] }, onChange: noOp, notify: noOp }));
   assert.match(screenHtml, /Saved text defaults/); assert.match(projectHtml, /Saved text defaults/);
   assert.doesNotMatch(screenHtml + projectHtml, /Edit template parameter|Template parameter type/);
+});
+
+check('parameter bindings keep fx in the third grid cell and definition collections expand from value cells', () => {
+  const edited = [], overrides = drive(InteractiveOverrides, { template, parameters: {}, parentParameters, onChange: noOp, notify: noOp, onEditBinding: name => edited.push(name) });
+  const row = overrides.find(node => node.props?.['data-property'] === 'parameters.threshold');
+  assert.match(row.props.className, /property-sheet-row/);
+  const cells = React.Children.toArray(row.props.children); assert.equal(cells.length, 3); assert.equal(cells[0].type, 'label'); assert.equal(cells[1].props.className, 'property-sheet-value');
+  assert.equal(cells[2].type, 'button'); assert.equal(cells[2].props.className, 'property-bind-button'); cells[2].props.onClick(); assert.deepEqual(edited, ['threshold']);
+  const screen = { ...template, kind: 'screen', parameterTypes: undefined }, project = { id: 'app', name: 'App', revision: 1, parameters: { flag: 'false' }, screens: [screen], navigation: { mode: 'menu', startupScreenId: screen.id, items: [{ screenId: screen.id, label: 'Motor' }] } };
+  for (const [Component, props, summary] of [[InteractiveDefinitions, { template, parentParameters }, 'Edit parameters (3)'], [InteractiveDocument, { document: screen, isTemplate: false }, 'Edit parameters (3)'], [InteractiveProject, { project }, 'Edit destinations (1)']]) {
+    const ui = drive(Component, { ...props, onChange: noOp, notify: noOp });
+    const gridRow = ui.all().find(node => node.props?.className === 'property-sheet-row' && React.Children.toArray(node.props.children).some(cell => cell.props?.className === 'property-sheet-value' && React.Children.toArray(cell.props.children).some(details => details.type === 'details' && nodes(details).some(item => item.type === 'summary' && React.Children.toArray(item.props.children).join('') === summary))));
+    assert.ok(gridRow, `${summary} must expand inside a property value cell`);
+  }
 });
 
 check('type conversion with an invalid default requires an explicit valid replacement before one atomic Apply', () => {
@@ -208,7 +223,7 @@ check('template and repeater parameters reuse the fx dialog with parent sources 
     const ui = bindUi(makeInstance(type));
     ui.label('Add parameter threshold binding').props.onClick(); ui.refresh();
     ui.button('Add reference').props.onClick(); ui.refresh();
-    assert.deepEqual(nodes(ui.label('Reference 1 source')).filter(node => node.type === 'option').map(node => node.props.value), ['custom', 'input', 'parameter', 'sessionState', 'screenState']);
+    assert.deepEqual(nodes(ui.label('Reference 1 source')).filter(node => node.type === 'option').map(node => node.props.value), ['custom', 'input', 'parameter', 'sessionState', 'screenState', 'tag']);
     assert.equal(ui.label('Reference 1 input key').props.value, 'quantity');
     assert.ok(!ui.all().some(node => node.type === 'option' && node.props.value === 'secret'));
     ui.expression('value * 2'); assert.equal(ui.output(), '12');

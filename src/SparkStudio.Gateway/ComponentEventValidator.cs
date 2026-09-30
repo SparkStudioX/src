@@ -7,6 +7,7 @@ namespace SparkStudio.Gateway;
 /// <summary>Saved browser events and flat canvas groups share one publication contract.</summary>
 internal static class ComponentEventValidator
 {
+    internal static readonly HashSet<string> InteractionNames = new(StringComparer.Ordinal) { "focus", "blur", "keyDown", "keyUp", "doubleClick", "pointerDown", "pointerUp" };
     private static readonly Regex GroupIdentifier = new(@"\A[A-Za-z_][A-Za-z0-9_-]{0,63}\z", RegexOptions.CultureInvariant);
     private static readonly Regex MessageHandlerIdentifier = new(@"\A[A-Za-z_][A-Za-z0-9_-]{0,79}\z", RegexOptions.CultureInvariant);
 
@@ -177,12 +178,12 @@ internal static class ComponentEventValidator
 
     private static void ValidateLifecycle(string type, JsonNode? raw)
     {
-        if (raw is not JsonObject events || events.Count > 3)
-            throw new ArgumentException("Component lifecycle events must be an object containing mount, unmount and/or propertyChange definitions.");
+        if (raw is not JsonObject events || events.Count > 10)
+            throw new ArgumentException("Component events must contain supported lifecycle, property-change or interaction definitions.");
         foreach (var (name, node) in events)
         {
-            if (name is not ("mount" or "unmount" or "propertyChange"))
-                throw new ArgumentException("Component lifecycle event names must be mount, unmount or propertyChange.");
+            if (name is not ("mount" or "unmount" or "propertyChange") && !InteractionNames.Contains(name))
+                throw new ArgumentException("Component event names must be mount, unmount, propertyChange, focus, blur, keyDown, keyUp, doubleClick, pointerDown or pointerUp.");
             var watched = name == "propertyChange";
             if (node is not JsonObject definition || definition.Count != (watched ? 3 : 2) ||
                 definition.Any(pair => pair.Key is not ("language" or "code") && !(watched && pair.Key == "properties")) ||

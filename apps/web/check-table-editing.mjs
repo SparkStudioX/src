@@ -52,4 +52,8 @@ test('row identity requires complete safe unique keys and versions',()=>{
   for(const bad of [{id:1,version:1},{id:'',version:1},{id:' '.repeat(3),version:1},{id:'a'.repeat(4097),version:1},{id:Number.MAX_SAFE_INTEGER+1,version:1},{id:'x',version:-1},{id:'x',version:1.1},{id:'x',version:'1'},{id:'x',version:null},{id:'x'}])assert.ok(identity([rows[0],bad],rows[0],'id','version').error,JSON.stringify(bad));
   assert.ok(identity(rows,rows[0],'id','id').error);
 });
+test('atomic definitions require a single saved target and safe distinct database identifiers',()=>{
+  const batch={versionColumn:'version',columns:[{key:'quantity',type:'number'}],batch:{table:'production_records'}};assert.equal(validate(batch,'id'),null);assert.equal(validate(batch,'id',true),null);
+  for(const invalid of [{...batch,script:'pass'},{...batch,batch:null},{...batch,batch:{table:'records',connection:'other'}},{...batch,batch:{table:'dbo.records'}},{...batch,versionColumn:'ID'},{...batch,columns:[{key:'ID',type:'number'}]},{...batch,columns:[{key:'quantity',type:'number'},{key:'QUANTITY',type:'number'}]}])assert.ok(validate(invalid,'id'));
+});
 console.log(`${passed} table-editing model checks passed.`);

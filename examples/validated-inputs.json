@@ -1,0 +1,21 @@
+{
+  "name": "Validated inputs workshop",
+  "tags": [],
+  "screens": [{
+    "id": "validated-inputs", "name": "Validated entry and scanning", "width": 1080, "height": 660,
+    "state": {"part":{"type":"string","value":""},"scans":{"type":"number","value":0}},
+    "components": [
+      {"id":"title","type":"label","x":28,"y":22,"width":1024,"height":44,"props":{"text":"Validated entry and scanning","fontSize":30}},
+      {"id":"intro","type":"label","x":28,"y":80,"width":1024,"height":52,"props":{"text":"Enter a part code and contact. Scan a label into the focused field. All values stay in this operator session.","fontSize":18}},
+      {"id":"part","type":"formattedInput","x":28,"y":158,"width":490,"height":110,"props":{"text":"Part code","fieldKey":"part","defaultValue":"","formatMask":"AA-####","textCase":"upper","validation":{"required":true,"minLength":7,"maxLength":7,"message":"Use two letters and four digits, such as AB-0012."},"stateBinding":{"scope":"screen","key":"part"}}},
+      {"id":"email","type":"textInput","x":558,"y":158,"width":494,"height":110,"props":{"text":"Contact email","fieldKey":"email","defaultValue":"","validation":{"required":true,"format":"email","maxLength":120}}},
+      {"id":"barcode","type":"barcodeInput","x":28,"y":308,"width":490,"height":110,"props":{"text":"Barcode","fieldKey":"scan","defaultValue":"","scanTerminator":"enter","validation":{"required":true,"format":"digits","minLength":6,"maxLength":12,"message":"Scan 6–12 digits, keeping leading zeroes."},"events":{"commit":{"language":"python","code":"self.parent.custom.scans = self.parent.custom.scans + 1\nself.getSibling('last-scan').text = 'Accepted ' + str(self.parent.custom.scans) + ': ' + event.value"}}}},
+      {"id":"scan-help","type":"label","x":558,"y":308,"width":494,"height":84,"props":{"text":"Try 000123 + Enter twice. Each scan runs the Python commit handler, even when the code is unchanged. The completed code is selected for the next scan.","fontSize":17}},
+      {"id":"last-scan","type":"label","x":28,"y":452,"width":1024,"height":44,"props":{"text":"No scan accepted yet","fontSize":22}},
+      {"id":"submit","type":"button","x":28,"y":524,"width":490,"height":54,"props":{"text":"Validate form","action":"script","script":"self.getSibling('status').text = 'Form accepted: ' + inputs['part'] + ' / ' + inputs['scan']\nresult = {'message': 'Form accepted. No gateway or database changes.'}"}},
+      {"id":"status","type":"label","x":558,"y":518,"width":494,"height":70,"props":{"text":"Complete all fields, then validate the form.","fontSize":18}},
+      {"id":"footer","type":"label","x":28,"y":612,"width":1024,"height":26,"props":{"text":"Synthetic workshop · No equipment, tag or database writes · Python requires Operate permission","fontSize":14}}
+    ]
+  }],
+  "templates": []
+}

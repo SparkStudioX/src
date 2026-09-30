@@ -174,4 +174,26 @@ await test('publication, parameter and query changes discard old context and ign
 await test('unmounting during a save detaches subscriptions and ignores late rejection',async()=>{
   const pending=deferred(),h=harness({onTableEdit:()=>pending.promise});await h.ready();h.edit('Name');button(h.render(),'Save').props.onClick();h.stop();const before=h.calls.length;pending.reject(new Error('late failure'));await Promise.resolve();await Promise.resolve();assert.equal(h.calls.length,before);assert.equal(timers.size,0);
 });
+await test('multiple selection retains typed keys across sorting paging and filtering without scalar input writes',async()=>{
+  const h=harness({selectionMode:'multiple',tableEdit:undefined}); h.fixture.rows[0].id=1;h.fixture.rows[1].id='1';
+  try { let tree=await h.ready(); named(tree,'input','Select row 1 (number)').props.onChange();tree=h.render();assert.match(html(tree),/1 \/ 100 rows selected/);
+    named(tree,'button','Next page of Production').props.onClick();tree=h.render();named(tree,'input','Select row 1 (string)').props.onChange();tree=h.render();assert.match(html(tree),/2 \/ 100 rows selected/);assert.deepEqual(h.selections,[]);
+    named(tree,'input','Filter Production').props.onChange({target:{value:'Alpha'}});tree=h.render();assert.equal(named(tree,'input','Select row 1 (number)').props.checked,true);assert.match(html(tree),/2 \/ 100 rows selected/);
+    h.fixture.rows=h.fixture.rows.filter(row=>typeof row.id==='string');tree=await h.poll();assert.match(html(tree),/1 \/ 100 rows selected/);
+    h.p.parameters={area:'South'};tree=await h.ready();assert.match(html(tree),/0 \/ 100 rows selected/);
+  } finally {h.stop();}
+});
+await test('batch selection captures the exact query snapshot without writes and designer or viewer sessions cannot open it',async()=>{
+  const definition={versionColumn:'version',batch:{table:'production_records'},columns:[{key:'quantity',type:'number'}]};
+  for(const permission of [{queryScope:'designer'},{onTableEdit:undefined},{}]){
+    const h=harness({selectionMode:'multiple',selectionFields:undefined,tableEdit:definition,...permission});try{let tree=await h.ready();named(tree,'input','Select row A (string)').props.onChange();tree=h.render();const launch=button(tree,'Edit selected rows');assert.equal(launch.props.disabled,Boolean(permission.queryScope||Object.hasOwn(permission,'onTableEdit')));launch.props.onClick();tree=h.render();const dialog=descendants(tree,node=>node.type?.name==='TableBatchEditor')[0];assert.equal(Boolean(dialog),!launch.props.disabled);assert.deepEqual(h.saves,[]);if(dialog){assert.deepEqual(dialog.props.keys,['A']);assert.equal(dialog.props.snapshot.rows[0].version,1);assert.equal(named(tree,'input','Filter Production').props.disabled,true);dialog.props.onClose(false);assert.equal(descendants(h.render(),node=>node.type?.name==='TableBatchEditor').length,0);}}
+    finally{h.stop();}
+  }
+});
+await test('invalid full-result identities prevent multiple selection even on valid displayed rows',async()=>{
+  const h=harness({selectionMode:'multiple',tableEdit:undefined});h.fixture.rows[1].id='A';try{const tree=await h.ready();assert.equal(named(tree,'input','Select row A (string)').props.disabled,true);named(tree,'input','Select row A (string)').props.onChange();assert.match(html(h.render()),/0 \/ 100 rows selected/);assert.deepEqual(h.selections,[]);}finally{h.stop();}
+});
+await test('scalar row mappings validate new formatted and barcode input rules before changing any destination',async()=>{
+  const h=harness({tableEdit:undefined,selectionFields:{selectedName:'name',code:'code'},components:[{id:'name-input',type:'textInput',props:{fieldKey:'selectedName'}},{id:'code-input',type:'formattedInput',props:{fieldKey:'code',formatMask:'AA-###',textCase:'upper',validation:{required:true}}}]});h.fixture.columns.push('code');h.fixture.rows[0].code='ab-12';h.fixture.rows[1].code='AB-123';try{let tree=await h.ready();descendants(tree,node=>node.type==='tr'&&node.props.onClick)[0].props.onClick();assert.deepEqual(h.selections,[]);assert.match(html(h.render()),/letter case|format/);h.fixture.rows[0].code='AB-123';tree=await h.poll();descendants(tree,node=>node.type==='tr'&&node.props.onClick)[0].props.onClick();assert.deepEqual(h.selections,[['selectedName','Alpha'],['code','AB-123']]);h.selections.length=0;h.p.components[1]={id:'code-input',type:'barcodeInput',props:{fieldKey:'code',validation:{format:'digits',minLength:5}}};tree=h.render();descendants(tree,node=>node.type==='tr'&&node.props.onClick)[0].props.onClick();assert.deepEqual(h.selections,[]);}finally{h.stop();}
+});
 console.log(`${passed} inline table editing renderer checks passed.`);

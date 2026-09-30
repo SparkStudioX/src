@@ -9,7 +9,7 @@ import ts from 'typescript';
 const require = createRequire(import.meta.url);
 function loader(fakeHooks = false) {
   const modules = new Map();
-  const hooks = `data:text/javascript;base64,${Buffer.from('export const useId = () => "input-test"; export const useRef = value => ({current:value}); export const useState = value => [value,()=>{}]; export const useEffect = () => {};').toString('base64')}`;
+  const hooks = `data:text/javascript;base64,${Buffer.from(`export * from ${JSON.stringify(pathToFileURL(require.resolve("react")).href)}; export const useId = () => "input-test"; export const useRef = value => ({current:value}); export const useState = value => [value,()=>{}]; export const useEffect = () => {};`).toString('base64')}`;
   return function moduleUrl(name) {
     if (modules.has(name)) return modules.get(name);
     const file = ['tsx', 'ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(url => fs.existsSync(url));
@@ -22,7 +22,7 @@ function loader(fakeHooks = false) {
   };
 }
 const moduleUrl = loader();
-const { InputEventLifecycle, inputAssignmentError, executeInputEvent } = await import(moduleUrl('inputEvents'));
+const { InputEventLifecycle, inputAssignmentError, executeInputEvent, inputEventFormIdentity } = await import(moduleUrl('inputEvents'));
 const { ComponentView } = await import(loader(true)('Components'));
 const { default: BoundComponent } = await import(moduleUrl('BoundComponent'));
 const component = (id = 'amount', type = 'numberInput', props = {}) => ({ id, type, x: 0, y: 0, width: 220, height: 90, props: { fieldKey: id, defaultValue: 0, events: { change: { language: 'javascript', code: 'change' }, commit: { language: 'javascript', code: 'commit' } }, ...props } });
@@ -199,5 +199,22 @@ await test('read-only and unavailable Preview never start authored input JavaScr
     await executeInputEvent(event, {}, {}, {}, {}); assert.equal(calls, 1);
     setPreviewRequestContext(null, false); await executeInputEvent(event, {}, {}, {}, {}); assert.equal(calls, 2);
   } finally { globalThis.fetch = original; setPreviewRequestContext(null, false); }
+});
+await test('editing a sibling validation, mask, case, or scanner constraint revokes queued input authority', async () => {
+  for (const [property, value] of [['validation', { required: true }], ['formatMask', 'AA-999'], ['textCase', 'upper'], ['scanTerminator', 'Tab']]) {
+    const components = structuredClone(form); components.push(component('scan', 'barcodeInput'));
+    const key = () => JSON.stringify(inputEventFormIdentity(components));
+    const effects = []; const seen = []; let oldApp;
+    const ctx = () => context({ key: key(), components, notify: value => effects.push(value), setInput: (...value) => effects.push(value) });
+    const runner = mount((_script, event, _inputs, _parameters, app) => {
+      seen.push(event.value); if (event.value === 1) { oldApp = app; return new Promise(() => {}); }
+    }, ctx());
+    runner.change(1); runner.change(2); await Promise.resolve();
+    const before = key(); components.at(-1).props[property] = value; assert.notEqual(key(), before, property);
+    runner.setContext(ctx(), 3); oldApp.notify('obsolete'); oldApp.setInput('amount', 99);
+    runner.change(4); await runner.whenIdle();
+    assert.equal(oldApp.signal.aborted, true, property); assert.deepEqual(seen, [1, 4], property); assert.deepEqual(effects, [], property);
+    runner.deactivate();
+  }
 });
 console.log(`${passed}/${passed} input event model and renderer checks passed.`);

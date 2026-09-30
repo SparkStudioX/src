@@ -43,6 +43,30 @@ function editor(extra={}) {
   refresh();return{props,patches,refresh,find,field,button,click,change,open,all:()=>nodes(tree)};
 }
 let passed=0;function check(name,run){run();passed++;console.log(`PASS ${name}`);}
+check('property-grid value source distinguishes a local default, initial tag and state binding',()=>{
+  for(const [props,expected,bound] of [
+    [{},'Local form default',false],
+    [{tagPath:'[default]Mixer/Target'},'Tag: [default]Mixer/Target',false],
+    [{stateBinding:{scope:'session',key:'quantity'}},'session.quantity',true],
+  ]) {
+    const ui=editor({component:component('numberInput',props)}),row=ui.find(node=>node.props?.['data-property']==='inputValue');
+    assert.ok(row.props.className.includes('property-sheet-row'));
+    assert.equal(row.props.className.includes('is-bound'),bound);
+    const source=ui.find(node=>node.type==='input'&&node.props.readOnly),label=ui.find(node=>node.type==='label'&&node.props.htmlFor===source.props.id);
+    assert.equal(label.props.children,'Value source');assert.equal(source.props.value,expected);assert.equal(source.props.title,expected);
+    const help=ui.find(node=>node.props?.id===source.props['aria-describedby']);assert.equal(help.props.className,'property-sheet-hint');
+    assert.equal(ui.all().filter(node=>node.type==='button').length,1);ui.open();
+    assert.ok(ui.find(node=>node.type==='dialog'));assert.deepEqual(ui.patches,[]);
+  }
+});
+check('an invalid saved source is associated with its complete error and the real binding editor',()=>{
+  const ui=editor({component:component('numberInput',{stateBinding:{scope:'session',key:'missing'}})});
+  const source=ui.find(node=>node.type==='input'&&node.props.readOnly),button=ui.field('Edit Value binding'),error=ui.find(node=>node.props?.role==='alert');
+  assert.equal(source.props['aria-invalid'],true);assert.equal(button.props['aria-describedby'],source.props['aria-describedby']);
+  assert.ok(source.props['aria-describedby'].split(' ').includes(error.props.id));assert.equal(error.props.title,error.props.children);
+  assert.match(error.props.children,/missing/);ui.open();ui.change('Value binding state property','quantity');ui.click('Apply');
+  assert.deepEqual(ui.patches,[{stateBinding:{scope:'session',key:'quantity'}}]);
+});
 check('input value fx selects compatible scalar state and applies a minimal staged patch',()=>{
   for(const[type,key]of[['numberInput','quantity'],['textInput','note'],['checkbox','enabled']]){
     const original=component(type),ui=editor({component:original});ui.open();

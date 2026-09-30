@@ -12,7 +12,7 @@ internal static class InputDefinitionValidator
     private const double MaximumSafeInteger = 9007199254740991;
     private static readonly HashSet<string> Types = new(StringComparer.Ordinal)
     {
-        "textInput", "textArea", "passwordInput", "numberInput", "spinner", "slider", "checkbox", "toggle", "select", "list", "treeView", "radioGroup", "multiStateButton", "dateTimeInput"
+        "textInput", "formattedInput", "barcodeInput", "textArea", "passwordInput", "numberInput", "spinner", "slider", "checkbox", "toggle", "select", "list", "treeView", "radioGroup", "multiStateButton", "dateTimeInput"
     };
     private static readonly Regex FieldKey = new(@"\A[A-Za-z_][A-Za-z0-9_]{0,63}\z", RegexOptions.CultureInvariant);
     private static readonly Regex LocalDateTime = new(@"\A[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}\z", RegexOptions.CultureInvariant);
@@ -23,6 +23,7 @@ internal static class InputDefinitionValidator
 
     public static void ValidateDefinition(string type, JsonObject props, HashSet<string> fields)
     {
+        InputConstraints.ValidateDefinition(type, props);
         var key = ProjectStore.Required(props, "fieldKey");
         if (!FieldKey.IsMatch(key) || !fields.Add(key))
             throw new ArgumentException("Input field names must be unique within their screen or template and use letters, digits and underscores, starting with a letter or underscore.");
@@ -80,15 +81,17 @@ internal static class InputDefinitionValidator
         {
             // Explicit null is malformed. An omitted default means that the operator
             // action must supply the field, including a valid bound value.
-            ValidateValue(key, type, props, JsonSerializer.SerializeToElement(props["defaultValue"]));
+            ValidateValue(key, type, props, JsonSerializer.SerializeToElement(props["defaultValue"]), enforceConstraints: false);
         }
     }
 
-    public static void ValidateValue(string key, string type, JsonObject definition, JsonElement value)
+    public static void ValidateValue(string key, string type, JsonObject definition, JsonElement value, bool enforceConstraints = true)
     {
         switch (type)
         {
             case "textInput":
+            case "formattedInput":
+            case "barcodeInput":
             case "textArea":
             case "passwordInput":
                 if (value.ValueKind != JsonValueKind.String || value.GetString()!.Length > 4096)
@@ -134,6 +137,7 @@ internal static class InputDefinitionValidator
             default:
                 throw new ArgumentException($"Input field '{key}' has an unsupported type.");
         }
+        if (enforceConstraints) InputConstraints.ValidateValue(key, type, definition, value);
     }
 
     public static void ValidateSelectionMappings(IEnumerable<JsonObject> components, HashSet<string> fields)

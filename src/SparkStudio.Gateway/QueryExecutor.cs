@@ -4,7 +4,7 @@ using SparkStudio.Connectors;
 
 namespace SparkStudio.Gateway;
 
-public sealed class QueryExecutor(ProjectStore store, ConnectorService connectors)
+public sealed partial class QueryExecutor(ProjectStore store, ConnectorService connectors)
 {
     public Task<QueryResult> ExecuteAsync(string id, Dictionary<string, JsonElement>? supplied, CancellationToken cancellation)
         => ExecuteDefinitionAsync(store.GetQuery(id), supplied, cancellation);

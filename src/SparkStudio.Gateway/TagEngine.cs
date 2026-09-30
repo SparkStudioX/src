@@ -77,11 +77,11 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             configurationGeneration++;
             if (ProjectStore.Required(saved, "kind") == "memory") SetValue(MemoryValue(saved, DateTimeOffset.UtcNow));
             else if (ProjectStore.Required(saved, "kind") == "expression")
-                SetValue(new(path, null, ProjectStore.Required(saved, "dataType"), saved["enabled"]?.GetValue<bool>() == false ? "Bad_Disabled" : "Bad_WaitingForInitialData", DateTimeOffset.UtcNow, "expression"));
+                SetValue(new(path, null, ProjectStore.Required(saved, "dataType"), saved["effectiveEnabled"]?.GetValue<bool>() == false ? "Bad_Disabled" : "Bad_WaitingForInitialData", DateTimeOffset.UtcNow, "expression"));
             else
             {
                 var disabled = store.GetConnections().OfType<JsonObject>().Any(item => ProjectStore.Optional(item, "id") == ProjectStore.Optional(saved, "connectionId") && item["enabled"]?.GetValue<bool>() == false);
-                SetUnavailable(path, recovery?.Active == true ? "Bad_RecoveryMode" : saved["enabled"]?.GetValue<bool>() == false || disabled ? "Bad_Disabled" : "Bad_WaitingForInitialData");
+                SetUnavailable(path, recovery?.Active == true ? "Bad_RecoveryMode" : saved["effectiveEnabled"]?.GetValue<bool>() == false || disabled ? "Bad_Disabled" : "Bad_WaitingForInitialData");
             }
             return saved;
         }
@@ -93,7 +93,8 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             var result = store.ApplyTagImport(request);
             var changed = result.Changes.Where(item => item.Action != "unchanged").Select(item => item.Path).ToHashSet(StringComparer.Ordinal);
             InvalidateWatches(watch => watch.Plan.Bindings.Any(binding => changed.Contains(binding.Path)));
-            foreach (var definition in store.GetTagDefinitions().OfType<JsonObject>().Where(item => changed.Contains(ProjectStore.Required(item, "path"))))
+            foreach (var removed in result.Changes.Where(item => item.Action == "remove" && item.Path.StartsWith("[default]", StringComparison.Ordinal))) RemoveValue(removed.Path);
+            foreach (var definition in store.GetRuntimeTagDefinitions().OfType<JsonObject>().Where(item => changed.Contains(ProjectStore.Required(item, "path"))))
             {
                 var path = ProjectStore.Required(definition, "path");
                 if (TagDefinitionValidator.Kind(definition) == "memory") SetValue(MemoryValue(definition, DateTimeOffset.UtcNow));
@@ -121,7 +122,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             var saved = store.SaveConnection(connection);
             var id = ProjectStore.Required(saved, "id");
             InvalidateWatches(watch => watch.Plan.Connection.Id == id);
-            foreach (var definition in store.GetTagDefinitions().OfType<JsonObject>().Where(item => ProjectStore.Optional(item, "connectionId") == id))
+            foreach (var definition in store.GetRuntimeTagDefinitions().OfType<JsonObject>().Where(item => ProjectStore.Optional(item, "connectionId") == id))
                 SetUnavailable(ProjectStore.Required(definition, "path"), recovery?.Active == true ? "Bad_RecoveryMode" : saved["enabled"]?.GetValue<bool>() == false || definition["enabled"]?.GetValue<bool>() == false ? "Bad_Disabled" : "Bad_WaitingForInitialData");
             configurationGeneration++;
             return saved;
@@ -146,6 +147,20 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                 tagCount = watch.Plan.Bindings.Length, state = watch.State, lastNotificationAt = watch.LastNotification
             }).ToArray();
     }
+    public object ProviderSnapshot()
+    {
+        lock (stateGate)
+        {
+            var definitions = store.GetRuntimeTagDefinitions().OfType<JsonObject>().ToArray();
+            var configured = definitions.Select(tag => ProjectStore.Required(tag, "path")).ToHashSet(StringComparer.Ordinal);
+            var snapshot = values.Values.Where(value => configured.Contains(value.Path)).ToArray();
+            var enabled = store.DefaultTagProviderEnabled();
+            var unavailable = definitions.Count(tag => TagDefinitionValidator.Enabled(tag) && (!values.TryGetValue(ProjectStore.Required(tag, "path"), out var value) || !value.Quality.StartsWith("Good", StringComparison.OrdinalIgnoreCase)));
+            return new { name = "default", enabled, state = !enabled ? "Disabled" : unavailable > 0 ? "Degraded" : "Running", configuredTags = definitions.Length,
+                goodTags = snapshot.Count(value => value.Quality.StartsWith("Good", StringComparison.OrdinalIgnoreCase)), unavailableTags = unavailable,
+                disabledTags = definitions.Count(tag => !TagDefinitionValidator.Enabled(tag)), scanGroups = store.ExportTags()["scanGroups"], subscriptions = SubscriptionSnapshot() };
+        }
+    }
     public static string Resolve(string path, IReadOnlyDictionary<string, JsonElement>? parameters)
     {
         if (path.Length > 1024) throw new ArgumentException("Tag path is too long.");
@@ -169,6 +184,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
         {
             lock (stateGate)
             {
+                if (!store.DefaultTagProviderEnabled()) return "Bad_Disabled";
                 if (path == "[default]Setpoints/TargetSpeed")
                 {
                     if (input[index].ValueKind != JsonValueKind.Number || !input[index].TryGetDouble(out var number) || !double.IsFinite(number) || number < 0 || number > 500) return "Bad_OutOfRange";
@@ -185,11 +201,31 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             }
         }).ToArray();
     }
+    /// <summary>Validate a reviewed memory command and dispatch under the normal tag/configuration lock order.</summary>
+    public string WriteReviewedMemory(string path, JsonElement value, Action validate)
+    {
+        lock (stateGate)
+        lock (GatewayConfigurationLock.SyncRoot)
+        {
+            validate();
+            return WriteMemory([path], [value]).Single();
+        }
+    }
     private void UpdateSamples()
     {
         var now = DateTimeOffset.UtcNow;
+        if (!store.DefaultTagProviderEnabled())
+        {
+            foreach (var value in values.Values.Where(value => value.Path.StartsWith("[default]Line/", StringComparison.Ordinal) || value.Path.StartsWith("[default]Setpoints/", StringComparison.Ordinal)))
+                SetValue(value with { Quality = "Bad_Disabled" });
+            return;
+        }
         var seconds = (now - started).TotalSeconds;
-        lock (stateGate) if (!values.ContainsKey("[default]Setpoints/TargetSpeed")) SetValue(new("[default]Setpoints/TargetSpeed", 85d, "Double", "Good", now, "memory"));
+        lock (stateGate)
+        {
+            if (!values.TryGetValue("[default]Setpoints/TargetSpeed", out var target)) SetValue(new("[default]Setpoints/TargetSpeed", 85d, "Double", "Good", now, "memory"));
+            else if (target.Quality == "Bad_Disabled") SetValue(target with { Quality = "Good" });
+        }
         for (var line = 1; line <= 2; line++)
         {
             void Set(string name, object value, string type) { var p = $"[default]Line/Line{line}/{name}"; SetValue(new(p, value, type, "Good", now, "simulated")); }
@@ -209,7 +245,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             {
                 if (expressionGeneration != configurationGeneration)
                 {
-                    expressionPlans = TagExpressions.Order(store.GetTagDefinitions().OfType<JsonObject>().ToArray());
+                    expressionPlans = TagExpressions.Order(store.GetRuntimeTagDefinitions().OfType<JsonObject>().ToArray());
                     expressionGeneration = configurationGeneration;
                     expressionDue.Clear();
                 }
@@ -238,7 +274,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     {
         var path = ProjectStore.Required(definition, "path");
         return new(path, definition["value"]?.Deserialize<JsonElement>(), ProjectStore.Required(definition, "dataType"),
-            definition["enabled"]?.GetValue<bool>() == false ? "Bad_Disabled" : "Good", timestamp, "memory");
+            definition["enabled"]?.GetValue<bool>() == false || definition["effectiveEnabled"]?.GetValue<bool>() == false ? "Bad_Disabled" : "Good", timestamp, "memory");
     }
 
     private async Task DefinitionLoop(CancellationToken stoppingToken)
@@ -253,7 +289,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                 lock (stateGate)
                 {
                     generation = configurationGeneration;
-                    definitions = store.GetTagDefinitions().OfType<JsonObject>().ToArray();
+                    definitions = store.GetRuntimeTagDefinitions().OfType<JsonObject>().ToArray();
                     disabledConnections = store.GetConnections().OfType<JsonObject>().Where(item => item["enabled"]?.GetValue<bool>() == false)
                         .Select(item => ProjectStore.Required(item, "id")).ToHashSet(StringComparer.Ordinal);
                     foreach (var definition in definitions.Where(definition => ProjectStore.Optional(definition, "kind") == "memory"))

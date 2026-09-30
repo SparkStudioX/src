@@ -6,9 +6,234 @@
       "kind": "source-commit",
       "value": "4e58e436ef3817458427e23a81d14a65ff1d190a"
     },
-    "note": "Use the companion SparkStudio 0.2.0-preview.9 release or a newer compatible gateway for this collection. The source baseline identifies the original collection's lower feature boundary, not support for subsequently added examples. The bundle's actual source revision and each workshop's prerequisites identify its full requirements; project format 1 alone does not establish feature compatibility."
+    "note": "Use the companion roadmap source build or a later compatible release for the newly added examples. Preview.9 does not contain unified publication, datasets, charts, UDTs or equipment commands. The bundle source revision and each workshop prerequisites identify its actual requirements."
   },
   "workshops": [
+    {
+      "id": "view-containers",
+      "title": "Retained view containers",
+      "summary": "Reusable forms in embedded, tab, split and dock layouts with independent retained pane state.",
+      "source": "examples/view-containers.json",
+      "distribution": "portable",
+      "features": ["Keyboard tab navigation", "Pointer and keyboard split sizing", "Dock visibility and resize", "Retained private form state", "Scoped Python and popup actions"],
+      "prerequisites": ["Use the companion application-workflows source build or later compatible release.", "Import the package, review and explicitly publish. Synthetic form actions and events require Operate permission and the bundled Python runtime. No connections or tags are needed."],
+      "gatewayWrites": "none",
+      "entryScreenId": "tabs",
+      "guide": "docs/architecture/VIEW_CONTAINERS.md",
+      "walkthrough": ["Edit a form in one tab, switch tabs and return to verify its draft is retained.", "Use arrow keys, Home and End on the tab strip to navigate.", "Open the split screen and resize with the pointer and keyboard.", "Hide and reopen a dock to verify its private values remain.", "Run a pane action and open its contextual popup; compare another pane and another operator tab."]
+    },
+    {
+      "id": "validated-inputs",
+      "title": "Validated inputs workshop",
+      "summary": "Formatted part codes, inline validation and repeat barcode scans with session-local Python feedback.",
+      "source": "examples/validated-inputs.json",
+      "distribution": "portable",
+      "features": ["Formatted input masks", "Required and text validation", "Keyboard barcode scans", "Python commit handlers"],
+      "prerequisites": ["Use the companion application-workflows source build or later compatible release; preview.9 does not include these controls.", "The bundled Python runtime and operator Operate permission are required."],
+      "gatewayWrites": "none",
+      "entryScreenId": "validated-inputs",
+      "guide": "docs/architecture/VALIDATED_INPUTS.md",
+      "walkthrough": ["Enter ab0012 and Tab to format the part as AB-0012.", "Enter an invalid email, then operator@example.test, observing inline messages.", "Scan 000123 plus Enter twice and confirm both commits while retaining leading zeroes.", "Validate an incomplete form, then a complete form. Compare independent state in another operator tab."]
+    },
+    {
+      "id": "component-interactions",
+      "title": "Component interaction workshop",
+      "summary": "Keyboard, focus and pointer handlers in Python and JavaScript with independent template forms.",
+      "source": "examples/component-interactions.json",
+      "distribution": "portable",
+      "features": ["Focus and blur events", "Keyboard and pointer events", "Double-click handlers", "Password key redaction", "Template event isolation"],
+      "prerequisites": ["Use the companion application-workflows source build or later compatible release; preview.9 does not include these events.", "Python handlers require the bundled runtime and operator Operate permission."],
+      "gatewayWrites": "none",
+      "entryScreenId": "interaction-lab",
+      "guide": "docs/architecture/COMPONENT_INTERACTIONS.md",
+      "walkthrough": ["Focus and type into fields, then use arrow keys and Tab to inspect their event details.", "Type slowly into the password field and confirm the counter changes without revealing keys.", "Press, release and double-click the pad, then compare disabled and hidden behavior.", "Compare independent station A and B forms and a second operator tab."]
+    },
+    {
+      "id": "table-batch-workflow",
+      "title": "Atomic table batch editing",
+      "summary": "Select several synthetic work orders, stage cell changes and save them in one SQLite transaction.",
+      "source": "examples/table-batch-workflow.json",
+      "distribution": "setup-required",
+      "features": ["Typed multiple row selection", "Staged batch Apply and Cancel", "Optimistic row versions", "Atomic SQLite and SQL Server batch contract"],
+      "prerequisites": ["Use the companion application-workflows source build or a later compatible release.", "Run tools/load-table-batch-example.mjs on an isolated gateway to create its synthetic SQLite database and project; --publish explicitly publishes.", "Operators need Operate permission to apply changes. SQL Server uses the same transaction contract but this workshop exercises SQLite."],
+      "gatewayWrites": "sqlite-setup",
+      "entryScreenId": "table-batch",
+      "guide": "docs/architecture/TABLE_BATCH_EDITING.md",
+      "walkthrough": ["Load and explicitly publish the synthetic workshop.", "Select multiple rows, open the batch editor and stage changes; Cancel must leave records unchanged.", "Apply changes and confirm the affected row versions advance once each.", "Use two operator tabs to stage conflicting edits; the losing batch must update no rows."]
+    },
+    {
+      "id": "access-permissions-workshop",
+      "title": "Access boundaries workshop",
+      "summary": "Separate operator commands and delegated gateway capabilities with a synthetic memory-tag application.",
+      "source": "examples/access-permissions-workshop.json",
+      "distribution": "setup-required",
+      "features": [
+        "View and Operate grants",
+        "Explicit Commands permission",
+        "Delegated gateway capabilities",
+        "Negative authorization checks"
+      ],
+      "prerequisites": [
+        "Use tools/load-access-permissions-example.mjs on an isolated gateway. It adds one scoped synthetic memory tag.",
+        "Create disposable local accounts manually with the profiles in the guide; no credentials are packaged."
+      ],
+      "gatewayWrites": "memory-tags",
+      "entryScreenId": "access-boundaries",
+      "guide": "docs/architecture/FINE_GRAINED_ACCESS.md",
+      "walkthrough": [
+        "Load and publish the workshop on an isolated gateway.",
+        "Compare Viewer, Operator and Command operator profiles.",
+        "Exercise the five delegated gateway profiles and confirm other operations are denied.",
+        "Disable a disposable account and verify its sessions lose access."
+      ]
+    },
+    {
+      "id": "equipment-commands",
+      "title": "Equipment commands workshop",
+      "summary": "Review, confirmation, typed bounds, readback and audit for three synthetic memory-tag commands.",
+      "source": "examples/equipment-commands.json",
+      "distribution": "setup-required",
+      "features": [
+        "Explicit Commands permission",
+        "Single-use confirmations",
+        "Current-state conflict checks",
+        "Readback receipts and audit"
+      ],
+      "prerequisites": [
+        "Run tools/load-equipment-commands-example.mjs on an isolated gateway; --publish explicitly publishes.",
+        "No equipment connection is configured. Non-admin operators need explicit Commands and tag-read access."
+      ],
+      "gatewayWrites": "memory-tags",
+      "entryScreenId": "equipment-commands",
+      "guide": "docs/architecture/EQUIPMENT_COMMANDS.md",
+      "walkthrough": [
+        "Review and confirm a speed, run flag and note.",
+        "Cancel a review and reject an out-of-range speed.",
+        "Change the target from another session after review; confirm stale requests are rejected.",
+        "Compare Operate-only and Commands accounts and inspect audit references."
+      ]
+    },
+    {
+      "id": "unit-model-workshop",
+      "title": "Reusable unit model workshop",
+      "summary": "Pinned UDT versions, member overrides and named scan groups using two synthetic counter instances.",
+      "source": "examples/unit-model-workshop.json",
+      "distribution": "setup-required",
+      "features": [
+        "Versioned UDTs",
+        "Instance overrides",
+        "Named scan groups",
+        "Default provider lifecycle"
+      ],
+      "prerequisites": [
+        "Run tools/load-unit-model-example.mjs against an isolated gateway using a local administrator credential file.",
+        "Creates six synthetic tags, two instances and one scan group; no OPC connection."
+      ],
+      "gatewayWrites": "memory-tags",
+      "entryScreenId": "unit-model",
+      "guide": "docs/architecture/TAG_MODELS.md",
+      "walkthrough": [
+        "Verify West 50% and East 75%.",
+        "Create version 2 and upgrade West through preview, retaining its Goal override.",
+        "Observe West 62.5%, then disable and restore the scan group."
+      ]
+    },
+    {
+      "id": "tag-template-parameters",
+      "title": "Tag-driven template parameters",
+      "summary": "Live typed tag parameters resolve a bounded machine address and reconstruct authoritative context for actions.",
+      "source": "examples/tag-template-parameters.json",
+      "distribution": "setup-required",
+      "features": [
+        "Direct tag parameter sources",
+        "Bounded indirect tag addresses",
+        "Quality and type validation"
+      ],
+      "prerequisites": [
+        "Create the two independently authored BindingWorkshop/A/Count and B/Count memory Double tags with values 12 and 27.",
+        "Configure the operator project readable tag prefix. No physical device is used."
+      ],
+      "gatewayWrites": "memory-tags",
+      "entryScreenId": "tag-template-parameters",
+      "guide": "docs/architecture/TAG_PARAMETER_BINDINGS.md",
+      "walkthrough": [
+        "Load the authored tags and screen into a separate project.",
+        "Select A or B and verify parameter readings.",
+        "Disable the source or change its type to inspect unavailable-state handling."
+      ]
+    },
+    {
+      "id": "dataset-nested-queries",
+      "title": "Datasets and nested query rows",
+      "summary": "Named-query datasets and two nested query levels preserve independent form and popup context.",
+      "source": "examples/dataset-nested-queries.json",
+      "distribution": "portable",
+      "features": [
+        "Dataset query bindings",
+        "Nested query repeaters",
+        "Stable row context and private drafts"
+      ],
+      "prerequisites": [
+        "Use the companion dataset/nested-query source build and bundled Python.",
+        "Uses only the built-in production-summary sample connection."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "dataset-nested-queries",
+      "guide": "docs/architecture/DATASETS_NESTED_QUERIES.md",
+      "walkthrough": [
+        "Import, review and publish the project.",
+        "Compare both nested row levels and their per-row charts.",
+        "Edit independent notes and open row-context popups; verify context after refresh."
+      ]
+    },
+    {
+      "id": "supplied-data-charts",
+      "title": "Supplied-data charts workshop",
+      "summary": "Ten chart modes, quality gaps, configurable axes and local range selection over synthetic datasets.",
+      "source": "examples/supplied-data-charts.json",
+      "distribution": "portable",
+      "features": [
+        "Line/area/bar/XY/time series",
+        "Pie/radar/status/box/Gantt",
+        "Compact sparklines",
+        "Quality gaps and accessible data"
+      ],
+      "prerequisites": [
+        "Use the companion dataset/chart source build. No database, device or Python is required."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "production",
+      "guide": "docs/architecture/CHARTS.md",
+      "walkthrough": [
+        "Import and publish, then visit Production, Quality and Scheduling.",
+        "Adjust the range selector and expand View data.",
+        "Edit series/axes in Designer; Apply, Undo, Save and Publish."
+      ]
+    },
+    {
+      "id": "unified-publication",
+      "title": "Unified application publication",
+      "summary": "Review and release screens, queries, libraries and gateway/browser events together; roll back the same complete version.",
+      "source": "examples/unified-publication.json",
+      "distribution": "portable",
+      "features": [
+        "Reviewed complete publication",
+        "Revision conflicts",
+        "Library and gateway-event rollback"
+      ],
+      "prerequisites": [
+        "Use the companion source build with unified publication and bundled Python.",
+        "Imported event and library resources are disabled until reviewed and enabled."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "release-desk",
+      "guide": "docs/architecture/UNIFIED_PUBLICATION.md",
+      "walkthrough": [
+        "Import and enable the three sample resources, then save and publish Amber.",
+        "Change the library and query to Indigo and publish the complete application.",
+        "Roll back Amber; verify the library, query and events match while drafts retain Indigo."
+      ]
+    },
     {
       "id": "lifecycle-session-messaging",
       "title": "Lifecycle and session messaging workshop",
@@ -658,7 +883,8 @@
       "walkthrough": [
         "Change Quantity and Unit price; Total recalculates from the current form values.",
         "Edit Order code and commit with Enter or Tab to exercise the browser commit handler.",
-        "In Designer, inspect the card's width, text and background bindings and the saved Quantity/Unit price group."
+        "In Designer, inspect the card's width, text and background bindings and the saved Quantity/Unit price group.",
+        "Select different controls in Designer and compare their shared property grid. Open a collection editor, Cancel, then Apply a valid edit and Undo it."
       ]
     },
     {

@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 namespace SparkStudio.Gateway;
 
 /// <summary>Executes the published action with only the fields declared by its published screen.</summary>
-public sealed partial class RuntimeActions(PublicationStore publications, PythonRunner python, QueryExecutor queries)
+public sealed partial class RuntimeActions(PublicationStore publications, PythonRunner python, QueryExecutor queries, Func<string, JsonElement>? readBindingTag = null)
 {
     public async Task<JsonObject> ExecuteAsync(string screenId, string componentId,
         Dictionary<string, JsonElement>? parameters, Dictionary<string, JsonElement>? inputs,
@@ -60,7 +60,7 @@ public sealed partial class RuntimeActions(PublicationStore publications, Python
             InputDefinitionValidator.ValidateQuerySelection(key, ProjectStore.Required(definition, "type"), source, result, resolvedInputs[key].GetString()!);
         }
 
-        return await python.RunAsync(action["code"]!.GetValue<string>(), resolvedParameters, resolvedInputs, cancellation, action["queries"]!.AsArray(), uiContext);
+        return await python.RunAsync(action["code"]!.GetValue<string>(), resolvedParameters, resolvedInputs, cancellation, action["queries"]!.AsArray(), uiContext, CapturedLibraries(action));
     }
 
     public async Task<JsonObject> ExecuteTableEditAsync(string screenId, string componentId, TableEditRequest request, CancellationToken cancellation)
@@ -68,6 +68,7 @@ public sealed partial class RuntimeActions(PublicationStore publications, Python
         if (string.IsNullOrWhiteSpace(request.PublishedAt))
             throw new ArgumentException("Reload the published screen before editing a table.");
         var action = publications.GetTableEdit(screenId, componentId, request.PublishedAt, request.InstanceId, request.RowId, request.PopupOrigin, request.InstancePath);
+        if (request.Edits is not null || action["table"]?["tableEdit"]?["batch"] is not null) throw new ArgumentException("This table requires an explicit atomic batch request.");
         var context = await ResolveContextAsync(action, request.Parameters, request.BindingInputs, request.PopupOrigin?.BindingInputs, request.BindingState, request.PopupOrigin?.BindingState, cancellation);
         var query = action["query"]!.AsObject();
         var queryParameters = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
@@ -80,8 +81,11 @@ public sealed partial class RuntimeActions(PublicationStore publications, Python
         var inputs = TableEditValidator.Inputs(action["table"]!.AsObject(), rows, request);
         // This read is only a preflight. The authored update must include its key
         // and version in the WHERE clause and require exactly one affected row.
-        return await python.RunAsync(action["code"]!.GetValue<string>(), context, inputs, cancellation, action["queries"]!.AsArray());
+        return await python.RunAsync(action["code"]!.GetValue<string>(), context, inputs, cancellation, action["queries"]!.AsArray(), libraries: CapturedLibraries(action));
     }
+
+    private static IReadOnlyDictionary<string, string>? CapturedLibraries(JsonObject action)
+        => (action["libraries"] as JsonObject)?.ToDictionary(pair => pair.Key, pair => pair.Value!.GetValue<string>(), StringComparer.Ordinal);
 
     private async Task<Dictionary<string, JsonElement>> ResolveContextAsync(JsonObject action, Dictionary<string, JsonElement>? parameters,
         IReadOnlyList<Dictionary<string, JsonElement>>? bindingInputs, IReadOnlyList<Dictionary<string, JsonElement>>? popupBindingInputs,
@@ -137,7 +141,7 @@ public sealed partial class RuntimeActions(PublicationStore publications, Python
         await ValidateBindingInputsAsync(scope, bindingInputs, context, capturedQueries, cancellation);
         // Every result is validated even when a saved/query row later overrides
         // that key. An invalid expression must never leave an actionable row.
-        var boundParameters = TemplateParameterBindings.Evaluate(scope, context, bindingInputs, bindingState)
+        var boundParameters = TemplateParameterBindings.Evaluate(scope, context, bindingInputs, bindingState, readBindingTag)
             .ToDictionary(pair => pair.Key, pair => TemplateParameterTypes.Coerce(pair.Key, pair.Value, parameterTypes), StringComparer.Ordinal);
         Dictionary<string, JsonElement>? rowParameters = null;
         if (scope["rowsSource"] is JsonObject rowsSource)

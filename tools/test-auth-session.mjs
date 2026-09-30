@@ -1,4 +1,4 @@
-// Preload existing integration suites with real authenticated sessions on isolated port 5091.
+// Preload integration suites with real authenticated sessions on isolated ports 5091/5093.
 // Usage: set SPARKSTUDIO_TEST_AUTH_FILE to the ignored file from test-security.mjs,
 // then node --import ./tools/test-auth-session.mjs tools/test-input-controls.mjs <gateway URL>.
 import { readFile } from 'node:fs/promises';
@@ -13,7 +13,7 @@ assert.ok(resolved.startsWith(dataRoot + path.sep), 'Test credentials must stay 
 const credentials = JSON.parse(await readFile(resolved, 'utf8'));
 const base = new URL(credentials.baseUrl);
 assert.equal(base.protocol, 'http:');
-assert.ok(['localhost', '127.0.0.1'].includes(base.hostname) && base.port === '5091', 'Only the isolated loopback test gateway on 5091 is allowed.');
+assert.ok(['localhost', '127.0.0.1'].includes(base.hostname) && ['5091', '5093'].includes(base.port), 'Only isolated loopback test gateways on 5091 or 5093 are allowed.');
 assert.equal(base.pathname, '/');
 const originalFetch = globalThis.fetch;
 const sessions = {};

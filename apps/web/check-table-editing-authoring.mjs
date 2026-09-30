@@ -22,7 +22,7 @@ function drive(component,onChange=()=>{},notify=()=>{}){hooks.clear();let tree,c
 let checks=0;function check(name,run){run();checks++;console.log(`PASS ${name}`)}
 
 check('disabled and configured summaries expose a transactional handler editor and runtime-only testing',()=>{
-  for(const definition of [undefined,saved()]){const html=renderToStaticMarkup(React.createElement(TableEditingEditor,{component:make(definition),onChange(){},notify(){}}));assert.match(html,/Inline editing/);assert.match(html,/operator runtime to test writes/);assert.match(html,/Designer Preview never executes cell writes/);assert.doesNotMatch(html,/<textarea|<pre/)}
+  for(const definition of [undefined,saved()]){const html=renderToStaticMarkup(React.createElement(TableEditingEditor,{component:make(definition),onChange(){},notify(){}}));assert.match(html,/Inline editing/);assert.match(html,/operator runtime to test writes/);assert.match(html,/Designer Preview never executes cell writes/);assert.doesNotMatch(html,/<textarea|<pre/);assert.match(html,/class="property-sheet-row" data-property="tableEdit"/);assert.equal(html.includes('data-property="tableEdit.versionColumn"'),Boolean(definition))}
 });
 check('configuration applies types, constraints and Python together as one Undo entry',()=>{
   const component=make(),before=structuredClone(component),patches=[];
@@ -75,5 +75,12 @@ check('App integrates the editor only in table properties and resets drafts on s
   const source=fs.readFileSync(new URL('src/App.tsx',import.meta.url),'utf8'),ast=ts.createSourceFile('App.tsx',source,ts.ScriptTarget.ES2022,true,ts.ScriptKind.TSX);let found;
   function visit(node){if(ts.isJsxSelfClosingElement(node)&&node.tagName.getText(ast)==='TableEditingEditor')found=node;ts.forEachChild(node,visit)}visit(ast);assert.ok(found);const key=found.attributes.properties.find(attribute=>attribute.name?.getText(ast)==='key').getText(ast);assert.match(key,/selected\.id/);for(const field of ['queryId','rowKey','tableEdit'])assert.ok(key.includes(field));
   let parent=found.parent;while(parent&&!ts.isBinaryExpression(parent))parent=parent.parent;assert.ok(parent?.getText(ast).startsWith('selected.type === "table" &&'));
+});
+check('atomic batch authoring saves one declared table and removes the staged Python alternative',()=>{
+  const patches=[],component=make(saved()),ui=drive(component,patch=>patches.push(patch));ui.change('Table edit persistence','batch');ui.change('Atomic batch table','production_records');assert.deepEqual(patches,[]);assert.equal(ui.all().filter(node=>node.type?.name==='ScriptEditor').length,0);ui.click('Apply editing');assert.equal(patches[0].selectionMode,'multiple');assert.deepEqual(patches[0].tableEdit.batch,{table:'production_records'});assert.equal(Object.hasOwn(patches[0].tableEdit,'script'),false);assert.equal(component.props.tableEdit.script,saved().script);assert.equal(validateTableEditDefinition(patches[0].tableEdit,'id'),null);
+});
+check('atomic batch identifier and scalar mapping errors block Apply; Cancel never changes persistence mode',()=>{
+  for(const name of ['dbo.records','records; DELETE','records]','1table',' records']){const patches=[],ui=drive(make(saved()),patch=>patches.push(patch));ui.change('Table edit persistence','batch');ui.change('Atomic batch table',name);assert.equal(ui.button('Apply editing').props.disabled,true);ui.click('Apply editing');assert.deepEqual(patches,[]);ui.click('Cancel');assert.deepEqual(patches,[])}
+  const component=make(saved());component.props.selectionFields={name:'status'};const ui=drive(component);ui.change('Table edit persistence','batch');ui.change('Atomic batch table','records');assert.equal(ui.button('Apply editing').props.disabled,true);
 });
 console.log(`${checks} table editing authoring checks passed.`);

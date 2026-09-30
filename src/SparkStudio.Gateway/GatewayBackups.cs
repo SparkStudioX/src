@@ -302,11 +302,11 @@ public static class GatewayBackupEndpoints
 {
     public static void MapGatewayBackupEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/gateway/backups", (GatewayBackups backups) => backups.Snapshot()).Access("admin");
-        app.MapPut("/api/gateway/backups", (BackupSettingsRequest request, GatewayBackups backups) => backups.Save(request)).Access("admin", audit: true);
+        app.MapGet("/api/gateway/backups", (GatewayBackups backups) => backups.Snapshot()).Access("backups");
+        app.MapPut("/api/gateway/backups", (BackupSettingsRequest request, GatewayBackups backups) => backups.Save(request)).Access("backups", audit: true);
         app.MapPost("/api/gateway/backups/run", (BackupRunRequest request, GatewayBackups backups, HttpContext context)
-            => Results.Json(backups.StartManual(request.Deliver, GatewayAccess.Actor(context)), statusCode: 202)).Access("admin", audit: true);
+            => Results.Json(backups.StartManual(request.Deliver, GatewayAccess.Actor(context)), statusCode: 202)).Access("backups", audit: true);
         app.MapGet("/api/gateway/backups/download/{id}", (string id, GatewayBackups backups) =>
-        { var file = backups.Download(id); return Results.File(file.Stream, "application/octet-stream", file.Name, enableRangeProcessing: false); }).Access("admin", audit: true);
+        { var file = backups.Download(id); return Results.File(file.Stream, "application/octet-stream", file.Name, enableRangeProcessing: false); }).Access("backups", audit: true);
     }
 }

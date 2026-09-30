@@ -5,7 +5,7 @@ namespace SparkStudio.Gateway;
 /// <summary>Each project owns its execution context; gateway tags and connections are shared.</summary>
 public sealed class ProjectRuntimeRegistry(ProjectCatalog catalog, TagEngine tags, ConnectorService connectors,
     IConfiguration configuration, ILoggerFactory loggers, IHostApplicationLifetime lifetime, RecoveryQuarantine? recovery = null,
-    RuntimeSessionMessaging? sessionMessaging = null) : IHostedService, IDisposable
+    RuntimeSessionMessaging? sessionMessaging = null, IHttpContextAccessor? httpContext = null, SecurityStore? security = null) : IHostedService, IDisposable
 {
     private readonly object gate = new();
     private readonly Dictionary<string, ProjectRuntime> runtimes = new(StringComparer.Ordinal);
@@ -33,7 +33,16 @@ public sealed class ProjectRuntimeRegistry(ProjectCatalog catalog, TagEngine tag
                 return oneWay ? Task.FromResult(destination.SendMessage(name, payload, actor, null, chain))
                     : destination.DispatchMessageAsync(name, payload, actor, null, cancellation, chain);
             };
-            var runtime = new ProjectRuntime(workspace, queries, python, events, new RuntimeActions(workspace.Publication, python, queries));
+            var runtime = new ProjectRuntime(workspace, queries, python, events, new RuntimeActions(workspace.Publication, python, queries, path =>
+            {
+                var context = httpContext?.HttpContext;
+                if (context is null || security is null || !GatewayAccess.CanReadTag(context, security, path))
+                    throw new ArgumentException("The tag binding source is unavailable in this project session.");
+                var tag = tags.Read([path], null)[0];
+                if (!System.Text.RegularExpressions.Regex.IsMatch(tag.Quality, @"\Agood(?:$|[_ (])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+                    throw new ArgumentException("The tag binding source has unavailable quality.");
+                return System.Text.Json.JsonSerializer.SerializeToElement(tag.Value);
+            }));
             if (recovery?.Active != true) events.StartAsync(lifetime.ApplicationStopping).GetAwaiter().GetResult();
             runtimes.Add(id, runtime);
             return runtime;

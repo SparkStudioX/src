@@ -8,23 +8,24 @@ import "./visualStyles.css";
 export function ComponentStyleAssignment({ component, styles = [], onChange, onManage }: {
   component: CanvasComponent; styles?: VisualStyle[]; onChange: (patch: CanvasComponent["props"]) => void; onManage: () => void;
 }) {
+  const fieldId = useId();
   const style = styles.find(item => item.id === component.props.styleId);
   return <div className="inspector-section visual-style-assignment">
     <h3>Visual style</h3>
-    <label>Assigned style<select value={component.props.styleId ?? ""} onChange={event => onChange({ styleId: event.target.value || undefined })}>
+    <div className="property-sheet-row" data-property="styleId"><label htmlFor={fieldId}>Assigned style</label><div className="property-sheet-value"><select id={fieldId} value={component.props.styleId ?? ""} onChange={event => onChange({ styleId: event.target.value || undefined })}>
       <option value="">None (local / theme)</option>
       {component.props.styleId && !style && <option value={component.props.styleId}>Missing style</option>}
       {styles.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-    </select></label>
-    <button className="button" type="button" onClick={onManage}>Manage visual styles</button>
-    <details><summary>Appearance sources</summary>
+    </select></div><span aria-hidden="true" /></div>
+    <div className="property-sheet-row"><label>Style definitions</label><div className="property-sheet-value"><button className="button" type="button" onClick={onManage}>Manage visual styles</button></div><span aria-hidden="true" /></div>
+    <div className="property-sheet-row" data-property="appearanceSources"><label>Appearance</label><div className="property-sheet-value"><details className="property-structured-editor"><summary>Appearance sources</summary>
       <p>Bindings override local values, then the assigned style, then parent or theme defaults. Clear a local override to use its style value.</p>
       <table><thead><tr><th>Property</th><th>Source / authored value</th><th /></tr></thead><tbody>
         {visualStyleProperties.map(key => <tr key={key}><th>{visualStyleLabels[key]}</th><td>{visualStyleSource(component, style, key)}<small>{component.props.bindings?.[key] || component.props.queryBindings?.[key] ? "Evaluated at runtime" : String(component.props[key] ?? style?.properties[key] ?? "Inherited")}</small></td><td>
           {component.props[key] !== undefined && <button type="button" title={`Clear local ${visualStyleLabels[key].toLowerCase()} override`} aria-label={`Clear local ${visualStyleLabels[key].toLowerCase()} override`} onClick={() => onChange({ [key]: undefined })}>Clear</button>}
         </td></tr>)}
       </tbody></table>
-    </details>
+    </details></div><span aria-hidden="true" /></div>
   </div>;
 }
 

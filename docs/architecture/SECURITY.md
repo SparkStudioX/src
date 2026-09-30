@@ -1,6 +1,6 @@
 # Local accounts and project access
 
-SparkStudio has separate engineering and operator sessions backed by one gateway account store. Engineering opens Projects, Designer and, for administrators, Security. Operator URLs remain `/runtime/<project-id>` and load only the published application. Signing in to one audience does not sign in to the other. Project URLs contain no credentials or access tokens.
+SparkStudio has separate engineering and operator sessions backed by one gateway account store. Engineering opens Projects, Designer and delegated gateway administration according to its capabilities. Operator URLs remain `/runtime/<project-id>` and load only the published application. Signing in to one audience does not sign in to the other. Project URLs contain no credentials or access tokens.
 
 ## First administrator
 
@@ -63,4 +63,10 @@ $env:SPARKSTUDIO_TEST_AUTH_FILE = Join-Path $PWD '.data/test-evidence/security-t
 node --import ./tools/test-auth-session.mjs tools/test-input-controls.mjs http://127.0.0.1:5091
 ```
 
-The preload is restricted to isolated port 5091, authenticates normally and sends the matching audience cookie and CSRF token. It adds no authentication bypass to the gateway. Never use fixture credentials for a deployed gateway. Example-loader and legacy unauthenticated CLI calls now need authenticated requests; opening Designer and importing a package remains the interactive path.
+The preload is restricted to isolated loopback ports 5091 and 5093, authenticates normally and sends the matching audience cookie and CSRF token. It adds no authentication bypass to the gateway. Never use fixture credentials for a deployed gateway. Example-loader and legacy unauthenticated CLI calls now need authenticated requests; opening Designer and importing a package remains the interactive path.
+
+## Delegated operations and equipment commands
+
+Non-administrators may receive separate Diagnostics, Configuration, Backups, Audit and Sessions capabilities. These enable only their corresponding gateway operations; account administration, project lifecycle and recovery activation remain administrator-only. See [access boundaries](FINE_GRAINED_ACCESS.md) for the operation matrix and workshop.
+
+Project Commands is explicit and implies Operate/View; existing Operate grants do not acquire Commands. Published equipment commands also require readable target and readback tags, fresh confirmation, current publication and current account authority before dispatch. See [equipment commands](EQUIPMENT_COMMANDS.md). Ordinary Python actions remain trusted published code and retain the separate memory-tag API; this permission is not an operating-system script sandbox.

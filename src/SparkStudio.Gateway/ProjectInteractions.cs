@@ -90,7 +90,8 @@ internal static class ProjectInteractions
             var instance = scope["components"]!.AsArray().OfType<JsonObject>().FirstOrDefault(component => ProjectStore.Optional(component, "id") == step.InstanceId)
                 ?? throw new KeyNotFoundException("Published template instance not found.");
             var kind = ProjectStore.Required(instance, "type");
-            if (kind is not ("template" or "repeater")) throw new ArgumentException("The selected component is not a template instance or repeater.");
+            if (kind == "viewContainer") instance = ViewContainerValidator.ResolvePlacement(instance, step.RowId);
+            else if (kind is not ("template" or "repeater")) throw new ArgumentException("The selected component is not an embedded view, template instance or repeater.");
             var templateId = ProjectStore.Required(instance["props"]!.AsObject(), "templateId");
             if (!visited.Add(templateId)) throw new ArgumentException("Template instance paths cannot contain a template cycle.");
             scope = ProjectTemplates.Templates(project).FirstOrDefault(template => ProjectStore.Optional(template, "id") == templateId)
@@ -101,7 +102,6 @@ internal static class ProjectInteractions
             {
                 if (instance["props"]!["rowsSource"] is JsonObject source)
                 {
-                    if (scopes.Count != 0) throw new ArgumentException("Query-backed repeaters are supported only at a screen's root.");
                     QueryRepeaterSource.ValidateRowId(step.RowId);
                     rowsSource = source.DeepClone().AsObject();
                 }
@@ -112,7 +112,7 @@ internal static class ProjectInteractions
                         ?? throw new KeyNotFoundException("Published repeater row not found.");
                 }
             }
-            else if (step.RowId is not null) throw new ArgumentException("A row ID is valid only for a repeater action.");
+            else if (kind != "viewContainer" && step.RowId is not null) throw new ArgumentException("A row ID is valid only for a repeater or container pane action.");
             var captured = new JsonObject
             {
                 ["templateParameters"] = ProjectTemplates.MergeParameters(scope, instance, null),

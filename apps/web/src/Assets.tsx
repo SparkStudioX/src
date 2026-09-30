@@ -88,14 +88,14 @@ export default function AssetPicker({
           </span>
         </div>
       )}
-      <button
+      <label className="field"><span>Image library</span><button
         className="button asset-upload"
         disabled={busy}
         onClick={() => input.current?.click()}
       >
         <Icon name="upload" size={14} />
         {busy ? "Uploading…" : "Upload local image"}
-      </button>
+      </button></label>
       <input
         ref={input}
         type="file"

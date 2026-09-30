@@ -1,0 +1,143 @@
+{
+  "name": "Atomic table batch workshop",
+  "connection": {
+    "id": "batch-table-db",
+    "name": "Batch table workshop SQLite",
+    "type": "sqlite",
+    "database": "batch-table.db"
+  },
+  "parameters": {},
+  "queries": [
+    {
+      "id": "batch-records",
+      "name": "Batch / Records",
+      "connectionId": "batch-table-db",
+      "kind": "query",
+      "sql": "SELECT id,work_order,machine,quantity,status,version FROM production_records ORDER BY id",
+      "parameters": []
+    }
+  ],
+  "screens": [
+    {
+      "id": "table-batch",
+      "name": "Atomic table editing",
+      "width": 1200,
+      "height": 760,
+      "components": [
+        {
+          "id": "heading",
+          "type": "label",
+          "x": 28,
+          "y": 24,
+          "width": 1144,
+          "height": 48,
+          "props": {
+            "text": "Review together. Apply together.",
+            "fontSize": 30
+          }
+        },
+        {
+          "id": "intro",
+          "type": "label",
+          "x": 28,
+          "y": 84,
+          "width": 1144,
+          "height": 70,
+          "props": {
+            "text": "Select synthetic production rows across pages. Edit selected rows stages changes locally. Apply commits all selected cells in one transaction; Cancel discards the draft. Each changed row advances version once.",
+            "fontSize": 16
+          }
+        },
+        {
+          "id": "batch-table",
+          "type": "table",
+          "x": 28,
+          "y": 174,
+          "width": 1144,
+          "height": 490,
+          "props": {
+            "text": "Synthetic production records",
+            "queryId": "batch-records",
+            "rowKey": "id",
+            "pageSize": 2,
+            "selectionMode": "multiple",
+            "tableColumns": [
+              {
+                "key": "id",
+                "label": "Record"
+              },
+              {
+                "key": "work_order",
+                "label": "Work order"
+              },
+              {
+                "key": "machine",
+                "label": "Machine"
+              },
+              {
+                "key": "quantity",
+                "label": "Quantity",
+                "format": "number",
+                "precision": 0
+              },
+              {
+                "key": "status",
+                "label": "Status"
+              },
+              {
+                "key": "version",
+                "label": "Version",
+                "format": "number",
+                "precision": 0
+              }
+            ],
+            "tableEdit": {
+              "versionColumn": "version",
+              "batch": {
+                "table": "production_records"
+              },
+              "columns": [
+                {
+                  "key": "quantity",
+                  "type": "number",
+                  "min": 0,
+                  "max": 10000,
+                  "integer": true
+                },
+                {
+                  "key": "status",
+                  "type": "string",
+                  "required": true,
+                  "maxLength": 20
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "exercise",
+          "type": "label",
+          "x": 28,
+          "y": 684,
+          "width": 1144,
+          "height": 54,
+          "props": {
+            "text": "Rollback exercise: change row 1 quantity, then row 2 status to invalid. SQLite rejects that status, so neither change nor version commits. Valid statuses: queued, running, complete.",
+            "fontSize": 15
+          }
+        }
+      ]
+    }
+  ],
+  "templates": [],
+  "navigation": {
+    "mode": "menu",
+    "items": [
+      {
+        "screenId": "table-batch",
+        "label": "Atomic table editing"
+      }
+    ],
+    "startupScreenId": "table-batch"
+  }
+}

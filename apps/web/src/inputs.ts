@@ -1,6 +1,7 @@
 import type { RuntimeParameters } from "./types";
 import { validateListTreeOptions } from "./listTreeModel";
 import { resolvePath } from "./api";
+import { inputConstraintError } from "./inputValidation";
 import type {
   CanvasComponent,
   ComponentType,
@@ -14,6 +15,8 @@ import type {
 export function isInput(type: ComponentType): boolean {
   return (
     type === "textInput" ||
+    type === "formattedInput" ||
+    type === "barcodeInput" ||
     type === "passwordInput" ||
     type === "multiStateButton" ||
     type === "list" ||
@@ -241,7 +244,10 @@ export function stateInputError(component: CanvasComponent, state?: RuntimeState
   const values = state?.[binding.scope];
   if (!values || !Object.hasOwn(values, binding.key)) return `${binding.scope === "session" ? "Session" : binding.scope === "screen" ? "Screen" : "Instance"} state '${binding.key}' is unavailable in this form.`;
   const key = component.props.fieldKey || component.id;
-  return validateInputs({ id: "bound-value", name: "Bound value", width: 1, height: 1, components: [component] }, { [key]: values[binding.key] });
+  // Required/mask rules describe a completed form, not whether a typed draft
+  // can be edited. Keep an empty or partially entered state value available.
+  const draft = { ...component, props: { ...component.props, validation: undefined, formatMask: undefined, textCase: undefined } };
+  return validateInputs({ id: "bound-value", name: "Bound value", width: 1, height: 1, components: [draft] }, { [key]: values[binding.key] });
 }
 
 export function validateInputs(
@@ -255,6 +261,8 @@ export function validateInputs(
     const key = component.props.fieldKey || component.id;
     const value = inputs[key];
     const label = resolvePath(component.props.text || key, parameters);
+    const constraint = inputConstraintError(component, value);
+    if (constraint) return `${label}: ${constraint}`;
     if (value === null)
       return `${label}: the initial value is unavailable. Enter a value before running this action.`;
     if (isNumericInput(component.type)) {

@@ -166,5 +166,5 @@ public static class GatewayDeploymentEndpoints
         {
             context.Response.Headers.CacheControl = "no-store";
             return deployment.Snapshot(context, server, security);
-        }).Access("admin");
+        }).Access("configuration");
 }

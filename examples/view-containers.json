@@ -1,0 +1,70 @@
+{
+  "name": "Retained view containers workshop",
+  "tags": [],
+  "navigation": { "startupScreenId": "tabs", "mode": "menu", "items": [{ "screenId": "tabs", "label": "Tabs" }, { "screenId": "split", "label": "Split" }, { "screenId": "dock", "label": "Docks" }, { "screenId": "embedded", "label": "Embedded" }] },
+  "templates": [
+    {
+      "id": "container-form", "name": "Independent pane form", "width": 420, "height": 300,
+      "parameters": { "station": "Station" },
+      "instanceState": { "quantity": { "type": "number", "value": 2 }, "messages": { "type": "number", "value": 0 }, "mounts": { "type": "number", "value": 0 } },
+      "components": [
+        { "id": "title", "type": "label", "x": 20, "y": 14, "width": 380, "height": 38, "props": { "text": "{station}", "fontSize": 26, "componentEvents": { "mount": { "language": "javascript", "code": "app.state.set('instance', 'mounts', app.state.get('instance', 'mounts') + 1);" } }, "messageHandlers": [{ "id": "ping", "messageType": "container.ping", "scope": "screen", "language": "javascript", "code": "app.state.set('instance', 'messages', app.state.get('instance', 'messages') + 1);" }] } },
+        { "id": "quantity", "type": "numberInput", "x": 20, "y": 66, "width": 200, "height": 70, "props": { "text": "Quantity", "fieldKey": "quantity", "defaultValue": 2, "min": 0, "max": 99, "stateBinding": { "scope": "instance", "key": "quantity" } } },
+        { "id": "status", "type": "label", "x": 20, "y": 149, "width": 85, "height": 50, "props": { "text": "Mounts:", "fontSize": 17 } },
+        { "id": "mount-count", "type": "label", "x": 110, "y": 149, "width": 50, "height": 50, "props": { "text": "0", "fontSize": 17, "bindings": { "text": { "expression": "mounts", "references": { "mounts": { "kind": "instanceState", "key": "mounts" } } } } } },
+        { "id": "message-label", "type": "label", "x": 180, "y": 149, "width": 110, "height": 50, "props": { "text": "Messages:", "fontSize": 17 } },
+        { "id": "message-count", "type": "label", "x": 300, "y": 149, "width": 70, "height": 50, "props": { "text": "0", "fontSize": 17, "bindings": { "text": { "expression": "messages", "references": { "messages": { "kind": "instanceState", "key": "messages" } } } } } },
+        { "id": "run", "type": "button", "x": 20, "y": 220, "width": 175, "height": 48, "props": { "text": "Inspect form (Python)", "action": "script", "script": "result = {'station': parameters['station'], 'quantity': inputs['quantity']}" } },
+        { "id": "popup", "type": "button", "x": 210, "y": 220, "width": 190, "height": 48, "props": { "text": "Open scoped popup", "action": "openPopup", "targetScreenId": "pane-popup", "parameters": { "station": "{station}" } } }
+      ]
+    },
+    {
+      "id": "nested-container-form", "name": "Nested embedded form", "width": 460, "height": 340, "parameters": { "station": "Nested" },
+      "components": [{ "id": "nested", "type": "viewContainer", "x": 10, "y": 10, "width": 440, "height": 320, "props": { "text": "Nested embedded view", "viewLayout": { "kind": "embedded", "panes": [{ "id": "content", "label": "Nested content", "templateId": "container-form", "parameters": { "station": "{station}" } }] } } }]
+    }
+  ],
+  "screens": [
+    { "id": "tabs", "name": "Retained tabs", "width": 1100, "height": 700, "components": [
+      { "id": "heading", "type": "label", "x": 32, "y": 24, "width": 1000, "height": 46, "props": { "text": "Retained forms · keyboard tabs", "fontSize": 30 } },
+      { "id": "help", "type": "label", "x": 32, "y": 84, "width": 1000, "height": 55, "props": { "text": "Change West quantity, visit East, then return: each value stays independent. Arrow keys, Home and End move between tabs. Hidden forms do not receive messages.", "fontSize": 17 } },
+      { "id": "views", "type": "viewContainer", "x": 32, "y": 156, "width": 1036, "height": 430, "props": { "text": "Station tabs", "viewLayout": { "kind": "tabs", "initialPaneId": "west", "panes": [{ "id": "west", "label": "West", "templateId": "container-form", "parameters": { "station": "West" } }, { "id": "east", "label": "East (nested)", "templateId": "nested-container-form", "parameters": { "station": "East" } }] } } },
+      { "id": "ping", "type": "button", "x": 32, "y": 612, "width": 245, "height": 48, "props": { "text": "Message visible forms", "action": "message", "message": { "messageType": "container.ping", "scope": "screen", "payload": {} } } },
+      { "id": "nav-tabs", "type": "button", "x": 400, "y": 612, "width": 150, "height": 48, "props": { "text": "Tabs", "action": "navigate", "targetScreenId": "tabs", "enabled": false } },
+      { "id": "nav-split", "type": "button", "x": 565, "y": 612, "width": 150, "height": 48, "props": { "text": "Split", "action": "navigate", "targetScreenId": "split", "enabled": true } },
+      { "id": "nav-dock", "type": "button", "x": 730, "y": 612, "width": 150, "height": 48, "props": { "text": "Docks", "action": "navigate", "targetScreenId": "dock", "enabled": true } },
+      { "id": "nav-embedded", "type": "button", "x": 895, "y": 612, "width": 150, "height": 48, "props": { "text": "Embedded", "action": "navigate", "targetScreenId": "embedded", "enabled": true } }
+    ] },
+    { "id": "split", "name": "Adjustable split", "width": 1100, "height": 700, "components": [
+      { "id": "heading", "type": "label", "x": 32, "y": 24, "width": 1000, "height": 46, "props": { "text": "Two forms · one adjustable split", "fontSize": 30 } },
+      { "id": "help", "type": "label", "x": 32, "y": 84, "width": 1000, "height": 55, "props": { "text": "Drag the divider or focus it and use arrow keys. Shift makes larger steps; Home and End select the limits. Resizing keeps both form values.", "fontSize": 17 } },
+      { "id": "views", "type": "viewContainer", "x": 32, "y": 156, "width": 1036, "height": 430, "props": { "text": "Station split", "viewLayout": { "kind": "split", "orientation": "horizontal", "ratio": 50, "panes": [{ "id": "west", "label": "West", "templateId": "container-form", "parameters": { "station": "West split" } }, { "id": "east", "label": "East", "templateId": "container-form", "parameters": { "station": "East split" } }] } } },
+      { "id": "nav-tabs", "type": "button", "x": 400, "y": 612, "width": 150, "height": 48, "props": { "text": "Tabs", "action": "navigate", "targetScreenId": "tabs", "enabled": true } },
+      { "id": "nav-split", "type": "button", "x": 565, "y": 612, "width": 150, "height": 48, "props": { "text": "Split", "action": "navigate", "targetScreenId": "split", "enabled": false } },
+      { "id": "nav-dock", "type": "button", "x": 730, "y": 612, "width": 150, "height": 48, "props": { "text": "Docks", "action": "navigate", "targetScreenId": "dock", "enabled": true } },
+      { "id": "nav-embedded", "type": "button", "x": 895, "y": 612, "width": 150, "height": 48, "props": { "text": "Embedded", "action": "navigate", "targetScreenId": "embedded", "enabled": true } }
+    ] },
+    { "id": "dock", "name": "Retained docks", "width": 1100, "height": 700, "components": [
+      { "id": "heading", "type": "label", "x": 32, "y": 24, "width": 1000, "height": 46, "props": { "text": "Dock visibility · retained side forms", "fontSize": 30 } },
+      { "id": "help", "type": "label", "x": 32, "y": 84, "width": 1000, "height": 55, "props": { "text": "Close a side dock, then reopen it from the toolbar. Its quantity is retained. Drag or use arrow keys on its separator. The main navigation remains available.", "fontSize": 17 } },
+      { "id": "views", "type": "viewContainer", "x": 32, "y": 156, "width": 1036, "height": 430, "props": { "text": "Station docks", "viewLayout": { "kind": "dock", "panes": [{ "id": "main", "label": "Main", "edge": "center", "templateId": "container-form", "parameters": { "station": "Main dock" } }, { "id": "details", "label": "Details", "edge": "right", "size": 320, "initiallyOpen": true, "templateId": "container-form", "parameters": { "station": "Details dock" } }, { "id": "notes", "label": "Notes", "edge": "left", "size": 260, "initiallyOpen": false, "templateId": "container-form", "parameters": { "station": "Notes dock" } }] } } },
+      { "id": "nav-tabs", "type": "button", "x": 400, "y": 612, "width": 150, "height": 48, "props": { "text": "Tabs", "action": "navigate", "targetScreenId": "tabs", "enabled": true } },
+      { "id": "nav-split", "type": "button", "x": 565, "y": 612, "width": 150, "height": 48, "props": { "text": "Split", "action": "navigate", "targetScreenId": "split", "enabled": true } },
+      { "id": "nav-dock", "type": "button", "x": 730, "y": 612, "width": 150, "height": 48, "props": { "text": "Docks", "action": "navigate", "targetScreenId": "dock", "enabled": false } },
+      { "id": "nav-embedded", "type": "button", "x": 895, "y": 612, "width": 150, "height": 48, "props": { "text": "Embedded", "action": "navigate", "targetScreenId": "embedded", "enabled": true } }
+    ] },
+    { "id": "embedded", "name": "Embedded placement", "width": 1100, "height": 700, "components": [
+      { "id": "heading", "type": "label", "x": 32, "y": 24, "width": 1000, "height": 46, "props": { "text": "Embedded form · free-positioned screen", "fontSize": 30 } },
+      { "id": "help", "type": "label", "x": 32, "y": 84, "width": 1000, "height": 55, "props": { "text": "This view keeps its authored screen rectangle. Template content scales inside it. Open the scoped popup or inspect the form to verify its station context.", "fontSize": 17 } },
+      { "id": "views", "type": "viewContainer", "x": 145, "y": 170, "width": 800, "height": 430, "props": { "text": "Embedded station", "viewLayout": { "kind": "embedded", "panes": [{ "id": "embedded", "label": "Embedded form", "templateId": "container-form", "parameters": { "station": "Embedded station" } }] } } },
+      { "id": "nav-tabs", "type": "button", "x": 400, "y": 612, "width": 150, "height": 48, "props": { "text": "Tabs", "action": "navigate", "targetScreenId": "tabs", "enabled": true } },
+      { "id": "nav-split", "type": "button", "x": 565, "y": 612, "width": 150, "height": 48, "props": { "text": "Split", "action": "navigate", "targetScreenId": "split", "enabled": true } },
+      { "id": "nav-dock", "type": "button", "x": 730, "y": 612, "width": 150, "height": 48, "props": { "text": "Docks", "action": "navigate", "targetScreenId": "dock", "enabled": true } },
+      { "id": "nav-embedded", "type": "button", "x": 895, "y": 612, "width": 150, "height": 48, "props": { "text": "Embedded", "action": "navigate", "targetScreenId": "embedded", "enabled": false } }
+    ] },
+    { "id": "pane-popup", "name": "Pane context", "kind": "popup", "width": 500, "height": 230, "parameters": { "station": "Unknown" }, "components": [
+      { "id": "title", "type": "label", "x": 24, "y": 20, "width": 452, "height": 54, "props": { "text": "Opened by {station}", "fontSize": 26 } },
+      { "id": "run", "type": "button", "x": 24, "y": 110, "width": 220, "height": 50, "props": { "text": "Inspect popup (Python)", "action": "script", "script": "result = {'station': parameters['station']}" } },
+      { "id": "close", "type": "button", "x": 266, "y": 110, "width": 210, "height": 50, "props": { "text": "Return to pane", "action": "closePopup" } }
+    ] }
+  ]
+}

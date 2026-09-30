@@ -32,6 +32,7 @@ const { PropertyBindingsEditor: Bindings } = await import(interactive('PropertyB
 const { default: ActionsEditor } = await import(interactive('ComponentActionsEditor'));
 const { drawingTypes, drawingDefaults, validateDrawingProps, supportsDrawingProperty } = await import(real('drawingComponents'));
 const { checkpoint, restoreHistory } = await import(real('canvasEditing'));
+const { isChart, defaultChartProps } = await import(real('chartModel'));
 const { isInput } = await import(real('inputs'));
 const { isProcessDisplay } = await import(real('processDisplays'));
 const { iconNames } = await import(real('Icon'));
@@ -67,6 +68,19 @@ function visit(node) {
 visit(ast);
 let checks = 0; function check(name, run) { run(); checks++; console.log(`PASS ${name}`); }
 
+check('drawing collection rows open an accessible dialog and native Escape discards staged geometry', () => {
+  for (const [type, property, trigger, field] of [['polyline', 'points', 'Edit points', 'Point 1 X'], ['rectangle', 'cornerRadius', 'Edit corners', 'Rectangle corner radius'], ['equipmentSymbol', 'symbol', 'Choose symbol', 'Equipment symbol']]) {
+    const ui = drive(make(type));
+    const row = ui.find(node => node.props?.['data-property'] === property); assert.match(row.props.className, /property-sheet-row/);
+    assert.equal(React.Children.toArray(row.props.children).length, 3); assert.ok(!ui.all().some(node => node.type === 'dialog'));
+    ui.click(trigger); ui.change(field, type === 'equipmentSymbol' ? 'motor' : '12');
+    const dialog = ui.find(node => node.type === 'dialog'); assert.ok(dialog.props['aria-label']); let prevented = false, stopped = false;
+    dialog.props.onKeyDown({ key: 'z', ctrlKey: true, stopPropagation() { stopped = true; } }); assert.equal(stopped, true);
+    dialog.props.onCancel({ preventDefault() { prevented = true; } }); ui.refresh();
+    assert.equal(prevented, true); assert.deepEqual(ui.patches, []); assert.ok(!ui.all().some(node => node.type === 'dialog'));
+  }
+});
+
 check('actual sibling inspector editors have distinct stable identities through Apply, Undo and reselection', () => {
   assert.equal(inspectorEditors.size, 2);
   const code = ts.transpileModule(`return [${inspectorEditors.get('PropertyBindingsEditor')}, ${inspectorEditors.get('DrawingEditor')}];`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None, jsx: ts.JsxEmit.React } }).outputText;
@@ -84,7 +98,7 @@ check('actual sibling inspector editors have distinct stable identities through 
 check('actual palette factories create all six drawings with bounded dimensions, canonical defaults and distinct icons', () => {
   const code = ts.transpileModule(`const processDimensions=${declarations.get('processDimensions')};const palettes=${declarations.get('palettes')};const typeIcon=${declarations.get('typeIcon')};const addComponent=${declarations.get('addComponent')};return {palettes,typeIcon,addComponent};`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
   let screen = { id: 'main', width: 1000, height: 700, components: [] };
-  const factory = new Function('screen', 'project', 'editingTemplate', 'availableTemplates', 'notify', 'id', 'assets', 'queries', 'isInput', 'isTemplateInstance', 'updateScreen', 'setSelectedId', 'isProcessDisplay', code)(screen, { screens: [screen], templates: [] }, false, [], noOp, type => type, [], [], isInput, () => false, update => { screen = update(screen); }, noOp, isProcessDisplay);
+  const factory = new Function('screen', 'project', 'editingTemplate', 'availableTemplates', 'notify', 'id', 'assets', 'queries', 'isInput', 'isTemplateInstance', 'updateScreen', 'setSelectedId', 'isProcessDisplay', 'isChart', 'defaultChartProps', code)(screen, { screens: [screen], templates: [] }, false, [], noOp, type => type, [], [], isInput, () => false, update => { screen = update(screen); }, noOp, isProcessDisplay, isChart, defaultChartProps);
   for (const type of drawingTypes) {
     assert.ok(factory.palettes.some(item => item.type === type)); assert.ok(iconNames.includes(factory.typeIcon[type])); factory.addComponent(type);
     const component = screen.components.at(-1); assert.equal(validateDrawingProps(type, component.props), null);

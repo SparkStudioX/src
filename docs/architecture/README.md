@@ -16,6 +16,9 @@ Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md).
 ## Designer and presentation
 
 - [Component coverage](COMPONENTS.md)
+- [Validated inputs and barcode entry](VALIDATED_INPUTS.md)
+- [Embedded, tab, split and dock containers](VIEW_CONTAINERS.md)
+- [Atomic table batch editing](TABLE_BATCH_EDITING.md)
 - [Property sheet, input events and groups](PROPERTY_SHEET_EVENTS.md)
 - [Canvas precision](CANVAS_PRECISION.md)
 - [Authoring defaults](AUTHORING_DEFAULTS.md)
@@ -44,6 +47,7 @@ Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md).
 - [Scripting workspace](SCRIPTING.md)
 - [Gateway events](GATEWAY_EVENTS.md)
 - [Component property/lifecycle events](COMPONENT_LIFECYCLE.md)
+- [Focus, keyboard and pointer interactions](COMPONENT_INTERACTIONS.md)
 - [Component messages](COMPONENT_MESSAGING.md)
 - [Python UI actions](PYTHON_UI.md)
 - [Python component events](PYTHON_COMPONENT_EVENTS.md)
@@ -75,3 +79,13 @@ Use [the example catalog and build instructions](../../examples/README.md) for i
 `artifacts/sparkproj/` is the only maintained location for loose `.sparkproj` packages, with guides and provenance in `index.json`. It is ignored by Git. `node tools/build-workshops.mjs --version <version>` updates this directory and creates an immutable ZIP, manifest and checksums under `artifacts/workshops/<version>/`, without duplicate loose packages. Example loaders import authored JSON directly. Historical artifact paths in dated verification records may have been archived or removed; use the current package directory or the frozen release ZIP.
 
 The September 30 documentation audit reconciled the overview, reusable forms, bindings, state, events, recovery and roadmap summaries against current frontend models/editors, gateway validators/services, Python helpers and existing verification records. It also checked documentation navigation, local links and referenced tool paths. It did not rerun all runtime, installer, network or database acceptance suites. Current source behavior, recorded verification and released binary coverage remain distinct.
+
+## Latest roadmap workshops
+
+- [Unified application publication](UNIFIED_PUBLICATION.md)
+- [Tag parameter and indirect bindings](TAG_PARAMETER_BINDINGS.md)
+- [Datasets and nested query rows](DATASETS_NESTED_QUERIES.md)
+- [Supplied-data charts](CHARTS.md)
+- [Versioned tag models](TAG_MODELS.md)
+- [Delegated access boundaries](FINE_GRAINED_ACCESS.md)
+- [Equipment command confirmation and readback](EQUIPMENT_COMMANDS.md)

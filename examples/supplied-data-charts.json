@@ -1,0 +1,854 @@
+{
+  "name": "Supplied-data charts workshop",
+  "tags": [],
+  "screens": [
+    {
+      "id": "production",
+      "name": "Production",
+      "width": 1200,
+      "height": 970,
+      "components": [
+        {
+          "id": "heading",
+          "type": "label",
+          "x": 32,
+          "y": 20,
+          "width": 1080,
+          "height": 55,
+          "props": {
+            "text": "Production \u00b7 supplied sample data",
+            "fontSize": 28
+          }
+        },
+        {
+          "id": "shift-output",
+          "type": "chart",
+          "x": 32,
+          "y": 100,
+          "width": 540,
+          "height": 350,
+          "props": {
+            "text": "Shift Output",
+            "chart": {
+              "kind": "line",
+              "xKey": "hour",
+              "series": [
+                {
+                  "key": "produced",
+                  "label": "Produced"
+                },
+                {
+                  "key": "target",
+                  "label": "Target"
+                }
+              ],
+              "rangeSelector": true
+            },
+            "data": {
+              "columns": [
+                "hour",
+                "produced",
+                "target"
+              ],
+              "rows": [
+                {
+                  "hour": "08:00",
+                  "produced": 42,
+                  "target": 60
+                },
+                {
+                  "hour": "09:00",
+                  "produced": 57,
+                  "target": 60
+                },
+                {
+                  "hour": "10:00",
+                  "produced": 51,
+                  "target": 60
+                },
+                {
+                  "hour": "11:00",
+                  "produced": 68,
+                  "target": 60
+                },
+                {
+                  "hour": "12:00",
+                  "produced": 64,
+                  "target": 60
+                },
+                {
+                  "hour": "13:00",
+                  "produced": 73,
+                  "target": 60
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "hourly-output",
+          "type": "chart",
+          "x": 604,
+          "y": 100,
+          "width": 540,
+          "height": 350,
+          "props": {
+            "text": "Hourly Output",
+            "chart": {
+              "kind": "bar",
+              "xKey": "hour",
+              "series": [
+                {
+                  "key": "produced",
+                  "label": "Produced"
+                },
+                {
+                  "key": "target",
+                  "label": "Target"
+                }
+              ]
+            },
+            "data": {
+              "columns": [
+                "hour",
+                "produced",
+                "target"
+              ],
+              "rows": [
+                {
+                  "hour": "08:00",
+                  "produced": 42,
+                  "target": 60
+                },
+                {
+                  "hour": "09:00",
+                  "produced": 57,
+                  "target": 60
+                },
+                {
+                  "hour": "10:00",
+                  "produced": 51,
+                  "target": 60
+                },
+                {
+                  "hour": "11:00",
+                  "produced": 68,
+                  "target": 60
+                },
+                {
+                  "hour": "12:00",
+                  "produced": 64,
+                  "target": 60
+                },
+                {
+                  "hour": "13:00",
+                  "produced": 73,
+                  "target": 60
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "production-share",
+          "type": "chart",
+          "x": 32,
+          "y": 482,
+          "width": 540,
+          "height": 350,
+          "props": {
+            "text": "Production Share",
+            "chart": {
+              "kind": "pie",
+              "xKey": "hour",
+              "series": [
+                {
+                  "key": "produced"
+                }
+              ]
+            },
+            "data": {
+              "columns": [
+                "hour",
+                "produced",
+                "target"
+              ],
+              "rows": [
+                {
+                  "hour": "08:00",
+                  "produced": 42,
+                  "target": 60
+                },
+                {
+                  "hour": "09:00",
+                  "produced": 57,
+                  "target": 60
+                },
+                {
+                  "hour": "10:00",
+                  "produced": 51,
+                  "target": 60
+                },
+                {
+                  "hour": "11:00",
+                  "produced": 68,
+                  "target": 60
+                },
+                {
+                  "hour": "12:00",
+                  "produced": 64,
+                  "target": 60
+                },
+                {
+                  "hour": "13:00",
+                  "produced": 73,
+                  "target": 60
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "compact-output",
+          "type": "sparkline",
+          "x": 604,
+          "y": 482,
+          "width": 540,
+          "height": 350,
+          "props": {
+            "text": "Compact Output",
+            "chart": {
+              "kind": "line",
+              "xKey": "hour",
+              "series": [
+                {
+                  "key": "produced",
+                  "label": "Produced"
+                },
+                {
+                  "key": "target",
+                  "label": "Target"
+                }
+              ]
+            },
+            "data": {
+              "columns": [
+                "hour",
+                "produced",
+                "target"
+              ],
+              "rows": [
+                {
+                  "hour": "08:00",
+                  "produced": 42,
+                  "target": 60
+                },
+                {
+                  "hour": "09:00",
+                  "produced": 57,
+                  "target": 60
+                },
+                {
+                  "hour": "10:00",
+                  "produced": 51,
+                  "target": 60
+                },
+                {
+                  "hour": "11:00",
+                  "produced": 68,
+                  "target": 60
+                },
+                {
+                  "hour": "12:00",
+                  "produced": 64,
+                  "target": 60
+                },
+                {
+                  "hour": "13:00",
+                  "produced": 73,
+                  "target": 60
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "nav-production",
+          "type": "button",
+          "x": 32,
+          "y": 890,
+          "width": 210,
+          "height": 48,
+          "props": {
+            "text": "Production",
+            "action": "navigate",
+            "targetScreenId": "production"
+          }
+        },
+        {
+          "id": "nav-quality",
+          "type": "button",
+          "x": 262,
+          "y": 890,
+          "width": 210,
+          "height": 48,
+          "props": {
+            "text": "Quality",
+            "action": "navigate",
+            "targetScreenId": "quality"
+          }
+        },
+        {
+          "id": "nav-scheduling",
+          "type": "button",
+          "x": 492,
+          "y": 890,
+          "width": 210,
+          "height": 48,
+          "props": {
+            "text": "Scheduling",
+            "action": "navigate",
+            "targetScreenId": "scheduling"
+          }
+        }
+      ]
+    },
+    {
+      "id": "quality",
+      "name": "Quality",
+      "width": 1200,
+      "height": 970,
+      "components": [
+        {
+          "id": "heading",
+          "type": "label",
+          "x": 32,
+          "y": 20,
+          "width": 1080,
+          "height": 55,
+          "props": {
+            "text": "Quality \u00b7 supplied sample data",
+            "fontSize": 28
+          }
+        },
+        {
+          "id": "quality-gaps",
+          "type": "chart",
+          "x": 32,
+          "y": 100,
+          "width": 540,
+          "height": 350,
+          "props": {
+            "text": "Quality Gaps",
+            "chart": {
+              "kind": "area",
+              "xKey": "hour",
+              "series": [
+                {
+                  "key": "produced",
+                  "label": "Produced"
+                },
+                {
+                  "key": "target",
+                  "label": "Target"
+                }
+              ],
+              "qualityKey": "quality"
+            },
+            "data": {
+              "columns": [
+                "hour",
+                "produced",
+                "target",
+                "quality"
+              ],
+              "rows": [
+                {
+                  "hour": "08:00",
+                  "produced": 42,
+                  "target": 60,
+                  "quality": "Good"
+                },
+                {
+                  "hour": "09:00",
+                  "produced": 57,
+                  "target": 60,
+                  "quality": "Good"
+                },
+                {
+                  "hour": "10:00",
+                  "produced": null,
+                  "target": 60,
+                  "quality": "Good"
+                },
+                {
+                  "hour": "11:00",
+                  "produced": 68,
+                  "target": 60,
+                  "quality": "Bad_Disconnected"
+                },
+                {
+                  "hour": "12:00",
+                  "produced": 64,
+                  "target": 60,
+                  "quality": "Good"
+                },
+                {
+                  "hour": "13:00",
+                  "produced": 73,
+                  "target": 60,
+                  "quality": "Good"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "shift-comparison",
+          "type": "chart",
+          "x": 604,
+          "y": 100,
+          "width": 540,
+          "height": 350,
+          "props": {
+            "text": "Shift Comparison",
+            "chart": {
+              "kind": "radar",
+              "xKey": "hour",
+              "series": [
+                {
+                  "key": "produced",
+                  "label": "Produced"
+                },
+                {
+                  "key": "target",
+                  "label": "Target"
+                }
+              ]
+            },
+            "data": {
+              "columns": [
+                "hour",
+                "produced",
+                "target"
+              ],
+              "rows": [
+                {
+                  "hour": "08:00",
+                  "produced": 42,
+                  "target": 60
+                },
+                {
+                  "hour": "09:00",
+                  "produced": 57,
+                  "target": 60
+                },
+                {
+                  "hour": "10:00",
+                  "produced": 51,
+                  "target": 60
+                },
+                {
+                  "hour": "11:00",
+                  "produced": 68,
+                  "target": 60
+                },
+                {
+                  "hour": "12:00",
+                  "produced": 64,
+                  "target": 60
+                },
+                {
+                  "hour": "13:00",
+                  "produced": 73,
+                  "target": 60
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "measurement-spread",
+          "type": "chart",
+          "x": 32,
+          "y": 482,
+          "width": 540,
+          "height": 350,
+          "props": {
+            "text": "Measurement Spread",
+            "chart": {
+              "kind": "box",
+              "xKey": "line",
+              "series": [
+                {
+                  "key": "lo"
+                },
+                {
+                  "key": "q1"
+                },
+                {
+                  "key": "median"
+                },
+                {
+                  "key": "q3"
+                },
+                {
+                  "key": "hi"
+                }
+              ]
+            },
+            "data": {
+              "columns": [
+                "line",
+                "lo",
+                "q1",
+                "median",
+                "q3",
+                "hi"
+              ],
+              "rows": [
+                {
+                  "line": "Line A",
+                  "lo": 10,
+                  "q1": 20,
+                  "median": 25,
+                  "q3": 35,
+                  "hi": 48
+                },
+                {
+                  "line": "Line B",
+                  "lo": 8,
+                  "q1": 18,
+                  "median": 30,
+                  "q3": 38,
+                  "hi": 51
+                },
+                {
+                  "line": "Line C",
+                  "lo": 15,
+                  "q1": 22,
+                  "median": 32,
+                  "q3": 39,
+                  "hi": 46
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "step-observations",
+          "type": "chart",
+          "x": 604,
+          "y": 482,
+          "width": 540,
+          "height": 350,
+          "props": {
+            "text": "Step Observations",
+            "chart": {
+              "kind": "status",
+              "xKey": "hour",
+              "series": [
+                {
+                  "key": "produced",
+                  "label": "Produced"
+                },
+                {
+                  "key": "target",
+                  "label": "Target"
+                }
+              ]
+            },
+            "data": {
+              "columns": [
+                "hour",
+                "produced",
+                "target"
+              ],
+              "rows": [
+                {
+                  "hour": "08:00",
+                  "produced": 42,
+                  "target": 60
+                },
+                {
+                  "hour": "09:00",
+                  "produced": 57,
+                  "target": 60
+                },
+                {
+                  "hour": "10:00",
+                  "produced": 51,
+                  "target": 60
+                },
+                {
+                  "hour": "11:00",
+                  "produced": 68,
+                  "target": 60
+                },
+                {
+                  "hour": "12:00",
+                  "produced": 64,
+                  "target": 60
+                },
+                {
+                  "hour": "13:00",
+                  "produced": 73,
+                  "target": 60
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "nav-production",
+          "type": "button",
+          "x": 32,
+          "y": 890,
+          "width": 210,
+          "height": 48,
+          "props": {
+            "text": "Production",
+            "action": "navigate",
+            "targetScreenId": "production"
+          }
+        },
+        {
+          "id": "nav-quality",
+          "type": "button",
+          "x": 262,
+          "y": 890,
+          "width": 210,
+          "height": 48,
+          "props": {
+            "text": "Quality",
+            "action": "navigate",
+            "targetScreenId": "quality"
+          }
+        },
+        {
+          "id": "nav-scheduling",
+          "type": "button",
+          "x": 492,
+          "y": 890,
+          "width": 210,
+          "height": 48,
+          "props": {
+            "text": "Scheduling",
+            "action": "navigate",
+            "targetScreenId": "scheduling"
+          }
+        }
+      ]
+    },
+    {
+      "id": "scheduling",
+      "name": "Scheduling",
+      "width": 1200,
+      "height": 970,
+      "components": [
+        {
+          "id": "heading",
+          "type": "label",
+          "x": 32,
+          "y": 20,
+          "width": 1080,
+          "height": 55,
+          "props": {
+            "text": "Scheduling \u00b7 supplied sample data",
+            "fontSize": 28
+          }
+        },
+        {
+          "id": "sample-schedule",
+          "type": "chart",
+          "x": 32,
+          "y": 100,
+          "width": 540,
+          "height": 350,
+          "props": {
+            "text": "Sample Schedule",
+            "chart": {
+              "kind": "gantt",
+              "xKey": "start",
+              "series": [
+                {
+                  "key": "lane"
+                }
+              ],
+              "endKey": "finish"
+            },
+            "data": {
+              "columns": [
+                "start",
+                "finish",
+                "lane"
+              ],
+              "rows": [
+                {
+                  "start": "2026-09-30T08:00:00Z",
+                  "finish": "2026-09-30T10:00:00Z",
+                  "lane": 1
+                },
+                {
+                  "start": "2026-09-30T09:00:00Z",
+                  "finish": "2026-09-30T11:00:00Z",
+                  "lane": 1
+                },
+                {
+                  "start": "2026-09-30T12:00:00Z",
+                  "finish": "2026-09-30T14:00:00Z",
+                  "lane": 1
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "timestamped-output",
+          "type": "chart",
+          "x": 604,
+          "y": 100,
+          "width": 540,
+          "height": 350,
+          "props": {
+            "text": "Timestamped Output",
+            "chart": {
+              "kind": "timeSeries",
+              "xKey": "at",
+              "series": [
+                {
+                  "key": "produced"
+                }
+              ],
+              "rangeSelector": true
+            },
+            "data": {
+              "columns": [
+                "at",
+                "produced"
+              ],
+              "rows": [
+                {
+                  "at": "2026-09-30T08:00:00Z",
+                  "produced": 12
+                },
+                {
+                  "at": "2026-09-30T09:00:00Z",
+                  "produced": 14
+                },
+                {
+                  "at": "2026-09-30T10:00:00Z",
+                  "produced": 11
+                },
+                {
+                  "at": "2026-09-30T11:00:00Z",
+                  "produced": 20
+                },
+                {
+                  "at": "2026-09-30T12:00:00Z",
+                  "produced": 18
+                },
+                {
+                  "at": "2026-09-30T13:00:00Z",
+                  "produced": 23
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "speed-and-output",
+          "type": "chart",
+          "x": 32,
+          "y": 482,
+          "width": 540,
+          "height": 350,
+          "props": {
+            "text": "Speed And Output",
+            "chart": {
+              "kind": "scatter",
+              "xKey": "speed",
+              "series": [
+                {
+                  "key": "output"
+                }
+              ]
+            },
+            "data": {
+              "columns": [
+                "speed",
+                "output"
+              ],
+              "rows": [
+                {
+                  "speed": 10,
+                  "output": 21
+                },
+                {
+                  "speed": 15,
+                  "output": 33
+                },
+                {
+                  "speed": 20,
+                  "output": 39
+                },
+                {
+                  "speed": 25,
+                  "output": 55
+                },
+                {
+                  "speed": 30,
+                  "output": 60
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "nav-production",
+          "type": "button",
+          "x": 32,
+          "y": 890,
+          "width": 210,
+          "height": 48,
+          "props": {
+            "text": "Production",
+            "action": "navigate",
+            "targetScreenId": "production"
+          }
+        },
+        {
+          "id": "nav-quality",
+          "type": "button",
+          "x": 262,
+          "y": 890,
+          "width": 210,
+          "height": 48,
+          "props": {
+            "text": "Quality",
+            "action": "navigate",
+            "targetScreenId": "quality"
+          }
+        },
+        {
+          "id": "nav-scheduling",
+          "type": "button",
+          "x": 492,
+          "y": 890,
+          "width": 210,
+          "height": 48,
+          "props": {
+            "text": "Scheduling",
+            "action": "navigate",
+            "targetScreenId": "scheduling"
+          }
+        }
+      ]
+    }
+  ],
+  "navigation": {
+    "startupScreenId": "production",
+    "mode": "none",
+    "items": []
+  }
+}

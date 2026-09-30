@@ -2,9 +2,10 @@ import { api, scriptFailureMessage } from "./api";
 import { applyPythonUiResult, pythonUiRequest } from "./pythonUiModel";
 import { instanceRequestScope } from "./templateModel";
 import { requirePreviewScriptPermission } from "./previewRequest";
-import type { CanvasComponent, InputValues, InstanceAction, PopupState, PythonUiAction, RuntimeParameters, ScriptResult } from "./types";
+import type { CanvasComponent, ComponentInteractionEventType, InputValues, InstanceAction, PopupState, PythonUiAction, RuntimeParameters, ScriptResult } from "./types";
 
 export type PythonEventHandler = { family: "input"; type: "change" | "commit" }
+  | { family: "interaction"; type: ComponentInteractionEventType }
   | { family: "propertyChange" } | { family: "message"; handlerId: string }
   | { family: "lifecycle"; type: "mount" | "unmount" };
 export const isPythonUnmount = (handler: PythonEventHandler) => handler.family === "lifecycle" && handler.type === "unmount";

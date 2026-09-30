@@ -37,7 +37,7 @@ import type {
   ScriptResult,
   PythonUiAction,
   Tag,
-  TableCellEdit,
+  TableEditIntent,
 } from "./types";
 import {
   inputsAfterContextChange,
@@ -324,7 +324,7 @@ export default function OperatorRuntime() {
       setActionBusyId("");
     }
   };
-  const editTable = async (component: CanvasComponent, edit: TableCellEdit, instance?: InstanceAction, popupContext?: PopupState): Promise<ScriptResult> => {
+  const editTable = async (component: CanvasComponent, edit: TableEditIntent, instance?: InstanceAction, popupContext?: PopupState): Promise<ScriptResult> => {
     const targetScreen = popupContext?.screenId || screen?.id;
     if (!canOperate || !project || !targetScreen || !popupContext && actionBusyId || instance?.isCurrent?.() === false)
       throw new Error("Table editing is unavailable in this session.");

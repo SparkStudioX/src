@@ -1,4 +1,4 @@
-import { constantPropertyBinding, evaluatePropertyBinding, validatePropertyBinding } from "./propertyBindings";
+import { constantPropertyBinding, evaluatePropertyBinding, validatePropertyBinding, validateTagAddress } from "./propertyBindings";
 import type { BindingContext } from "./propertyBindings";
 import { coerceTemplateParameter } from "./templateModel";
 import { isInput, validateInputs } from "./inputs";
@@ -38,7 +38,9 @@ export function validateTemplateParameterBinding(binding: PropertyBinding, compo
         const scope = stateScopes[reference.kind];
         if (!(scope === "screen" && allowUnresolvedScreenState && !own(state?.screen ?? {}, reference.key)))
           sourceStateValue(state, scope, reference.key);
-      } else throw new Error("Template parameter bindings support parent parameters, form inputs, custom properties and containing state scopes. Tags are unavailable.");
+      } else if (reference.kind === "tag") {
+        validateTagAddress(reference.path, parentParameters);
+      } else throw new Error("Unsupported template parameter source.");
     }
     const result = constantPropertyBinding(binding);
     if (result.constant) {
@@ -106,6 +108,9 @@ export function resolveParameterBindings(component: CanvasComponent, template: T
     const type = own(template.parameterTypes ?? {}, name) ? template.parameterTypes![name] : "string";
     const error = validateTemplateParameterBinding(binding, component, context.components, context.parameters, name, type, context.state);
     if (error) throw new Error(`${name}: ${error}`);
+    // Tag quality is required even for an unused alias or a short-circuited expression.
+    for (const [alias, reference] of Object.entries(binding.references)) if (reference.kind === "tag")
+      evaluatePropertyBinding({ expression: alias, references: { [alias]: reference } }, component, context);
     // Reject invalid intermediate edits even when an expression would mask them.
     // Other, unrelated parent inputs need not be valid to operate this child.
     for (const reference of Object.values(binding.references)) if (reference.kind === "input") {

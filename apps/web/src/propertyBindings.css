@@ -16,7 +16,7 @@
 .property-bind-button:hover, .property-bind-button:focus-visible { background: var(--accent-soft); color: var(--accent); outline: 1px solid var(--accent); }
 .property-sheet-row.is-bound .property-bind-button { background: var(--accent-soft); color: var(--accent); font-weight: bold; }
 .template-parameter-override.is-bound .property-bind-button { background: var(--accent-soft); color: var(--accent); font-weight: bold; }
-.binding-template-parameters { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border); }
+.binding-template-parameters { margin: 0; padding: 0; }
 .template-parameter-override-header .property-bind-button { flex: 0 0 26px; }
 .template-parameter-binding-expression { display: block; color: var(--accent); font-size: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .property-sheet-expression, .property-sheet-error { grid-column: 2 / 4; color: var(--accent); font: 9px/1.5 Consolas, monospace; padding: 1px 5px 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -92,3 +92,30 @@
 .query-property-editor .binding-preview > button { margin-top: 12px; }
 .query-binding-footer { position: sticky; bottom: -20px; margin: 20px -22px -20px; }
 @media (max-width: 600px) { .property-binding-dialog { width: calc(100vw - 20px); max-height: calc(100dvh - 20px); }.binding-dialog-body, .binding-dialog-heading { padding: 15px; }.binding-reference-top { grid-template-columns: 1fr auto; }.binding-reference-top > label { grid-column: 1; }.binding-reference-top > button { grid-column: 2; grid-row: 1 / 3; }.binding-reference-source { grid-template-columns: 1fr; }.binding-dialog-footer { padding: 12px 15px; } }
+
+.property-sheet-summary { display: block; font-size: 11px; padding: 4px; overflow-wrap: anywhere; }
+.property-structured-editor { font-size: 11px; min-width: 0; }
+.property-structured-editor summary { padding: 5px; cursor: pointer; color: var(--accent); }
+.property-structured-editor textarea { width: 100%; min-height: 150px; font: 11px/1.5 Consolas, monospace; padding: 5px; }
+.property-structured-editor small { display: block; white-space: normal; font-size: 10px; color: var(--muted); padding: 5px; }
+.property-sheet-row:has(.property-structured-editor[open]) > .property-sheet-value { grid-column: 1 / -1; }
+.property-sheet-actions { padding: 7px; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.property-sheet-actions .property-sheet-error { width: 100%; white-space: normal; }
+.property-sheet-hint { grid-column: 1 / -1; padding: 4px 7px 7px; color: var(--muted); font-size: 10px; line-height: 1.5; white-space: normal; overflow-wrap: anywhere; }
+
+/* One continuous grid for every selected component. Complex editors retain their own dialogs. */
+.component-property-grid { padding: 0 12px 12px; }
+.property-sheet-inspector .component-property-grid .inspector-section { padding: 0; border: 0; margin: 0; }
+.component-property-grid .inspector-section > h3 { margin: 0; padding: 7px 8px; font-size: 10px; font-weight: 650; background: var(--surface-subtle); border-block: 1px solid var(--border); }
+.component-property-grid .field { display: grid; grid-template-columns: minmax(85px, 38%) minmax(0, 1fr) 28px; align-items: center; gap: 0; padding: 0; min-height: 30px; border-bottom: 1px solid var(--border); }
+.component-property-grid .field > span { grid-column: 1; padding: 6px 7px; font-size: 10px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.component-property-grid .field > :not(span):not(small) { grid-column: 2; margin: 2px 4px; width: calc(100% - 8px); min-width: 0; }
+.component-property-grid .field > input, .component-property-grid .field > select { height: 25px; padding: 3px 5px; border: 1px solid transparent; border-radius: 2px; background: transparent; color: var(--ink); font-size: 11px; }
+.component-property-grid .field > input:focus, .component-property-grid .field > select:focus { background: var(--panel); border-color: var(--accent); }
+.component-property-grid .field > small { grid-column: 2 / -1; font-size: 10px; margin: 0; padding: 2px 5px 5px; }
+.component-property-grid .field-grid { display: block; }
+.component-property-grid .inspector-section > p, .component-property-grid .inspector-section > small { display: block; margin: 0; padding: 6px 8px; font-size: 10px; }
+.component-property-grid .button { min-height: 26px; padding: 4px 6px; font-size: 10px; }
+.component-property-grid .visual-style-assignment { display: block; }
+.component-property-grid .visual-style-assignment > details { font-size: 10px; padding: 6px 8px; }
+.component-property-grid .asset-preview { margin: 6px 8px; }

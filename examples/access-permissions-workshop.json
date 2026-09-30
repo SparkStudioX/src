@@ -1,0 +1,26 @@
+{
+  "name": "Access boundaries workshop",
+  "tagPackage": { "format": "sparkstudio.tags", "version": 1, "tags": [{ "path": "[default]AccessPermissionsWorkshop/Value", "kind": "memory", "dataType": "Int32", "value": 0 }] },
+  "roles": [
+    { "name": "Viewer", "projectGrants": { "view": true, "operate": false, "commands": false, "design": false, "publish": false }, "gatewayCapabilities": {} },
+    { "name": "Operator", "projectGrants": { "view": true, "operate": true, "commands": false, "design": false, "publish": false }, "gatewayCapabilities": {} },
+    { "name": "Command operator", "projectGrants": { "view": true, "operate": true, "commands": true, "design": false, "publish": false }, "gatewayCapabilities": {} },
+    { "name": "Diagnostic observer", "projectGrants": {}, "gatewayCapabilities": { "diagnostics": true } },
+    { "name": "Configuration engineer", "projectGrants": {}, "gatewayCapabilities": { "configuration": true } },
+    { "name": "Backup operator", "projectGrants": {}, "gatewayCapabilities": { "backups": true } },
+    { "name": "Auditor", "projectGrants": {}, "gatewayCapabilities": { "audit": true } },
+    { "name": "Session manager", "projectGrants": {}, "gatewayCapabilities": { "sessions": true } }
+  ],
+  "navigation": { "startupScreenId": "access-boundaries", "mode": "none", "items": [] },
+  "screens": [{
+    "id": "access-boundaries", "name": "Access boundaries", "width": 1120, "height": 640,
+    "components": [
+      { "id": "title", "type": "label", "x": 32, "y": 28, "width": 1048, "height": 54, "props": { "text": "Give each person the access their task needs", "fontSize": 29 } },
+      { "id": "intro", "type": "label", "x": 32, "y": 100, "width": 1048, "height": 75, "props": { "text": "Sign in as Viewer to inspect this value. Sign in as Operator to run the synthetic action. Equipment commands is a separate project grant; ordinary Operate does not include it.", "fontSize": 18 } },
+      { "id": "value", "type": "value", "x": 32, "y": 220, "width": 480, "height": 156, "props": { "text": "Synthetic memory value", "tagPath": "[default]AccessPermissionsWorkshop/Value" } },
+      { "id": "operate", "type": "button", "x": 578, "y": 246, "width": 492, "height": 80, "props": { "text": "Operator exercise: set synthetic value to 1", "action": "script", "script": "quality = system.tag.writeBlocking(['[default]AccessPermissionsWorkshop/Value'], [1])\nif not quality[0].isGood():\n    raise RuntimeError('Synthetic memory write was denied or unavailable.')\nresult = {'message': 'Synthetic value saved. No device command was sent.'}" } },
+      { "id": "caps", "type": "label", "x": 32, "y": 424, "width": 1048, "height": 90, "props": { "text": "Gateway exercise: give a separate account exactly one capability—Diagnostics, Configuration, Backups, Audit, or Sessions. Sign in to Gateway Settings and inspect only that task’s controls.", "fontSize": 18 } },
+      { "id": "scope", "type": "label", "x": 32, "y": 570, "width": 1048, "height": 36, "props": { "text": "Gateway setup and manually created test accounts required · Synthetic memory only · No equipment connection", "fontSize": 14 } }
+    ]
+  }]
+}

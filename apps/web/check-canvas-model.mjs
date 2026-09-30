@@ -9,7 +9,8 @@ const authSessionUrl = asModule(compile(source('authSession')));
 const previewRequestUrl = asModule(compile(source('previewRequest')));
 const apiUrl = asModule(compile(source('api')).replaceAll('"./authSession"', JSON.stringify(authSessionUrl)).replaceAll('"./previewRequest"', JSON.stringify(previewRequestUrl)));
 const listTreeUrl = asModule(compile(source('listTreeModel')));
-const inputsUrl = asModule(compile(source('inputs')).replaceAll('"./api"', JSON.stringify(apiUrl)).replaceAll('"./listTreeModel"', JSON.stringify(listTreeUrl)));
+const validationUrl = asModule(compile(source('inputValidation')));
+const inputsUrl = asModule(compile(source('inputs')).replaceAll('"./api"', JSON.stringify(apiUrl)).replaceAll('"./listTreeModel"', JSON.stringify(listTreeUrl)).replaceAll('"./inputValidation"', JSON.stringify(validationUrl)));
 const compiled = compile(source('canvasEditing')).replaceAll('"./inputs"', JSON.stringify(inputsUrl));
 const { selectionBounds, snapToGrid, moveSelected, resizeComponent, alignSelected, distributeSelected, duplicateSelected, marqueeBounds, marqueeSelection, checkpoint, restoreHistory, projectContent, expandGroupSelection, toggleGroupSelection, groupSelected, ungroupSelected, deleteSelected, resizeGroup, arrangementCount, selectComponentType, parseGridSize, matchSelectedSize } =
   await import(asModule(compiled));

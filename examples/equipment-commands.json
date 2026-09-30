@@ -1,0 +1,161 @@
+{
+  "name": "Equipment commands workshop",
+  "tags": [
+    {
+      "path": "[default]CommandWorkshop/Speed",
+      "kind": "memory",
+      "dataType": "Double",
+      "value": 25,
+      "enabled": true
+    },
+    {
+      "path": "[default]CommandWorkshop/Run",
+      "kind": "memory",
+      "dataType": "Boolean",
+      "value": false,
+      "enabled": true
+    },
+    {
+      "path": "[default]CommandWorkshop/Note",
+      "kind": "memory",
+      "dataType": "String",
+      "value": "Ready",
+      "enabled": true
+    }
+  ],
+  "commands": [
+    {
+      "id": "speed",
+      "name": "Speed",
+      "tagPath": "[default]CommandWorkshop/Speed",
+      "dataType": "Double",
+      "confirmation": "Change the synthetic speed value?",
+      "timeoutMs": 1000,
+      "min": 0,
+      "max": 100,
+      "tolerance": 0
+    },
+    {
+      "id": "run",
+      "name": "Run",
+      "tagPath": "[default]CommandWorkshop/Run",
+      "dataType": "Boolean",
+      "confirmation": "Change the synthetic run value?",
+      "timeoutMs": 1000
+    },
+    {
+      "id": "note",
+      "name": "Note",
+      "tagPath": "[default]CommandWorkshop/Note",
+      "dataType": "String",
+      "confirmation": "Change the synthetic note value?",
+      "timeoutMs": 1000,
+      "maxLength": 100
+    }
+  ],
+  "screens": [
+    {
+      "id": "equipment-commands",
+      "name": "Equipment commands",
+      "width": 1200,
+      "height": 740,
+      "components": [
+        {
+          "id": "heading",
+          "type": "label",
+          "x": 32,
+          "y": 24,
+          "width": 1100,
+          "height": 56,
+          "props": {
+            "text": "Review \u2192 Confirm \u2192 Readback",
+            "fontSize": 30
+          }
+        },
+        {
+          "id": "note",
+          "type": "label",
+          "x": 32,
+          "y": 82,
+          "width": 1100,
+          "height": 56,
+          "props": {
+            "text": "Synthetic memory tags only. Each command requires explicit Commands permission and a fresh confirmation."
+          }
+        },
+        {
+          "id": "cmd-speed",
+          "type": "equipmentCommand",
+          "x": 32,
+          "y": 175,
+          "width": 345,
+          "height": 275,
+          "props": {
+            "commandId": "speed",
+            "text": "Speed command"
+          }
+        },
+        {
+          "id": "actual-speed",
+          "type": "value",
+          "x": 32,
+          "y": 490,
+          "width": 345,
+          "height": 135,
+          "props": {
+            "tagPath": "[default]CommandWorkshop/Speed",
+            "text": "Live speed"
+          }
+        },
+        {
+          "id": "cmd-run",
+          "type": "equipmentCommand",
+          "x": 407,
+          "y": 175,
+          "width": 345,
+          "height": 275,
+          "props": {
+            "commandId": "run",
+            "text": "Run command"
+          }
+        },
+        {
+          "id": "actual-run",
+          "type": "value",
+          "x": 407,
+          "y": 490,
+          "width": 345,
+          "height": 135,
+          "props": {
+            "tagPath": "[default]CommandWorkshop/Run",
+            "text": "Live run"
+          }
+        },
+        {
+          "id": "cmd-note",
+          "type": "equipmentCommand",
+          "x": 782,
+          "y": 175,
+          "width": 345,
+          "height": 275,
+          "props": {
+            "commandId": "note",
+            "text": "Note command"
+          }
+        },
+        {
+          "id": "actual-note",
+          "type": "value",
+          "x": 782,
+          "y": 490,
+          "width": 345,
+          "height": 135,
+          "props": {
+            "tagPath": "[default]CommandWorkshop/Note",
+            "text": "Live note"
+          }
+        }
+      ]
+    }
+  ]
+}

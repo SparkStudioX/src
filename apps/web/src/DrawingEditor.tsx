@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { drawingDefaults, validateDrawingProps } from "./drawingComponents";
 import type { CanvasComponent } from "./types";
+import { PropertyCollectionDialog } from "./PropertyCollectionEditor";
 import "./drawingEditor.css";
 
 type PointRow = { id: number; x: string; y: string };
@@ -62,15 +63,13 @@ export function DrawingEditor({ component, onChange, notify }: {
   }
   const previewPoints = draft?.points.map(point => ({ x: Number(point.x), y: Number(point.y) }));
   const previewValid = previewPoints && draft!.points.every(point => point.x.trim() && point.y.trim()) && previewPoints.every(point => Number.isFinite(point.x) && Number.isFinite(point.y) && point.x >= 0 && point.x <= 100 && point.y >= 0 && point.y <= 100);
-  return <section className="drawing-editor inspector-section" aria-label={title}>
-    <div className="drawing-editor-heading"><h3>{title}</h3>{!draft && <button type="button" className="button small" onClick={edit}>{path ? "Edit points" : rectangle ? "Edit corners" : "Choose symbol"}</button>}</div>
-    <p className="drawing-editor-help">{path ? "Points use positions inside the component: X runs left to right and Y runs top to bottom, from 0 to 100%. Move or resize the component on the canvas to place the whole drawing."
+  const help = path ? "Points use positions inside the component: X runs left to right and Y runs top to bottom, from 0 to 100%. Move or resize the component on the canvas to place the whole drawing."
       : rectangle ? "Round the corners from 0 to 50% of the shorter side."
-        : "Choose an authored pump, valve, or motor. Active and Accent color in the property sheet control its status appearance."}</p>
-    {!draft ? <>
-      <p className="drawing-editor-summary">{path ? `${source.length} points · ${source.map(point => `(${point.x}, ${point.y})`).join(" → ")}` : rectangle ? `Corner radius: ${component.props.cornerRadius ?? defaults.cornerRadius ?? 0}%` : `Symbol: ${component.props.symbol ?? defaults.symbol ?? "pump"}`}</p>
-      {error && <p className="drawing-editor-error" role="alert">{error}</p>}
-    </> : <div className="drawing-editor-draft" role="group" aria-label={`Edit ${title.toLowerCase()}`} onKeyDown={event => {
+        : "Choose an authored pump, valve, or motor. Active and Accent color in the property sheet control its status appearance.";
+  return <section className="property-sheet-group property-collection-group" aria-label={title}><h4>Drawing</h4>
+    <div className="property-sheet-row" data-property={path ? "points" : rectangle ? "cornerRadius" : "symbol"}><label title={help}>{path ? "Points" : rectangle ? "Corner radius" : "Symbol"}</label><div className="property-sheet-value property-collection-value"><span>{path ? `${source.length} points` : rectangle ? `${component.props.cornerRadius ?? defaults.cornerRadius ?? 0}%` : component.props.symbol ?? defaults.symbol ?? "pump"}</span><button type="button" className="button small" onClick={edit}>{path ? "Edit points" : rectangle ? "Edit corners" : "Choose symbol"}</button></div><span aria-hidden="true" /></div>
+    {!draft && error && <p className="drawing-editor-error" role="alert">{error}</p>}
+    {draft && <PropertyCollectionDialog title={title} onClose={() => setDraft(null)}><p className="drawing-editor-help">{help}</p><div className="drawing-editor-draft" role="group" aria-label={`Edit ${title.toLowerCase()}`} onKeyDown={event => {
       event.stopPropagation();
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); apply(); }
       if (event.key === "Escape") { event.preventDefault(); setDraft(null); }
@@ -97,6 +96,6 @@ export function DrawingEditor({ component, onChange, notify }: {
       {equipment && <label className="drawing-editor-field">Symbol<select aria-label="Equipment symbol" value={draft.symbol} onChange={event => setDraft({ ...draft, symbol: event.target.value })}><option value="pump">Pump</option><option value="valve">Valve</option><option value="motor">Motor</option></select></label>}
       {error && <p className="drawing-editor-error" role="alert">{error}</p>}
       <div className="drawing-editor-actions"><button type="button" className="button small primary" disabled={Boolean(error)} onClick={apply}>{path ? "Apply points" : rectangle ? "Apply corners" : "Apply symbol"}</button><button type="button" className="button small" onClick={() => setDraft(null)}>Cancel</button></div>
-    </div>}
+    </div></PropertyCollectionDialog>}
   </section>;
 }

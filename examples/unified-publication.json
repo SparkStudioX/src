@@ -1,0 +1,21 @@
+{
+  "name": "Unified publication · Dispatch desk",
+  "parameters": {},
+  "screens": [{
+    "id": "release-desk", "name": "Dispatch release desk", "width": 1000, "height": 680,
+    "components": [
+      { "id": "title", "type": "label", "x": 32, "y": 28, "width": 936, "height": 58, "props": { "text": "Release Amber · Dispatch desk", "fontSize": 30 } },
+      { "id": "instructions", "type": "label", "x": 32, "y": 102, "width": 936, "height": 94, "props": { "text": "Review the three disabled resources in Scripting. Enable them, Save resources, then Publish application. The same release captures this screen, the sample query, Python library and gateway/browser startup resources.", "fontSize": 18 } },
+      { "id": "result", "type": "label", "x": 32, "y": 220, "width": 936, "height": 74, "props": { "text": "Publish enabled resources, then verify the release here.", "fontSize": 24 } },
+      { "id": "verify", "type": "button", "x": 32, "y": 322, "width": 330, "height": 65, "props": { "text": "Verify matching release", "action": "script", "language": "python", "script": "from project import dispatch_release\nrows = system.db.runNamedQuery('production-summary')\nmessage = dispatch_release.caption() + ' / ' + rows.getValueAt(0, 'Line')\nself.getSibling('result').text = message\nresult = message" } },
+      { "id": "rollback-guide", "type": "label", "x": 32, "y": 418, "width": 936, "height": 100, "props": { "text": "Create Release Indigo: edit this title, change the library and browser messages to Indigo, and set the sample query default to Line2. Save both workspaces and publish once. Restore Amber from Publication history; the operator release returns to Amber / Line1 while drafts keep Indigo.", "fontSize": 18 } },
+      { "id": "boundary", "type": "label", "x": 32, "y": 552, "width": 936, "height": 83, "props": { "text": "Synthetic, read-only workshop. Check gateway startup results in Scripting execution history. The browser startup banner names the matching release. No external database, tag writes, device or internet connection is used.", "fontSize": 16 } }
+    ]
+  }],
+  "queries": [{ "id": "production-summary", "name": "Dispatch line (sample)", "connectionId": "sample", "kind": "query", "sql": "SELECT Line, Product, Produced, Target FROM ProductionSummary WHERE Line = @line", "parameters": [{ "name": "line", "type": "string", "defaultValue": "Line1" }] }],
+  "scripts": { "revision": 0, "resources": [
+    { "id": "dispatch-library", "name": "dispatch_release", "type": "library", "enabled": false, "parameters": {}, "code": "def caption():\n    return 'Release Amber'\n" },
+    { "id": "dispatch-startup", "name": "Dispatch startup", "type": "gateway", "event": "startup", "enabled": false, "parameters": {}, "timeoutMs": 10000, "threading": "dedicated", "code": "from project import dispatch_release\nrows = system.db.runNamedQuery('production-summary')\nresult = dispatch_release.caption() + ' / ' + rows.getValueAt(0, 'Line')\nprint(result)" },
+    { "id": "dispatch-browser", "name": "Dispatch browser", "type": "client", "event": "startup", "enabled": false, "parameters": {}, "code": "app.notify('Browser loaded Release Amber');" }
+  ] }
+}

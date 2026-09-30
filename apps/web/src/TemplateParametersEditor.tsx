@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import type { ReactNode } from "react";
 import { displayValue, resolvePath } from "./api";
 import { coerceTemplateParameter } from "./templateModel";
 import type { PropertyBinding, RuntimeParameters, Template, TemplateParameterType } from "./types";
@@ -7,6 +8,10 @@ type Notify = (message: string, error?: boolean) => void;
 type DeclarationDraft = { original?: string; name: string; type: TemplateParameterType; value: string };
 const typeLabels: Record<TemplateParameterType, string> = { string: "Text", number: "Number", boolean: "Boolean" };
 const ownEntry = <T,>(entries: Record<string, T> | undefined, key: string): T | undefined => entries && Object.hasOwn(entries, key) ? entries[key] : undefined;
+
+function ParameterRow({ name, label, children }: { name: string; label: string; children: ReactNode }) {
+  return <div className="property-sheet-row" data-property={`parameters.${name}`}><label>{label}</label><div className="property-sheet-value">{children}</div><span aria-hidden="true" /></div>;
+}
 
 function nameError(name: string, parameters: Record<string, string>, original?: string): string | undefined {
   if (name === original) return undefined;
@@ -75,8 +80,9 @@ export function TemplateParametersEditor({ template, parentParameters, onChange,
     onChange({ parameters: nextParameters, parameterTypes: nextTypes });
     setDraft(null);
   }
-  return <section className="document-property-group template-parameters" aria-label="Template parameter defaults">
-    <h3>Parameters</h3>
+  return <section className="property-sheet-group template-parameters" aria-label="Template parameter defaults">
+    <h4>Parameters</h4>
+    <ParameterRow name="defaults" label="Defaults"><details className="property-structured-editor"><summary>Edit parameters ({Object.keys(parameters).length})</summary>
     <p id={helpId} className="document-property-help">Declare the values each instance can override. Text is the default type for existing parameters. Use <code>{"{parentParameter}"}</code> to read the parent context once before conversion.</p>
     <div className="template-parameter-columns" aria-hidden="true"><span>Name / type</span><span>Default value</span><span /></div>
     {Object.entries(parameters).map(([name, value]) => {
@@ -96,11 +102,11 @@ export function TemplateParametersEditor({ template, parentParameters, onChange,
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); apply(); }
         if (event.key === "Escape") { event.preventDefault(); setDraft(null); }
       }}>
-      <label>Name<input aria-label="Template parameter name" aria-describedby={helpId} value={draft.name} maxLength={64} onChange={event => setDraft({ ...draft, name: event.target.value })} /></label>
-      <label>Type<select aria-label="Template parameter type" value={draft.type} onChange={event => setDraft({ ...draft, type: event.target.value as TemplateParameterType })}>
+      <ParameterRow name="name" label="Name"><input aria-label="Template parameter name" aria-describedby={helpId} value={draft.name} maxLength={64} onChange={event => setDraft({ ...draft, name: event.target.value })} /></ParameterRow>
+      <ParameterRow name="type" label="Type"><select aria-label="Template parameter type" value={draft.type} onChange={event => setDraft({ ...draft, type: event.target.value as TemplateParameterType })}>
         <option value="string">Text</option><option value="number">Number</option><option value="boolean">Boolean</option>
-      </select></label>
-      <div className="template-parameter-draft-value"><span>Default value</span><ParameterValueInput key={`${draft.original ?? "new"}:${draft.type}`} label="Template parameter default value" value={draft.value} type={draft.type} onChange={value => setDraft({ ...draft, value })} /></div>
+      </select></ParameterRow>
+      <ParameterRow name="defaultValue" label="Default value"><ParameterValueInput key={`${draft.original ?? "new"}:${draft.type}`} label="Template parameter default value" value={draft.value} type={draft.type} onChange={value => setDraft({ ...draft, value })} /></ParameterRow>
       <p className={validation ? "template-parameter-error" : "document-property-help"} role={validation ? "alert" : "status"}>{validation || preview?.text}</p>
       <p className="document-property-help">Number values use decimal notation without spaces. Boolean values are exactly <code>true</code> or <code>false</code>. Changes apply together and can be undone.</p>
       <div className="template-parameter-actions">
@@ -113,6 +119,7 @@ export function TemplateParametersEditor({ template, parentParameters, onChange,
         }}>Delete parameter</button>}
       </div>
     </div>}
+    </details></ParameterRow>
   </section>;
 }
 
@@ -123,6 +130,7 @@ function OverrideRow({ name, defaultValue, type, override, parentParameters, onC
 }) {
   const [draft, setDraft] = useState(override ?? defaultValue);
   const [editing, setEditing] = useState(false);
+  const id = useId();
   useEffect(() => { setDraft(override ?? defaultValue); setEditing(false); }, [override, defaultValue, type, binding]);
   const resolved = previewValue(name, editing ? draft : override ?? defaultValue, type, parentParameters);
   const defaultPreview = previewValue(name, defaultValue, type, parentParameters);
@@ -130,14 +138,13 @@ function OverrideRow({ name, defaultValue, type, override, parentParameters, onC
     if (resolved.error) { notify(resolved.error, true); return; }
     onChange(draft); setEditing(false);
   }
-  return <div className={`template-parameter-override${binding ? " is-bound" : ""}`} aria-label={`Template parameter ${name} override`}>
-    <div className="template-parameter-override-header"><strong>{name}</strong><span>{typeLabels[type]}</span>
-      <select aria-label={`Parameter ${name} value source`} disabled={Boolean(binding)} value={binding ? "binding" : editing || override !== undefined ? "override" : "default"} onChange={event => {
+  return <div className={`property-sheet-row${binding ? " is-bound" : ""}`} data-property={`parameters.${name}`} aria-label={`Template parameter ${name} override`}>
+    <label htmlFor={id} title={typeLabels[type]}>{name}</label>
+    <div className="property-sheet-value">
+      <select id={id} aria-label={`Parameter ${name} value source`} disabled={Boolean(binding)} value={binding ? "binding" : editing || override !== undefined ? "override" : "default"} onChange={event => {
         if (event.target.value === "default") { setEditing(false); setDraft(defaultValue); onChange(undefined); }
         else { setDraft(override ?? defaultValue); setEditing(true); }
       }}><option value="default">Use default</option><option value="override">Override</option>{binding && <option value="binding">Binding</option>}</select>
-      {onEditBinding && <button type="button" className="property-bind-button" aria-label={`${binding ? "Edit" : "Add"} parameter ${name} binding`} title={binding ? `${binding.expression}\nEdit or remove binding` : `Bind parameter ${name}`} onClick={onEditBinding}>ƒx</button>}
-    </div>
     <p className="document-property-help">Default: <code>{defaultValue || "(empty)"}</code>{!defaultPreview.error && ` → ${defaultPreview.text}`}</p>
     {!binding && (editing || override !== undefined) && <div onKeyDown={event => {
       event.stopPropagation();
@@ -152,6 +159,8 @@ function OverrideRow({ name, defaultValue, type, override, parentParameters, onC
       <code className="template-parameter-binding-expression">{binding.expression}</code>
       <p className={bindingError ? "template-parameter-error" : "document-property-help"} role={bindingError ? "alert" : "status"}>{bindingError || `${typeLabels[type]} · ${displayValue(bindingValue)}`}</p>
     </> : <p className={resolved.error ? "template-parameter-error" : "document-property-help"} role={resolved.error ? "alert" : "status"}>{resolved.error || resolved.text}</p>}
+    </div>
+    {onEditBinding ? <button type="button" className="property-bind-button" aria-label={`${binding ? "Edit" : "Add"} parameter ${name} binding`} title={binding ? `${binding.expression}\nEdit or remove binding` : `Bind parameter ${name}`} onClick={onEditBinding}>ƒx</button> : <span aria-hidden="true" />}
   </div>;
 }
 
@@ -165,15 +174,16 @@ export function TemplateParameterOverrides({ template, parameters, parentParamet
     onChange(Object.fromEntries([...Object.entries(parameters).filter(([key]) => key !== name), ...(value === undefined ? [] : [[name, value]])]));
   }
   const unknown = [...new Set([...Object.keys(parameters), ...Object.keys(bindings)])].filter(key => !Object.hasOwn(template?.parameters || {}, key));
-  return <section className="template-parameter-overrides" aria-label="Template parameter overrides">
+  return <section className="property-sheet-group template-parameter-overrides" aria-label="Template parameter overrides">
+    <h4>Parameters</h4>
     <p className="template-property-note">Choose a value for each instance, or inherit the shared default. {onEditBinding && <>Use ƒx to bind a value from the containing form. </>}Parent references use <code>{"{parameter}"}</code>; repeater row values take precedence over these overrides.</p>
     {template && Object.entries(template.parameters).map(([name, defaultValue]) => <OverrideRow key={`${template.id}:${name}`} name={name} defaultValue={defaultValue}
       type={ownEntry(template.parameterTypes, name) || "string"} override={ownEntry(parameters, name)} parentParameters={parentParameters} notify={notify} onChange={value => update(name, value)}
       binding={ownEntry(bindings, name)} bindingValue={ownEntry(bindingValues, name)} bindingError={ownEntry(bindingErrors, name)} onEditBinding={onEditBinding ? () => onEditBinding(name) : undefined} />)}
     {!template && <p className="document-property-empty">Choose a template to edit its parameters.</p>}
     {template && !Object.keys(template.parameters).length && <p className="document-property-empty">This template has no parameters.</p>}
-    {unknown.map(name => <div className="template-parameter-unknown" key={name}><span role="alert">Undeclared parameter: <strong>{name}</strong></span>
+    {unknown.map(name => <ParameterRow name={name} label={name} key={name}><span className="template-parameter-error" role="alert">Undeclared parameter</span>
       {Object.hasOwn(parameters, name) && <button className="button small" type="button" aria-label={`Remove undeclared parameter ${name}`} onClick={() => update(name, undefined)}>Remove override</button>}
-      {Object.hasOwn(bindings, name) && onRemoveBinding && <button className="button small" type="button" aria-label={`Remove undeclared parameter ${name} binding`} onClick={() => onRemoveBinding(name)}>Remove binding</button>}</div>)}
+      {Object.hasOwn(bindings, name) && onRemoveBinding && <button className="button small" type="button" aria-label={`Remove undeclared parameter ${name} binding`} onClick={() => onRemoveBinding(name)}>Remove binding</button>}</ParameterRow>)}
   </section>;
 }

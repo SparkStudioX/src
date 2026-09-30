@@ -187,7 +187,7 @@ internal static class RuntimeSessionMessagingChecks
             var draft = workspace.Scripts.GetDraft();
             draft["resources"] = new JsonArray(new JsonObject { ["id"] = "started", ["name"] = "started", ["type"] = "gateway", ["event"] = "startup", ["enabled"] = true, ["code"] = "result = system.ui.sendMessage('gateway.started', {'reason': event.type})" });
             var saved = workspace.Scripts.SaveDraft(draft);
-            workspace.Scripts.Publish(ScriptResourceStore.Revision(saved));
+            workspace.Publication.Publish(workspace.Store, workspace.Store.GetProject()["revision"]!.GetValue<int>(), ScriptResourceStore.Revision(saved));
             using var events = new ScriptEventService(workspace.Scripts, python, NullLogger<ScriptEventService>.Instance, tags);
             await events.StartAsync(CancellationToken.None);
             JsonObject? notice = null;

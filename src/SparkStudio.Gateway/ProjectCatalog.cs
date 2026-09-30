@@ -23,6 +23,8 @@ public sealed class ProjectWorkspace
         Assets = new LocalAssetStore(directory);
         Publication = new PublicationStore(directory, Assets);
         Scripts = new ScriptResourceStore(directory);
+        Publication.AttachScripts(Scripts);
+        Scripts.AttachApplication(Publication);
     }
 }
 

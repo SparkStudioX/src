@@ -4,8 +4,33 @@ import { bindingTargets, propertyValue, supportsBindingTarget } from "./property
 import { isInput } from "./inputs";
 import { inputAssignmentError } from "./inputEvents";
 import { createComponentMessageSender, type ComponentMessageBus, type ComponentMessageSender, type MessageContext } from "./componentMessageModel";
-import type { CanvasComponent, ComponentEventProperty, ComponentEventScript, InputValue, InputValues, RuntimeParameters, RuntimeStateApi, RuntimeStateValues } from "./types";
+import type { CanvasComponent, ComponentEventProperty, ComponentEventScript, ComponentInteractionEventType, InputValue, InputValues, RuntimeParameters, RuntimeStateApi, RuntimeStateValues } from "./types";
 import type { EventOrigin, PythonEventRunner } from "./pythonComponentEvents";
+
+export const componentInteractionTypes: ComponentInteractionEventType[] = ["focus", "blur", "keyDown", "keyUp", "doubleClick", "pointerDown", "pointerUp"];
+export const isComponentInteraction = (type: string): type is ComponentInteractionEventType => componentInteractionTypes.includes(type as ComponentInteractionEventType);
+export interface ComponentInteractionData {
+  key?: string; code?: string; repeat?: boolean; isComposing?: boolean; redacted?: boolean;
+  altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean;
+  button?: number; buttons?: number; pointerType?: string; pointerId?: number; clientX?: number; clientY?: number;
+}
+/** Copies only bounded primitives. DOM targets, input values and native methods never enter scripts. */
+export function componentInteractionEvent(type: ComponentInteractionEventType, componentId: string, data: ComponentInteractionData = {}, password = false): AutomaticComponentEvent {
+  const event: AutomaticComponentEvent = { type, componentId, origin: "user" };
+  if (type === "focus" || type === "blur") return event;
+  for (const key of ["altKey", "ctrlKey", "metaKey", "shiftKey"] as const) event[key] = data[key] === true;
+  if (type === "keyDown" || type === "keyUp") {
+    Object.assign(event, { key: password ? "" : String(data.key ?? "").slice(0, 128), code: password ? "" : String(data.code ?? "").slice(0, 64),
+      repeat: data.repeat === true, isComposing: data.isComposing === true, redacted: password });
+  } else {
+    const bounded = (value: number | undefined, fallback: number, minimum: number, maximum: number) => typeof value === "number" && Number.isFinite(value) ? Math.max(minimum, Math.min(maximum, value)) : fallback;
+    Object.assign(event, { button: Math.trunc(bounded(data.button, 0, -1, 5)), buttons: Math.trunc(bounded(data.buttons, 0, 0, 63)),
+      clientX: bounded(data.clientX, 0, -10_000_000, 10_000_000), clientY: bounded(data.clientY, 0, -10_000_000, 10_000_000) });
+    if (type !== "doubleClick") Object.assign(event, { pointerType: ["mouse", "pen", "touch", ""].includes(data.pointerType ?? "") ? data.pointerType ?? "" : "",
+      pointerId: Math.trunc(bounded(data.pointerId, 0, -1, 2_147_483_647)) });
+  }
+  return event;
+}
 
 export function componentEventProperties(component: CanvasComponent, language: "javascript" | "python" = "javascript"): ComponentEventProperty[] {
   return [...new Set([...bindingTargets.filter(target => supportsBindingTarget(component.type, target) && !(component.type === "passwordInput" && language === "python" && target === "text")),
@@ -70,7 +95,7 @@ export class ComponentEventCoordinator {
     for (const cancel of [...this.clients]) cancel();
     this.changed(); return false;
   }
-  accept(type: "mount" | "propertyChange" | "message" | "input" = "mount"): boolean {
+  accept(type: "mount" | "propertyChange" | "message" | "input" | ComponentInteractionEventType = "mount"): boolean {
     if (this.state.breaker) return false;
     const now = this.now(); this.timestamps = this.timestamps.filter(time => now - time < 1000);
     if (this.timestamps.length >= 512) {
@@ -94,8 +119,8 @@ export class ComponentEventCoordinator {
     this.timestamps = []; this.state = { diagnostics: [], breaker: "" }; this.changed();
   }
 }
-export interface AutomaticComponentEvent {
-  type: "mount" | "propertyChange" | "unmount" | "message"; componentId: string;
+export interface AutomaticComponentEvent extends ComponentInteractionData {
+  type: "mount" | "propertyChange" | "unmount" | "message" | ComponentInteractionEventType; componentId: string;
   property?: ComponentEventProperty; value?: InputValue | null; previousValue?: InputValue | null;
   available?: boolean; previousAvailable?: boolean; error?: string; previousError?: string;
   origin?: EventOrigin;
@@ -117,6 +142,8 @@ export interface ComponentEventContext {
   messages?: MessageContext & { bus: ComponentMessageBus };
   python?: PythonEventRunner;
   origins?: Partial<Record<ComponentEventProperty, EventOrigin>>;
+  interactionEnabled?: boolean;
+  suspended?: boolean;
 }
 export type ComponentEventExecutor = (script: ComponentEventScript, event: AutomaticComponentEvent, inputs: InputValues,
   parameters: RuntimeParameters, app: ComponentEventApp) => unknown | Promise<unknown>;
@@ -126,7 +153,7 @@ export const executeComponentEvent: ComponentEventExecutor = (script, event, inp
   const execute = new Function("event", "inputs", "parameters", "app", `"use strict"; return (async () => {\n${script.code}\n})();`);
   return execute(event, inputs, parameters, app);
 };
-interface Invocation { active: boolean; controller: AbortController }
+interface Invocation { active: boolean; controller: AbortController; activityRevision?: number; interactionRevision?: number }
 interface EventOwner {
   context: ComponentEventContext; baseline: ComponentPropertySamples; closed: boolean; blocked: boolean;
   scriptsAllowed: boolean;
@@ -135,6 +162,7 @@ interface EventOwner {
   unregister: () => void; cleanupReading: boolean; cleanupValues?: RuntimeStateValues;
   unregisterMessages: () => void; messageSignature: string; messageRevision?: number;
   started: boolean;
+  suspended: boolean; activityRevision: number; interactionEnabled: boolean; interactionRevision: number; resumePending: boolean;
 }
 
 /** Trusted JavaScript runs serially. Dead/expired invocations lose all helper authority. */
@@ -154,6 +182,21 @@ export class ComponentEventLifecycle {
       this.owner.messageSignature !== JSON.stringify(context?.component.props.messageHandlers ?? []))) {
       this.retire(this.owner); this.retiring.push(this.owner); this.owner = undefined;
     }
+    if (this.owner && context) {
+      const owner = this.owner, suspended = context.suspended === true, interactionEnabled = context.interactionEnabled === true;
+      if (owner.suspended !== suspended) {
+        owner.suspended = suspended; owner.activityRevision++;
+        if (suspended) {
+          owner.unregisterMessages(); owner.unregisterMessages = () => {};
+          owner.controller.abort();
+          for (const invocation of owner.invocations) { invocation.active = false; invocation.controller.abort(); }
+        } else { owner.controller = new AbortController(); owner.resumePending = true; }
+      }
+      if (owner.interactionEnabled !== interactionEnabled) {
+        owner.interactionEnabled = interactionEnabled; owner.interactionRevision++;
+        for (const invocation of owner.invocations) if (invocation.interactionRevision !== undefined) { invocation.active = false; invocation.controller.abort(); }
+      }
+    }
     this.prepared = context ? { context, samples } : undefined;
   }
   commit() {
@@ -164,16 +207,21 @@ export class ComponentEventLifecycle {
     if (!this.owner) {
       const owner: EventOwner = { context, baseline: frozen(samples), closed: false, blocked: false, scriptsAllowed: previewScriptsAllowed(), queue: this.cleanupWork, pending: 0,
         invocations: new Set(), cleanups: [], controller: new AbortController(), unregister: () => {}, cleanupReading: false,
-        unregisterMessages: () => {}, messageSignature: JSON.stringify(context.component.props.messageHandlers ?? []), messageRevision: context.messages?.bus.revision, started: false };
+        unregisterMessages: () => {}, messageSignature: JSON.stringify(context.component.props.messageHandlers ?? []), messageRevision: context.messages?.bus.revision, started: false,
+        suspended: context.suspended === true, activityRevision: 0, interactionEnabled: context.interactionEnabled === true, interactionRevision: 0, resumePending: false };
       owner.unregister = context.coordinator.register(() => this.cancel(owner)); this.owner = owner;
-      this.registerMessages(owner);
-      this.enqueue(owner, "mount", { type: "mount", componentId: context.component.id });
+      if (!owner.suspended) this.start(owner);
       // React StrictMode retires its phantom owner synchronously before this
       // microtask. It must not send a gateway cleanup for a mount that never ran.
-      queueMicrotask(() => { if (!owner.closed && this.active) owner.started = true; });
       return;
     }
     const owner = this.owner; owner.context = context;
+    if (owner.suspended) { owner.baseline = frozen(samples); return; }
+    if (owner.resumePending) {
+      owner.resumePending = false; owner.baseline = frozen(samples);
+      if (!owner.started) this.start(owner); else this.registerMessages(owner);
+      return;
+    }
     for (const property of context.component.props.componentEvents?.propertyChange?.properties ?? []) {
       const next = samples[property], previous = owner.baseline[property];
       if (next && previous && !same(next, previous)) this.enqueue(owner, "propertyChange", { type: "propertyChange", componentId: context.component.id,
@@ -181,6 +229,18 @@ export class ComponentEventLifecycle {
         origin: context.origins?.[property] ?? "configuration" });
     }
     owner.baseline = frozen(samples);
+  }
+  private start(owner: EventOwner) {
+    this.registerMessages(owner);
+    this.enqueue(owner, "mount", { type: "mount", componentId: owner.context.component.id });
+    queueMicrotask(() => { if (!owner.closed && !owner.suspended && this.active) owner.started = true; });
+  }
+  interaction(key: string, event: AutomaticComponentEvent): boolean {
+    const owner = this.owner;
+    if (!owner || !this.active || owner.closed || owner.blocked || owner.suspended || !owner.interactionEnabled ||
+      key !== owner.context.key || this.prepared?.context.key !== key || owner.context.isCurrent?.() === false ||
+      event.componentId !== owner.context.component.id || !isComponentInteraction(event.type) || !previewScriptsAllowed()) return false;
+    return this.enqueue(owner, event.type, event);
   }
   deactivate() {
     // Retain the prepared render for React's setup-cleanup-setup replay. Its
@@ -206,7 +266,10 @@ export class ComponentEventLifecycle {
   }
   private app(owner: EventOwner, invocation: Invocation, cleanup = false): ComponentEventApp {
     const capturedCurrent = owner.context.isCurrent;
-    const live = () => this.active && !owner.closed && !owner.blocked && invocation.active && capturedCurrent?.() !== false && owner.context.isCurrent?.() !== false &&
+    const live = () => this.active && !owner.closed && !owner.blocked && !owner.suspended && invocation.active &&
+      (invocation.activityRevision === undefined || invocation.activityRevision === owner.activityRevision) &&
+      (invocation.interactionRevision === undefined || owner.interactionEnabled && invocation.interactionRevision === owner.interactionRevision) &&
+      capturedCurrent?.() !== false && owner.context.isCurrent?.() !== false &&
       owner.messageRevision === owner.context.messages?.bus.revision;
     const messages = owner.context.messages;
     const sendMessage: ComponentMessageSender = messages
@@ -257,7 +320,7 @@ export class ComponentEventLifecycle {
   }
   private registerMessages(owner: EventOwner) {
     const context = owner.context, messages = context.messages;
-    if (!messages || !owner.scriptsAllowed || owner.closed || owner.blocked) return;
+    if (!messages || !owner.scriptsAllowed || owner.closed || owner.blocked || owner.suspended) return;
     const handlers = context.component.props.messageHandlers ?? [];
     if (handlers.length > 16) { context.coordinator.report(context.component.id, "A component can register at most 16 message handlers."); return; }
     const signatures = new Set<string>(), removals: (() => void)[] = [];
@@ -271,7 +334,7 @@ export class ComponentEventLifecycle {
           throw new Error("Message handlers require Python or JavaScript with at most 65,536 characters.");
         const script = frozen({ language: handler.language, code: handler.code });
         removals.push(messages.bus.register(handler.messageType, handler.scope, messages, event => {
-          if (!this.active || owner.closed || owner.blocked || owner.context.isCurrent?.() === false ||
+          if (!this.active || owner.closed || owner.blocked || owner.suspended || owner.context.isCurrent?.() === false ||
             owner.messageRevision !== messages.bus.revision || !previewScriptsAllowed()) return false;
           return this.enqueue(owner, "message", { ...event, componentId: context.component.id }, script, handler.id);
         }));
@@ -282,9 +345,10 @@ export class ComponentEventLifecycle {
       context.coordinator.report(context.component.id, `message: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
-  private enqueue(owner: EventOwner, type: "mount" | "propertyChange" | "message", event: AutomaticComponentEvent, suppliedScript?: ComponentEventScript, handlerId?: string): boolean {
+  private enqueue(owner: EventOwner, type: "mount" | "propertyChange" | "message" | ComponentInteractionEventType, event: AutomaticComponentEvent, suppliedScript?: ComponentEventScript, handlerId?: string): boolean {
     const context = owner.context, script = suppliedScript ?? (type === "message" ? undefined : context.component.props.componentEvents?.[type]);
-    if (!script || script.language !== "python" && !script.code?.trim() || owner.blocked || owner.closed || !owner.scriptsAllowed) return false;
+    const interaction = isComponentInteraction(type), activityRevision = owner.activityRevision, interactionRevision = owner.interactionRevision;
+    if (!script || script.language !== "python" && !script.code?.trim() || owner.blocked || owner.closed || owner.suspended || !owner.scriptsAllowed || interaction && !owner.interactionEnabled) return false;
     if (script.language === "python" && !context.python) return false;
     if (!["javascript", "python"].includes(script.language) || (script.code?.length ?? 0) > 65536) { context.coordinator.report(context.component.id, `${type}: use Python or JavaScript with at most 65,536 characters.`); return false; }
     if (owner.pending >= 32) { context.coordinator.report(context.component.id, "Automatic event queue is full (32 events). New events were skipped."); return false; }
@@ -297,20 +361,23 @@ export class ComponentEventLifecycle {
       // A task boundary prevents state feedback from recursively exhausting
       // React's passive-effect update depth before the shared breaker runs.
       if (type !== "mount" || script.language !== "python") await new Promise<void>(resolve => setTimeout(resolve, 0));
-      if (!this.active || owner.closed || owner.blocked || context.isCurrent?.() === false || owner.context.isCurrent?.() === false ||
+      if (!this.active || owner.closed || owner.blocked || owner.suspended || owner.activityRevision !== activityRevision ||
+        interaction && (!owner.interactionEnabled || owner.interactionRevision !== interactionRevision) || context.isCurrent?.() === false || owner.context.isCurrent?.() === false ||
         owner.messageRevision !== owner.context.messages?.bus.revision || !previewScriptsAllowed()) return;
-      const invocation = { active: true, controller: new AbortController() }; owner.invocations.add(invocation);
+      const invocation: Invocation = { active: true, controller: new AbortController(), activityRevision, ...(interaction ? { interactionRevision } : {}) }; owner.invocations.add(invocation);
       try {
         const app = this.app(owner, invocation);
         if (script.language === "python") {
           if (!context.python) throw new Error("Python component events are unavailable in this context.");
           const output = await context.python(type === "message" ? { family: "message", handlerId: handlerId! }
-            : type === "mount" ? { family: "lifecycle", type: "mount" } : { family: "propertyChange" }, snapshot, inputs, parameters, app.signal);
-          if (output && !app.signal.aborted && !owner.closed && !owner.blocked && context.isCurrent?.() !== false)
+            : type === "mount" ? { family: "lifecycle", type: "mount" } : isComponentInteraction(type) ? { family: "interaction", type } : { family: "propertyChange" }, snapshot, inputs, parameters, app.signal);
+          if (output && !app.signal.aborted && !owner.closed && !owner.blocked && !owner.suspended && owner.activityRevision === activityRevision &&
+            (!interaction || owner.interactionEnabled && owner.interactionRevision === interactionRevision) && context.isCurrent?.() !== false)
             context.coordinator.report(context.component.id, output, "info");
         } else await this.bounded(() => this.execute(script, snapshot, inputs, parameters, app), invocation, this.timeoutMs);
       }
-      catch (error) { if (!owner.closed && !owner.blocked) context.coordinator.report(context.component.id, `${type}${event.property ? ` (${event.property})` : ""}: ${error instanceof Error ? error.message : String(error)}`); }
+      catch (error) { if (!owner.closed && !owner.blocked && !owner.suspended && owner.activityRevision === activityRevision &&
+        (!interaction || owner.interactionEnabled && owner.interactionRevision === interactionRevision)) context.coordinator.report(context.component.id, `${type}${event.property ? ` (${event.property})` : ""}: ${error instanceof Error ? error.message : String(error)}`); }
       finally { owner.invocations.delete(invocation); }
     }).finally(() => { owner.pending--; finish(); });
     return true;
@@ -326,7 +393,7 @@ export class ComponentEventLifecycle {
     const context = owner.context, script = context.component.props.componentEvents?.unmount;
     const invocation = { active: true, controller: new AbortController() };
     const runs: (() => unknown | Promise<unknown>)[] = [...owner.cleanups.splice(0)];
-    if (script && (script.language === "python" || script.code?.trim())) runs.unshift(async () => {
+    if (!owner.suspended && script && (script.language === "python" || script.code?.trim())) runs.unshift(async () => {
       if (!["javascript", "python"].includes(script.language) || (script.code?.length ?? 0) > 65536) throw new Error("Cleanup requires Python or JavaScript with at most 65,536 characters.");
       if (script.language === "python") {
         if (!owner.started || !context.python) return;

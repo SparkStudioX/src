@@ -34,6 +34,7 @@ builder.Services.AddSingleton(new GatewayDeployment(builder.Configuration, build
 builder.Services.AddSingleton(new GatewayObservations(dataDir));
 builder.Services.AddSingleton<PreviewSessions>();
 builder.Services.AddSingleton<RuntimeSessionMessaging>();
+builder.Services.AddSingleton<EquipmentCommands>();
 builder.Services.AddSingleton(sp => new ProjectCatalog(dataDir, sp.GetRequiredService<IDataProtectionProvider>()));
 builder.Services.AddSingleton(_ => new ConnectorService(dataDir, recovery.EnsureOperationsAllowed));
 builder.Services.AddSingleton(sp => new TagEngine(sp.GetRequiredService<ProjectCatalog>().GatewayStore,
@@ -140,6 +141,7 @@ routes.MapTagEngineeringEndpoints();
 routes.MapPreviewEndpoints();
 routes.MapPythonComponentEventEndpoints();
 routes.MapRuntimeSessionMessageEndpoints();
+routes.MapEquipmentCommandEndpoints();
 routes.MapGet("/health", (PythonRunner python) => new { status = "ok", version = typeof(PythonRunner).Assembly
     .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
     .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "unknown",
@@ -181,12 +183,13 @@ routes.MapPut("/project", (JsonObject project, ProjectStore store, ScriptResourc
     return saved;
 }).Access("design", audit: true);
 routes.MapGet("/project/publication", (PublicationStore publication) => publication.Metadata()).Access("read", "context");
+routes.MapGet("/project/publication-review", (ProjectStore store, PublicationStore publication) => publication.Review(store)).Access("publish");
 routes.MapGet("/project/history", (PublicationStore publication) => publication.History()).Access("design");
-routes.MapPost("/project/history/{id}/restore", (string id, PublicationRollbackRequest request, PublicationStore publication) => publication.Rollback(id, request.ExpectedPublishedAt)).Access("publish", audit: true);
+routes.MapPost("/project/history/{id}/restore", (string id, PublicationRollbackRequest request, PublicationStore publication) => publication.Rollback(id, request.ExpectedPublishedAt, request.AcknowledgeLegacy)).Access("publish", audit: true);
 routes.MapPost("/project/publish", (PublishRequest request, ProjectStore store, PublicationStore publication, ScriptResourceStore scripts, HttpContext context) =>
 {
     var before = publication.Metadata();
-    var saved = publication.Publish(store, request.Revision);
+    var saved = publication.Publish(store, request.Revision, request.ScriptsRevision, request.ReviewToken);
     if (!JsonNode.DeepEquals(before, publication.Metadata())) scripts.NotifyUpdate(ScriptProjectUpdates.Resource(GatewayAccess.Actor(context).Username, "publication", "application", false, "projectPublished"));
     return saved;
 }).Access("publish", audit: true);
@@ -202,7 +205,9 @@ routes.MapPost("/runtime/screens/{screenId}/components/{componentId}/action", as
 }).Access("operate", "operator", audit: true);
 routes.MapPost("/runtime/screens/{screenId}/components/{componentId}/table-edit", async (string screenId, string componentId, TableEditRequest request, RuntimeActions actions, HttpContext context, CancellationToken cancellation) =>
 {
-    var result = await actions.ExecuteTableEditAsync(screenId, componentId, request, cancellation);
+    var result = request.Edits is null
+        ? await actions.ExecuteTableEditAsync(screenId, componentId, request, cancellation)
+        : await actions.ExecuteTableBatchEditAsync(screenId, componentId, request, cancellation);
     context.Items["spark.actionOutcome"] = result["success"]?.GetValue<bool>() == true ? "Completed" : "Action failed";
     return result;
 }).Access("operate", "operator", audit: true);
@@ -214,19 +219,19 @@ routes.MapPost("/tags/read", (TagReadRequest request, HttpContext context, Secur
         throw new BadHttpRequestException("One or more tags are outside this project's readable tag scope.", 403);
     return values;
 }).Access("read", "context");
-routes.MapGet("/tag-definitions", (ProjectStore store) => store.GetTagDefinitions()).Access("admin");
-routes.MapGet("/opcua/subscriptions", (TagEngine tags) => tags.SubscriptionSnapshot()).Access("admin");
-routes.MapPost("/tags", (JsonObject value, TagEngine tags) => tags.SaveDefinition(value)).Access("admin", audit: true);
-routes.MapDelete("/tag-definitions", (string path, TagEngine tags) => tags.DeleteDefinition(path) ? Results.NoContent() : Results.NotFound(new { error = "Tag definition not found." })).Access("admin", audit: true);
-routes.MapGet("/connections", (ProjectStore store) => store.GetConnections()).Access("admin");
-routes.MapGet("/opcua/endpoints", (string endpoint, ConnectorService connector, CancellationToken cancellation) => connector.DiscoverEndpointsAsync(endpoint, cancellation)).Access("admin");
-routes.MapPost("/connections", (JsonObject connection, TagEngine tags) => tags.SaveConnection(connection)).Access("admin", audit: true);
+routes.MapGet("/tag-definitions", (ProjectStore store) => store.GetTagDefinitions()).Access("configuration");
+routes.MapGet("/opcua/subscriptions", (TagEngine tags) => tags.SubscriptionSnapshot()).Access("configuration");
+routes.MapPost("/tags", (JsonObject value, TagEngine tags) => tags.SaveDefinition(value)).Access("configuration", audit: true);
+routes.MapDelete("/tag-definitions", (string path, TagEngine tags) => tags.DeleteDefinition(path) ? Results.NoContent() : Results.NotFound(new { error = "Tag definition not found." })).Access("configuration", audit: true);
+routes.MapGet("/connections", (ProjectStore store) => store.GetConnections()).Access("configuration");
+routes.MapGet("/opcua/endpoints", (string endpoint, ConnectorService connector, CancellationToken cancellation) => connector.DiscoverEndpointsAsync(endpoint, cancellation)).Access("configuration");
+routes.MapPost("/connections", (JsonObject connection, TagEngine tags) => tags.SaveConnection(connection)).Access("configuration", audit: true);
 routes.MapGatewayConnectionEndpoints();
-routes.MapGet("/connections/{id}/browse", (string id, string? nodeId, ProjectStore store, ConnectorService connector, CancellationToken cancellation) => connector.BrowseAsync(store.GetConnection(id), nodeId, cancellation)).Access("admin");
+routes.MapGet("/connections/{id}/browse", (string id, string? nodeId, ProjectStore store, ConnectorService connector, CancellationToken cancellation) => connector.BrowseAsync(store.GetConnection(id), nodeId, cancellation)).Access("configuration");
 routes.MapPost("/connections/{id}/database", (string id, CreateDatabaseRequest request, ProjectStore store, ConnectorService connector, CancellationToken cancellation)
-    => connector.CreateSqliteDatabaseAsync(store.GetConnection(id), request.InitializeSampleData, cancellation)).Access("admin", audit: true);
+    => connector.CreateSqliteDatabaseAsync(store.GetConnection(id), request.InitializeSampleData, cancellation)).Access("configuration", audit: true);
 routes.MapGet("/connections/{id}/schema", (string id, ProjectStore store, ConnectorService connector, CancellationToken cancellation)
-    => connector.BrowseSqliteSchemaAsync(store.GetConnection(id), cancellation)).Access("admin");
+    => connector.BrowseSqliteSchemaAsync(store.GetConnection(id), cancellation)).Access("configuration");
 routes.MapGet("/queries", (ProjectStore store) => store.GetQueries()).Access("design");
 routes.MapPut("/queries/{id}", (string id, JsonObject query, ProjectStore store, ScriptResourceStore scripts, HttpContext context) =>
 {
@@ -246,13 +251,18 @@ routes.MapPost("/scripts/validate", (ScriptSyntaxRequest request, PythonRunner p
     => python.ValidateSyntaxAsync(request.Code, cancellation)).Access("design");
 routes.MapPut("/scripts/resources", (JsonObject draft, ScriptResourceStore scripts, HttpContext context) => scripts.SaveDraft(draft, GatewayAccess.Actor(context).Username)).Access("design", audit: true);
 routes.MapGet("/scripts/publication", (ScriptResourceStore scripts) => scripts.Metadata()).Access("design");
-routes.MapPost("/scripts/publish", (PublishRequest request, ScriptResourceStore scripts, HttpContext context) => scripts.Publish(request.Revision, GatewayAccess.Actor(context).Username)).Access("publish", audit: true);
+routes.MapPost("/scripts/publish", (PublishRequest request, ProjectStore store, PublicationStore publication) => {
+    var result = publication.Publish(store, store.GetProject()["revision"]!.GetValue<int>(), request.Revision, request.ReviewToken, onlyWhenChanged: true);
+    result["applicationRevision"] = result["revision"]?.DeepClone(); result["revision"] = result["scriptsRevision"]?.DeepClone();
+    result["draftRevision"] = request.Revision;
+    return result;
+}).Access("publish", audit: true);
 routes.MapScriptMessageEndpoints();
 routes.MapGet("/scripts/events/status", (ProjectRuntime runtime) => runtime.Events.Status()).Access("design");
 routes.MapGet("/scripts/events/logs", (ProjectRuntime runtime) => runtime.Events.Logs()).Access("design");
 routes.MapPost("/scripts/resources/{id}/run", (string id, ScriptRunRequest request, ProjectRuntime runtime, HttpContext context, CancellationToken cancellation)
     => runtime.Events.RunAsync(id, request, cancellation, GatewayAccess.Actor(context).Username)).Access("admin", audit: true);
-routes.MapGet("/runtime/scripts", (ScriptResourceStore scripts) => scripts.GetClientResources()).Access("view", "operator");
+routes.MapGet("/runtime/scripts", (string? publishedAt, PublicationStore publication) => publication.GetClientResources(publishedAt)).Access("view", "operator");
 routes.MapPost("/scripts/run", (ScriptRequest request, PythonRunner python, ScriptResourceStore scripts, ProjectStore store, HttpContext context, CancellationToken cancellation)
     => python.RunWithLibrariesAsync(request.Code, request.Parameters, request.Inputs, scripts.CaptureLibraries(), cancellation,
         eventContext: new JsonObject { ["type"] = "manual", ["reason"] = "console", ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
@@ -285,7 +295,7 @@ public record CreateDatabaseRequest(bool InitializeSampleData = false);
 public record ScriptRequest(string Code, Dictionary<string, JsonElement>? Parameters, Dictionary<string, JsonElement>? Inputs, JsonObject? Ui = null, JsonObject? UiContext = null);
 [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
 public record ScriptSyntaxRequest(string Code);
-public record PublishRequest(int Revision);
+public record PublishRequest(int Revision, int? ScriptsRevision = null, string? ReviewToken = null);
 [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
 public record RuntimeActionRequest(Dictionary<string, JsonElement>? Parameters, Dictionary<string, JsonElement>? Inputs, string? PublishedAt, string? InstanceId = null, string? RowId = null, PopupOrigin? PopupOrigin = null,
     IReadOnlyList<InstancePathStep>? InstancePath = null, IReadOnlyList<Dictionary<string, JsonElement>>? BindingInputs = null,

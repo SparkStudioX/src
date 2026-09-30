@@ -209,4 +209,19 @@ check('JavaScript input help only offers implemented helpers and explains its pa
 check('syntax and message help distinguish compile checks, local messages and gateway resources', () => {
   const ui=drive(input);assert.match(ui.content(),/Check syntax compiles Python on the gateway without running code/);ui.nav('Messages');ui.click('Add handler');assert.match(ui.content(),/Gateway system.ui.sendMessage reaches only session-scope handlers/);assert.match(ui.content(),/published gateway message resources/);
 });
+check('all interaction handlers remain staged with independent languages and preserve existing lifecycle definitions',()=>{
+  const original={...base,props:{...base.props,componentEvents:{mount:{language:'javascript',code:'app.notify("original");'}}}},ui=drive(original);
+  const interactions=[['focus','Focus gained'],['blur','Focus lost'],['keyDown','Key down'],['keyUp','Key up'],['doubleClick','Double click'],['pointerDown','Pointer down'],['pointerUp','Pointer up']];
+  for(const[type,label]of interactions){ui.nav(label);selectLanguage(ui,'javascript');ui.code(`app.notify(${JSON.stringify(type)});`);selectLanguage(ui,'python');ui.code(`print(${JSON.stringify(type)})`);assert.deepEqual(ui.applied,[]);}
+  ui.nav('Key down');assert.ok(current(ui).completions.some(item=>item.label==='event.key'));selectLanguage(ui,'javascript');assert.equal(current(ui).value,'app.notify("keyDown");');
+  apply(ui);assert.equal(ui.applied.length,1);assert.equal(ui.applied[0].componentEvents.mount.code,'app.notify("original");');
+  for(const[type]of interactions)assert.equal(ui.applied[0].componentEvents[type].language,type==='keyDown'?'javascript':'python');
+  assert.deepEqual(Object.keys(original.props.componentEvents),['mount']);
+});
+check('password keyboard authoring permits gateway events but documents redacted keys and exposes no secret values',()=>{
+  const ui=drive(secret);ui.nav('Key down');assert.equal(current(ui).language,'python');ui.code('result = event.redacted');
+  assert.ok(current(ui).completions.some(item=>item.label==='event.redacted'));assert.match(ui.content(),/empty key\/code and redacted=true/);assert.ok(!ui.content().includes('must-not-leak'));
+  apply(ui);assert.equal(ui.applied[0].componentEvents.keyDown.code,'result = event.redacted');
+  ui.nav('Pointer up');selectLanguage(ui,'javascript');ui.code('app.notify(event.pointerType);');ui.click('Cancel');assert.equal(ui.applied.length,1);
+});
 console.log(`${passed}/${passed} unified component action authoring checks passed.`);

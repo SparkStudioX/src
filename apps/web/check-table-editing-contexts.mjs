@@ -231,4 +231,12 @@ await check('popup edit failures release busy state and stale/unmounted completi
   const late = callback(table, edit); active.current = false; delayed.reject(conflict); await assert.rejects(late, reason => reason === conflict);
   assert.deepEqual(effects, [['busy', table.id], ['parent', true]]);
 });
+await check('atomic batch intent travels unchanged through repeated tables, popup forwarding and operator request provenance',async()=>{
+  const batch={edits:[{key:1,version:3,column:'quantity',value:0},{key:'1',version:4,column:'quantity',value:12}]};
+  const calls=[],wrapper=component('batch-rows','repeater',{templateId:'form',rows:[{id:'a',parameters:{line:'1'}},{id:'b',parameters:{line:'2'}}]});
+  for(const view of wrapperTables(wrapper,{onTableEdit:async(...args)=>{calls.push(args);return result;}}))await view.table.props.onTableEdit(batch);
+  assert.equal(calls.length,2);assert.ok(calls.every(args=>args[1]===batch));assert.deepEqual(calls.map(args=>args[2].rowId),['a','b']);
+  const forwarded=[],child=ofType(popupView({onTableEdit:async(...args)=>{forwarded.push(args);return result;}}),'ProjectComponentView')[0];await child.props.onTableEdit(table,batch,calls[1][2]);assert.equal(forwarded[0][1],batch);assert.equal(forwarded[0][2].rowId,'b');
+  const run=operator();await run.run(table,batch,calls[1][2],popupState);const payload=run.requests[0][2];assert.deepEqual(payload.edits,batch.edits);assert.equal(payload.rowId,'b');assert.deepEqual(payload.popupOrigin,popupState.origin);assert.equal(Object.hasOwn(payload,'inputs'),false);assert.equal(Object.hasOwn(payload,'key'),false);
+});
 console.log(`${checks} table editing context checks passed.`);

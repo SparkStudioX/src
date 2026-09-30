@@ -346,9 +346,9 @@ public static class DeploymentSettingsEndpoints
     public static void MapDeploymentSettingsEndpoints(this WebApplication app)
     {
         app.MapGet("/api/gateway/deployment/settings", (HttpContext context, DeploymentSettings settings) =>
-        { context.Response.Headers.CacheControl = "no-store"; return settings.Snapshot(); }).Access("admin");
-        app.MapPost("/api/gateway/deployment/settings/validate", (DeploymentIntent request, DeploymentSettings settings) => settings.Validate(request)).Access("admin");
-        app.MapPut("/api/gateway/deployment/settings", (DeploymentSaveRequest request, DeploymentSettings settings) => settings.Save(request)).Access("admin", audit: true);
-        app.MapPost("/api/gateway/deployment/settings/restore", (DeploymentRevisionRequest request, DeploymentSettings settings) => settings.Restore(request)).Access("admin", audit: true);
+        { context.Response.Headers.CacheControl = "no-store"; return settings.Snapshot(); }).Access("configuration");
+        app.MapPost("/api/gateway/deployment/settings/validate", (DeploymentIntent request, DeploymentSettings settings) => settings.Validate(request)).Access("configuration");
+        app.MapPut("/api/gateway/deployment/settings", (DeploymentSaveRequest request, DeploymentSettings settings) => settings.Save(request)).Access("configuration", audit: true);
+        app.MapPost("/api/gateway/deployment/settings/restore", (DeploymentRevisionRequest request, DeploymentSettings settings) => settings.Restore(request)).Access("configuration", audit: true);
     }
 }

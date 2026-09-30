@@ -1,4 +1,7 @@
 export type ComponentType =
+  | "chart"
+  | "sparkline"
+  | "equipmentCommand"
   | "label"
   | "value"
   | "gauge"
@@ -7,6 +10,9 @@ export type ComponentType =
   | "list"
   | "treeView"
   | "textInput"
+  | "formattedInput"
+  | "barcodeInput"
+  | "viewContainer"
   | "passwordInput"
   | "multiStateButton"
   | "multiStateIndicator"
@@ -77,10 +83,18 @@ export interface InputEventScript {
 }
 export type ComponentEventProperty = BindingTarget;
 export interface ComponentEventScript { language: "javascript" | "python"; code: string }
+export type ComponentInteractionEventType = "focus" | "blur" | "keyDown" | "keyUp" | "doubleClick" | "pointerDown" | "pointerUp";
 export interface ComponentEvents {
   mount?: ComponentEventScript;
   unmount?: ComponentEventScript;
   propertyChange?: ComponentEventScript & { properties: ComponentEventProperty[] };
+  focus?: ComponentEventScript;
+  blur?: ComponentEventScript;
+  keyDown?: ComponentEventScript;
+  keyUp?: ComponentEventScript;
+  doubleClick?: ComponentEventScript;
+  pointerDown?: ComponentEventScript;
+  pointerUp?: ComponentEventScript;
 }
 export type ComponentMessageScope = "instance" | "screen" | "session";
 export interface ComponentMessageHandler {
@@ -121,6 +135,13 @@ export interface QueryPropertyBinding {
   parameters?: Record<string, PropertyBinding>;
   refresh?: { mode: "onChange" | "poll"; intervalMs?: number };
 }
+export interface Dataset { columns: string[]; rows: Record<string, ParameterValue | null>[] }
+export interface QueryDatasetSource {
+  queryId: string;
+  parameters?: Record<string, PropertyBinding>;
+  refresh?: { mode: "onChange" | "poll"; intervalMs?: number };
+}
+export interface DatasetSample { status: "idle" | "loading" | "ready" | "error"; data?: Dataset; error?: string; refreshing?: boolean }
 export interface QueryPropertySample {
   status: "idle" | "loading" | "ready" | "error";
   value?: ParameterValue;
@@ -142,6 +163,7 @@ export interface QueryRepeaterSource {
   queryId: string;
   rowKey: string;
   parameterMap: Record<string, string>;
+  maxRows?: number;
 }
 export interface TableColumnDefinition {
   key: string;
@@ -167,12 +189,21 @@ export interface TableEditDefinition {
   columns: TableEditColumn[];
   // Published runtime responses omit executable code.
   script?: string;
+  batch?: { table: string };
 }
 export interface TableCellEdit {
   key: string | number;
   version: number;
   column: string;
   value: InputValue;
+}
+export type TableEditIntent = TableCellEdit | { edits: TableCellEdit[] };
+export interface InputValidationDefinition {
+  required?: boolean;
+  minLength?: number;
+  maxLength?: number;
+  format?: "text" | "email" | "digits" | "alphanumeric";
+  message?: string;
 }
 export interface CanvasComponent {
   id: string;
@@ -183,6 +214,14 @@ export interface CanvasComponent {
   width: number;
   height: number;
   props: {
+    viewLayout?: import("./viewContainers").ViewLayout;
+    validation?: InputValidationDefinition;
+    formatMask?: string;
+    textCase?: "preserve" | "upper" | "lower";
+    scanTerminator?: "enter" | "tab";
+    selectionMode?: "single" | "multiple";
+    chart?: import("./chartModel").ChartDefinition;
+    commandId?: string;
     /** Optional project visual style; local values and bindings retain precedence. */
     styleId?: string;
     /** Optional reusable caption translation; input values and actions are never translated. */
@@ -196,6 +235,8 @@ export interface CanvasComponent {
     visible?: boolean;
     bindings?: Partial<Record<BindingTarget, PropertyBinding>>;
     queryBindings?: Partial<Record<BindingTarget, QueryPropertyBinding>>;
+    data?: Dataset;
+    dataSource?: QueryDatasetSource;
     text?: string;
     tagPath?: string;
     queryId?: string;
@@ -264,6 +305,7 @@ export interface Screen {
   state?: StateDefinitions;
 }
 export interface Project {
+  commands?: import("./EquipmentCommand").EquipmentCommandDefinition[];
   id: string;
   name: string;
   revision: number;
@@ -320,6 +362,7 @@ export interface InstanceAction {
   /** Local lifecycle guard; never serialized in action requests. */
   isCurrent?: () => boolean;
   querySourceParameters?: RuntimeParameters;
+  sourceParameterScopes?: RuntimeParameters[];
   template: Template;
   parameters: RuntimeParameters;
   inputs: InputValues;
@@ -342,6 +385,7 @@ export interface PopupState {
   // Local source snapshot only; runtime actions send the published opener identity.
   querySourceParameters?: RuntimeParameters;
   queryRootParameters?: RuntimeParameters;
+  sourceParameterScopes?: RuntimeParameters[];
   templateParameterTypes?: Record<string, TemplateParameterType>;
   // Nested template definitions captured for local stale-source diagnostics.
   templateSourceSignature?: string;
@@ -374,8 +418,17 @@ export interface TagDefinition {
   enabled?: boolean;
   expression?: string;
   inputs?: Record<string, string>;
+  scanGroup?: string;
+  effectiveEnabled?: boolean;
+  udtInstance?: string;
+  udtDefinition?: string;
+  udtVersion?: number;
+  udtMember?: string;
+  overrideFields?: string[];
 }
 export interface Publication {
+  scriptsRevision?: number;
+  complete?: boolean;
   warnings?: string[];
   published?: boolean;
   revision?: number;

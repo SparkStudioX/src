@@ -1,0 +1,11 @@
+.property-collection-group { margin: 0; padding: 0; border: 0; }
+.property-collection-value { display: flex; align-items: center; gap: 5px; }
+.property-collection-value > span { min-width: 0; flex: 1; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.property-collection-value > .button { flex: 0 0 auto; padding: 3px 5px; min-height: 24px; font-size: 10px; }
+.property-collection-dialog { position: fixed; margin: auto; padding: 0; width: min(640px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); color: var(--ink); background: var(--panel); border: 1px solid var(--border-strong); border-radius: 9px; box-shadow: 0 24px 80px var(--shadow-soft); }
+.property-collection-dialog[open] { display: flex; flex-direction: column; }
+.property-collection-dialog::backdrop { background: rgba(12, 21, 36, .5); }
+.property-collection-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 14px 18px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.property-collection-dialog > header h2 { margin: 0; font-size: 15px; }
+.property-collection-dialog > header button { color: var(--muted); font-size: 24px; }
+.property-collection-body { padding: 16px 18px; overflow-y: auto; min-height: 0; }

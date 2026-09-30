@@ -75,23 +75,26 @@ public static class GatewayConsole
     {
         app.MapGet("/api/gateway/overview", (HttpContext context, ProjectCatalog catalog, TagEngine tags, SecurityStore security, GatewayObservations observations, RecoveryQuarantine recovery) =>
         {
-            var projects = catalog.List(includeArchived: true);
+            var actor = GatewayAccess.Actor(context); var capabilities = security.GetGatewayCapabilities(actor);
+            var resources = capabilities.Diagnostics || capabilities.Configuration;
+            var projects = resources ? catalog.List(includeArchived: true) : new JsonArray();
             var values = tags.Snapshot();
-            var connections = catalog.GatewayStore.GetConnections().OfType<JsonObject>().Select(item => new {
+            var connections = catalog.GatewayStore.GetConnections().OfType<JsonObject>().Where(_ => resources).Select(item => new {
                 id = ProjectStore.Required(item, "id"), name = ProjectStore.Required(item, "name"), type = ProjectStore.Required(item, "type"),
                 status = ProjectStore.Optional(item, "status") ?? "unknown"
             }).ToArray();
             return new { observedAt = DateTimeOffset.UtcNow, identity = Environment.MachineName, recoveryMode = recovery.Active,
                 version = typeof(GatewayConsole).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown",
                 framework = RuntimeInformation.FrameworkDescription, platform = RuntimeInformation.OSDescription,
-                projects, connections, tags = new { total = values.Length, good = values.Count(item => item.Quality == "Good"),
-                    unavailable = values.Count(item => item.Quality != "Good"), configured = catalog.GatewayStore.GetTagDefinitions().Count },
-                currentSessionId = GatewaySecurity.CurrentSessionAdministrationId(context), sessions = security.SessionInventory(), metrics = observations.Snapshot() };
-        }).Access("admin");
+                projects, connections, tags = new { total = resources ? values.Length : 0, good = resources ? values.Count(item => item.Quality == "Good") : 0,
+                    unavailable = resources ? values.Count(item => item.Quality != "Good") : 0, configured = resources ? catalog.GatewayStore.GetTagDefinitions().Count : 0 },
+                currentSessionId = capabilities.Sessions ? GatewaySecurity.CurrentSessionAdministrationId(context) : null,
+                sessions = capabilities.Sessions ? security.SessionInventory() : [], metrics = capabilities.Diagnostics ? observations.Snapshot() : null };
+        }).Access("gateway");
         app.MapPost("/api/gateway/sessions/{id}/revoke", (string id, SecurityStore security) =>
             security.RevokeManagedSession(id) ? Results.Ok(new { revoked = true }) : Results.NotFound(new { error = "Session is no longer active." }))
-            .Access("admin", audit: true);
-        app.MapGet("/api/gateway/diagnostics", (GatewayObservations observations) => observations.Snapshot()).Access("admin");
+            .Access("sessions", audit: true);
+        app.MapGet("/api/gateway/diagnostics", (GatewayObservations observations) => observations.Snapshot()).Access("diagnostics");
         app.MapGet("/api/gateway/support-snapshot", (GatewayObservations observations, ProjectCatalog catalog, TagEngine tags) =>
         {
             // Export an explicit allowlist, never configuration files or exception/output bodies.
@@ -101,6 +104,6 @@ public static class GatewayConsole
                 tagCount = tags.Snapshot().Length, metrics = observations.Snapshot(),
                 excluded = new[] { "credentials", "session identities and tokens", "configuration values", "tag values and paths", "project resources", "script output", "exception bodies", "certificates and keys" } };
             return Results.File(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, ProjectStore.Json), "application/json", "sparkstudio-support-snapshot.json");
-        }).Access("admin", audit: true);
+        }).Access("diagnostics", audit: true);
     }
 }

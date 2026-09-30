@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { api } from "./api";
 import "./accountSettings.css";
 
-type Preview = { revision: string; previewToken: string; totalTags: number; changes: { path: string; action: string; kind: string }[] };
+type Preview = { revision: string; previewToken: string; totalTags: number; canApply: boolean; conflicts: string[]; changes: { path: string; action: string; kind: string; overrideFields?: string[] }[] };
 
 export default function TagTransfer({ onClose, onApplied }: { onClose: () => void; onApplied: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null), id = useId();
@@ -23,7 +23,7 @@ export default function TagTransfer({ onClose, onApplied }: { onClose: () => voi
     onCancel={event => { event.preventDefault(); if (!busy) onClose(); }} onKeyDown={event => event.stopPropagation()}>
     <header><h2 id={`${id}-title`}>Import / export tags</h2><button className="account-settings-close" aria-label="Close tag transfer" disabled={busy} onClick={onClose}>×</button></header>
     <section className="security-form account-settings-password">
-      <p>Import adds tags and updates matching paths across the gateway. Existing tags absent from the file are retained. Preview all changes before applying. Connections and UDT definitions are not imported.</p>
+      <p>Import merges tags, immutable UDT versions, pinned instances and named scan groups across the gateway. Existing resources absent from the file are retained unless explicitly removed. Version 1 tag files migrate automatically; exports use version 2. Connections are configured separately.</p>
       <button className="button" disabled={busy} onClick={() => void run(async () => {
         const result = await api<unknown>("/tag-engineering/export");
         const url = URL.createObjectURL(new Blob([JSON.stringify(result, null, 2) + "\n"], { type: "application/json" }));
@@ -39,13 +39,14 @@ export default function TagTransfer({ onClose, onApplied }: { onClose: () => voi
         if (new Blob([text]).size > 900_000) throw new Error("Use a tag package smaller than 900 KB.");
         setPreview(await api<Preview>("/tag-engineering/preview", "POST", JSON.parse(text)));
       })}>Preview import</button>
-      {preview && <div role="status"><p>{preview.changes.length} definitions reviewed · {preview.totalTags} total tags after import</p>
+      {preview && <div role="status"><p>{preview.changes.length} resources reviewed · {preview.totalTags} total tags after import</p>
+        {preview.conflicts?.length > 0 && <div className="security-error"><strong>Resolve conflicts before applying</strong><ul>{preview.conflicts.map(conflict => <li key={conflict}>{conflict}</li>)}</ul></div>}
         <div style={{ maxHeight: 220, overflow: "auto" }}><table className="data-table"><thead><tr><th>Action</th><th>Tag path</th><th>Source</th></tr></thead><tbody>
-          {preview.changes.map(item => <tr key={item.path}><td>{item.action}</td><td>{item.path}</td><td>{item.kind}</td></tr>)}
+          {preview.changes.map(item => <tr key={`${item.kind}:${item.path}`}><td>{item.action}</td><td>{item.path}{item.overrideFields?.length ? ` (overrides: ${item.overrideFields.join(", ")})` : ""}</td><td>{item.kind}</td></tr>)}
         </tbody></table></div><p>Changes to tags, memory values, connections or this file invalidate the preview.</p></div>}
       {error && <p className="security-error" role="alert">{error}</p>}{message && <p role="status">{message}</p>}
       <footer><button className="button" disabled={busy} onClick={onClose}>Done</button>
-        <button className="button primary" disabled={busy || !preview} onClick={() => void run(async () => {
+        <button className="button primary" disabled={busy || !preview?.canApply} onClick={() => void run(async () => {
           await api("/tag-engineering/apply", "POST", { package: JSON.parse(text), revision: preview!.revision, previewToken: preview!.previewToken });
           setPreview(null); setMessage("Tag import applied. All changes were saved together."); onApplied();
         })}>{busy ? "Working…" : "Apply reviewed import"}</button></footer>

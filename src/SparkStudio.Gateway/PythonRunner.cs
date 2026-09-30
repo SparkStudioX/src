@@ -94,12 +94,12 @@ sys.stdout.flush()
     public Task<JsonObject> RunAsync(string code, Dictionary<string, JsonElement>? parameters, Dictionary<string, JsonElement>? inputs, CancellationToken cancellation)
         => RunWithLibrariesAsync(code, parameters, inputs, scripts.CaptureLibraries(), cancellation);
 
-    public Task<JsonObject> RunAsync(string code, Dictionary<string, JsonElement>? parameters, Dictionary<string, JsonElement>? inputs, CancellationToken cancellation, JsonArray queryDefinitions, PythonUiContext? uiContext = null)
-        => RunWithLibrariesAsync(code, parameters, inputs, scripts.CaptureLibraries(), cancellation, queryDefinitions, uiContext: uiContext);
+    public Task<JsonObject> RunAsync(string code, Dictionary<string, JsonElement>? parameters, Dictionary<string, JsonElement>? inputs, CancellationToken cancellation, JsonArray queryDefinitions, PythonUiContext? uiContext = null, IReadOnlyDictionary<string, string>? libraries = null)
+        => RunWithLibrariesAsync(code, parameters, inputs, libraries ?? scripts.CaptureLibraries(), cancellation, queryDefinitions, uiContext: uiContext);
 
     public Task<JsonObject> RunComponentEventAsync(string code, Dictionary<string, JsonElement> parameters, Dictionary<string, JsonElement> inputs,
-        JsonObject eventContext, JsonArray queryDefinitions, PythonUiContext uiContext, CancellationToken cancellation)
-        => RunWithLibrariesAsync(code, parameters, inputs, scripts.CaptureLibraries(), cancellation, queryDefinitions, eventContext, timeoutMs: 2000, uiContext: uiContext);
+        JsonObject eventContext, JsonArray queryDefinitions, PythonUiContext uiContext, CancellationToken cancellation, IReadOnlyDictionary<string, string>? libraries = null)
+        => RunWithLibrariesAsync(code, parameters, inputs, libraries ?? scripts.CaptureLibraries(), cancellation, queryDefinitions, eventContext, timeoutMs: 2000, uiContext: uiContext);
 
     public async Task<JsonObject> RunWithLibrariesAsync(string code, Dictionary<string, JsonElement>? parameters, Dictionary<string, JsonElement>? inputs,
         IReadOnlyDictionary<string, string> libraries, CancellationToken cancellation, JsonArray? queryDefinitions = null,

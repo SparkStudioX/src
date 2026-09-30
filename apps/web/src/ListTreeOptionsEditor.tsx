@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { validateListTreeOptions } from "./listTreeModel";
 import type { CanvasComponent } from "./types";
+import { PropertyCollectionDialog } from "./PropertyCollectionEditor";
 import "./listTreeOptionsEditor.css";
 
 type Option = NonNullable<CanvasComponent["props"]["options"]>[number];
@@ -47,17 +48,13 @@ export function ListTreeOptionsEditor({ component, onChange, notify }: {
     setDraft({ ...draft, rows: draft.rows.map(row => row.id === id ? { ...row, ...patch }
       : patch.value !== undefined && row.parentId === id ? { ...row, parentValue: patch.value } : row) });
   }
-  return <section className="list-tree-editor" aria-label={tree ? "Tree options" : "List options"}>
-    <div className="list-tree-heading"><strong>{tree ? "Tree options" : "List options"}</strong>{!draft && <button type="button" className="button small" onClick={edit}>Edit options</button>}</div>
-    <p className="list-tree-help">{tree ? "Define up to 100 choices with parent links, at most 16 levels deep. Roots have no parent. " : "Define up to 100 choices in display order. "}Selecting a choice stages its exact value in this form.</p>
-    {!draft && <>
-      <ul className="list-tree-summary">{source.map((option, index) => <li key={`${index}:${option.value}`}><span><strong>{option.label}</strong><small>{option.value}</small>
-        {tree && option.parentValue && <small>Parent: {option.parentValue}</small>}</span>
-        {option.value === String(component.props.defaultValue ?? source[0]?.value ?? "") && <small>Default</small>}
-      </li>)}</ul>
-      {!source.length && <p className="list-tree-error" role="alert">Add at least one option.</p>}
-    </>}
-    {draft && <div className="list-tree-draft" role="group" aria-label={`Edit ${tree ? "tree" : "list"} options`} onKeyDown={event => {
+  const label = tree ? "Tree options" : "List options";
+  const help = (tree ? "Define up to 100 choices with parent links, at most 16 levels deep. Roots have no parent. " : "Define up to 100 choices in display order. ") + "Selecting a choice stages its exact value in this form.";
+  return <section className="property-sheet-group property-collection-group" aria-label={label}><h4>{label}</h4>
+    <div className="property-sheet-row" data-property="options"><label title={help}>Options</label><div className="property-sheet-value property-collection-value"><span>{source.length} defined</span><button type="button" className="button small" onClick={edit}>Edit options</button></div><span aria-hidden="true" /></div>
+    <div className="property-sheet-row" data-property="defaultValue"><label>Default selection</label><div className="property-sheet-value"><span className="property-sheet-summary">{source.find(row => row.value === String(component.props.defaultValue ?? source[0]?.value ?? ""))?.label ?? "Unavailable"}</span></div><span aria-hidden="true" /></div>
+    {!source.length && <p className="list-tree-error" role="alert">Add at least one option.</p>}
+    {draft && <PropertyCollectionDialog title={label} onClose={() => setDraft(null)}><p className="list-tree-help">{help}</p><div className="list-tree-draft" role="group" aria-label={`Edit ${tree ? "tree" : "list"} options`} onKeyDown={event => {
       event.stopPropagation();
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); apply(); }
       if (event.key === "Escape") { event.preventDefault(); setDraft(null); }
@@ -87,7 +84,7 @@ export function ListTreeOptionsEditor({ component, onChange, notify }: {
       </select></label>
       {error && <p className="list-tree-error" role="alert">{error}</p>}
       <div className="list-tree-actions"><button type="button" className="button small primary" onClick={apply}>Apply options</button><button type="button" className="button small" onClick={() => setDraft(null)}>Cancel</button></div>
-    </div>}
+    </div></PropertyCollectionDialog>}
   </section>;
 }
 

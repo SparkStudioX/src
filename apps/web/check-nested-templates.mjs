@@ -25,7 +25,8 @@ function load(name, harness = false) {
     module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
   }}).outputText.replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
     .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, dependency) => {
-      const stub = harness && name === 'inputStateBindings' && dependency === 'react' ? hookUrl : harness && name === 'templates' ? ({react: hookUrl, './BoundComponent': leafUrl,
+      const stub = harness && dependency === './ComponentActivity' ? url('export const useComponentActivity=()=>true; export const ComponentActivityProvider=({children})=>children;')
+        : harness && name === 'inputStateBindings' && dependency === 'react' ? hookUrl : harness && name === 'templates' ? ({react: hookUrl, './BoundComponent': leafUrl,
         './applicationState': stateUrl, './useQueryRepeater': queryUrl, './ComponentEvents': url('export const useComponentEvents=()=>{}; export const usePythonComponentEvents=()=>undefined;'),
         './VisualStyleContext': url('export const useVisualStyles=()=>undefined;'), './LocalizationContext': url('export const useLocalization=()=>({});'),
         './useQueryPropertyBindings': url('export const useQueryPropertyBindings=()=>({});export const useQueryPropertyContext=()=>undefined;export const QueryPropertyProvider=({children})=>children;')})[dependency] : undefined;
@@ -116,13 +117,13 @@ await check('placement counts every shared-template ancestor including unplaced 
   templates.push(t('above', [embed('above-a', 'A')]));
   assert.match(templatePlacementError(templates, 'C', 'E'), /at most 4 levels/);
 });
-await check('cycle, missing definitions and nested queries fail including empty saved rows', () => {
+await check('cycles and missing definitions fail while bounded nested query sources are accepted', () => {
   const a = t('a', [repeat('child', 'b', [])]), b = t('b', [embed('back', 'a')]);
   assert.match(templateExpansion([embed('a', 'a')], [a, b]).error, /cycle/);
   assert.match(templatePlacementError([a, b], 'a', 'a'), /cycle/);
   assert.match(templateExpansion([embed('missing', 'unknown')], []).error, /unavailable/);
   b.components = [repeat('nested-query', 'leaf', [], {rowsSource: {queryId: 'q', rowKey: 'id', parameterMap: {}}})];
-  assert.match(templateExpansion([embed('a', 'a')], [a, b, t('leaf', [])]).error, /screen root/);
+  assert.equal(templateExpansion([embed('a', 'a')], [a, b, t('leaf', [])]).error, undefined);
 });
 await check('component ceiling counts containers and multiplies all saved and query row levels', () => {
   const leaf = t('leaf', [save]), mid = t('mid', [repeat('nested', 'leaf', Array.from({length: 99}, (_, i) => String(i)))]);

@@ -89,7 +89,7 @@ public sealed partial class ConnectorService
         catch (UnauthorizedAccessException) { throw new InvalidOperationException("The gateway cannot access the managed SQLite database directory."); }
     }
 
-    private static void RestrictSqlite(SqliteConnection client, bool allowWrites, CancellationToken ct, bool schema = false)
+    private static void RestrictSqlite(SqliteConnection client, bool allowWrites, CancellationToken ct, bool schema = false, bool transactions = false)
     {
         var handle = client.Handle!;
         raw.sqlite3_limit(handle, raw.SQLITE_LIMIT_LENGTH, 1_048_576);
@@ -100,6 +100,7 @@ public sealed partial class ConnectorService
         strdelegate_authorizer authorize = (_, action, first, second, database, _) =>
         {
             if (action is raw.SQLITE_SELECT or raw.SQLITE_RECURSIVE) return raw.SQLITE_OK;
+            if (transactions && action == raw.SQLITE_TRANSACTION) return raw.SQLITE_OK;
             if (action == raw.SQLITE_READ) return database is null or "" or "main" or "temp" ? raw.SQLITE_OK : raw.SQLITE_DENY;
             if (action == raw.SQLITE_FUNCTION)
                 return second is not null && new[] { "load_extension", "readfile", "writefile", "fts3_tokenizer" }.Contains(second, StringComparer.OrdinalIgnoreCase) ? raw.SQLITE_DENY : raw.SQLITE_OK;

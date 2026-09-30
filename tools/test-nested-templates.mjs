@@ -228,8 +228,7 @@ try {
     await rejectPublication(project => project.templates.push(template('fifth', [repeater('empty', 'bridge-a', [])])), /4.*level/i);
     await rejectPublication(project => { findTemplate(project, 'outer').components.push(instance('missing', 'not-defined')); }, /reference|existing/i);
   });
-  await test('nested query sources, nested popup openers and missing descendant state reject publication', async () => {
-    await rejectPublication(project => project.templates.push(template('unplaced-query', [component('query', 'repeater', { templateId: 'form', rowsSource: querySource, columns: 1, gap: 0 })])), /query-backed|root/i);
+  await test('nested popup openers and missing descendant state reject publication', async () => {
     await rejectPublication(project => { findTemplate(project, 'popup-form').components.push(component('open-again', 'button', { action: 'openPopup', targetScreenId: 'other' })); }, /popup.*popup/i);
     await rejectPublication(project => { delete project.screens[0].state; }, /screen state/i);
   });

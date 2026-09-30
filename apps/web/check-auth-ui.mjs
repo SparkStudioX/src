@@ -17,10 +17,11 @@ modules.set('Auth', asModule('export const useAuth=()=>globalThis.__authUiIdenti
 modules.set('Theme', asModule('export const ThemePicker=()=>null;'));
 modules.set('ScriptEditor', asModule('export default function ScriptEditor(){return null;}'));
 modules.set('browserScripts', asModule('export const useBrowserScripts=()=>{};'));
+modules.set('GatewayConfiguration', asModule('export default function GatewayConfiguration(){return null;}'));
 
 // Seed named application state without running requests or effects. Real child
 // renderers and callback bodies are used, including the runtime read-only seam.
-const seeded = new Set(['Projects', 'OperatorRuntime', 'Scripts', 'OperatorAccess']);
+const seeded = new Set(['Projects', 'OperatorRuntime', 'Scripts', 'OperatorAccess', 'GatewayConsole', 'Security']);
 function seedState(context) {
   const visit = node => {
     if (ts.isVariableDeclaration(node) && ts.isArrayBindingPattern(node.name) && node.initializer && ts.isCallExpression(node.initializer)
@@ -54,8 +55,11 @@ const { default: OperatorRuntime } = await import(moduleUrl('OperatorRuntime'));
 const { default: Scripts } = await import(moduleUrl('Scripts'));
 const { ProjectProperties } = await import(moduleUrl('DocumentProperties'));
 const { OperatorAccessDialog } = await import(moduleUrl('OperatorAccess'));
-const noRights = { view:false,operate:false,design:false,publish:false };
-const identity = (audience, grants = {}, gatewayAdmin = false) => ({ audience, gatewayAdmin, permissions:{...noRights,...grants}, user:{id:'person',username:'alex',displayName:'Alex'}, publicOperatorBaseUrl:'', signOut:async()=>{}, refresh:async()=>{} });
+const { default: GatewayConsole } = await import(moduleUrl('GatewayConsole'));
+const { default: Security } = await import(moduleUrl('Security'));
+const noRights = { view:false,operate:false,commands:false,design:false,publish:false };
+const noCapabilities = { diagnostics:false,configuration:false,backups:false,audit:false,sessions:false };
+const identity = (audience, grants = {}, gatewayAdmin = false, capabilities = {}) => ({ audience, gatewayAdmin, gatewayCapabilities:gatewayAdmin ? Object.fromEntries(Object.keys(noCapabilities).map(key=>[key,true])) : {...noCapabilities,...capabilities}, gatewayAccess:gatewayAdmin || Object.values(capabilities).some(Boolean), permissions:{...noRights,...grants}, user:{id:'person',username:'alex',displayName:'Alex'}, publicOperatorBaseUrl:'', signOut:async()=>{}, refresh:async()=>{} });
 const state = (auth, values = {}) => { globalThis.__authUiIdentity=auth; globalThis.__authUiState=values; globalThis.__authWrites=[]; };
 const render = (Component, props = {}) => renderToStaticMarkup(React.createElement(Component, props));
 const descendants = (node, test) => !node || typeof node !== 'object' ? [] : [...(test(node) ? [node] : []), ...React.Children.toArray(node.props?.children).flatMap(child=>descendants(child,test))];
@@ -164,14 +168,14 @@ await check('script authors can edit resources but cannot publish or access manu
   state(identity('engineering',{design:true}),{draft,saved:JSON.stringify(draft),selectedId:'helper',openIds:['helper'],loading:false});
   const html=render(Scripts,{parameters:{},pythonAvailable:true,notify(){}});
   assert.match(html,/helpers\.py/); assert.match(html,/Administrator required to run/);
-  assert.match(html,/<button[^>]*title="Your account needs publish permission[^>]*disabled=""[^>]*>[^]*?Publish scripts/);
+  assert.match(html,/<button[^>]*title="Your account needs publish permission[^>]*disabled=""[^>]*>[^]*?Publish application/);
   assert.doesNotMatch(html,/>Console<|>Save console<|>Run<|Script run source|Run parameters/);
 });
 await check('publishing scripts does not grant raw Python execution', () => {
   const draft={revision:2,resources:[{id:'helper',name:'helpers',type:'library',code:'result = 1',enabled:true,parameters:{}}]};
   state(identity('engineering',{design:true,publish:true}),{draft,saved:JSON.stringify(draft),selectedId:'helper',loading:false});
   const html=render(Scripts,{parameters:{},pythonAvailable:true,notify(){}});
-  assert.match(html,/<button class="button primary"><[^]*?Publish scripts/);
+  assert.match(html,/<button class="button primary"><[^]*?Publish application/);
   assert.doesNotMatch(html,/>Run<|>Console<|Script run source/);
 });
 await check('project name fields are read-only for nonadministrators and callback invocations cannot rename', () => {
@@ -216,5 +220,30 @@ await check('operator presentation selection regenerates the share URL and clear
   state(auth,{presentation:'application'});
   assert.doesNotMatch(render(OperatorAccessDialog,props), /\?view=/);
   delete globalThis.window;
+});
+await check('capability-only accounts receive gateway navigation without administrator project controls', () => {
+  state(identity('engineering',{},false,{audit:true}),{catalog:{defaultProjectId:null,projects:[]},loading:false});
+  const html=render(Projects);
+  assert.match(html,/href="\/gateway">Settings/);
+  assert.doesNotMatch(html,/New project|Import \.sparkproj|Show archived/);
+});
+await check('gateway sections reflect independent capabilities and forbidden hashes fall back to an allowed section', () => {
+  globalThis.window={location:{hash:'#security'}};
+  for(const capability of Object.keys(noCapabilities)) {
+    state(identity('engineering',{},false,{[capability]:true}),{requestedSection:'security',data:null,busy:false});
+    const html=render(GatewayConsole);
+    const nav=html.match(/<nav aria-label="Gateway sections">([^]*?)<\/nav>/)?.[1] ?? '';
+    assert.ok(nav.includes(`href="#${capability}"`),capability);
+    for(const other of Object.keys(noCapabilities).filter(key=>key!==capability)) assert.ok(!nav.includes(`href="#${other}"`),`${capability} leaked ${other}`);
+    assert.doesNotMatch(nav,/href="#security"|href="#recovery"/);
+    assert.doesNotMatch(html,/Gateway accounts|New user/);
+  }
+  delete globalThis.window;
+});
+await check('account editor presents separate equipment command and gateway capability grants', () => {
+  state(identity('engineering',{},true),{editing:'new',projects:[summary('plant',{})],loading:false});
+  const html=render(Security,{section:'security'});
+  assert.match(html,/aria-label="Equipment commands plant"/);
+  for(const text of ['Gateway capabilities','Diagnostics and support snapshots','Tags, connections and deployment configuration','Backup configuration, creation and download','Audit history','Session inventory and revocation']) assert.ok(html.includes(text),text);
 });
 console.log(`${checks} authentication UI checks passed.`);

@@ -23,7 +23,8 @@ function loader(harness=false){const cache=new Map();return function load(name){
   const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText
     .replace(/import "\.\/[^"\n]+\.css";\r?\n/g,'')
     .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g,(_all,prefix,_quote,dependency)=>{
-      const stub=harness&&['applicationState','templates','inputStateBindings','ComponentEvents'].includes(name)&&dependency==='react'?hookUrl
+      const stub=harness&&dependency==='./ComponentActivity'?moduleUrl('export const useComponentActivity=()=>true; export const ComponentActivityProvider=({children})=>children;')
+        :harness&&['applicationState','templates','inputStateBindings','ComponentEvents'].includes(name)&&dependency==='react'?hookUrl
         :harness&&name==='templates'?({'./BoundComponent':leafUrl,'./useQueryRepeater':queryUrl,'./VisualStyleContext':moduleUrl('export const useVisualStyles=()=>undefined;'),'./LocalizationContext':moduleUrl('export const useLocalization=()=>({});'),'./useQueryPropertyBindings':moduleUrl('export const useQueryPropertyBindings=()=>({});export const useQueryPropertyContext=()=>undefined;export const QueryPropertyProvider=({children})=>children;')})[dependency]:undefined;
       return prefix+JSON.stringify(stub??(dependency.startsWith('./')?load(dependency.slice(2)):pathToFileURL(require.resolve(dependency)).href));
     });

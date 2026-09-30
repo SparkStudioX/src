@@ -1,6 +1,7 @@
+import { PropertyCollectionDialog } from "./PropertyCollectionEditor";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
-import { api, currentProjectId, displayValue, eventStreamUrl, id, projectPage, projectStorageKey, resolvePath } from "./api";
+import { api, currentProjectId, displayValue, eventStreamUrl, id, projectPage, projectStorageKey } from "./api";
 import { useAuth } from "./Auth";
 import { ApplicationStateProvider, useApplicationState, useApplicationStateContext } from "./applicationState";
 import { applyPythonUiResult, pythonUiPreviewContext, pythonUiRequest } from "./pythonUiModel";
@@ -57,11 +58,16 @@ import { QueryPropertyProvider, useQueryPropertyBindings } from "./useQueryPrope
 import { DocumentProperties, ProjectSettingsDialog } from "./DocumentProperties";
 import { StateControlEditor } from "./StateControlEditor";
 import { ListTreeOptionsEditor, TablePageSizeEditor } from "./ListTreeOptionsEditor";
+import { InputValidationEditor } from "./InputValidationEditor";
+import ViewContainerProperties from "./ViewContainerProperties";
+import { defaultViewLayout, type ViewLayoutKind } from "./viewContainers";
 import { TableColumnsEditor } from "./TableColumnsEditor";
 import { TableEditingEditor } from "./TableEditingEditor";
 import { isProcessDisplay } from "./processDisplays";
 import { isDrawingComponent } from "./drawingComponents";
 import { DrawingEditor } from "./DrawingEditor";
+import EquipmentCommandsEditor from "./EquipmentCommandsEditor";
+import { defaultChartProps, isChart } from "./chartModel";
 import { reconcileNavigationAfterScreenChange } from "./runtimeNavigation";
 import { closeDesignerDocument, documentKey, openDesignerDocument, restoreDesignerDocuments } from "./designerDocuments";
 import type { DesignerDocument, DesignerDocuments } from "./designerDocuments";
@@ -86,6 +92,7 @@ import { applyStyleCatalog } from "./visualStyles";
 import { usePreviewCommunication } from "./usePreviewCommunication";
 import { PreviewControls } from "./PreviewControls";
 import PublicationHistoryDialog from "./PublicationHistoryDialog";
+import ApplicationPublishDialog from "./ApplicationPublishDialog";
 import { newDocumentDimensions, projectAuthoringDefaults } from "./authoringDefaults";
 import AssetLibraryDialog from "./AssetLibraryDialog";
 import { applyAssetReplacement } from "./assetLibrary";
@@ -93,7 +100,14 @@ import "./designerDocuments.css";
 
 type Workspace = "designer" | "tags" | "connections" | "queries" | "scripts";
 type Toast = { message: string; error?: boolean };
-const palettes: { type: ComponentType; name: string; hint: string }[] = [
+const palettes: { type: ComponentType; name: string; hint: string; viewKind?: ViewLayoutKind }[] = [
+  { type: "viewContainer", viewKind: "embedded", name: "Embedded view", hint: "Place an independently scoped template" },
+  { type: "viewContainer", viewKind: "tabs", name: "Tab container", hint: "Switch between retained application forms" },
+  { type: "viewContainer", viewKind: "split", name: "Split pane", hint: "Resize two independent views" },
+  { type: "viewContainer", viewKind: "dock", name: "Docked panels", hint: "A central view with collapsible side panels" },
+  { type: "equipmentCommand", name: "Equipment command", hint: "Review, confirm and verify a configured write" },
+  { type: "chart", name: "Chart", hint: "Line, bar, pie, XY, radar, status, box and Gantt" },
+  { type: "sparkline", name: "Sparkline", hint: "A compact trend from supplied data" },
   { type: "label", name: "Text", hint: "Headings & labels" },
   { type: "value", name: "Value", hint: "A live tag value" },
   { type: "gauge", name: "Gauge", hint: "Value in a range" },
@@ -113,6 +127,8 @@ const palettes: { type: ComponentType; name: string; hint: string }[] = [
   { type: "image", name: "Image", hint: "Local photos & diagrams" },
   { type: "icon", name: "Icon", hint: "Built-in symbols" },
   { type: "textInput", name: "Text box", hint: "Enter text" },
+  { type: "formattedInput", name: "Formatted input", hint: "Masked text with validation" },
+  { type: "barcodeInput", name: "Barcode input", hint: "Scan a code with a keyboard scanner" },
   { type: "passwordInput", name: "Password field", hint: "Mask a form value" },
   { type: "numberInput", name: "Number input", hint: "Enter a numeric value" },
   { type: "checkbox", name: "Check box", hint: "Choose true or false" },
@@ -135,6 +151,9 @@ const palettes: { type: ComponentType; name: string; hint: string }[] = [
   },
 ];
 const typeIcon: Record<ComponentType, string> = {
+  equipmentCommand: "settings",
+  chart: "activity",
+  sparkline: "activity",
   label: "text",
   value: "value",
   gauge: "gauge",
@@ -152,6 +171,9 @@ const typeIcon: Record<ComponentType, string> = {
   button: "button",
   table: "table",
   textInput: "text",
+  formattedInput: "text",
+  barcodeInput: "scan",
+  viewContainer: "layers",
   passwordInput: "shield",
   numberInput: "value",
   checkbox: "check",
@@ -178,6 +200,8 @@ function tagBindingPatch(component: CanvasComponent, path: string): CanvasCompon
     : { tagPath: path };
 }
 const processDimensions: Partial<Record<ComponentType, { width: number; height: number }>> = {
+  equipmentCommand: { width: 360, height: 230 },
+  chart: { width: 520, height: 340 }, sparkline: { width: 300, height: 120 },
   ledDisplay: { width: 280, height: 100 }, progressBar: { width: 340, height: 100 },
   cylindricalTank: { width: 180, height: 260 }, levelIndicator: { width: 140, height: 260 }, thermometer: { width: 140, height: 280 },
   line: { width: 240, height: 80 }, rectangle: { width: 220, height: 140 }, ellipse: { width: 180, height: 140 },
@@ -195,7 +219,7 @@ function UnsavedProjectNavigation({ onStay, onDiscard }: { onStay: () => void; o
 }
 
 export default function App() {
-  const { gatewayAdmin, permissions } = useAuth();
+  const { gatewayAdmin, permissions, gatewayAccess, gatewayCapabilities } = useAuth();
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [workspace, setWorkspace] = useState<Workspace>("designer");
   const [scriptsVisited, setScriptsVisited] = useState(false);
@@ -209,6 +233,7 @@ export default function App() {
   const [translationsOpen, setTranslationsOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [publicationHistoryOpen, setPublicationHistoryOpen] = useState(false);
+  const [equipmentCommandsOpen, setEquipmentCommandsOpen] = useState(false);
   const [assetLibraryOpen, setAssetLibraryOpen] = useState(false);
   const previewCommunication = usePreviewCommunication();
   const [searchOpen, setSearchOpen] = useState(false);
@@ -366,7 +391,7 @@ export default function App() {
         await Promise.all([
           api<Project>("/project"),
           api<Tag[]>("/tags"),
-          gatewayAdmin ? api<Connection[]>("/connections") : Promise.resolve([]),
+          gatewayCapabilities.configuration ? api<Connection[]>("/connections") : Promise.resolve([]),
           api<NamedQuery[]>("/queries"),
           api<Health>("/health"),
         ]);
@@ -395,7 +420,7 @@ export default function App() {
       );
       setConnected(false);
     }
-  }, [updateHistory, gatewayAdmin]);
+  }, [updateHistory, gatewayCapabilities.configuration]);
   useEffect(() => {
     void load();
     void api<Publication>("/project/publication")
@@ -772,21 +797,6 @@ export default function App() {
       return;
     }
     setPublishing(true);
-    try {
-      const published = await api<Publication>("/project/publish", "POST", {
-        revision: project.revision,
-      });
-      setPublication({ ...published, published: true });
-      notify(
-        `Revision ${published.revision ?? project.revision} published. ${published.warnings?.length ? published.warnings.join(" ") : "Open the operator application to use it."}`,
-        Boolean(published.warnings?.length),
-      );
-      if (published.warnings?.length) setPublicationHistoryOpen(true);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : String(error), true);
-    } finally {
-      setPublishing(false);
-    }
   };
   const travelHistory = useCallback((direction: "undo" | "redo") => {
     const current = projectRef.current;
@@ -828,10 +838,10 @@ export default function App() {
     return () => window.removeEventListener("keydown", handle);
   }, [save, undo, redo, workspace, eventEditorId]);
 
-  const addComponent = (type: ComponentType, tagPath?: string) => {
+  const addComponent = (type: ComponentType, tagPath?: string, viewKind?: ViewLayoutKind) => {
     if (!screen) return;
     const reusable = availableTemplates[0];
-    if (isTemplateInstance(type) && !reusable) {
+    if ((isTemplateInstance(type) || type === "viewContainer") && !reusable) {
       notify(
         editingTemplate
           ? "Create another template that can be nested here without a cycle or more than four levels."
@@ -854,7 +864,7 @@ export default function App() {
       x: 40 + offset,
       y: 48 + offset,
       width: processDimensions[type]?.width ?? (
-        type === "repeater"
+        type === "viewContainer" ? Math.min(720, Math.max(200, screen.width - 80)) : type === "repeater"
           ? Math.min(900, screen.width - 80)
           : type === "template"
             ? reusable!.width
@@ -863,7 +873,7 @@ export default function App() {
               : type === "label"
                 ? 340
                 : 260),
-      height: processDimensions[type]?.height ?? (isTemplateInstance(type)
+      height: processDimensions[type]?.height ?? (type === "viewContainer" ? 420 : isTemplateInstance(type)
         ? type === "template"
           ? reusable!.height
           : 450
@@ -882,6 +892,9 @@ export default function App() {
                 : 170),
       props: {
         text: {
+          equipmentCommand: "Equipment command",
+          chart: "Production chart",
+          sparkline: "Production sparkline",
           label: "New heading",
           value: "Live value",
           gauge: "Process value",
@@ -901,6 +914,9 @@ export default function App() {
           image: "",
           icon: "Status icon",
           textInput: "Text input",
+          formattedInput: "Part code",
+          barcodeInput: "Barcode",
+          viewContainer: "View container",
           passwordInput: "Password",
           numberInput: "Number input",
           checkbox: "Check box",
@@ -918,6 +934,11 @@ export default function App() {
           template: reusable?.name || "Template",
           repeater: reusable?.name || "Repeater",
         }[type],
+        ...(isChart(type) ? defaultChartProps(type === "sparkline") : {}),
+        ...(type === "viewContainer" ? { viewLayout: defaultViewLayout(viewKind ?? "embedded", reusable!.id) } : {}),
+        ...(type === "formattedInput" ? { formatMask: "AA-####", textCase: "upper" as const } : {}),
+        ...(type === "barcodeInput" ? { scanTerminator: "enter" as const, validation: { required: true } } : {}),
+        ...(type === "equipmentCommand" ? { commandId: project?.commands?.[0]?.id ?? "" } : {}),
         ...(type === "image"
           ? { assetId: assets[0]?.id || "", fit: "contain", alt: "" }
           : {}),
@@ -1156,7 +1177,7 @@ export default function App() {
               ["queries", "database", "Named queries"],
               ["scripts", "code", "Scripting"],
             ] as const
-          ).filter(([key]) => gatewayAdmin || key !== "tags" && key !== "connections").map(([key, icon, label]) => (
+          ).filter(([key]) => gatewayCapabilities.configuration || key !== "tags" && key !== "connections").map(([key, icon, label]) => (
             <button
               key={key}
               className={`nav-link ${workspace === key ? "active" : ""}`}
@@ -1172,7 +1193,7 @@ export default function App() {
           ))}
         </nav>
         <button className="nav-link" title="Search project (Ctrl+Shift+F)" aria-label="Search project" disabled={!project || Boolean(previewActionBusy)} onClick={() => setSearchOpen(true)}><Icon name="search" /><span>Search project</span></button>
-        {gatewayAdmin && <a className="designer-project-link" href="/gateway" title="Gateway Settings" aria-label="Gateway Settings"><Icon name="settings" size={17} /><span>Gateway Settings</span></a>}
+        {gatewayAccess && <a className="designer-project-link" href="/gateway" title="Gateway Settings" aria-label="Gateway Settings"><Icon name="settings" size={17} /><span>Gateway Settings</span></a>}
         </div>
         <div className="nav-bottom">
           <a
@@ -1335,6 +1356,7 @@ export default function App() {
                     <Icon name="settings" size={15} /> Project settings
                   </button>
                   <details className="project-tools"><summary>Project tools</summary><div>
+                  <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setEquipmentCommandsOpen(true)}>Equipment commands</button>
                   <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setStylesEditorOpen(true)}>Visual styles</button>
                   <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setTranslationsOpen(true)}>Translations</button>
                   <button className="project-settings-button" type="button" onClick={() => setDiagnosticsOpen(true)}>Project diagnostics</button>
@@ -1476,19 +1498,19 @@ export default function App() {
                     </p>
                     {palettes.map((item) => (
                         <button
-                          key={item.type}
+                          key={`${item.type}:${item.viewKind ?? ""}`}
                           className="palette-item"
                           disabled={
-                            !screen || isTemplateInstance(item.type) &&
+                            !screen || (isTemplateInstance(item.type) || item.type === "viewContainer") &&
                             !availableTemplates.length
                           }
                           title={
-                            isTemplateInstance(item.type) &&
+                            (isTemplateInstance(item.type) || item.type === "viewContainer") &&
                             !availableTemplates.length
                               ? "Create a compatible template in the Project tab first"
                               : item.hint
                           }
-                          onClick={() => addComponent(item.type)}
+                          onClick={() => addComponent(item.type, undefined, item.viewKind)}
                         >
                           <span className="palette-icon">
                             <Icon name={typeIcon[item.type]} size={20} />
@@ -1735,7 +1757,7 @@ export default function App() {
                   }} /> px</label>
                   <select aria-label="Select components by type" value="" disabled={!screen.components.length} title="Select this component type in the current document, including its group members. Ctrl+Shift+A selects the first selected control's type." onChange={event => selectType(event.target.value)}>
                     <option value="" disabled>Select type…</option>
-                    {palettes.filter(item => screen.components.some(component => component.type === item.type)).map(item => <option key={item.type} value={item.type}>{item.name}</option>)}
+                    {palettes.filter((item, index) => palettes.findIndex(other => other.type === item.type) === index && screen.components.some(component => component.type === item.type)).map(item => <option key={item.type} value={item.type}>{item.type === "viewContainer" ? "View container" : item.name}</option>)}
                   </select>
                   <button className="canvas-group-command" disabled={selection.length < 2 || Boolean(selectedGroupId)} onClick={groupSelection} title="Group selection (Ctrl+G)"><Icon name="layers" size={14} /> Group</button>
                   <button className="canvas-group-command" disabled={!selection.some(component => component.groupId)} onClick={ungroupSelection} title="Ungroup selection (Ctrl+Shift+G)">Ungroup</button>
@@ -1918,8 +1940,7 @@ export default function App() {
                         <Icon name="trash" size={15} />
                       </button>
                     </div>
-                    <ComponentStyleAssignment component={selected} styles={project.styles} onChange={updateProps} onManage={() => setStylesEditorOpen(true)} />
-                    <ComponentTranslationAssignment component={selected} catalog={project.localization} onChange={updateProps} onManage={() => setTranslationsOpen(true)} />
+                    <div className="component-property-grid" aria-label="Component properties">
                     <PropertyBindingsEditor
                       key={selected.id}
                       component={selected}
@@ -1936,14 +1957,17 @@ export default function App() {
                       onChange={updateProps}
                       onGeometryChange={patch => updateComponent(selected.id, patch)}
                     />
+                    <ComponentStyleAssignment component={selected} styles={project.styles} onChange={updateProps} onManage={() => setStylesEditorOpen(true)} />
+                    <ComponentTranslationAssignment component={selected} catalog={project.localization} onChange={updateProps} onManage={() => setTranslationsOpen(true)} />
                     <div className="inspector-section">
-                      <h3>Actions &amp; events</h3>
-                      <button type="button" className="button component-actions-open" onClick={() => setEventEditorId(selected.id)}>
+                      <h3>Behavior</h3>
+                      <Field label="Actions & events"><button type="button" className="button component-actions-open" onClick={() => setEventEditorId(selected.id)}>
                         <Icon name="code" size={14} /> Edit actions &amp; events
-                      </button>
+                      </button></Field>
                       <p className="component-lifecycle-hint">Configure actions, input events, lifecycle events and message handlers together. Apply creates one undo step.</p>
                     </div>
                     {isDrawingComponent(selected.type) && <DrawingEditor key={`drawing:${selected.id}`} component={selected} onChange={updateProps} notify={notify} />}
+                    {selected.type === "viewContainer" && <ViewContainerProperties key={selected.id} component={selected} templates={project.templates ?? []} parentTemplateId={editingTemplate?.id} onChange={updateProps} />}
                     {isTemplateInstance(selected.type) && (
                       <div className="inspector-section">
                         <h3>Reusable template</h3>
@@ -1970,7 +1994,9 @@ export default function App() {
                           </select>
                         </Field>
                         {selected.props.templateId && (
+                          <Field label="Template definition">
                           <button
+                            type="button"
                             className="button template-open-button"
                             onClick={() =>
                               openTemplate(selected.props.templateId!)
@@ -1979,6 +2005,7 @@ export default function App() {
                             <Icon name="layers" size={14} /> Edit shared
                             template
                           </button>
+                          </Field>
                         )}
                         {selected.type === "repeater" && (
                           <>
@@ -1989,10 +2016,10 @@ export default function App() {
                                   : undefined,
                               })}>
                                 <option value="saved">Saved rows</option>
-                                <option value="query" disabled={Boolean(editingTemplate)}>Named query</option>
+                                <option value="query">Named query</option>
                               </select>
                             </Field>
-                            {editingTemplate && <p className="template-property-note">Nested repeaters use saved rows. Place a named-query repeater directly on a screen, then nest forms inside its row template.</p>}
+                            {editingTemplate && <p className="template-property-note">Nested query repeaters read their containing row's typed parameters. Every query level reserves up to 100 rows within the project expansion limit.</p>}
                             <div className="field-grid">
                               <Field label="Columns">
                                 <input
@@ -2036,6 +2063,10 @@ export default function App() {
                               </Field>
                             </div>
                             {selected.props.rowsSource ? <>
+                              <Field label="Maximum query rows">
+                                <input aria-label="Repeater maximum query rows" type="number" min={1} max={100} step={1} value={selected.props.rowsSource.maxRows ?? 100}
+                                  onChange={event => updateProps({ rowsSource: { ...selected.props.rowsSource!, maxRows: Number(event.target.value) } })} />
+                              </Field>
                               <Field label="Rows query">
                                 <select aria-label="Repeater rows query" value={selected.props.rowsSource.queryId} onChange={event => updateProps({ rowsSource: { ...selected.props.rowsSource!, queryId: event.target.value } })}>
                                   <option value="">Choose query…</option>
@@ -2045,7 +2076,7 @@ export default function App() {
                               <Field label="Row key column" hint="Every returned row needs a unique text key. Include its revision in the key when an older row must no longer accept actions.">
                                 <input aria-label="Repeater row key column" maxLength={128} value={selected.props.rowsSource.rowKey} onChange={event => updateProps({ rowsSource: { ...selected.props.rowsSource!, rowKey: event.target.value } })} />
                               </Field>
-                              <h3>Parameter columns</h3>
+                              <InspectorDetails label="Parameter columns" summary="Edit column mappings">
                               {Object.keys(project.templates?.find(item => item.id === selected.props.templateId)?.parameters || {}).map(parameter => <Field key={parameter} label={parameter} hint="Query column name; leave blank to keep the saved parameter default.">
                                 <input aria-label={`Query column for ${parameter}`} maxLength={128} value={selected.props.rowsSource!.parameterMap[parameter] || ""} onChange={event => {
                                   const parameterMap = { ...selected.props.rowsSource!.parameterMap };
@@ -2054,6 +2085,7 @@ export default function App() {
                                   updateProps({ rowsSource: { ...selected.props.rowsSource!, parameterMap } });
                                 }} />
                               </Field>)}
+                              </InspectorDetails>
                               <p className="template-property-note">Up to 100 rows refresh every ten seconds and after actions. Query values are literal parameter values. Changed or removed rows reset their input forms. Popups keep the selected row context and require reopening if that row changes.</p>
                             </> : <>
                             <JsonEditor
@@ -2118,7 +2150,8 @@ export default function App() {
                         )}
                       </div>
                     )}
-                    {!isTemplateInstance(selected.type) && !isProcessDisplay(selected.type) && (!isDrawingComponent(selected.type) || selected.type === "equipmentSymbol") && <div className="inspector-section">
+                    {selected.type === "equipmentCommand" && <div className="inspector-section"><h3>Equipment command</h3><Field label="Declared command"><select value={selected.props.commandId ?? ""} onChange={event => updateProps({ commandId: event.target.value })}><option value="">Select a command</option>{project.commands?.map(command => <option key={command.id} value={command.id}>{command.name}</option>)}</select></Field><Field label="Command definitions"><button className="button" onClick={() => setEquipmentCommandsOpen(true)}>Configure project commands</button></Field><p>Operators need Commands permission. Designer Preview never dispatches equipment commands.</p></div>}
+                    {!isTemplateInstance(selected.type) && !isProcessDisplay(selected.type) && !isChart(selected.type) && !["viewContainer", "equipmentCommand", "button", "label"].includes(selected.type) && !isDrawingComponent(selected.type) && <div className="inspector-section">
                       <h3>Content</h3>
                       {selected.type === "multiStateIndicator" && <StateControlEditor key={selected.id} component={selected} onChange={updateProps} notify={notify} />}
                       {selected.type === "image" && (
@@ -2196,20 +2229,8 @@ export default function App() {
                           />
                         </Field>
                       )}
-                      {(selected.type === "value" ||
-                        selected.type === "gauge") && (
-                        <Field label="Unit">
-                          <input
-                            placeholder="e.g. rpm, °C, units"
-                            value={selected.props.unit || ""}
-                            onChange={(event) =>
-                              updateProps({ unit: event.target.value })
-                            }
-                          />
-                        </Field>
-                      )}
-                      {(selected.type === "gauge" ||
-                        ["numberInput", "spinner", "slider"].includes(selected.type)) && (
+                      {(selected.type === "value" || selected.type === "gauge") && <Field label="Unit"><input value={selected.props.unit || ""} placeholder="rpm, °C, units" onChange={event => updateProps({ unit: event.target.value })} /></Field>}
+                      {(selected.type === "gauge" || ["numberInput", "spinner", "slider"].includes(selected.type)) && (
                         <div className="field-grid">
                           <Field label="Minimum">
                             <input
@@ -2238,6 +2259,7 @@ export default function App() {
                       )}
                       {isInput(selected.type) && (
                         <>
+                          <InputValidationEditor key={selected.id} component={selected} onChange={updateProps} />
                           <Field
                             label="Field name"
                             hint="Available in event form snapshots as inputs['fieldName']. Automatic Python events omit password fields."
@@ -2318,7 +2340,7 @@ export default function App() {
                             <Field label="Option value column" hint="A unique, nonempty value for each choice."><input maxLength={128} value={selected.props.optionsSource.valueColumn} onChange={event => updateProps({ optionsSource: { ...selected.props.optionsSource!, valueColumn: event.target.value } })} /></Field>
                             <Field label="Option label column"><input maxLength={128} value={selected.props.optionsSource.labelColumn} onChange={event => updateProps({ optionsSource: { ...selected.props.optionsSource!, labelColumn: event.target.value } })} /></Field>
                             {selected.type === "treeView" && <Field label="Parent value column" hint="Required. Each parent must match another option value; null or empty values identify roots."><input aria-label="Tree parent column" maxLength={128} value={selected.props.optionsSource.parentColumn || ""} onChange={event => updateProps({ optionsSource: { ...selected.props.optionsSource!, parentColumn: event.target.value } })} /></Field>}
-                            <p className="muted">When the operator chooses an option, fill these fields from the selected query row. Blank mappings leave fields unchanged.</p>
+                            <InspectorDetails label="Selection mappings" summary="Edit form mappings"><p className="muted">When the operator chooses an option, fill these fields from the selected query row. Blank mappings leave fields unchanged.</p>
                             {screen?.components.filter(item => isInput(item.type) && item.id !== selected.id).map(input => {
                               const field = input.props.fieldKey || input.id;
                               return <Field key={field} label={input.props.text || field}><input maxLength={128} placeholder="Column name (optional)" value={selected.props.selectionFields?.[field] || ""} onChange={event => {
@@ -2328,41 +2350,8 @@ export default function App() {
                                 updateProps({ selectionFields: mapping });
                               }} /></Field>;
                             })}
-                          </>}
-                          {(selected.type === "radioGroup" || selected.type === "select" && !selected.props.optionsSource) && (
-                            <Field
-                              label="Options"
-                              hint="One option per line: Label | value"
-                            >
-                              <textarea
-                                key={selected.id}
-                                rows={5}
-                                defaultValue={(selected.props.options || [])
-                                  .map(
-                                    (option) =>
-                                      `${option.label} | ${option.value}`,
-                                  )
-                                  .join("\n")}
-                                onBlur={(event) =>
-                                  updateProps({
-                                    options: event.target.value
-                                      .split("\n")
-                                      .filter((line) => line.trim())
-                                      .map((line) => {
-                                        const [label, ...value] =
-                                          line.split("|");
-                                        return {
-                                          label: label.trim(),
-                                          value: value.length
-                                            ? value.join("|").trim()
-                                            : label.trim(),
-                                        };
-                                      }),
-                                  })
-                                }
-                              />
-                            </Field>
-                          )}
+                          </InspectorDetails></>}
+                          {(selected.type === "radioGroup" || selected.type === "select" && !selected.props.optionsSource) && <OptionsEditor key={selected.id} component={selected} onChange={updateProps} />}
                           {selected.type !== "passwordInput" && <Field
                             label="Initial value tag (optional)"
                             hint="Read a tag’s value before the operator edits this field. Submitting a button event controls writing."
@@ -2393,67 +2382,19 @@ export default function App() {
                             ))}
                           </select>
                         </Field>
+                        <Field label="Selection mode" hint="Multiple selection keeps a local set of stable row keys. Atomic batch editing requires multiple selection."><select aria-label="Table selection mode" value={selected.props.tableEdit?.batch ? "multiple" : selected.props.selectionMode ?? "single"} disabled={Boolean(selected.props.tableEdit?.batch)} onChange={event => updateProps({ selectionMode: event.target.value as "single" | "multiple", ...(event.target.value === "multiple" ? { selectionFields: undefined } : {}) })}><option value="single">Single row</option><option value="multiple">Multiple rows</option></select></Field>
                         <Field label="Rows per page" hint="Page through the rows already loaded by the query. This does not change the query's result limit."><TablePageSizeEditor key={selected.id} value={selected.props.pageSize} onChange={pageSize => updateProps({ pageSize })} notify={notify} /></Field>
                         <TableColumnsEditor key={`${selected.id}:${JSON.stringify(selected.props.tableColumns)}`} component={selected} onChange={updateProps} notify={notify} />
                         <Field label="Unique row column" hint="A stable primary key, usually id."><input value={selected.props.rowKey || ""} onChange={event => updateProps({rowKey:event.target.value})} /></Field>
                         <TableEditingEditor key={`${selected.id}:${JSON.stringify([selected.props.queryId, selected.props.rowKey, selected.props.tableEdit])}`} component={selected} onChange={updateProps} notify={notify} />
-                        <p className="muted">Select a table row to fill these form fields. Enter the source column name for each field.</p>
+                        {selected.props.selectionMode !== "multiple" && !selected.props.tableEdit?.batch && <InspectorDetails label="Selection mappings" summary="Edit form mappings"><p className="muted">Select a table row to fill these form fields. Enter the source column name for each field.</p>
                         {screen?.components.filter(item => isInput(item.type)).map(input => {
                           const field=input.props.fieldKey || input.id;
                           return <Field key={field} label={input.props.text || field}><input placeholder="Column name (optional)" value={selected.props.selectionFields?.[field] || ""} onChange={event => { const mapping={...selected.props.selectionFields}; if (event.target.value) mapping[field]=event.target.value; else delete mapping[field]; updateProps({selectionFields:mapping, rowKey:selected.props.rowKey || "id"}); }} /></Field>;
-                        })}</>
+                        })}</InspectorDetails>}</>
                       )}
                     </div>}
-                    {(selected.type === "value" ||
-                      selected.type === "gauge") && (
-                      <div className="inspector-section">
-                        <h3>
-                          <Icon name="link" size={14} />
-                          Tag binding<span className="mini-badge">LIVE</span>
-                        </h3>
-                        <Field label="Tag path" hint={selected.props.bindings?.tagPath ? "Controlled by the Tag path binding in the property sheet. Use its binding button to edit." : undefined}>
-                          <textarea
-                            className="binding-input"
-                            disabled={Boolean(selected.props.bindings?.tagPath)}
-                            rows={3}
-                            value={selected.props.tagPath || ""}
-                            placeholder="[default]Line/{line}/Speed"
-                            onChange={(event) =>
-                              updateProps({ tagPath: event.target.value })
-                            }
-                          />
-                        </Field>
-                        <div className="binding-help">
-                          Use <code>{"{parameter}"}</code> for tag indirection.
-                          Context values resolve the path at runtime.
-                        </div>
-                        <div className="resolved-binding">
-                          <span>RESOLVED PATH</span>
-                          <code>
-                            {resolvePath(
-                              selected.props.tagPath || "",
-                              editorParameters,
-                            ) || "No tag selected"}
-                          </code>
-                          <div>
-                            <span
-                              className={`status-dot ${tags.some((tag) => tag.path === resolvePath(selected.props.tagPath || "", editorParameters)) ? "" : "offline"}`}
-                            />
-                            {displayValue(
-                              tags.find(
-                                (tag) =>
-                                  tag.path ===
-                                  resolvePath(
-                                    selected.props.tagPath || "",
-                                    editorParameters,
-                                  ),
-                              )?.value,
-                            )}{" "}
-                            <small>{selected.props.unit || ""}</small>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                    </div>
                   </>
                 ) : (
                   <>
@@ -2516,7 +2457,7 @@ export default function App() {
             )}
           </div>
         )}
-        {gatewayAdmin && project && workspace === "tags" && (
+        {gatewayCapabilities.configuration && project && workspace === "tags" && (
           <Tags
             connections={connections}
             tags={tags}
@@ -2528,7 +2469,7 @@ export default function App() {
             notify={notify}
           />
         )}
-        {gatewayAdmin && project && workspace === "connections" && (
+        {gatewayCapabilities.configuration && project && workspace === "connections" && (
           <Connections
             connections={connections}
             onChange={setConnections}
@@ -2623,6 +2564,7 @@ export default function App() {
         }} />}
       {projectSettingsOpen && project && <ProjectSettingsDialog project={project} canRename={gatewayAdmin} notify={notify}
         onChange={patch => change(current => ({ ...current, ...patch }))} onClose={() => setProjectSettingsOpen(false)} />}
+      {equipmentCommandsOpen && project && <EquipmentCommandsEditor project={project} onApply={commands => change(current => ({ ...current, commands }))} onClose={() => setEquipmentCommandsOpen(false)} />}
       {pendingNavigation && <UnsavedProjectNavigation onStay={() => setPendingNavigation(null)} onDiscard={() => {
         discardNavigation.current = true;
         window.location.assign(pendingNavigation);
@@ -2683,7 +2625,8 @@ export default function App() {
         if (previewActionBusy) throw new Error("Wait for the active preview action to finish.");
         change(current => applyStyleCatalog(current, expected, styles)); setStylesEditorOpen(false);
       }} />}
-      {publicationHistoryOpen && <PublicationHistoryDialog canPublish={permissions.publish} onClose={() => setPublicationHistoryOpen(false)} onRestored={() => notify("Operator publication restored. Designer drafts are unchanged.")} />}
+      {publishing && project && <ApplicationPublishDialog projectRevision={project.revision} onClose={() => setPublishing(false)} onPublished={published => { setPublication(published); setPublishing(false); notify(`Application revision ${published.revision} published with scripts revision ${published.scriptsRevision}. ${published.warnings?.join(" ") ?? ""}`, Boolean(published.warnings?.length)); if (published.warnings?.length) setPublicationHistoryOpen(true); }} />}
+      {publicationHistoryOpen && <PublicationHistoryDialog canPublish={permissions.publish} onClose={() => setPublicationHistoryOpen(false)} onRestored={published => { setPublication(published); notify(published.complete ? "Application restored with its matching scripts. Designer drafts are unchanged." : "Legacy snapshot restored; active scripts were preserved. Review the compatibility warning."); }} />}
       {translationsOpen && project && <TranslationsEditor project={project} onClose={() => setTranslationsOpen(false)} onApply={(catalog, expected) => {
         if (previewActionBusy) throw new Error("Wait for the active preview action to finish.");
         change(current => applyLocalizationCatalog(current, expected, catalog)); setTranslationsOpen(false);
@@ -2730,41 +2673,34 @@ function textParameters(value: unknown): Record<string, string> {
   return value as Record<string, string>;
 }
 
-function JsonEditor({
-  label,
-  value,
-  onSave,
-  notify,
-  rows = 6,
-}: {
-  label: string;
-  value: unknown;
-  onSave: (value: unknown) => void;
-  notify: (message: string, error?: boolean) => void;
-  rows?: number;
+function JsonEditor({ label, value, onSave, notify, rows = 6 }: {
+  label: string; value: unknown; onSave: (value: unknown) => void; notify: (message: string, error?: boolean) => void; rows?: number;
 }) {
-  return (
-    <Field label={label}>
-      <textarea
-        className="template-json-editor"
-        spellCheck={false}
-        rows={rows}
-        key={JSON.stringify(value)}
-        defaultValue={JSON.stringify(value, null, 2)}
-        onBlur={(event) => {
-          try {
-            const next: unknown = JSON.parse(event.target.value);
-            if (JSON.stringify(next) !== JSON.stringify(value)) onSave(next);
-          } catch (error) {
-            notify(
-              error instanceof Error ? error.message : "Enter valid JSON.",
-              true,
-            );
-          }
-        }}
-      />
-    </Field>
-  );
+  const [open, setOpen] = useState(false), [draft, setDraft] = useState(""), [error, setError] = useState("");
+  function apply() {
+    try { const next: unknown = JSON.parse(draft); if (JSON.stringify(next) !== JSON.stringify(value)) onSave(next); setOpen(false); }
+    catch (cause) { const message = cause instanceof Error ? cause.message : "Enter valid JSON."; setError(message); notify(message, true); }
+  }
+  return <><div className="property-sheet-row"><label>{label}</label><div className="property-sheet-value property-collection-value"><span>{Array.isArray(value) ? value.length + " rows" : "Structured value"}</span><button type="button" className="button" onClick={() => { setDraft(JSON.stringify(value, null, 2)); setError(""); setOpen(true); }}>Edit {label.toLowerCase()}</button></div><span aria-hidden="true" /></div>
+    {open && <PropertyCollectionDialog title={label} onClose={() => setOpen(false)}><label className="field"><span>{label} (JSON)</span><textarea aria-label={label + " JSON"} rows={rows} spellCheck={false} value={draft} onChange={event => setDraft(event.target.value)} /></label>{error && <p role="alert">{error}</p>}<div className="binding-actions"><button type="button" className="button" onClick={() => setOpen(false)}>Cancel</button><button type="button" className="button primary" onClick={apply}>Apply {label.toLowerCase()}</button></div></PropertyCollectionDialog>}
+  </>;
+}
+
+function InspectorDetails({ label, summary, children }: { label: string; summary: string; children: React.ReactNode }) {
+  return <div className="property-sheet-row"><label>{label}</label><div className="property-sheet-value"><details className="property-structured-editor"><summary>{summary}</summary><div>{children}</div></details></div><span aria-hidden="true" /></div>;
+}
+
+function OptionsEditor({ component, onChange }: { component: CanvasComponent; onChange: (patch: CanvasComponent["props"]) => void }) {
+  const [open, setOpen] = useState(false), [draft, setDraft] = useState(""), [error, setError] = useState("");
+  function apply() {
+    const options = draft.split("\n").filter(line => line.trim()).map(line => { const [label, ...value] = line.split("|"); return { label: label.trim(), value: value.length ? value.join("|").trim() : label.trim() }; });
+    if (!options.length || options.length > 100 || options.some(option => !option.label || !option.value || option.label.length > 200 || option.value.length > 4096) || new Set(options.map(option => option.value)).size !== options.length) { setError("Use 1–100 options with nonempty labels up to 200 characters and unique nonempty values up to 4096 characters."); return; }
+    if (component.props.defaultValue !== undefined && !options.some(option => option.value === component.props.defaultValue)) { setError("The default value must match one of these option values."); return; }
+    onChange({ options }); setOpen(false);
+  }
+  return <><div className="property-sheet-row" data-property="options"><label>Options</label><div className="property-sheet-value property-collection-value"><span>{component.props.options?.length ?? 0} choices</span><button type="button" className="button" onClick={() => { setDraft((component.props.options ?? []).map(option => option.label + " | " + option.value).join("\n")); setError(""); setOpen(true); }}>Edit options</button></div><span aria-hidden="true" /></div>
+    {open && <PropertyCollectionDialog title="Options" onClose={() => setOpen(false)}><label className="field"><span>Options · one Label | value per line</span><textarea aria-label="Option definitions" rows={8} value={draft} onChange={event => setDraft(event.target.value)} /></label>{error && <p role="alert">{error}</p>}<div className="binding-actions"><button type="button" className="button" onClick={() => setOpen(false)}>Cancel</button><button type="button" className="button primary" onClick={apply}>Apply options</button></div></PropertyCollectionDialog>}
+  </>;
 }
 
 function Canvas({

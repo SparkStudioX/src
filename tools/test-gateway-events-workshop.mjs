@@ -82,11 +82,11 @@ try {
   const project = await api('/project');
   const publication = await api('/project/publish', { method: 'POST', body: { revision: project.revision } });
   assert.equal(publication.published, true);
-  assert.equal((await api('/scripts/publication')).published, false);
+  assert.equal((await api('/scripts/publication')).published, true);
   assert.deepEqual(await api('/scripts/events/logs'), []);
   const beforeExport = readZip(await api('/export', { binary: true }));
   assert.deepEqual(JSON.parse(beforeExport.get('scripts-draft.json')), initial);
-  pass('screen publication and project re-export preserve inactive gateway script drafts');
+  pass('complete publication includes disabled gateway resources and re-export preserves their drafts');
 
   const enabled = structuredClone(initial);
   enabled.resources.find(item => item.event === 'message').enabled = true;

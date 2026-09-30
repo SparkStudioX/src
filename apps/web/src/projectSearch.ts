@@ -43,7 +43,7 @@ const own = (object: object, key: string) => Object.prototype.hasOwnProperty.cal
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
 const leafText = (value: unknown): string => value === null ? "null" : String(value);
 const title = (value: string) => value.replace(/\s+/g, " ").trim().slice(0, 120);
-const inputTypes = new Set(["textInput", "passwordInput", "textArea", "numberInput", "spinner", "slider", "checkbox", "toggle", "select", "radioGroup", "dateTimeInput", "multiStateButton", "list", "treeView"]);
+const inputTypes = new Set(["textInput", "formattedInput", "barcodeInput", "passwordInput", "textArea", "numberInput", "spinner", "slider", "checkbox", "toggle", "select", "radioGroup", "dateTimeInput", "multiStateButton", "list", "treeView"]);
 
 /** Build from the current authoring snapshot. No network, query, expression or script execution. */
 export function buildProjectSearch(project: Project, queries: NamedQuery[], scripts: ScriptSearchResource[], options: SearchIndexOptions = {}): SearchEntry[] {
@@ -72,7 +72,8 @@ export function buildProjectSearch(project: Project, queries: NamedQuery[], scri
     // Binding reference objects are indexed once, preserving alias and source kind.
     const bindingReferencePath = path[0] === "props" && path.at(-2) === "references"
       && ((path.length === 5 && ["bindings", "parameterBindings"].includes(path[1]))
-        || (path.length === 7 && path[1] === "queryBindings" && path[3] === "parameters"));
+        || (path.length === 7 && path[1] === "queryBindings" && path[3] === "parameters")
+        || (path.length === 6 && path[1] === "dataSource" && path[2] === "parameters"));
     if (bindingReferencePath && record(value) && typeof value.kind === "string") {
       let reference: SearchReference | undefined;
       if (value.kind === "tag" && typeof value.path === "string" && value.path) reference = { kind: "tag", id: value.path };
@@ -103,8 +104,9 @@ export function buildProjectSearch(project: Project, queries: NamedQuery[], scri
         const kinds: Record<string, SearchReference["kind"]> = { queryId: "query", templateId: "template", targetScreenId: "screen", assetId: "asset", tagPath: "tag" };
         if (own(kinds, path[1])) reference = { kind: kinds[path[1]], id: value };
       }
-      if (componentProperty && path.at(-1) === "queryId" && ((path.length === 3 && (path[1] === "optionsSource" || path[1] === "rowsSource")) || (path.length === 4 && path[1] === "queryBindings")))
+      if (componentProperty && path.at(-1) === "queryId" && ((path.length === 3 && (path[1] === "optionsSource" || path[1] === "rowsSource" || path[1] === "dataSource")) || (path.length === 4 && path[1] === "queryBindings")))
         reference = { kind: "query", id: value };
+      if (componentProperty && source?.component?.type === "viewContainer" && path.length === 5 && path[1] === "viewLayout" && path[2] === "panes" && path[4] === "templateId") reference = { kind: "template", id: value };
       if (componentProperty && path.length === 3 && path[1] === "selectionFields" && source?.component
         && ["table", "select", "list", "treeView"].includes(source.component.type)) {
         const input = source.document.components.find(component => inputTypes.has(component.type) && (component.props.fieldKey || component.id) === path[2]);
@@ -113,7 +115,7 @@ export function buildProjectSearch(project: Project, queries: NamedQuery[], scri
       if (target.kind === "project" && path[0] === "navigation" && ((path.length === 4 && path[1] === "items" && path[3] === "screenId") || (path.length === 2 && path[1] === "startupScreenId")))
         reference = { kind: "screen", id: value };
     }
-    const binding = componentProperty && ["bindings", "queryBindings", "parameterBindings", "stateBinding"].includes(path[1]);
+    const binding = componentProperty && ["bindings", "queryBindings", "dataSource", "parameterBindings", "stateBinding"].includes(path[1]);
     const code = (target.kind === "script" && path[0] === "code") || (target.kind === "query" && path[0] === "sql")
       || (componentProperty && ((path[1] === "script" && path.length === 2) || (path[1] === "tableEdit" && path[2] === "script")
         || (["events", "componentEvents", "messageHandlers"].includes(path[1]) && path.at(-1) === "code")));

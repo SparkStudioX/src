@@ -8,18 +8,19 @@ import "./localization.css";
 export function ComponentTranslationAssignment({ component, catalog, onChange, onManage }: {
   component: CanvasComponent; catalog?: TranslationCatalog; onChange: (patch: CanvasComponent["props"]) => void; onManage: () => void;
 }) {
+  const fieldId = useId();
   if (component.type === "passwordInput") return null;
   function compatible(key: string) {
     try { return JSON.stringify(captionTokens(component.props.text ?? "")) === JSON.stringify(captionTokens(catalog!.messages[key][catalog!.defaultLocale])); } catch { return false; }
   }
   const bound = Boolean(component.props.bindings?.text || component.props.queryBindings?.text);
   return <div className="inspector-section visual-style-assignment"><h3>Caption translation</h3>
-    <label>Translation key<select value={component.props.textKey ?? ""} onChange={event => onChange({ textKey: event.target.value || undefined })}>
+    <div className="property-sheet-row" data-property="textKey"><label htmlFor={fieldId}>Translation key</label><div className="property-sheet-value"><select id={fieldId} value={component.props.textKey ?? ""} onChange={event => onChange({ textKey: event.target.value || undefined })}>
       <option value="">Authored text</option>
       {component.props.textKey && (!catalog || !Object.hasOwn(catalog.messages, component.props.textKey)) && <option value={component.props.textKey}>Missing translation</option>}
       {Object.keys(catalog?.messages ?? {}).map(key => <option key={key} value={key} disabled={!compatible(key)}>{key}{compatible(key) ? "" : " (parameter mismatch)"}</option>)}
-    </select></label>
-    <button className="button" type="button" onClick={onManage}>Manage translations</button>
+    </select></div><span aria-hidden="true" /></div>
+    <div className="property-sheet-row"><label>Translation catalog</label><div className="property-sheet-value"><button className="button" type="button" onClick={onManage}>Manage translations</button></div><span aria-hidden="true" /></div>
     <small>{bound ? "The Text binding takes precedence over caption translation." : "Translates the caption only. Authored text remains the final fallback; values and choices stay unchanged."}</small>
   </div>;
 }

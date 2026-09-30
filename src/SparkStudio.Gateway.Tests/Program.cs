@@ -2,6 +2,11 @@ using System.Diagnostics;
 using System.Text.Json.Nodes;
 using SparkStudio.Gateway;
 
+if (args.Contains("--unified-publication-only")) { Console.WriteLine($"PASS {await UnifiedPublicationChecks.RunAsync()} unified publication checks."); return; }
+if (args.Contains("--equipment-commands-only")) { Console.WriteLine($"PASS {await EquipmentCommandChecks.RunAsync()} equipment command checks."); return; }
+if (args.Contains("--interaction-events-only")) { Console.WriteLine($"PASS {await InteractionEventChecks.RunAsync()} interaction event checks."); return; }
+if (args.Contains("--input-constraints-only")) { Console.WriteLine($"PASS {await InputConstraintChecks.RunAsync()} input constraint checks."); return; }
+
 var passed = 0;
 void Check(bool condition, string description)
 {
@@ -173,6 +178,13 @@ try
 }
 finally { if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true); }
 passed += ComponentMessagingChecks.Run();
+passed += await InputConstraintChecks.RunAsync();
+passed += await InteractionEventChecks.RunAsync();
+passed += ChartChecks.Run();
+passed += await BindingDataChecks.RunAsync();
+passed += await TableBatchChecks.RunAsync();
+passed += await UnifiedPublicationChecks.RunAsync();
+passed += await EquipmentCommandChecks.RunAsync();
 passed += await PythonUiChecks.RunAsync();
 passed += await PythonComponentEventChecks.RunAsync();
 passed += await RuntimeSessionMessagingChecks.RunAsync();

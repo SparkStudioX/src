@@ -1,0 +1,24 @@
+.view-container { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
+.view-container-tabs { display: flex; flex-direction: column; }
+.view-container-split, .view-container-dock { display: grid; }
+.view-tab-list, .view-dock-toolbar { display: flex; gap: 3px; overflow-x: auto; flex: 0 0 auto; border-bottom: 1px solid var(--border); background: var(--surface-subtle); }
+.view-tab-list button, .view-dock-toolbar button { padding: 7px 10px; white-space: nowrap; font: inherit; color: inherit; }
+.view-tab-list button[aria-selected=true], .view-dock-toolbar button[aria-pressed=true] { background: var(--accent-soft); box-shadow: inset 0 -2px var(--accent); }
+.view-pane { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.view-pane[hidden] { display: none; }
+.view-container-tabs > .view-pane, .view-container-embedded > .view-pane { flex: 1; height: 100%; }
+.view-pane-content { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
+.view-pane-placement { position: relative; width: 100%; height: 100%; overflow: hidden; }
+.view-dock-toolbar { grid-column: 1 / -1; grid-row: 1; }
+.view-pane > header { display: flex; align-items: center; justify-content: space-between; flex: 0 0 auto; padding: 4px 8px; min-height: 28px; background: var(--surface-subtle); border-bottom: 1px solid var(--border); font-size: 12px; }
+.view-pane > header button { font-size: 18px; }
+.view-resize-handle { background: var(--border); touch-action: none; min-width: 6px; min-height: 6px; }
+.view-resize-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--accent-soft); }
+.view-resize-handle.is-vertical { cursor: col-resize; width: 6px; height: 100%; }
+.view-resize-handle.is-horizontal { cursor: row-resize; height: 6px; width: 100%; }
+.view-resize-handle[aria-disabled=true] { cursor: default; }
+.view-split-separator { min-width: 0; min-height: 0; }
+.view-dock-left > .view-resize-handle { position: absolute; right: 0; top: 0; }
+.view-dock-right > .view-resize-handle { position: absolute; left: 0; top: 0; }
+.view-dock-top > .view-resize-handle { position: absolute; left: 0; bottom: 0; }
+.view-dock-bottom > .view-resize-handle { position: absolute; left: 0; top: 0; }

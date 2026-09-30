@@ -61,10 +61,12 @@ public static class GatewayAccess
             {
                 "signedIn" => true,
                 "admin" => audience == "engineering" && permissions.GatewayAdmin,
+                "gateway" or "diagnostics" or "configuration" or "backups" or "audit" or "sessions" => audience == "engineering" && store.Can(actor, null, policy.Permission),
                 "design" => audience == "engineering" && permissions.Design,
                 "publish" => audience == "engineering" && permissions.Design && permissions.Publish,
                 "view" => audience == "operator" && permissions.View,
                 "operate" => audience == "operator" && permissions.Operate,
+                "command" => audience == "operator" && permissions.Commands && permissions.Operate && permissions.View,
                 "read" => audience == "operator" ? permissions.View : permissions.Design,
                 _ => false,
             };
@@ -74,7 +76,7 @@ public static class GatewayAccess
                 store.Audit(actor, denialAction[..Math.Min(denialAction.Length, 100)], projectId, "denied", resource: Resource(context));
                 await Reject(context, 403, "Your account does not have permission for this operation."); return;
             }
-            if (policy.Permission is "design" or "publish" or "read" or "view" or "operate"
+            if (policy.Permission is "design" or "publish" or "read" or "view" or "operate" or "command"
                 && route?.EndsWith("/export", StringComparison.Ordinal) != true)
                 catalog.Get(projectId);
             if (!HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method))

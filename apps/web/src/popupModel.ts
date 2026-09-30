@@ -1,6 +1,9 @@
 import { id, resolvePath } from "./api";
 import { instanceRequestScope, queryTemplateParameters, templateParameters } from "./templateModel";
+import { panePlacement } from "./viewContainers";
 import { parameterBindingStateContext, resolveParameterBindings } from "./templateParameterBindings";
+import { loadQueryRepeater } from "./queryRepeater";
+import type { RepeaterApi } from "./queryRepeater";
 import type {
   CanvasComponent,
   InstanceAction,
@@ -17,6 +20,7 @@ import type {
   ParameterBindingState,
   StateDefinitions,
   RuntimeStateValues,
+  Tag,
 } from "./types";
 
 export function screenParameters(
@@ -62,7 +66,7 @@ export function createPopup(
   const path = instance ? instance.instancePath ?? [{ instanceId: instance.instanceId, ...(instance.rowId === undefined ? {} : { rowId: instance.rowId }) }] : [];
   const container = instance && source.components.find(component => component.id === path[0]?.instanceId);
   const trace = path.length > 1 || container ? traceSource(project, source, path) : [];
-  const querySource = container?.type === "repeater" && container.props.rowsSource;
+  const querySource = trace.some(step => step.instance.props.rowsSource || Object.values(step.instance.props.parameterBindings ?? {}).some(binding => Object.values(binding.references).some(reference => reference.kind === "tag")));
   return {
     id: id("popup"),
     screenId: target.id,
@@ -71,6 +75,7 @@ export function createPopup(
     ...(querySource ? { querySourceParameters: { ...caller } } : {}),
     ...(querySource && path.length > 1 ? { queryRootParameters: { ...(instance?.querySourceParameters ?? caller) } } : {}),
     ...(instance ? { templateParameterTypes: { ...instance.template.parameterTypes } } : {}),
+    ...(instance?.sourceParameterScopes ? { sourceParameterScopes: structuredClone(instance.sourceParameterScopes) } : {}),
     ...(trace.length ? { templateSourceSignature: sourceSignature(trace) } : {}),
     origin: {
       screenId: source.id,
@@ -103,21 +108,21 @@ function traceSource(project: Project, screen: Screen, path: InstancePathStep[])
   if (!path.length || path.length > 4) throw new Error("The source template path is no longer available. Close this popup and open it again.");
   let scope = screen;
   const seen = new Set<string>();
-  return path.map((step, index) => {
-    const instance = scope.components.find(item => item.id === step.instanceId && (item.type === "template" || item.type === "repeater"));
+  return path.map(step => {
+    const authored = scope.components.find(item => item.id === step.instanceId && (item.type === "template" || item.type === "repeater" || item.type === "viewContainer"));
+    const pane = authored?.type === "viewContainer" ? authored.props.viewLayout?.panes.find(pane => pane.id === step.rowId) : undefined;
+    const instance = authored?.type === "viewContainer" ? pane ? panePlacement(authored, pane) : undefined : authored;
     const template = project.templates?.find(item => item.id === instance?.props.templateId);
     if (!instance || !template || seen.has(template.id)) throw new Error("The source template is no longer available. Close this popup and open it again.");
     seen.add(template.id);
     let row: TemplateRow | undefined;
     if (instance.type === "repeater") {
       if (!step.rowId) throw new Error("The source row is no longer available. Close this popup and open a current record.");
-      if (instance.props.rowsSource) {
-        if (index > 0) throw new Error("Named-query repeaters must be placed directly on a screen.");
-      } else {
+      if (!instance.props.rowsSource) {
         row = instance.props.rows?.find(item => item.id === step.rowId);
         if (!row) throw new Error("The source row is no longer available. Close this popup and open a current record.");
       }
-    } else if (step.rowId !== undefined) throw new Error("The source instance no longer uses this row. Close this popup and open it again.");
+    } else if (authored?.type !== "viewContainer" && step.rowId !== undefined) throw new Error("The source instance no longer uses this row. Close this popup and open it again.");
     const parentComponents = scope.components;
     const parentParameters = scope.parameters ?? {};
     const stateDefinitions = { session: project.sessionState ?? {}, screen: screen.state ?? {},
@@ -231,4 +236,44 @@ export function popupSourceStatus(
 function sameParameters(current: RuntimeParameters, captured: RuntimeParameters) {
   return Object.keys(current).length === Object.keys(captured).length &&
     Object.entries(current).every(([key, value]) => Object.hasOwn(captured, key) && captured[key] === value);
+}
+
+/** Replay every query boundary, including saved ancestors and several query levels. */
+export async function validatePopupSource(project: Project, popup: PopupState, tags: Tag[], scope: "designer" | "runtime",
+  request: RepeaterApi, publishedAt?: string, signal?: AbortSignal): Promise<PopupSourceStatus> {
+  let definitionReady = false;
+  try {
+    const path = popup.origin.instancePath ?? (popup.origin.instanceId ? [{ instanceId: popup.origin.instanceId, ...(popup.origin.rowId ? { rowId: popup.origin.rowId } : {}) }] : []);
+    if (!path.length) return { ready: true, stale: false, message: "" };
+    const screen = project.screens.find(item => item.id === popup.origin.screenId) ?? project.templates?.find(item => item.id === popup.origin.screenId);
+    if (!screen) throw new Error("The popup source screen is no longer available.");
+    const trace = traceSource(project, screen, path);
+    if (popup.templateSourceSignature !== undefined && sourceSignature(trace) !== popup.templateSourceSignature) throw new Error("The source template definition changed.");
+    validateSourceState(trace, popup.origin.bindingState);
+    if (popup.origin.bindingInputs && popup.origin.bindingInputs.length !== trace.length) throw new Error("The source input context is unavailable.");
+    const opener = trace.at(-1)!.template.components.find(item => item.id === popup.origin.componentId);
+    if (opener?.props.action !== "openPopup" || opener.props.targetScreenId !== popup.screenId) throw new Error("The source no longer opens this popup.");
+    definitionReady = true;
+    let current: RuntimeParameters = project.templates?.includes(screen as Template) ? templateParameters(screen as Template, popup.rootParameters) : screenParameters(screen, popup.rootParameters);
+    for (const [index, step] of trace.entries()) {
+      signal?.throwIfAborted();
+      const state = parameterBindingStateContext(step.instance, popup.origin.bindingState?.[index], step.stateDefinitions);
+      const bound = resolveParameterBindings(step.instance, step.template, { components: step.parentComponents, tags, parameters: current, inputs: popup.origin.bindingInputs?.[index] ?? {}, state });
+      if (step.instance.props.rowsSource) {
+        const rows = await loadQueryRepeater(step.instance.props.rowsSource, step.template, scope, current, request, publishedAt, signal);
+        const row = rows.find(row => row.id === path[index].rowId);
+        if (!row) return { ready: false, stale: true, message: "The source row is no longer available. Close this popup and open a current record." };
+        current = queryTemplateParameters(step.template, current, step.instance.props.parameters, row.parameters, bound);
+      } else current = templateParameters(step.template, current, step.instance.props.parameters, step.row?.parameters, bound);
+      if (popup.sourceParameterScopes?.[index] && !sameParameters(current, popup.sourceParameterScopes[index]))
+        return { ready: false, stale: true, message: "A source ancestor changed. Close this popup and open a current record." };
+    }
+    signal?.throwIfAborted();
+    if (popup.querySourceParameters && !sameParameters(current, popup.querySourceParameters))
+      return { ready: false, stale: true, message: "The source parameters changed. Close this popup and open a current record." };
+    return { ready: true, stale: false, message: "" };
+  } catch (reason) {
+    signal?.throwIfAborted();
+    return { ready: false, stale: !definitionReady, message: `Source unavailable. ${reason instanceof Error ? reason.message : String(reason)}` };
+  }
 }

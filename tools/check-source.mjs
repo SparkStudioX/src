@@ -16,6 +16,8 @@ const rootFiles = new Set([
   'Dockerfile', 'compose.yaml', 'Directory.Build.props', 'global.json', 'NuGet.Config',
 ]);
 const webFiles = new Set([
+  'apps/web/check-input-validation.mjs', 'apps/web/check-table-batch-editor.mjs', 'apps/web/check-view-containers.mjs',
+  'apps/web/check-chart-renderer.mjs', 'apps/web/check-chart-authoring.mjs', 'apps/web/check-equipment-command-ui.mjs', 'apps/web/check-application-publication.mjs', 'apps/web/check-binding-data.mjs',
   'apps/web/package.json', 'apps/web/package-lock.json', 'apps/web/tsconfig.json',
   'apps/web/vite.config.ts', 'apps/web/index.html', 'apps/web/check-template-model.mjs',
   'apps/web/check-popup-model.mjs', 'apps/web/public/spark.svg',
@@ -69,6 +71,9 @@ const webFiles = new Set([
   'apps/web/check-input-state-bindings.mjs', 'apps/web/check-input-state-authoring.mjs',
 ]);
 const toolFiles = new Set([
+  'load-table-batch-example.mjs', 'test-application-workflows.mjs', 'test-view-containers.mjs',
+  'test-equipment-commands.mjs', 'test-tag-parameter-workshop.mjs', 'test-fine-grained-access.mjs', 'load-access-permissions-example.mjs', 'test-charts.mjs', 'test-tag-model.mjs', 'test-unified-publication-workshop.mjs',
+  'load-unit-model-example.mjs', 'load-equipment-commands-example.mjs',
   'bootstrap.ps1', 'build.ps1', 'dev.ps1', 'publish-windows.ps1', 'install-service.ps1',
   'build-installer.ps1', 'test-installer.ps1', 'test-installer-auth.mjs', 'test-gateway-readiness.mjs', 'generate-example-assets.ps1',
   'load-example.mjs', 'test-assets-popups.mjs', 'test-gateway.mjs', 'test-runtime-actions.mjs',
@@ -126,6 +131,9 @@ const toolFiles = new Set([
   'test-input-state-bindings.mjs',
 ]);
 const architectureDocs = new Set([
+  'VALIDATED_INPUTS.md', 'COMPONENT_INTERACTIONS.md', 'TABLE_BATCH_EDITING.md', 'VIEW_CONTAINERS.md',
+  'CHARTS.md', 'DATASETS_NESTED_QUERIES.md', 'TAG_PARAMETER_BINDINGS.md', 'TAG_MODELS.md',
+  'FINE_GRAINED_ACCESS.md', 'UNIFIED_PUBLICATION.md', 'EQUIPMENT_COMMANDS.md',
   'RELEASE_PROCESS.md',
   'README.md',
   'ASSETS_POPUPS.md', 'COMPONENTS.md', 'PARITY.md', 'PRODUCT.md', 'TEMPLATES.md',
@@ -158,6 +166,12 @@ const architectureDocs = new Set([
   'TAG_ENGINEERING.md', 'NETWORK_ACCESS.md',
 ]);
 const explicitFiles = new Set([
+  'examples/validated-inputs.json', 'examples/component-interactions.json', 'examples/table-batch-workflow.json', 'examples/view-containers.json',
+  'src/SparkStudio.Gateway.Tests/InputConstraintChecks.cs', 'src/SparkStudio.Gateway.Tests/InteractionEventChecks.cs', 'src/SparkStudio.Gateway.Tests/TableBatchChecks.cs',
+  'examples/unified-publication.json', 'examples/dataset-nested-queries.json', 'examples/supplied-data-charts.json',
+  'examples/tag-template-parameters.json', 'examples/unit-model-workshop.json', 'examples/access-permissions-workshop.json', 'examples/equipment-commands.json',
+  'src/SparkStudio.Gateway.Tests/EquipmentCommandChecks.cs', 'src/SparkStudio.Gateway.Tests/ChartChecks.cs', 'src/SparkStudio.Gateway.Tests/BindingDataChecks.cs',
+  'src/SparkStudio.Gateway.Tests/UnifiedPublicationChecks.cs',
   '.githooks/pre-commit', '.githooks/pre-push', '.github/workflows/source-boundary.yml',
   'runtimes/python/worker.py', 'installer/SparkStudio.iss', 'installer/INSTALL-NOTES.txt',
   'examples/application-form.json', 'examples/reusable-applications.json', 'examples/assets-popups.json',

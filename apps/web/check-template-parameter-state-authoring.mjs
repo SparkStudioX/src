@@ -58,10 +58,10 @@ function editor(component = host, extra = {}) {
 let passed = 0;
 function check(name, run) { run(); passed++; console.log(`PASS ${name}`); }
 
-check('state source picker exposes only containing scopes and never offers tags for parameters', () => {
+check('parameter source picker exposes tags and only containing state scopes', () => {
   for (const local of [false, true]) {
     const ui = editor(host, { state: local ? state : { session: state.session, screen: state.screen } }); ui.open(); ui.click('Add reference');
-    assert.deepEqual(nodes(ui.field('Reference 1 source')).filter(node => node.type === 'option').map(node => node.props.value), ['custom', 'input', 'parameter', 'sessionState', 'screenState', ...(local ? ['instanceState'] : [])]);
+    assert.deepEqual(nodes(ui.field('Reference 1 source')).filter(node => node.type === 'option').map(node => node.props.value), ['custom', 'input', 'parameter', 'sessionState', 'screenState', ...(local ? ['instanceState'] : []), 'tag']);
     assert.ok(!ui.all().some(node => node.type === 'option' && node.props.value === 'childOnly'));
   }
 });
@@ -85,10 +85,16 @@ check('unresolved screen state is saveable only while authoring a shared templat
   assert.match(deferred.output(), /Preview unavailable.*containing screen or popup/); assert.match(deferred.content(), /Apply saves this binding/); deferred.click('Apply'); assert.equal(deferred.patches[0].parameterBindings.quantity.references.value.key, 'callerAmount');
   const root = editor(host, { state: { session: {}, screen: {} } }); root.reference('screenState', 'callerAmount'); root.click('Apply'); assert.deepEqual(root.patches, []);
 });
-check('deferred screen references do not excuse another invalid state source or unsupported tag', () => {
+check('deferred screen references do not excuse another invalid state source', () => {
   const ui = editor(host, { state: { session: {}, screen: {}, instance: {} }, allowUnresolvedScreenState: true }); ui.reference('screenState', 'later'); ui.click('Add reference'); ui.change('Reference 2 source', 'sessionState'); ui.change('Reference 2 state property', 'missing'); ui.expression('value + value2'); ui.click('Apply'); assert.deepEqual(ui.patches, []); assert.match(ui.output(), /session.*missing/);
-  const bad = { ...host, props: { ...host.props, parameterBindings: { quantity: { expression: 'value', references: { value: { kind: 'tag', path: '[default]Value' } } } } } };
-  const tag = editor(bad); tag.open('quantity', true); assert.equal(nodes(tag.field('Reference 1 source')).find(node => node.type === 'option' && node.props.value === 'tag').props.disabled, true); tag.click('Apply'); assert.deepEqual(tag.patches, []);
+});
+check('tag parameter definitions stage independently of runtime availability and preview typed live values', () => {
+  const component = { ...host, props: { ...host.props, parameterBindings: { quantity: { expression: 'value', references: { value: { kind: 'tag', path: '[default]Value' } } } } } };
+  const unavailable = editor(component); unavailable.open('quantity', true);
+  assert.ok(!nodes(unavailable.field('Reference 1 source')).find(node => node.type === 'option' && node.props.value === 'tag').props.disabled);
+  assert.match(unavailable.output(), /not found/); unavailable.click('Apply'); assert.deepEqual(unavailable.patches, [{ parameterBindings: component.props.parameterBindings }]);
+  const live = editor(component, { tags: [{ path: '[default]Value', quality: 'Good', value: 7 }] }); live.open('quantity', true);
+  assert.equal(live.output(), '7'); assert.deepEqual(live.patches, []); live.click('Apply'); assert.equal(live.patches.length, 1);
 });
 check('state fx Cancel and Remove preserve authored literals and other bindings', () => {
   const original = { quantity: binding('screenState', 'amount'), title: binding('sessionState', 'caption') }, component = { ...host, props: { ...host.props, parameterBindings: original } };

@@ -15,9 +15,10 @@ internal static class QueryRepeaterSource
         foreach (var component in ProjectTemplates.Components(project))
         {
             if (component["props"] is not JsonObject props || !props.ContainsKey("rowsSource")) continue;
-            if (ProjectStore.Optional(component, "type") != "repeater" || props["rowsSource"] is not JsonObject source || source.Count != 3 ||
-                source.Any(pair => pair.Key is not ("queryId" or "rowKey" or "parameterMap")))
-                throw new ArgumentException("Only repeaters support a rows source containing exactly queryId, rowKey and parameterMap.");
+            if (ProjectStore.Optional(component, "type") != "repeater" || props["rowsSource"] is not JsonObject source ||
+                source.Any(pair => pair.Key is not ("queryId" or "rowKey" or "parameterMap" or "maxRows")))
+                throw new ArgumentException("Repeater row sources need queryId, rowKey, parameterMap and optional maxRows only.");
+            RowLimit(source);
             Column(source, "queryId");
             Column(source, "rowKey");
             if (props.ContainsKey("rows") && (props["rows"] is not JsonArray rows || rows.Count != 0))
@@ -49,12 +50,19 @@ internal static class QueryRepeaterSource
         if (InputDefinitionValidator.BlankOption(rowId) || rowId!.Length > 200)
             throw new ArgumentException("A query-backed repeater action requires a nonempty text row ID up to 200 characters.");
     }
+    public static int RowLimit(JsonObject source)
+    {
+        if (!source.ContainsKey("maxRows")) return MaximumRows;
+        if (source["maxRows"] is not JsonValue value || !value.TryGetValue<double>(out var limit) || limit != Math.Truncate(limit) || limit is < 1 or > MaximumRows)
+            throw new ArgumentException("Repeater maximum rows must be an integer from 1 to 100.");
+        return (int)limit;
+    }
 
     public static Dictionary<string, JsonElement> ResolveRow(JsonObject source, QueryResult result, string rowId, JsonObject? parameterTypes = null)
     {
         ValidateRowId(rowId);
-        if (result.Rows.Count > MaximumRows)
-            throw new ArgumentException("A query-backed repeater returned more than 100 rows. Narrow its named query.");
+        if (result.Rows.Count > RowLimit(source))
+            throw new ArgumentException($"A query-backed repeater returned more than {RowLimit(source)} rows. Narrow its named query.");
         var rowKey = ProjectStore.Required(source, "rowKey");
         var map = source["parameterMap"]!.AsObject();
         var required = map.Select(pair => pair.Value!.GetValue<string>()).Append(rowKey).Distinct(StringComparer.Ordinal);

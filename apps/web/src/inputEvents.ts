@@ -6,6 +6,13 @@ import type { CanvasComponent, InputEventScript, InputEventType, InputValue, Inp
 import type { ComponentEventCoordinator } from "./componentEventModel";
 import type { PythonEventRunner } from "./pythonComponentEvents";
 
+/** Constraints are part of the form lifetime, including constraints on sibling fields. */
+export function inputEventFormIdentity(components: CanvasComponent[]) {
+  return components.map(({ id, type, props }) => [id, type, props.fieldKey, props.stateBinding,
+    props.min, props.max, props.step, props.options, props.optionsSource, props.selectionFields,
+    props.validation, props.formatMask, props.textCase, props.scanTerminator]);
+}
+
 export interface InputEventPayload {
   type: InputEventType;
   componentId: string;
@@ -113,7 +120,8 @@ export class InputEventLifecycle {
   commit(value: InputValue) {
     if (!this.active || !this.context) return;
     this.change(value);
-    if (Object.is(this.committedValue, value)) return;
+    // Each explicit scanner terminator is a new scan, including identical codes.
+    if (Object.is(this.committedValue, value) && this.context.component.type !== "barcodeInput") return;
     const previousValue = this.committedValue;
     this.committedValue = value;
     this.enqueue("commit", value, previousValue);

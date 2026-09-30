@@ -3,9 +3,11 @@ import type { ReactNode } from "react";
 import type { Project, ProjectNavigationSettings, RuntimeParameters, Screen, StateScope, Template } from "./types";
 import { defaultNavigationLabel, navigationLabelError, projectNavigationSettings } from "./runtimeNavigation";
 import { TemplateParametersEditor } from "./TemplateParametersEditor";
+import { templatePlacements } from "./viewContainers";
 import { StateDefinitionsEditor } from "./StateDefinitionsEditor";
 import { AuthoringDefaultsEditor } from "./AuthoringDefaultsEditor";
 import "./documentProperties.css";
+import "./propertyBindings.css";
 import "./resourceChanges.css";
 
 type Notify = (message: string, error?: boolean) => void;
@@ -28,7 +30,7 @@ interface ProjectPropertiesProps {
 
 function PropertyRow({ label, children }: { label: string; children: (id: string) => ReactNode }) {
   const id = useId();
-  return <div className="document-property-row"><label htmlFor={id}>{label}</label><div className="document-property-value">{children(id)}</div></div>;
+  return <div className="property-sheet-row" data-property={`document.${label.toLowerCase().replaceAll(" ", "-")}`}><label htmlFor={id}>{label}</label><div className="property-sheet-value">{children(id)}</div><span aria-hidden="true" /></div>;
 }
 
 function DimensionInput({ id, label, value, onChange, notify }: { id: string; label: string; value: number; onChange: (value: number) => void; notify: Notify }) {
@@ -84,8 +86,9 @@ function ParametersSheet({ scope, parameters, onChange, notify, project = false 
     onChange(Object.fromEntries([...Object.entries(parameters), [newName, newValue]]));
     setNewName(""); setNewValue("");
   }
-  return <section className="document-property-group document-parameters" aria-label={`${scope} parameter defaults`}>
-    <h3>Parameters</h3>
+  return <section className="property-sheet-group document-parameters" aria-label={`${scope} parameter defaults`}>
+    <h4>Parameters</h4>
+    <PropertyRow label="Defaults">{id => <details className="property-structured-editor"><summary id={id}>Edit parameters ({Object.keys(parameters).length})</summary>
     <p id={helpId} className="document-property-help">{project
       ? <>Saved text defaults. Screens and templates can reference them with <code>{"{parameter}"}</code>.</>
       : <>Saved text defaults. Use <code>{"{projectParameter}"}</code> to follow a project parameter.</>} These definitions do not use runtime fx bindings.</p>
@@ -107,6 +110,7 @@ function ParametersSheet({ scope, parameters, onChange, notify, project = false 
       </div>
       <button type="button" className="button small" onClick={add}>Add parameter</button>
     </div>
+    </details>}</PropertyRow>
   </section>;
 }
 
@@ -120,14 +124,15 @@ export function stateDefinitionReferences(documents: (Screen | Template)[], scop
     for (const component of document.components) {
       const add = (key: string, property: string) => { const label = `${document.name} / ${component.props.text || component.id} · ${property}`; if (!(references[key] ??= []).includes(label)) references[key].push(label); };
       const bindings = [...Object.entries(component.props.bindings || {}), ...Object.entries(component.props.parameterBindings || {}).map(([target, binding]) => [`parameter ${target}`, binding] as const), ...Object.entries(component.props.queryBindings || {}).flatMap(([target, source]) => Object.entries(source?.parameters || {}).map(([name, binding]) => [`query ${target} / ${name}`, binding] as const))];
+      bindings.push(...Object.entries(component.props.dataSource?.parameters ?? {}).map(([name, binding]) => [`dataset / ${name}`, binding] as [string, typeof binding]));
       for (const [target, binding] of bindings)
         for (const reference of Object.values(binding?.references || {}))
           if (reference.kind !== "tag" && reference.kind === `${scope}State`) add(reference.key, target);
       if (component.props.stateBinding?.scope === scope) add(component.props.stateBinding.key, "Value");
       // Every nested placement shares its containing screen; private instance
       // state is replaced at each template boundary and must not be traversed.
-      if (scope === "screen" && (component.type === "template" || component.type === "repeater")) {
-        const child = templateById.get(component.props.templateId || "");
+      if (scope === "screen") for (const placement of templatePlacements(component)) {
+        const child = templateById.get(placement.props.templateId || "");
         if (child) visit(child);
       }
     }
@@ -141,9 +146,9 @@ export function DocumentProperties({ document, isTemplate, onChange, onRename, n
   const scope = isTemplate ? "Template" : "Screen";
   const stateReferences = stateDefinitionReferences([document], isTemplate ? "instance" : "screen", templates);
   return <div className="document-properties" aria-label={`${scope} properties`}>
-    <div className="document-property-columns" aria-hidden="true"><span>Property</span><span>Value</span></div>
-    <section className="document-property-group" aria-label={`${scope} general properties`}>
-      <h3>General</h3>
+    <div className="property-sheet-columns" aria-hidden="true"><span>Property</span><span>Value</span><span /></div>
+    <section className="property-sheet-group" aria-label={`${scope} general properties`}>
+      <h4>General</h4>
       <PropertyRow label="ID">{id => <input id={id} aria-label={`${scope} ID`} readOnly value={document.id} title={document.id} />}</PropertyRow>
       <PropertyRow label="Name">{id => onRename
         ? <div className="document-resource-name"><input id={id} aria-label={`${scope} name`} value={document.name} readOnly title={document.name} /><button type="button" className="button small" aria-label={`Rename ${scope.toLowerCase()}`} onClick={onRename}>Rename</button></div>
@@ -158,8 +163,8 @@ export function DocumentProperties({ document, isTemplate, onChange, onRename, n
       {!isTemplate && <p className="document-property-help">{document.kind === "popup" ? "Popups are opened by a component action." : "Screens open through navigation actions or the optional menu configured in Project settings."}
         {!canChangeToPopup && document.kind !== "popup" && " Keep at least one regular screen."}</p>}
     </section>
-    <section className="document-property-group" aria-label={`${scope} layout properties`}>
-      <h3>Layout</h3>
+    <section className="property-sheet-group" aria-label={`${scope} layout properties`}>
+      <h4>Layout</h4>
       {(["width", "height"] as const).map(key => <PropertyRow key={key} label={key === "width" ? "Width" : "Height"}>{id =>
         <DimensionInput id={id} label={`${scope} ${key}`} value={document[key]} notify={notify} onChange={value => onChange({ [key]: value })} />}</PropertyRow>)}
     </section>
@@ -201,8 +206,8 @@ function NavigationProperties({ project, onChange, notify }: ProjectPropertiesPr
     [items[index], items[index + offset]] = [items[index + offset], items[index]];
     update({ items });
   }
-  return <section className="document-property-group navigation-properties" aria-label="Operator navigation settings">
-    <h3>Operator navigation</h3>
+  return <section className="property-sheet-group navigation-properties" aria-label="Operator navigation settings">
+    <h4>Operator navigation</h4>
     <p className="document-property-help">The application opens one startup screen. Add navigation buttons to your screens, or enable a menu with selected destinations below.</p>
     <PropertyRow label="Startup screen">{id => <select id={id} aria-label="Startup screen" value={navigation.startupScreenId}
       onChange={event => update({ startupScreenId: event.target.value })}>
@@ -212,7 +217,7 @@ function NavigationProperties({ project, onChange, notify }: ProjectPropertiesPr
       onChange={event => update({ mode: event.target.value as ProjectNavigationSettings["mode"] })}>
       <option value="none">None — use navigation actions</option><option value="menu">Show selected destinations</option>
     </select>}</PropertyRow>
-    {navigation.mode === "menu" && <>
+    {navigation.mode === "menu" && <PropertyRow label="Destinations">{id => <details className="property-structured-editor"><summary id={id}>Edit destinations ({navigation.items.length})</summary>
       <p className="document-property-help">Only these screens appear in the menu, in this order. Popups open through actions. Adding a screen never adds it to this menu automatically.</p>
       <ol className="navigation-menu-items" aria-label="Menu destinations">
         {navigation.items.map((item, index) => <li key={item.screenId}>
@@ -237,7 +242,7 @@ function NavigationProperties({ project, onChange, notify }: ProjectPropertiesPr
           if (screen) update({ items: [...navigation.items, { screenId: screen.id, label: defaultNavigationLabel(screen) }] });
         }}>Add destination</button>
       </div>
-    </>}
+    </details>}</PropertyRow>}
     {navigation.mode === "none" && navigation.items.length > 0 && <p className="document-property-help">Your {navigation.items.length} saved menu destinations are retained while the menu is hidden.</p>}
   </section>;
 }
@@ -263,9 +268,9 @@ export function ProjectProperties({ project, onChange, notify, canRename = true 
   return <div className="document-properties" aria-label="Project properties">
     <NavigationProperties project={project} onChange={onChange} notify={notify} />
     <AuthoringDefaultsEditor value={project.authoringDefaults} onApply={authoringDefaults => onChange({ authoringDefaults })} />
-    <div className="document-property-columns" aria-hidden="true"><span>Property</span><span>Value</span></div>
-    <section className="document-property-group" aria-label="Project general properties">
-      <h3>General</h3>
+    <div className="property-sheet-columns" aria-hidden="true"><span>Property</span><span>Value</span><span /></div>
+    <section className="property-sheet-group" aria-label="Project general properties">
+      <h4>General</h4>
       <PropertyRow label="ID">{id => <input id={id} aria-label="Project ID" readOnly value={project.id} title={project.id} />}</PropertyRow>
       <PropertyRow label="Name">{id => <input id={id} aria-label="Project name" maxLength={120} readOnly={!canRename} title={!canRename ? "A gateway administrator can rename this project" : undefined} value={project.name} onChange={event => { if (canRename) onChange({ name: event.target.value }); }} />}</PropertyRow>
       <PropertyRow label="Revision">{id => <input id={id} aria-label="Project revision" readOnly value={project.revision} />}</PropertyRow>

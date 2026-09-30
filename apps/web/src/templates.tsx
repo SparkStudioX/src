@@ -19,6 +19,10 @@ import { useLocalization } from "./LocalizationContext";
 import { localizeComponent } from "./localization";
 import { applyPythonUiOverrides } from "./pythonUiModel";
 import Icon from "./Icon";
+import ViewContainer from "./ViewContainer";
+import { panePlacement, viewLayoutError } from "./viewContainers";
+import type { ViewPane } from "./viewContainers";
+import { ComponentActivityProvider, useComponentActivity } from "./ComponentActivity";
 import type {
   CanvasComponent,
   InputValue,
@@ -33,7 +37,7 @@ import type {
   RuntimeParameters,
   ScriptResult,
   PythonUiAction,
-  TableCellEdit,
+  TableEditIntent,
 } from "./types";
 import {
   actionKey,
@@ -80,7 +84,7 @@ export interface ProjectComponentProps {
   onNavigate: (screenId: string) => void;
   onAction?: (component: CanvasComponent, instance?: InstanceAction, uiAction?: PythonUiAction) => void;
   onPythonEvent?: PythonEventTransport;
-  onTableEdit?: (component: CanvasComponent, edit: TableCellEdit, instance?: InstanceAction) => Promise<ScriptResult>;
+  onTableEdit?: (component: CanvasComponent, edit: TableEditIntent, instance?: InstanceAction) => Promise<ScriptResult>;
   onOpenPopup?: (component: CanvasComponent, instance?: InstanceAction) => void;
   onClosePopup?: () => void;
   actionBusyId?: string;
@@ -96,10 +100,11 @@ type TemplateInstanceProps = ProjectComponentProps & {
   querySourceParameters?: RuntimeParameters;
   parentBindingInputs?: InputValues[];
   parentBindingState?: ParameterBindingState[];
+  parentParameterScopes?: RuntimeParameters[];
 };
 
 export function ProjectComponentView(props: ProjectComponentProps) {
-  if (isTemplateInstance(props.component.type))
+  if (isTemplateInstance(props.component.type) || props.component.type === "viewContainer")
     return <BoundTemplateInstance {...props} />;
   return (
     <BoundComponent
@@ -114,6 +119,7 @@ export function ProjectComponentView(props: ProjectComponentProps) {
 
 /** Wrapper bindings belong to the parent form, independently of each template row. */
 function BoundTemplateInstance(props: TemplateInstanceProps) {
+  const activity = useComponentActivity();
   const applicationState = useApplicationStateContext();
   const queryProperties = useQueryPropertyContext();
   const styles = useVisualStyles();
@@ -135,8 +141,9 @@ function BoundTemplateInstance(props: TemplateInstanceProps) {
   const python = usePythonComponentEvents({ component: props.component, components: props.components ?? [props.component], parameters: props.parameters,
     identity: JSON.stringify([props.component, props.parameters, props.publishedAt, props.preview, props.queryScope]),
     enabled: props.preview && !props.readOnly, transport: props.onPythonEvent, onAutomaticInputChange: props.onAutomaticInputChange });
-  useComponentEvents({ component: props.component, evaluated: result.component, components: props.components ?? [props.component], errors: result.errors,
-    parameters: props.parameters, inputs: props.inputs ?? {}, preview: props.preview, scopeKey: props.queryScope, onAutomaticInputChange: props.onAutomaticInputChange, python });
+  const interactionEvents = useComponentEvents({ component: props.component, evaluated: result.component, components: props.components ?? [props.component], errors: result.errors,
+    parameters: props.parameters, inputs: props.inputs ?? {}, preview: props.preview, scopeKey: props.queryScope, onAutomaticInputChange: props.onAutomaticInputChange, python,
+    interactionEnabled: props.preview && !props.readOnly && result.component.props.enabled !== false && result.component.props.visible !== false && errors.length === 0 && !props.interactionLocked });
   const appearance = result.component.props;
   const visible = appearance.visible !== false;
   const enabled = appearance.enabled !== false && errors.length === 0;
@@ -149,7 +156,7 @@ function BoundTemplateInstance(props: TemplateInstanceProps) {
   const template = props.templates?.find(item => item.id === view.props.templateId);
   const caption = appearance.bindings?.text || appearance.queryBindings?.text || Object.hasOwn(applicationState?.propertyOverrides[props.component.id] ?? {}, "text")
     ? appearance.text ?? "" : resolvePath(appearance.text || template?.name || "Template instance", props.parameters);
-  const canInteract = props.preview && enabled && visible && !props.interactionLocked;
+  const canInteract = activity && props.preview && enabled && visible && !props.interactionLocked;
   const gate = useRef(false);
   const writeGate = useRef(false);
   gate.current = canInteract;
@@ -161,7 +168,8 @@ function BoundTemplateInstance(props: TemplateInstanceProps) {
   const inheritedAppearance: InheritedComponentAppearance = {};
   for (const key of ["color", "backgroundColor", "foregroundColor", "fontSize"] as const)
     if (appearance[key] !== undefined) Object.assign(inheritedAppearance, { [key]: appearance[key] });
-  return <div className={`bound-component template-binding-frame${runtimeHidden ? " bound-component-hidden" : ""}${!visible ? " design-hidden" : ""}${errors.length ? " binding-failed" : ""}`}
+  const InstanceContents = props.component.type === "viewContainer" ? ContainerInstances : TemplateInstances;
+  return <div {...interactionEvents} className={`bound-component template-binding-frame${runtimeHidden ? " bound-component-hidden" : ""}${!visible ? " design-hidden" : ""}${errors.length ? " binding-failed" : ""}`}
     hidden={runtimeHidden}
     role="group" aria-label={caption} lang={localized.locale} data-component-id={props.component.id} aria-disabled={props.preview && !enabled || undefined}
     style={{
@@ -172,7 +180,8 @@ function BoundTemplateInstance(props: TemplateInstanceProps) {
       "--template-background": appearance.backgroundColor,
     } as CSSProperties}>
     <div className="bound-component-content" inert={props.preview && (!enabled || !visible || props.interactionLocked)}>
-      <TemplateInstances {...props} component={view} inheritedAppearance={inheritedAppearance}
+      <ComponentActivityProvider active={!props.preview || enabled && visible}>
+      <InstanceContents {...props} component={view} inheritedAppearance={inheritedAppearance}
         onAutomaticScopedInputChange={props.onAutomaticScopedInputChange ?? props.onScopedInputChange}
         interactionLocked={props.interactionLocked || !enabled || !visible}
         onAction={(leaf, instance, uiAction) => { if (writeGate.current) props.onAction?.(leaf, instance, uiAction); }}
@@ -182,6 +191,7 @@ function BoundTemplateInstance(props: TemplateInstanceProps) {
         onNavigate={target => { if (gate.current) props.onNavigate(target); }}
         onClosePopup={() => { if (gate.current) props.onClosePopup?.(); }}
         onScopedInputChange={(scope, key, value) => { if (writeGate.current) props.onScopedInputChange?.(scope, key, value); }} />
+      </ComponentActivityProvider>
     </div>
     {!props.preview && !visible && <span className="binding-visibility-note">Hidden in runtime</span>}
     {localized.warning && <span className="component-localization-note" role="status" title={localized.warning}>{localized.warning}</span>}
@@ -192,7 +202,42 @@ function BoundTemplateInstance(props: TemplateInstanceProps) {
   </div>;
 }
 
+function ContainerInstances(props: TemplateInstanceProps) {
+  const activity = useComponentActivity();
+  const layout = props.component.props.viewLayout;
+  let error = viewLayoutError(layout, props.templates) || templateExpansion([props.component], props.templates ?? [], props.templateAncestors).error;
+  const contexts = new Map<string, RuntimeParameters>();
+  if (!error && layout) for (const pane of layout.panes) {
+    const template = props.templates!.find(item => item.id === pane.templateId)!;
+    try { contexts.set(pane.id, templateParameters(template, props.parameters, pane.parameters)); }
+    catch (reason) { error = reason instanceof Error ? reason.message : String(reason); }
+  }
+  if (error || !layout) return <div className="template-placeholder query-repeater-error" role="status"><strong>View container unavailable</strong><span>{error || "Configure the container panes in Properties."}</span></div>;
+  return <ViewContainer layout={layout} interactive={activity && props.preview && !props.interactionLocked}
+    renderPane={(pane, active) => <ComponentActivityProvider active={active}><ContainerPane {...props} pane={pane} context={contexts.get(pane.id)!} /></ComponentActivityProvider>} />;
+}
+
+function ContainerPane(props: TemplateInstanceProps & { pane: ViewPane; context: RuntimeParameters }) {
+  const host = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: props.component.width, height: props.component.height });
+  const template = props.templates!.find(item => item.id === props.pane.templateId)!;
+  useEffect(() => {
+    const element = host.current;
+    if (!element) return;
+    const resize = () => { if (element.clientWidth && element.clientHeight) setSize({ width: element.clientWidth, height: element.clientHeight }); };
+    resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => observer.disconnect();
+  }, []);
+  const key = JSON.stringify([props.pane.id, props.pane.templateId, props.context, template.parameters, template.parameterTypes, template.instanceState, props.publishedAt]);
+  return <div className="view-pane-placement" ref={host}><TemplateInstanceCell {...props} key={key}
+    component={panePlacement(props.component, props.pane)} template={template} row={{ id: props.pane.id, parameters: {} }}
+    parentBindingInputs={props.parentBindingInputs ? [...props.parentBindingInputs, {}] : undefined}
+    parentBindingState={props.parentBindingState ? [...props.parentBindingState, {}] : undefined}
+    dynamic={false} dynamicAncestor scale={Math.min(size.width / template.width, size.height / template.height)} cellHeight={size.height} />
+  </div>;
+}
+
 function TemplateInstances(props: TemplateInstanceProps) {
+  const activity = useComponentActivity();
   const applicationState = useApplicationStateContext();
   const {
     component, templates = [], parameters, preview, queryScope, publishedAt, communicationLost = false,
@@ -209,7 +254,7 @@ function TemplateInstances(props: TemplateInstanceProps) {
   try {
     if (template) {
       boundParameters = resolveParameterBindings(component, template, {
-        components: props.components ?? [component], tags: props.tags, parameters, inputs: props.inputs ?? {}, state: applicationState?.values,
+        components: props.components ?? [component], tags: props.tags, parameters, inputs: props.inputs ?? {}, state: applicationState?.values, communicationLost,
       });
       bindingInputs = parameterBindingInputs(component, props.inputs ?? {});
       bindingState = parameterBindingState(component, applicationState?.values);
@@ -222,7 +267,7 @@ function TemplateInstances(props: TemplateInstanceProps) {
   const parentBindingInputs = [...(props.parentBindingInputs ?? (props.parentPath ?? []).map(() => ({}))), bindingInputs];
   const hasStateSource = Object.keys(bindingState).length > 0 || Boolean(props.parentBindingState);
   const parentBindingState = [...(props.parentBindingState ?? (props.parentPath ?? []).map(() => ({}))), bindingState];
-  const queryRows = useQueryRepeater(repeating && !expansionError && !bindingError ? component.props.rowsSource : undefined, template,
+  const queryRows = useQueryRepeater(activity && repeating && !expansionError && !bindingError ? component.props.rowsSource : undefined, template,
     queryScope ?? "designer", parameters, communicationLost, publishedAt);
   useEffect(() => {
     const element = host.current;
@@ -321,16 +366,21 @@ function TemplateInstanceCell({ component, templates, template, row, context, dy
   scopedInputs = {}, onScopedInputChange, onAutomaticScopedInputChange, communicationLost = false, preview, queryScope, publishedAt,
   onNavigate, onAction, onPythonEvent, onTableEdit, onOpenPopup, onClosePopup, actionBusyId, interactionLocked, inheritedAppearance, readOnly,
   parentPath = [], templateAncestors = [], dynamicAncestor = false,
-  querySourceParameters, parentBindingInputs, parentBindingState,
+  querySourceParameters, parentBindingInputs, parentBindingState, parentParameterScopes,
 }: TemplateInstanceProps & { template: Template; row?: TemplateRow | ResolvedTemplateRow; context: RuntimeParameters; dynamic: boolean; scale: number; cellHeight: number }) {
+  const activity = useComponentActivity();
   const parentApplicationState = useApplicationStateContext();
+  const activityLifetime = useRef({ active: activity, epoch: 0 });
+  if (activityLifetime.current.active !== activity) { activityLifetime.current.active = activity; activityLifetime.current.epoch++; }
+  const activityEpoch = activityLifetime.current.epoch;
   const [localInputs, setLocalInputs] = useState<InputValues>({});
   const path: InstancePathStep[] = [...parentPath, { instanceId: component.id, ...(row ? { rowId: row.id } : {}) }];
   const scope = instanceInputKey(screenId, path);
   const applicationState = useInstanceApplicationState(parentApplicationState, scope, template.instanceState);
   const local = dynamic || dynamicAncestor || Boolean(parentBindingInputs) || template.instanceState !== undefined;
   const queryParameters = dynamic ? context : querySourceParameters;
-  const active = preview && !interactionLocked && !readOnly;
+  const sourceParameterScopes = [...(parentParameterScopes ?? []), context];
+  const active = activity && preview && !interactionLocked && !readOnly;
   const inputGate = useRef(false);
   const lifetime = useRef(true);
   useEffect(() => { lifetime.current = true; return () => { lifetime.current = false; }; }, []);
@@ -345,13 +395,14 @@ function TemplateInstanceCell({ component, templates, template, row, context, dy
   const inputs = form.inputs;
   const queryProperties = useQueryPropertyBindings(template.components,
     { components: template.components, tags, parameters: context, inputs, communicationLost, state: applicationState?.values },
-    { state: applicationState, scope: queryScope ?? "designer", publishedAt, active: preview });
+    { state: applicationState, scope: queryScope ?? "designer", publishedAt, active: preview && activity });
   const instance: InstanceAction = {
     ...path[0], ...(path.length > 1 ? { instancePath: path } : {}), template, parameters: context, inputs,
+    sourceParameterScopes,
     ...(queryParameters ? { querySourceParameters: queryParameters } : {}),
     ...(parentBindingInputs ? { bindingInputs: parentBindingInputs.map(values => ({ ...values })) } : {}),
     ...(parentBindingState ? { bindingState: structuredClone(parentBindingState) } : {}),
-    isCurrent: () => lifetime.current,
+    isCurrent: () => lifetime.current && activityLifetime.current.active && activityLifetime.current.epoch === activityEpoch,
   };
   return <ApplicationStateProvider value={applicationState}><QueryPropertyProvider value={queryProperties}><div className="template-instance-cell" data-instance-id={component.id} data-row-id={row?.id} data-instance-path={JSON.stringify(path)} style={{ height: cellHeight }}>
               <div
@@ -377,7 +428,7 @@ function TemplateInstanceCell({ component, templates, template, row, context, dy
                       } as CSSProperties
                     }
                   >
-                    {isTemplateInstance(leaf.type) ? (
+                    {isTemplateInstance(leaf.type) || leaf.type === "viewContainer" ? (
                       <BoundTemplateInstance component={leaf} components={template.components} templates={templates} screenId={screenId}
                         parameters={context} inputs={inputs} scopedInputs={scopedInputs} tags={tags} preview={preview}
                         onAutomaticInputChange={form.assignAutomatic}
@@ -385,6 +436,7 @@ function TemplateInstanceCell({ component, templates, template, row, context, dy
                         querySourceParameters={queryParameters}
                         parentBindingInputs={parentBindingInputs}
                         parentBindingState={parentBindingState}
+                        parentParameterScopes={sourceParameterScopes}
                         inheritedAppearance={inheritedAppearance} interactionLocked={interactionLocked} readOnly={readOnly}
                         queryScope={queryScope} publishedAt={publishedAt} communicationLost={communicationLost}
                         onScopedInputChange={onScopedInputChange} onNavigate={onNavigate} onAction={onAction}
@@ -403,7 +455,7 @@ function TemplateInstanceCell({ component, templates, template, row, context, dy
                         queryScope={queryScope}
                         publishedAt={publishedAt}
                         communicationLost={communicationLost}
-                        onNavigate={onNavigate}
+                        onNavigate={target => { if (activity && !interactionLocked) onNavigate(target); }}
                         onInputChange={form.assign}
                         onAutomaticInputChange={form.assignAutomatic}
                         onAction={(_component, uiAction) => { if (lifetime.current && inputGate.current) onAction?.(leaf, instance, uiAction); }}
@@ -411,7 +463,7 @@ function TemplateInstanceCell({ component, templates, template, row, context, dy
                           ? onPythonEvent(target, invocation, instance) : Promise.reject(new Error("This template event owner has closed.")) : undefined}
                         onTableEdit={onTableEdit ? edit => lifetime.current && inputGate.current ? onTableEdit(leaf, edit, instance)
                           : Promise.reject(new Error("This template form is no longer interactive.")) : undefined}
-                        onOpenPopup={() => { if (lifetime.current) onOpenPopup?.(leaf, instance); }}
+                        onOpenPopup={() => { if (lifetime.current && activity && !interactionLocked) onOpenPopup?.(leaf, instance); }}
                         onClosePopup={onClosePopup}
                         actionBusy={
                           actionBusyId === actionKey(leaf.id, instance)

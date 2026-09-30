@@ -1,14 +1,15 @@
 import { eventScriptDraft, eventScriptError, eventScriptValue, pythonComponentEventRestriction, pythonInputEventsAvailable, type EventScriptDraft } from "./eventScriptAuthoring";
-import { componentEventProperties } from "./componentEventModel";
+import { componentEventProperties, componentInteractionTypes } from "./componentEventModel";
 import { componentMessageScopes, componentMessageTypeError, validateComponentMessageHandlers } from "./componentMessageAuthoring";
 import { componentMessagePayload } from "./componentMessageModel";
 import { isInput } from "./inputs";
-import type { CanvasComponent, ComponentEventProperty, ComponentMessageHandler, ComponentMessageScope, Screen } from "./types";
+import type { CanvasComponent, ComponentEventProperty, ComponentInteractionEventType, ComponentMessageHandler, ComponentMessageScope, Screen } from "./types";
 
-export type ComponentEventTab = "action" | "change" | "commit" | "mount" | "propertyChange" | "unmount" | "messages";
+export type ComponentEventTab = "action" | "change" | "commit" | "mount" | "propertyChange" | "unmount" | "messages" | ComponentInteractionEventType;
 export type ScriptEventTab = Exclude<ComponentEventTab, "action" | "messages">;
-export const scriptEventTabs: ScriptEventTab[] = ["change", "commit", "mount", "propertyChange", "unmount"];
-export const eventTabLabels: Record<ComponentEventTab, string> = { action: "On click", change: "Value changed", commit: "Value committed", mount: "Mounted", propertyChange: "Property changed", unmount: "Unmounted", messages: "Messages" };
+export const scriptEventTabs: ScriptEventTab[] = ["change", "commit", "mount", "propertyChange", "unmount", ...componentInteractionTypes];
+export const eventTabLabels: Record<ComponentEventTab, string> = { action: "On click", change: "Value changed", commit: "Value committed", mount: "Mounted", propertyChange: "Property changed", unmount: "Unmounted", messages: "Messages",
+  focus: "Focus gained", blur: "Focus lost", keyDown: "Key down", keyUp: "Key up", doubleClick: "Double click", pointerDown: "Pointer down", pointerUp: "Pointer up" };
 export interface ComponentActionsDraft {
   scripts: Record<ScriptEventTab, EventScriptDraft>;
   properties: ComponentEventProperty[];
@@ -28,7 +29,7 @@ export function componentActionsDraft(component: CanvasComponent): ComponentActi
   const props = component.props, inputAvailable = pythonInputEventsAvailable(component);
   const handlers = (props.messageHandlers ?? []).map(handler => ({ ...handler }));
   return {
-    scripts: { change: eventScriptDraft(props.events?.change, inputAvailable), commit: eventScriptDraft(props.events?.commit, inputAvailable), mount: eventScriptDraft(props.componentEvents?.mount), propertyChange: eventScriptDraft(props.componentEvents?.propertyChange), unmount: eventScriptDraft(props.componentEvents?.unmount) },
+    scripts: Object.fromEntries(scriptEventTabs.map(tab => [tab, tab === "change" || tab === "commit" ? eventScriptDraft(props.events?.[tab], inputAvailable) : eventScriptDraft(props.componentEvents?.[tab])])) as Record<ScriptEventTab, EventScriptDraft>,
     properties: [...(props.componentEvents?.propertyChange?.properties ?? [])], handlers,
     messageScripts: Object.fromEntries(handlers.map(handler => [handler.id, eventScriptDraft(handler)])),
     action: props.action ?? (component.type === "button" ? "navigate" : ""), buttonCode: props.script ?? "",

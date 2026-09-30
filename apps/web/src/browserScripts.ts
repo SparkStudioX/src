@@ -10,6 +10,7 @@ import type { ComponentMessageSender } from "./componentMessageModel";
 // with that origin's privileges; this convenience API is not a security sandbox.
 export function useBrowserScripts(project: Project | null, screen: Screen | undefined, notify:(message:string)=>void, navigate:(id:string)=>void, state?:RuntimeStateApi, scopeKey?:string, sendMessage?:ComponentMessageSender) {
   const [publication,setPublication]=useState<BrowserPublication | null>(null);
+  const applicationStamp = (project as (Project & { publishedAt?: string }) | null)?.publishedAt;
   const lifecycle=useRef<BrowserScriptLifecycle | null>(null);
   const current=useRef({project,screen,notify,navigate});
   current.current={project,screen,notify,navigate};
@@ -20,6 +21,7 @@ export function useBrowserScripts(project: Project | null, screen: Screen | unde
   });
   // Context changes invalidate old helper calls synchronously, before the next effect.
   lifecycle.current.setContext(project && screen ? {
+    applicationPublishedAt: applicationStamp,
     projectKey:JSON.stringify([project.id,project.revision,(project as Project & {publishedAt?:string}).publishedAt]),
     screenId:screen.id,
     screenName:screen.name,
@@ -39,15 +41,16 @@ export function useBrowserScripts(project: Project | null, screen: Screen | unde
     return ()=>runner.deactivate();
   },[]);
   useEffect(() => {
+    if (!applicationStamp) { setPublication(null); return; }
     let stopped=false;
     let latestRequest=0;
-    const load=() => { const request=++latestRequest; void api<BrowserPublication>("/runtime/scripts").then(next => {
-      if (!stopped && request===latestRequest) setPublication(prior => prior?.publishedAt === next.publishedAt && prior?.revision === next.revision ? prior : next);
+    const load=() => { const request=++latestRequest; void api<BrowserPublication>(`/runtime/scripts?publishedAt=${encodeURIComponent(applicationStamp)}`).then(next => {
+      if (!stopped && request===latestRequest) setPublication(prior => prior?.applicationPublishedAt === next.applicationPublishedAt && prior?.publishedAt === next.publishedAt && prior?.revision === next.revision ? prior : next);
     }).catch(() => { /* Gateway connection status already reports outages. */ }); };
     load(); const poll=setInterval(load,15000);
     return () => { stopped=true; clearInterval(poll); };
-  },[]);
+  },[applicationStamp]);
   useEffect(() => {
-    lifecycle.current!.update(publication);
+    lifecycle.current!.update(publication?.applicationPublishedAt === applicationStamp ? publication : null);
   },[project,screen,publication,scopeKey]);
 }

@@ -30,6 +30,12 @@ export function InputStateBindingEditor({ component, state, allowUnresolvedScree
   const type = isNumericInput(component.type) ? "number" : component.type === "checkbox" || component.type === "toggle" ? "boolean" : "string";
   const compatibleKeys = (scope: InputStateBinding["scope"]) => Object.entries(state?.[scope] ?? {}).filter(([, value]) => typeof value === type).map(([key]) => key);
   const problem = binding ? inputStateBindingDraftError(component, binding, state, allowUnresolvedScreenState) : null;
+  const source = binding ? `${binding.scope}.${binding.key}` : component.props.tagPath ? `Tag: ${component.props.tagPath}` : "Local form default";
+  const help = binding ? "Accepted edits update this state property. The local default is inactive."
+    : component.props.tagPath ? "The tag supplies the initial value before editing. Clear the initial tag to use a state binding."
+    : state?.instance !== undefined ? "Use ƒx to synchronize with session, screen or this template's private instance state."
+    : "Use ƒx to synchronize with a session or screen property.";
+  const description = `${id}-help${problem ? ` ${id}-error` : ""}`;
   const close = () => { setDraft(null); setError(""); };
   const apply = () => {
     if (!draft) return;
@@ -40,14 +46,14 @@ export function InputStateBindingEditor({ component, state, allowUnresolvedScree
   return <div className="property-sheet-group" aria-label="Input value source">
     <h4>Data</h4>
     <div className={`property-sheet-row${binding ? " is-bound" : ""}`} data-property="inputValue">
-      <label htmlFor={`${id}-source`}>Value</label>
-      <div className="property-sheet-value"><input id={`${id}-source`} readOnly value={binding ? `${binding.scope}.${binding.key}` : "Local form value"} /></div>
-      <button type="button" className="property-bind-button" aria-label={`${binding ? "Edit" : "Add"} Value binding`} title="Bind this input to browser application state" onClick={() => {
+      <label htmlFor={`${id}-source`}>Value source</label>
+      <div className="property-sheet-value"><input id={`${id}-source`} readOnly value={source} title={source} aria-invalid={Boolean(problem)} aria-describedby={description} /></div>
+      <button type="button" className="property-bind-button" aria-label={`${binding ? "Edit" : "Add"} Value binding`} aria-describedby={description} title="Bind this input to browser application state" onClick={() => {
         setError(""); setDraft(binding ? { ...binding } : { scope: "session", key: compatibleKeys("session")[0] ?? "" });
       }}>ƒx</button>
-      {binding && <small className={problem ? "property-sheet-error" : "property-sheet-expression"}>{problem || "Two-way · accepted edits update state"}</small>}
+      {binding && <small id={problem ? `${id}-error` : undefined} role={problem ? "alert" : undefined} className={problem ? "property-sheet-error" : "property-sheet-expression"} title={problem || "Two-way · accepted edits update state"}>{problem || "Two-way · accepted edits update state"}</small>}
+      <small id={`${id}-help`} className="property-sheet-hint">{help}</small>
     </div>
-    <p className="binding-note">{binding ? "State supplies the value; the local default is inactive. Inputs using the same state property stay synchronized." : state?.instance !== undefined ? "The form starts from its configured default or tag source. Use ƒx to synchronize with session, screen or this template's private instance state." : "The form starts from its configured default or tag source. Use ƒx to synchronize with a session or screen property."}</p>
     {draft && createPortal(<dialog ref={dialog} className="property-binding-dialog" aria-labelledby={`${id}-title`} onCancel={event => { event.preventDefault(); close(); }} onClose={close} onKeyDown={event => {
       event.stopPropagation();
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); apply(); }

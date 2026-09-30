@@ -16,8 +16,8 @@ public static class GatewayConnections
             var timer = Stopwatch.StartNew();
             var result = await connector.TestAsync(capture.Connection, cancellation);
             return store.CompleteConnectionTest(capture, result.Success, timer.Elapsed.TotalMilliseconds, result.Message);
-        }).Access("admin", audit: true);
-        routes.MapGet("/connections/{id}/diagnostics", (string id, ProjectCatalog catalog, TagEngine tags) => Snapshot(id, catalog, tags)).Access("admin");
+        }).Access("configuration", audit: true);
+        routes.MapGet("/connections/{id}/diagnostics", (string id, ProjectCatalog catalog, TagEngine tags) => Snapshot(id, catalog, tags)).Access("configuration");
     }
 
     public static object Snapshot(string id, ProjectCatalog catalog, TagEngine tags)

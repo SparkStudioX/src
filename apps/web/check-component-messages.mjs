@@ -231,4 +231,22 @@ await check('read-only Preview does not accept gateway-injected authored behavio
   setPreviewRequestContext({token:'fixture',mode:'read-only',expiresAt:new Date(Date.now()+60000).toISOString()});
   try {assert.deepEqual(bus.receiveSessionMessage('gateway-preview','refresh',{}),{messageId:'',accepted:0});assert.equal(hits,0);}finally{setPreviewRequestContext(null,false);}
 });
+await check('retained inactive panes unregister messages and never revive queued or captured message authority', async () => {
+  const env = environment(), seen = [], effects = [], started = deferred(), target = component('retained', [handler('session', 'session')]);
+  const ctx = context(env, target, scope(), { setInput: (...args) => effects.push(args) });
+  let oldApp;
+  const life = mount(ctx, (_script, event, _inputs, _parameters, app) => {
+    seen.push(event.payload.order);
+    if (event.payload.order === 1) { oldApp = app; started.resolve(); return new Promise(() => {}); }
+  });
+  const send = order => env.bus.receiveSessionMessage('retained-' + order, 'refresh', { order });
+  assert.equal(send(1).accepted, 1); await started.promise; assert.equal(send(2).accepted, 1);
+  life.prepare({ ...ctx, suspended: true }); life.commit();
+  assert.equal(oldApp.signal.aborted, true); assert.equal(send(3).accepted, 0);
+  life.prepare(ctx); life.commit(); oldApp.notify('obsolete');
+  assert.equal(oldApp.sendMessage('refresh', { order: 99 }, { scope: 'session' }).accepted, 0);
+  assert.equal(send(4).accepted, 1); await life.whenIdle();
+  assert.deepEqual(seen, [1, 4]); assert.deepEqual(effects, []); assert.deepEqual(env.coordinator.snapshot().diagnostics, []);
+  await dispose(life); assert.equal(send(5).accepted, 0);
+});
 console.log(`${passed} component-message checks passed.`);

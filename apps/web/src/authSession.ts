@@ -1,6 +1,8 @@
 export type AuthAudience = "engineering" | "operator";
-export interface ProjectPermissions { view: boolean; operate: boolean; design: boolean; publish: boolean }
-export const noPermissions: ProjectPermissions = { view: false, operate: false, design: false, publish: false };
+export interface ProjectPermissions { view: boolean; operate: boolean; design: boolean; publish: boolean; commands?: boolean }
+export const noPermissions: ProjectPermissions = { view: false, operate: false, design: false, publish: false, commands: false };
+export interface GatewayCapabilities { diagnostics: boolean; configuration: boolean; backups: boolean; audit: boolean; sessions: boolean }
+export const noGatewayCapabilities: GatewayCapabilities = { diagnostics: false, configuration: false, backups: false, audit: false, sessions: false };
 export const authExpiredEvent = "sparkstudio:auth-expired";
 
 let session: { audience: AuthAudience; projectId: string | null; csrfToken: string | null; key: string } = {

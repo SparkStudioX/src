@@ -15,7 +15,7 @@ public sealed partial class ProjectStore
     private JsonObject project;
     private JsonArray connections;
     private JsonArray queries;
-    private JsonArray definitions;
+    private JsonArray definitions = [];
     private readonly Dictionary<string, string> connectionTests = new(StringComparer.Ordinal);
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
@@ -30,7 +30,7 @@ public sealed partial class ProjectStore
         if (projectId is not null) project["id"] = projectId;
         connections = gatewayStore is null ? Load("connections.json") as JsonArray ?? [] : [];
         queries = gatewayOnly ? [] : Load("queries.json") as JsonArray ?? (gatewayStore is null ? Seed.Queries() : []);
-        definitions = gatewayStore is null ? Load("tags.json") as JsonArray ?? [] : [];
+        if (gatewayStore is null) LoadTagModel(Load("tags.json"));
     }
     private JsonNode? Load(string name) => File.Exists(Path.Combine(directory, name)) ? JsonNode.Parse(File.ReadAllText(Path.Combine(directory, name))) : null;
     private void Persist(string name, JsonNode node)
@@ -214,9 +214,7 @@ public sealed partial class ProjectStore
         if (gatewayStore is not null) return gatewayStore.GetTagDefinitions();
         lock (gate)
         {
-            return new JsonArray(definitions.Select(node => node is JsonObject value
-                ? (JsonNode)TagDefinitionValidator.WithLegacyDefaults(value)
-                : node?.DeepClone()).ToArray());
+            return TagModel.Expand(tagModel, NormalizeTag);
         }
     }
     public JsonObject SaveTag(JsonObject value)
@@ -226,15 +224,16 @@ public sealed partial class ProjectStore
         {
             var node = NormalizeTag(value);
             var tagPath = Required(node, "path");
+            if (GetTagDefinitions().OfType<JsonObject>().Any(tag => Optional(tag, "path") == tagPath && tag["udtInstance"] is not null))
+                throw new ArgumentException("Edit UDT members through a reviewed instance override or a new definition version.");
             var next = (JsonArray)definitions.DeepClone();
             var old = next.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "path") == tagPath);
             if (old is null && next.Count >= 1000) throw new ArgumentException("A gateway supports at most 1000 configured tags in this version.");
             if (old is not null) next.Remove(old);
             next.Add(node);
-            TagExpressions.Order(next.OfType<JsonObject>().ToArray());
-            Persist("tags.json", next);
-            definitions = next;
-            return (JsonObject)node.DeepClone();
+            var model = ModelWithTags(next); var expanded = TagModel.Expand(model, NormalizeTag);
+            PersistTagModel(model);
+            return (JsonObject)expanded.OfType<JsonObject>().Single(tag => Required(tag, "path") == tagPath).DeepClone();
         }
     }
     public bool DeleteTag(string path)
@@ -243,13 +242,13 @@ public sealed partial class ProjectStore
         lock (gate)
         {
             TagDefinitionValidator.Path(path);
+            if (GetTagDefinitions().OfType<JsonObject>().Any(tag => Optional(tag, "path") == path && tag["udtInstance"] is not null))
+                throw new ArgumentException("Remove a UDT instance through a reviewed tag model change.");
             var next = (JsonArray)definitions.DeepClone();
             var old = next.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "path") == path);
             if (old is null) return false;
             next.Remove(old);
-            TagExpressions.Order(next.OfType<JsonObject>().ToArray());
-            Persist("tags.json", next);
-            definitions = next;
+            var model = ModelWithTags(next); TagModel.Expand(model, NormalizeTag); PersistTagModel(model);
             return true;
         }
     }
@@ -259,15 +258,22 @@ public sealed partial class ProjectStore
         lock (gate)
         {
             TagDefinitionValidator.Path(path);
-            var next = (JsonArray)definitions.DeepClone();
-            var old = next.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "path") == path)
+            var old = GetTagDefinitions().OfType<JsonObject>().FirstOrDefault(x => Optional(x, "path") == path)
                 ?? throw new KeyNotFoundException("Tag definition not found.");
             if (TagDefinitionValidator.Kind(old) != "memory") throw new ArgumentException("Only configured memory tags can be written.");
-            if (!TagDefinitionValidator.Enabled(old)) throw new ArgumentException("Disabled memory tags cannot be written.");
-            old["value"] = TagDefinitionValidator.MemoryValue(TagDefinitionValidator.DataType(old), value);
-            Persist("tags.json", next);
-            definitions = next;
-            return TagDefinitionValidator.WithLegacyDefaults(old);
+            if (old["effectiveEnabled"]?.GetValue<bool>() != true) throw new ArgumentException("Disabled memory tags cannot be written.");
+            var typed = TagDefinitionValidator.MemoryValue(TagDefinitionValidator.DataType(old), value);
+            var next = (JsonObject)tagModel.DeepClone();
+            if (old["udtInstance"] is not null)
+            {
+                var instance = next["instances"]!.AsArray().OfType<JsonObject>().Single(item => Required(item, "path") == Required(old, "udtInstance"));
+                var overrides = instance["overrides"]!.AsObject(); var member = Required(old, "udtMember");
+                overrides[member] ??= new JsonObject(); overrides[member]!["value"] = typed;
+            }
+            else next["tags"]!.AsArray().OfType<JsonObject>().Single(item => Required(item, "path") == path)["value"] = typed;
+            PersistTagModel(next);
+            old["value"] = typed.DeepClone();
+            return old;
         }
     }
     public static string Required(JsonObject value, string key) => !string.IsNullOrWhiteSpace(Optional(value, key)) ? Optional(value, key)! : throw new ArgumentException($"{key} is required.");

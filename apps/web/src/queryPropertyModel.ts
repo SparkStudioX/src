@@ -48,6 +48,7 @@ export function validateQueryPropertyBinding(binding: QueryPropertyBinding, targ
     if (query) for (const parameter of query.parameters) if (!Object.hasOwn(binding.parameters ?? {}, parameter.name) && !Object.hasOwn(parameter, "defaultValue"))
       fail(`Query parameter '${parameter.name}' needs a mapping or a saved default.`);
     for (const [key, expression] of Object.entries(binding.parameters ?? {})) {
+      if (Object.values(expression.references ?? {}).some(reference => reference.kind === "tag")) fail("Query parameter expressions cannot reference tags.");
       if (!/^@?[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(key) || key.length > 129) fail(`Query parameter '${key}' has an invalid name.`);
       const error = validateTemplateParameterBinding(expression, component, context.components, context.parameters, key, "string", context.state, allowUnresolvedScreenState);
       if (error) fail(`${key}: ${error}`);
@@ -63,6 +64,7 @@ export function validateQueryPropertyBinding(binding: QueryPropertyBinding, targ
 /** No tag/query recursion or parent/child data ambiguity. Check unused aliases too. */
 export function resolveQueryPropertyParameters(binding: QueryPropertyBinding, component: CanvasComponent, context: BindingContext): RuntimeParameters {
   return Object.fromEntries(Object.entries(binding.parameters ?? {}).map(([key, expression]) => {
+    if (Object.values(expression.references ?? {}).some(reference => reference.kind === "tag")) fail("Query parameter expressions cannot reference tags.");
     const error = validateTemplateParameterBinding(expression, component, context.components, context.parameters, key, "string", context.state);
     if (error) fail(`${key}: ${error}`);
     for (const [alias, reference] of Object.entries(expression.references)) {

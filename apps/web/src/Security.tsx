@@ -1,20 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { useAuth } from "./Auth";
-import { noPermissions } from "./authSession";
-import type { ProjectPermissions } from "./authSession";
+import { noPermissions, noGatewayCapabilities } from "./authSession";
+import type { ProjectPermissions, GatewayCapabilities } from "./authSession";
 import type { ProjectCatalog, ProjectSummary } from "./projectManagement";
 import "./security.css";
 
 interface ManagedUser {
   id: string; username: string; displayName: string; gatewayAdmin: boolean; disabled: boolean; revision: number;
   projectGrants: Record<string, ProjectPermissions>; createdAt: string; updatedAt: string;
+  gatewayCapabilities?: GatewayCapabilities;
 }
 interface GatewaySettings { revision: number; publicBaseUrl: string | null; projectTagPrefixes: Record<string, string[]> }
 interface AuditEntry { id: string; recordedAt: string; actor: string; action: string; resource?: string | null; projectId: string | null; outcome: string; targetUserId: string | null }
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
-const permissionKeys = ["view", "operate", "design", "publish"] as const;
-const permissionLabels: Record<keyof ProjectPermissions, string> = { view: "View", operate: "Operate", design: "Design", publish: "Publish" };
+const permissionKeys = ["view", "operate", "commands", "design", "publish"] as const;
+const permissionLabels: Record<keyof ProjectPermissions, string> = { view: "View", operate: "Operate", commands: "Equipment commands", design: "Design", publish: "Publish" };
+const capabilityLabels: Record<keyof GatewayCapabilities, string> = { diagnostics: "Diagnostics and support snapshots", configuration: "Tags, connections and deployment configuration", backups: "Backup configuration, creation and download", audit: "Audit history", sessions: "Session inventory and revocation" };
 
 export default function Security({ section }: { section: "security" | "audit" }) {
   const auth = useAuth();
@@ -68,6 +70,7 @@ function UserEditor({ user, projects, onClose, onSaved }: { user: ManagedUser | 
   const [username, setUsername] = useState(user?.username ?? ""), [displayName, setDisplayName] = useState(user?.displayName ?? "");
   const [gatewayAdmin, setGatewayAdmin] = useState(user?.gatewayAdmin ?? false), [disabled, setDisabled] = useState(user?.disabled ?? false);
   const [grants, setGrants] = useState<Record<string, ProjectPermissions>>(() => structuredClone(user?.projectGrants ?? {}));
+  const [capabilities, setCapabilities] = useState<GatewayCapabilities>(() => ({ ...noGatewayCapabilities, ...user?.gatewayCapabilities }));
   const [resetPassword, setResetPassword] = useState(!user), [password, setPassword] = useState(""), [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   useEffect(() => { const element = dialog.current; element?.showModal(); return () => element?.close(); }, []);
@@ -75,7 +78,9 @@ function UserEditor({ user, projects, onClose, onSaved }: { user: ManagedUser | 
     setGrants(current => {
       const next = { ...(current[projectId] ?? noPermissions), [key]: checked };
       if (key === "operate" && checked) next.view = true;
-      if (key === "view" && !checked) next.operate = false;
+      if (key === "commands" && checked) { next.operate = true; next.view = true; }
+      if (key === "operate" && !checked) next.commands = false;
+      if (key === "view" && !checked) { next.operate = false; next.commands = false; }
       if (key === "publish" && checked) next.design = true;
       if (key === "design" && !checked) next.publish = false;
       return { ...current, [projectId]: next };
@@ -87,7 +92,7 @@ function UserEditor({ user, projects, onClose, onSaved }: { user: ManagedUser | 
     setBusy(true); setError("");
     try {
       const projectGrants = Object.fromEntries(Object.entries(grants).filter(([, value]) => permissionKeys.some(key => value[key])));
-      const common = { displayName, gatewayAdmin, disabled, projectGrants };
+      const common = { displayName, gatewayAdmin, disabled, projectGrants, gatewayCapabilities: capabilities };
       if (user) await api(`/security/users/${encodeURIComponent(user.id)}`, "PUT", { ...common, revision: user.revision, ...(resetPassword ? { password } : {}) });
       else await api("/security/users", "POST", { ...common, username, password });
       await onSaved();
@@ -99,7 +104,8 @@ function UserEditor({ user, projects, onClose, onSaved }: { user: ManagedUser | 
     <div className="security-dialog-body"><div className="security-form-grid"><label>Username<input autoFocus required pattern={"[A-Za-z0-9._\\-]{3,64}"} minLength={3} maxLength={64} autoComplete="off" value={username} disabled={busy || Boolean(user)} onChange={event => setUsername(event.target.value)} /><small>{user ? "The username cannot be changed." : "3–64 letters, numbers, dots, underscores or hyphens."}</small></label><label>Display name<input maxLength={100} value={displayName} disabled={busy} onChange={event => setDisplayName(event.target.value)} /></label></div>
       <div className="security-check-row"><label><input type="checkbox" checked={disabled} disabled={busy} onChange={event => setDisabled(event.target.checked)} /> Account disabled</label><label><input type="checkbox" checked={gatewayAdmin} disabled={busy} onChange={event => setGatewayAdmin(event.target.checked)} /> Gateway administrator</label></div>
       <p className="muted">Gateway administrators manage accounts and gateway settings and have access to all projects. Disabling an account blocks sign-in and revokes its access.</p>
-      <fieldset disabled={busy}><legend>Project permissions</legend><p className="muted">View opens operator screens. Operate includes View and allows operator actions. Design edits project resources. Publish includes Design and deploys changes. Design does not automatically grant operator access.</p><div className="security-table-scroll"><table className="security-table security-grants"><thead><tr><th>Project</th>{permissionKeys.map(key => <th key={key}>{permissionLabels[key]}</th>)}</tr></thead><tbody>{projects.map(project => <tr key={project.id}><td>{project.name}{project.archived ? " (archived)" : ""}</td>{permissionKeys.map(key => <td key={key}><input type="checkbox" aria-label={`${permissionLabels[key]} ${project.name}`} checked={grants[project.id]?.[key] ?? false} onChange={event => grant(project.id, key, event.target.checked)} /></td>)}</tr>)}</tbody></table></div>{!projects.length && <p>No projects are available.</p>}</fieldset>
+      <fieldset disabled={busy || gatewayAdmin}><legend>Gateway capabilities</legend><p className="muted">Grant individual gateway tasks without account administration. Administrators have every capability. These grants do not add project design or operator access.</p>{(Object.keys(capabilityLabels) as (keyof GatewayCapabilities)[]).map(key => <label className="security-checkbox" key={key}><input type="checkbox" checked={gatewayAdmin || capabilities[key]} onChange={event => setCapabilities(current => ({ ...current, [key]: event.target.checked }))} />{capabilityLabels[key]}</label>)}</fieldset>
+      <fieldset disabled={busy}><legend>Project permissions</legend><p className="muted">View opens operator screens. Operate includes View and allows ordinary operator actions. Equipment commands separately grants controlled device commands and includes Operate. Design edits project resources. Publish includes Design and deploys changes.</p><div className="security-table-scroll"><table className="security-table security-grants"><thead><tr><th>Project</th>{permissionKeys.map(key => <th key={key}>{permissionLabels[key]}</th>)}</tr></thead><tbody>{projects.map(project => <tr key={project.id}><td>{project.name}{project.archived ? " (archived)" : ""}</td>{permissionKeys.map(key => <td key={key}><input type="checkbox" aria-label={`${permissionLabels[key]} ${project.name}`} checked={grants[project.id]?.[key] ?? false} onChange={event => grant(project.id, key, event.target.checked)} /></td>)}</tr>)}</tbody></table></div>{!projects.length && <p>No projects are available.</p>}</fieldset>
       {user && <label className="security-checkbox"><input type="checkbox" checked={resetPassword} disabled={busy} onChange={event => { setResetPassword(event.target.checked); setPassword(""); setConfirm(""); }} /> Set a new password</label>}
       {resetPassword && <div className="security-form-grid"><label>{user ? "New password" : "Password"}<input type="password" autoComplete="new-password" required minLength={12} maxLength={256} value={password} disabled={busy} onChange={event => setPassword(event.target.value)} /><small>12–256 characters. Enter a password explicitly.</small></label><label>Confirm password<input type="password" autoComplete="new-password" required maxLength={256} value={confirm} disabled={busy} onChange={event => setConfirm(event.target.value)} /></label></div>}
       {error && <p className="security-error" role="alert">{error}</p>}

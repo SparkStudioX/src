@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 
 const require = createRequire(import.meta.url), asModule = code=>`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
-const hookUrl = asModule(`let values=[],index=0;export const begin=()=>{index=0;};export const clear=()=>{values=[];index=0;};export const useState=initial=>{const at=index++;if(!(at in values))values[at]=typeof initial==='function'?initial():initial;return[values[at],next=>{values[at]=typeof next==='function'?next(values[at]):next;}];};export const useRef=initial=>{const at=index++;return values[at]??={current:initial};};`);
+const hookUrl = asModule(`let values=[],index=0;export const begin=()=>{index=0;};export const clear=()=>{values=[];index=0;};export const useState=initial=>{const at=index++;if(!(at in values))values[at]=typeof initial==='function'?initial():initial;return[values[at],next=>{values[at]=typeof next==='function'?next(values[at]):next;}];};export const useRef=initial=>{const at=index++;return values[at]??={current:initial};};export const useEffect=()=>{};`);
 function loader(interactive=false) {
   const modules=new Map();
   return function url(name) {
@@ -42,8 +42,13 @@ check('automatic and configured summaries use ordinary fields and explain source
   for(const columns of [undefined,[],[{key:'part_number',label:'Part'},{key:'id',visible:false}]]) {
     const html=renderToStaticMarkup(React.createElement(TableColumnsEditor,{component:make(columns),onChange(){},notify(){}}));
     assert.match(html,/Edit columns/);assert.match(html,/exact query column names/);assert.match(html,/presentation only/);
-    assert.doesNotMatch(html,/<textarea|JSON/);
+    assert.doesNotMatch(html,/<textarea|JSON|<ul|<ol/);assert.match(html,/class="property-sheet-row" data-property="tableColumns"/);
   }
+});
+check('table column row opens a staged dialog and title-bar dismissal preserves saved columns',()=>{
+  const patches=[],ui=drive(make([{key:'amount',label:'Amount'}]),patch=>patches.push(patch));ui.click('Edit columns');ui.change('Column 1 heading','Unsaved');
+  ui.all().find(node=>node.type?.name==='PropertyCollectionDialog').props.onClose();ui.refresh();assert.deepEqual(patches,[]);
+  ui.click('Edit columns');assert.equal(ui.field('Column 1 heading').props.value,'Amount');
 });
 check('all column fields apply together in display order with one undo checkpoint',()=>{
   const component=make([{key:'id'},{key:'amount'}]),before=structuredClone(component),patches=[];

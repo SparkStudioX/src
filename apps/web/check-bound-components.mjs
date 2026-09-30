@@ -24,6 +24,8 @@ function moduleUrl(name) {
 }
 const { default: BoundComponent } = await import(moduleUrl('BoundComponent'));
 const { ProjectComponentView, instanceInputKey } = await import(moduleUrl('templates'));
+const { ApplicationStateProvider } = await import(moduleUrl('applicationState'));
+const { ApplicationStateStore } = await import(moduleUrl('applicationStateModel'));
 const component = (id, type, props) => ({ id, type, x: 0, y: 0, width: 240, height: 80, props });
 const binding = (expression, references = {}) => ({ expression, references });
 const button = component('apply', 'button', { text: 'Apply', action: 'script', script: 'result = inputs', customProperties: { minimum: { type: 'number', value: 2 } }, bindings: {
@@ -161,13 +163,19 @@ check('wrapper appearance supplies child defaults while explicit child appearanc
   const templates = [{ ...formTemplate, components: [component('plain', 'label', { text: 'Plain', fontSize: undefined, foregroundColor: undefined, backgroundColor: undefined }), component('explicit', 'label', { text: 'Own', color: '#ff00ff', backgroundColor: '#334455', fontSize: 17 }), component('bound', 'label', { text: 'Bound', bindings: { foregroundColor: binding('"#667788"') } })] }];
   const html = renderWrapper(wrapper, { templates });
   assert.match(html, /--template-background:#112233/); assert.match(html, /border-color:#fedcba;border-width:3px/);
-  const style = id => html.match(new RegExp(`<div class="bound-component[^"]*" style="([^"]*)" data-component-id="${id}"`))?.[1];
+  const componentStyle = (markup, id) => {
+    const element = [...markup.matchAll(/<div\b[^>]*>/g)].map(match => match[0])
+      .find(tag => tag.includes(`data-component-id="${id}"`) && /class="bound-component(?: |")/.test(tag));
+    assert.ok(element, `Rendered bound component ${id}`);
+    return element.match(/\bstyle="([^"]*)"/)?.[1] ?? '';
+  };
+  const style = id => componentStyle(html, id);
   assert.match(style('plain'), /--component-text-color:#abcdef/); assert.match(style('plain'), /--component-font-size:22px/);
   assert.match(style('explicit'), /--component-background:#334455/); assert.match(style('explicit'), /--component-accent:#ff00ff/);
   assert.match(style('explicit'), /--component-font-size:17px/); assert.doesNotMatch(style('explicit'), /--component-text-color/);
   assert.match(style('bound'), /--component-text-color:#667788/);
   const unstyled = renderWrapper(component('wrapper', 'template', { templateId: 'form' }), { templates });
-  const plainStyle = unstyled.match(/<div class="bound-component[^"]*" style="([^"]*)" data-component-id="plain"/)?.[1];
+  const plainStyle = componentStyle(unstyled, 'plain');
   assert.doesNotMatch(plainStyle, /--component-(text-color|background|font-size)/);
 });
 check('viewer mode locks inputs and gateway actions while preserving navigation and popup controls', () => {
@@ -186,5 +194,17 @@ check('viewer mode reaches template leaves without disabling their navigation', 
   assert.match(html, /<input[^>]*disabled=""/);
   assert.match(html, /<button[^>]*disabled=""[^>]*>Run/);
   assert.doesNotMatch(html, /<button[^>]*disabled=""[^>]*>Open/);
+});
+check('authored interaction workshop renders every state binding without diagnostics', () => {
+  const fixture = JSON.parse(fs.readFileSync(new URL('../../examples/component-interactions.json', import.meta.url), 'utf8'));
+  const document = fixture.screens[0];
+  const store = new ApplicationStateStore(); store.configure('interaction-workshop', {});
+  const owner = store.activateScreen(document.id, document.state);
+  const html = renderToStaticMarkup(React.createElement(ApplicationStateProvider, { value: { ...store.context(owner), store } },
+    document.components.map(component => React.createElement(ProjectComponentView, { key: component.id, component, components: document.components,
+      templates: fixture.templates, screenId: document.id, tags: [], parameters: {}, preview: true, onNavigate() {} }))));
+  assert.doesNotMatch(html, /component-binding-error|Binding error:/);
+  assert.match(html, /Focus the station note/); assert.match(html, /No key yet/);
+  assert.match(html, /data-component-id="masked-status"/); assert.match(html, /Redacted Python key releases:/);
 });
 console.log(`${passed} bound-component renderer checks passed.`);

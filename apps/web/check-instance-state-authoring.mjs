@@ -146,7 +146,7 @@ check('input two-way instance binding filters compatible declared keys and is un
 check('parameter fx reads only containing state and keeps child-private names unavailable', () => {
   const wrapper = { ...label, type: 'template', props: { templateId: 'child' } }, child = { ...template, id: 'child', parameters: { quantity: '0' }, parameterTypes: { quantity: 'number' } };
   const ui = bindingEditor(values, wrapper, { parameterTemplate: child }); ui.field('Add parameter quantity binding').props.onClick(); ui.refresh(); ui.click('Add reference');
-  assert.deepEqual(nodes(ui.field('Reference 1 source')).filter(node => node.type === 'option').map(node => node.props.value), ['custom', 'input', 'parameter', 'sessionState', 'screenState', 'instanceState']);
+  assert.deepEqual(nodes(ui.field('Reference 1 source')).filter(node => node.type === 'option').map(node => node.props.value), ['custom', 'input', 'parameter', 'sessionState', 'screenState', 'instanceState', 'tag']);
   ui.change('Reference 1 source', 'instanceState'); ui.change('Reference 1 state property', 'childOnly'); ui.expression('value'); ui.click('Apply'); assert.deepEqual(ui.patches, []);
   ui.change('Reference 1 state property', 'count'); ui.click('Apply'); assert.equal(ui.patches[0].parameterBindings.quantity.references.value.kind, 'instanceState');
 });

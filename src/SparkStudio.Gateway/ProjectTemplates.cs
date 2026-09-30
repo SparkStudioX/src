@@ -10,7 +10,7 @@ internal static class ProjectTemplates
     public const int MaximumInstanceDepth = 4;
     private const long MaximumExpandedComponents = 10000;
     private static readonly HashSet<string> ComponentTypes = new(StringComparer.Ordinal)
-        { "label", "value", "gauge", "button", "table", "textInput", "numberInput", "checkbox", "select", "list", "treeView", "template", "repeater", "image", "icon", "textArea", "spinner", "slider", "radioGroup", "dateTimeInput", "toggle", "passwordInput", "multiStateButton", "multiStateIndicator", "ledDisplay", "progressBar", "cylindricalTank", "levelIndicator", "thermometer", "line", "rectangle", "ellipse", "polyline", "pipe", "equipmentSymbol" };
+        { "viewContainer", "formattedInput", "barcodeInput", "equipmentCommand", "chart", "sparkline", "label", "value", "gauge", "button", "table", "textInput", "numberInput", "checkbox", "select", "list", "treeView", "template", "repeater", "image", "icon", "textArea", "spinner", "slider", "radioGroup", "dateTimeInput", "toggle", "passwordInput", "multiStateButton", "multiStateIndicator", "ledDisplay", "progressBar", "cylindricalTank", "levelIndicator", "thermometer", "line", "rectangle", "ellipse", "polyline", "pipe", "equipmentSymbol" };
     private static readonly Regex ParameterReference = new(@"\{([^{}]+)\}", RegexOptions.CultureInvariant);
 
     public static IEnumerable<JsonObject> Templates(JsonObject project) => project["templates"] is JsonArray templates
@@ -40,9 +40,11 @@ internal static class ProjectTemplates
         AuthoringDefaultsValidator.ValidateProject(project);
         TemplateParameterBindings.ValidateProject(project);
         ComponentQueryBindingValidator.ValidateProject(project);
+        DatasetBindingValidator.ValidateProject(project);
         QueryRepeaterSource.ValidateStructure(project);
         ProjectNavigation.Validate(project, screens);
         ProjectInteractions.ValidateDrawingActions(project);
+        EquipmentCommandDefinitions.Validate(project);
     }
 
     private static void ValidateDocuments(JsonArray documents, string kind, JsonObject? projectParameters, JsonObject? sessionState)
@@ -72,6 +74,9 @@ internal static class ProjectTemplates
                 if (ProcessDisplayValidator.Types.Contains(type)) ProcessDisplayValidator.Validate(type, component["props"]);
                 if (DrawingComponentValidator.Types.Contains(type)) DrawingComponentValidator.Validate(type, component["props"]);
                 TableColumnValidator.Validate(type, component["props"]);
+                ChartValidator.Validate(type, component["props"]);
+                ViewContainerValidator.Validate(type, component["props"]);
+                if (!InputDefinitionValidator.IsInput(type) && component["props"] is JsonObject inputProps && inputProps.Any(pair => pair.Key is "validation" or "formatMask" or "textCase" or "scanTerminator")) InputConstraints.ValidateDefinition(type, inputProps);
                 TableEditValidator.Validate(type, component["props"]);
                 if (component["props"] is JsonObject tableProps && tableProps.ContainsKey("pageSize"))
                 {
@@ -114,9 +119,9 @@ internal static class ProjectTemplates
             foreach (var component in templates[id]["components"]!.AsArray().OfType<JsonObject>())
             {
                 count++;
-                if (RequiredText(component, "type") is "template" or "repeater")
+                foreach (var placement in ViewContainerValidator.Placements(component))
                 {
-                    var (child, repetitions) = Instance(component, templates, nested: true);
+                    var (child, repetitions) = Instance(placement, templates, nested: true);
                     var childMetrics = MeasureTemplate(RequiredText(child, "id"));
                     depth = Math.Max(depth, childMetrics.Depth + 1);
                     count += childMetrics.Count * repetitions;
@@ -136,9 +141,9 @@ internal static class ProjectTemplates
             foreach (var component in screen["components"]!.AsArray().OfType<JsonObject>())
             {
                 expandedCount++;
-                if (RequiredText(component, "type") is "template" or "repeater")
+                foreach (var placement in ViewContainerValidator.Placements(component))
                 {
-                    var (template, repetitions) = Instance(component, templates, nested: false);
+                    var (template, repetitions) = Instance(placement, templates, nested: false);
                     expandedCount += metrics[RequiredText(template, "id")].Count * repetitions;
                 }
                 if (expandedCount > MaximumExpandedComponents)
@@ -152,9 +157,8 @@ internal static class ProjectTemplates
             {
                 ProjectInteractions.ValidatePlacement(document, screen, context, screens);
                 if (templateScope) ProjectStateValidator.ValidatePlacement(document, screen);
-                foreach (var component in document["components"]!.AsArray().OfType<JsonObject>())
+                foreach (var component in document["components"]!.AsArray().OfType<JsonObject>().SelectMany(ViewContainerValidator.Placements))
                 {
-                    if (RequiredText(component, "type") is not ("template" or "repeater")) continue;
                     var props = component["props"]!.AsObject();
                     var template = templates[RequiredText(props, "templateId")];
                     var defaults = template["parameters"]!.AsObject();
@@ -190,10 +194,9 @@ internal static class ProjectTemplates
         if (RequiredText(component, "type") != "repeater") return (template, 1);
         ValidateNumber(props, "columns", 1, 12, integer: true);
         ValidateNumber(props, "gap", 0, 64, integer: false);
-        if (props["rowsSource"] is JsonObject)
+        if (props["rowsSource"] is JsonObject source)
         {
-            if (nested) throw new ArgumentException("Query-backed repeaters are supported only at a screen's root; nested repeaters must use saved rows.");
-            return (template, QueryRepeaterSource.MaximumRows);
+            return (template, QueryRepeaterSource.RowLimit(source));
         }
         if (props["rows"] is not JsonArray rows || rows.Count > 100)
             throw new ArgumentException("Repeater rows must be an array containing at most 100 rows.");

@@ -1,0 +1,23 @@
+.render-chart { margin:0; width:100%; height:100%; display:flex; flex-direction:column; gap:6px; overflow:auto; padding:10px; box-sizing:border-box; color:inherit; }
+.render-chart figcaption { font-weight:650; font-size:14px; }
+.render-chart svg { display:block; width:100%; min-height:60px; flex:1 1 120px; overflow:visible; }
+.render-chart svg text { fill:currentColor; font-size:11px; font-family:inherit; }
+.chart-grid { stroke:currentColor; stroke-opacity:.14; fill:none; stroke-width:1; }
+.chart-legend { display:flex; flex-wrap:wrap; gap:6px 15px; list-style:none; padding:0; margin:0; font-size:12px; }
+.chart-legend li { display:flex; align-items:center; gap:6px; }
+.chart-legend i { width:10px; height:10px; border-radius:2px; }
+.chart-range { display:flex; gap:12px; align-items:center; font-size:11px; }
+.chart-range label { flex:1; min-width:0; }
+.chart-range input { width:100%; min-width:0; }
+.chart-diagnostic { padding:8px; border:1px solid currentColor; border-radius:4px; }
+.chart-data { font-size:11px; flex:0 0 auto; }
+.chart-data summary { cursor:pointer; }
+.chart-data > div { overflow:auto; max-height:140px; }
+.chart-data table { width:100%; border-collapse:collapse; }
+.chart-data th, .chart-data td { text-align:left; padding:4px 8px; border-bottom:1px solid color-mix(in srgb,currentColor 20%,transparent); }
+.chart-compact { padding:5px; }
+.chart-compact figcaption { font-size:12px; }
+.chart-editor label { display:flex; flex-direction:column; gap:5px; margin-bottom:10px; }
+.chart-editor .chart-check { flex-direction:row; align-items:center; }
+.chart-editor textarea { width:100%; min-height:100px; resize:vertical; font-family:monospace; font-size:12px; }
+.chart-editor small { display:block; line-height:1.4; margin-bottom:8px; }

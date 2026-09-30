@@ -25,7 +25,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ThemeProvider>
       <AuthProvider audience={audience} projectId={route.kind === "designer" || route.kind === "runtime" ? route.projectId : null}>
-        <AuthGate requireAdmin={route.kind === "security" || route.kind === "gateway"}>
+        <AuthGate requireGateway={route.kind === "security" || route.kind === "gateway"}>
           {route.kind === "home" ? <Projects /> : route.kind === "gateway" || route.kind === "security" ? <GatewayConsole /> : route.kind === "invalid" ? <main className="projects-empty"><h1>Page not found</h1><a className="button" href="/">Open Projects</a></main> : route.projectId === null ? <DefaultProjectRedirect kind={route.kind} /> : route.kind === "runtime" ? <OperatorRuntime /> : <App />}
         </AuthGate>
       </AuthProvider>

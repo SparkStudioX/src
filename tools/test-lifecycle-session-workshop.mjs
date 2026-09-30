@@ -154,11 +154,11 @@ try {
 
   await register(operatorA, { body: { publishedAt: 'stale' }, status: 409 });
   await register(operatorA, { csrf: false, status: 403 }); await register(admin, { status: 401 });
-  const idA = await register(operatorA), idA2 = await register(operatorA), idB = await register(operatorB);
+  let idA = await register(operatorA), idA2 = await register(operatorA), idB = await register(operatorB);
   assert.equal(new Set([idA.sessionId, idA2.sessionId, idB.sessionId]).size, 3);
   await project(`/runtime/sessions/${idA.sessionId}/messages`, { session: operatorB, status: 404 });
   await close(idA, operatorB, { status: 404 });
-  const a = await stream(idA, operatorA), a2 = await stream(idA2, operatorA), b = await stream(idB, operatorB);
+  let a = await stream(idA, operatorA), a2 = await stream(idA2, operatorA), b = await stream(idB, operatorB);
   await until(() => [a, a2, b].every(receiver => receiver.events.some(event => event.type === 'tags')), 'multiplexed tags');
   pass('server identities distinguish same-cookie tabs; ownership, audience, CSRF and stale publication checks protect registration/SSE/cleanup');
 
@@ -206,6 +206,10 @@ try {
   const scriptDraft = await project('/scripts/resources', { method: 'PUT', body: scripts });
   const scriptPublication = await project('/scripts/publish', { method: 'POST', body: { revision: scriptDraft.revision } });
   await until(async () => (await project('/scripts/events/status')).activeRevision === scriptPublication.revision, 'gateway event activation');
+  await until(() => a.ended && a2.ended && b.ended, 'whole-application script publication retires old sessions');
+  runtime = await project('/runtime/project', { session: operatorA });
+  idA = await register(operatorA); idA2 = await register(operatorA); idB = await register(operatorB);
+  a = await stream(idA, operatorA); a2 = await stream(idA2, operatorA); b = await stream(idB, operatorB);
   const event = success(await project('/scripts/messages/Workshop%20broadcast/request', { method: 'POST', body: { payload: { text: 'Gateway event notification' }, revision: scriptPublication.revision } }));
   assert.equal(event.result.queued, 3); const fromEvent = await received([a, a2, b], event.result.messageId); assert.equal(fromEvent[0].payload.text, 'Gateway event notification');
   pass('an explicitly published gateway event pushes to active operator streams without a browser action');

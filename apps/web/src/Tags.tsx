@@ -3,6 +3,7 @@ import { api, displayValue } from "./api";
 import { Field } from "./App";
 import Icon from "./Icon";
 import TagTransfer from "./TagTransfer";
+import TagModels from "./TagModels";
 import type { Connection, Tag, TagDefinition } from "./types";
 
 const dataTypes = [
@@ -40,6 +41,8 @@ export default function Tags({
   const [error, setError] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [transfer, setTransfer] = useState(false);
+  const [models, setModels] = useState(false);
+  const [scanGroups, setScanGroups] = useState<{ name: string; publishingIntervalMs: number; enabled?: boolean }[]>([]);
   const [inputsText, setInputsText] = useState("{}");
   const selected = definitions.find(
     (definition) => definition.path === selectedPath,
@@ -53,7 +56,8 @@ export default function Tags({
     setLoading(true);
     setError("");
     try {
-      setDefinitions(await api<TagDefinition[]>("/tag-definitions"));
+      const [configured, model] = await Promise.all([api<TagDefinition[]>("/tag-definitions"), api<{ scanGroups: { name: string; publishingIntervalMs: number; enabled?: boolean }[] }>("/tag-engineering/export")]);
+      setDefinitions(configured); setScanGroups(model.scanGroups);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -229,6 +233,7 @@ export default function Tags({
           </p>
         </div>
         <div className="page-heading-actions">
+          <button className="button" onClick={() => setModels(true)}>UDTs / scan groups</button>
           <button className="button" onClick={() => setTransfer(true)}>Import / export</button>
           <button className="button" onClick={() => add("expression")}><Icon name="plus" size={16} />Expression tag</button>
           <button className="button" onClick={() => add("memory")}>
@@ -411,14 +416,15 @@ export default function Tags({
                 </div>
                 <button
                   className="button primary small"
-                  disabled={!draft || busy}
+                  disabled={!draft || busy || Boolean(current.udtInstance)}
                   onClick={() => void save()}
                 >
                   <Icon name="save" size={14} />
                   {busy ? "Saving…" : "Save"}
                 </button>
               </div>
-              <div className="inspector-section">
+              {current.udtInstance && <div className="inspector-section"><p>Member of <strong>{current.udtDefinition}@{current.udtVersion}</strong> at {current.udtInstance}.</p><p>Overrides: {current.overrideFields?.join(", ") || "none"}</p><button className="button" onClick={() => setModels(true)}>Edit instance / definition</button></div>}
+              <fieldset className="inspector-section" disabled={Boolean(current.udtInstance)} style={{ border: 0, margin: 0 }}>
                 <Field
                   label="Tag path"
                   hint={
@@ -533,6 +539,11 @@ export default function Tags({
                     </Field>
                   </>
                 )}
+                <Field label="Scan group" hint="Choose a shared timing/availability group, or use an individual interval.">
+                  <select value={current.scanGroup || ""} onChange={event => edit({ scanGroup: event.target.value || undefined })}>
+                    <option value="">Individual timing</option>{scanGroups.map(group => <option key={group.name} value={group.name}>{group.name} · {group.publishingIntervalMs} ms{group.enabled === false ? " · disabled" : ""}</option>)}
+                  </select>
+                </Field>
                 <Field
                   label="Publishing interval"
                   hint="100–60,000 ms. OPC UA requests this subscription interval. Expressions run on the gateway at this interval with a 100 ms scheduler resolution."
@@ -543,6 +554,7 @@ export default function Tags({
                       min="100"
                       max="60000"
                       step="100"
+                      disabled={Boolean(current.scanGroup)}
                       value={current.publishingIntervalMs ?? 1000}
                       onChange={(event) =>
                         edit({
@@ -563,7 +575,7 @@ export default function Tags({
                   />
                   <span>Tag enabled</span>
                 </label>
-              </div>
+              </fieldset>
               <div className="inspector-section tag-live-preview">
                 <h3>Current value</h3>
                 <strong>{displayValue(live?.value)}</strong>
@@ -579,7 +591,7 @@ export default function Tags({
                   </small>
                 )}
               </div>
-              {selected && (
+              {selected && !selected.udtInstance && (
                 <div className="inspector-section">
                   {deleteConfirm ? (
                     <div className="tag-delete-confirm" role="alert">
@@ -639,6 +651,7 @@ export default function Tags({
         </aside>
       </div>
       {transfer && <TagTransfer onClose={() => setTransfer(false)} onApplied={() => { void reload(); setDraft(null); setSelectedPath(""); onTagsChanged(); }} />}
+      {models && <TagModels onClose={() => setModels(false)} onApplied={() => { void reload(); setDraft(null); setSelectedPath(""); onTagsChanged(); }} />}
     </div>
   );
 }

@@ -24,6 +24,7 @@ const { ListTreeOptionsEditor, TablePageSizeEditor } = await import(modules('Lis
 const { ListTreeOptionsEditor: InteractiveOptions, TablePageSizeEditor: InteractivePageSize } = await import(interactiveModules('ListTreeOptionsEditor'));
 const { validateListTreeOptions } = await import(modules('listTreeModel'));
 const { isInput, resolveInputs, validateInputs } = await import(modules('inputs'));
+const { isChart, defaultChartProps } = await import(modules('chartModel'));
 const { isProcessDisplay } = await import(modules('processDisplays'));
 const { iconNames } = await import(modules('Icon'));
 const hooks = await import(hookUrl);
@@ -45,7 +46,17 @@ function check(name, run) { run(); passed++; console.log(`PASS ${name}`); }
 check('list/tree definitions have row editors and plain summaries without raw JSON fields', () => {
   for (const type of ['list', 'treeView']) {
     const html = renderToStaticMarkup(React.createElement(ListTreeOptionsEditor, { component: make(type), onChange: noOp, notify: noOp }));
-    assert.match(html, /Edit options/); assert.match(html, /stages its exact value/); assert.doesNotMatch(html, /textarea|JSON/);
+    assert.match(html, /Edit options/); assert.match(html, /stages its exact value/); assert.doesNotMatch(html, /textarea|JSON|<ul|<ol/);
+    assert.match(html, /class="property-sheet-row" data-property="options"/); assert.match(html, /data-property="defaultValue"/);
+  }
+});
+
+check('list and tree collection dialogs discard staged edits when closed from the title bar', () => {
+  for (const type of ['list', 'treeView']) {
+    const patches = [], ui = drive(InteractiveOptions, { component: make(type), onChange: patch => patches.push(patch), notify: noOp });
+    ui.button('Edit options').props.onClick(); ui.refresh(); ui.change('Option 1 label', 'Unsaved');
+    ui.find(node => node.type?.name === 'PropertyCollectionDialog').props.onClose(); ui.refresh(); assert.deepEqual(patches, []);
+    ui.button('Edit options').props.onClick(); ui.refresh(); assert.equal(ui.label('Option 1 label').props.value, 'Plant');
   }
 });
 
@@ -108,7 +119,7 @@ visit(ast);
 check('actual palette factories create valid selected list/tree forms and tables with a bounded page size', () => {
   const script = ts.transpileModule(`const processDimensions=${declarations.get('processDimensions')};const palettes=${declarations.get('palettes')};const typeIcon=${declarations.get('typeIcon')};const addComponent=${declarations.get('addComponent')};return {palettes,typeIcon,addComponent};`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
   let screen = { id: 'screen', width: 1000, height: 700, components: [] };
-  const factory = new Function('screen', 'project', 'editingTemplate', 'availableTemplates', 'notify', 'id', 'assets', 'queries', 'isInput', 'isTemplateInstance', 'updateScreen', 'setSelectedId', 'isProcessDisplay', script)(screen, { screens: [screen], templates: [] }, undefined, [], noOp, value => value, [], [], isInput, type => type === 'template' || type === 'repeater', update => { screen = update(screen); }, noOp, isProcessDisplay);
+  const factory = new Function('screen', 'project', 'editingTemplate', 'availableTemplates', 'notify', 'id', 'assets', 'queries', 'isInput', 'isTemplateInstance', 'updateScreen', 'setSelectedId', 'isProcessDisplay', 'isChart', 'defaultChartProps', script)(screen, { screens: [screen], templates: [] }, undefined, [], noOp, value => value, [], [], isInput, type => type === 'template' || type === 'repeater', update => { screen = update(screen); }, noOp, isProcessDisplay, isChart, defaultChartProps);
   for (const type of ['list', 'treeView', 'table']) { assert.ok(factory.palettes.some(item => item.type === type)); assert.ok(iconNames.includes(factory.typeIcon[type])); factory.addComponent(type); }
   const [list, tree, table] = screen.components;
   for (const component of [list, tree]) { assert.ok(isInput(component.type)); assert.ok(component.height >= 200); validateListTreeOptions(component.type, component.props.options); assert.ok(component.props.options.some(option => option.value === component.props.defaultValue)); }
@@ -116,7 +127,8 @@ check('actual palette factories create valid selected list/tree forms and tables
 });
 
 function authoredExpression(text, selected, updateProps, screen = { components: [] }) {
-  const script = ts.transpileModule(`const body=(${text});return body;`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None, jsx: ts.JsxEmit.React } }).outputText;
+  const details = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'InspectorDetails'); assert.ok(details);
+  const script = ts.transpileModule(`${details.getText(ast)}\nconst body=(${text});return body;`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None, jsx: ts.JsxEmit.React } }).outputText;
   return new Function('React', 'Field', 'selected', 'queries', 'updateProps', 'screen', 'isInput', script)(React, ({ children }) => children, selected, [{ id: 'read', kind: 'query' }], updateProps, screen, isInput);
 }
 check('actual option-source controls give only tree queries a parent column and retain static options on switch', () => {
@@ -143,4 +155,50 @@ check('query properties expose parent and selection mapping controls in list/tre
   }
 });
 
-console.log(`${passed}/${passed} list/tree authoring checks passed.`);
+// Exercise the actual App helper with the same staged React harness used above.
+const optionsDeclaration = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'OptionsEditor'); assert.ok(optionsDeclaration);
+const optionsScript = ts.transpileModule(`${optionsDeclaration.getText(ast)}\nreturn OptionsEditor;`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None, jsx: ts.JsxEmit.React } }).outputText;
+const { PropertyCollectionDialog } = await import(interactiveModules('PropertyCollectionEditor'));
+const SelectionOptions = new Function('React', 'useState', 'PropertyCollectionDialog', optionsScript)(React, hooks.useState, PropertyCollectionDialog);
+function selectionOptions(type = 'select', props = {}) {
+  const component = make(type); component.props = { ...component.props, ...props }; const before = structuredClone(component), patches = [];
+  const ui = drive(SelectionOptions, { component, onChange: patch => patches.push(patch) });
+  const click = text => { ui.button(text).props.onClick(); ui.refresh(); };
+  click('Edit options'); return { ...ui, click, component, before, patches };
+}
+check('dropdown and radio options accept the gateway label and value boundaries in one staged Apply', () => {
+  for (const type of ['select', 'radioGroup']) {
+    const value = 'v'.repeat(4096), label = 'L'.repeat(200), ui = selectionOptions(type, { defaultValue: value });
+    ui.change('Option definitions', `${label} | ${value}`); assert.deepEqual(ui.patches, []);
+    ui.click('Apply options'); assert.deepEqual(ui.patches, [{ options: [{ label, value }] }]); assert.deepEqual(ui.component, ui.before);
+    assert.ok(!ui.all().some(node => node.type === PropertyCollectionDialog));
+  }
+});
+check('selection collections reject overlong, empty and duplicate entries without truncation or mutation', () => {
+  for (const text of [`${'L'.repeat(201)} | child`, `Label | ${'v'.repeat(4097)}`, ' | child', 'Label | ', 'First | child\nSecond | child', '', Array.from({ length: 101 }, (_, index) => `Choice ${index} | ${index}`).join('\n')]) {
+    const ui = selectionOptions(); ui.change('Option definitions', text); ui.click('Apply options');
+    assert.deepEqual(ui.patches, []); assert.deepEqual(ui.component, ui.before);
+    assert.ok(ui.all().some(node => node.props?.role === 'alert')); assert.equal(ui.label('Option definitions').props.value, text);
+  }
+  const ui = selectionOptions('radioGroup', { defaultValue: '0' });
+  ui.change('Option definitions', Array.from({ length: 100 }, (_, index) => `Choice ${index} | ${index}`).join('\n')); ui.click('Apply options');
+  assert.equal(ui.patches[0].options.length, 100);
+});
+check('every declared default must match exactly while an omitted default stays omitted', () => {
+  for (const defaultValue of ['', 0, false, null, 'missing', 'Child']) {
+    const ui = selectionOptions('select', { defaultValue }); ui.change('Option definitions', 'Machine | child'); ui.click('Apply options');
+    assert.deepEqual(ui.patches, []); assert.match(ui.find(node => node.props?.role === 'alert').props.children, /default value must match/);
+  }
+  const ui = selectionOptions('radioGroup', { defaultValue: undefined }); ui.change('Option definitions', 'Lower | child\nUpper | Child'); ui.click('Apply options');
+  assert.deepEqual(ui.patches, [{ options: [{ label: 'Lower', value: 'child' }, { label: 'Upper', value: 'Child' }] }]);
+});
+check('selection collection Cancel and title-bar close discard drafts and reopen the saved choices', () => {
+  for (const close of ['Cancel', 'title']) {
+    const ui = selectionOptions(); ui.change('Option definitions', 'Unsaved | child');
+    if (close === 'Cancel') ui.click('Cancel'); else { ui.find(node => node.type === PropertyCollectionDialog).props.onClose(); ui.refresh(); }
+    assert.deepEqual(ui.patches, []); assert.deepEqual(ui.component, ui.before); ui.click('Edit options');
+    assert.equal(ui.label('Option definitions').props.value, 'Plant | root\nMachine | child');
+  }
+});
+
+console.log(`${passed}/${passed} list/tree and selection authoring checks passed.`);

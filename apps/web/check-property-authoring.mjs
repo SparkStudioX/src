@@ -53,7 +53,7 @@ function check(name, run) { run(); passed++; console.log(`PASS ${name}`); }
 check('template and repeater wrappers expose all thirteen common property rows and fx buttons', () => {
   for (const type of ['template', 'repeater']) {
     const html = render(make(type));
-    assert.deepEqual([...html.matchAll(/data-property="([^"]+)"/g)].map(match => match[1]), common);
+    assert.deepEqual([...html.matchAll(/data-property="([^"]+)"/g)].map(match => match[1]), [...common, 'parameters.title', 'parameters.quantity', 'customProperties.minimum']);
     assert.equal((html.match(/class="property-bind-button"/g) || []).length, 13);
     assert.match(html, /Accessible label/); assert.match(html, /Typed values belong to this wrapper/);
     assert.doesNotMatch(html, /data-property="(?:tagPath|templateId|parameters|rows|rowsSource|columns|gap)"/);

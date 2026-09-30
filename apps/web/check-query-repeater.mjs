@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+process.on('uncaughtException',error=>{console.error(error.stack?.split('\n').filter(line=>!line.includes('data:')).join('\n')??error.message);process.exit(1);});
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
@@ -12,7 +13,8 @@ const hooks = moduleUrl(`export * from ${JSON.stringify(pathToFileURL(require.re
 export const useMemo=run=>run(); export const useCallback=run=>run;
 // Cell tests run without a provider, preserving the context's declared default.
 export const createContext=value=>({defaultValue:value,Provider:({children})=>children});export const useContext=context=>context.defaultValue;`);
-const requests = moduleUrl('export const api=(...args)=>globalThis.__repeaterRequest(...args);');
+const requests = moduleUrl('export const api=(...args)=>globalThis.__repeaterRequest(...args);export const currentProjectId=()=>null;');
+const appState = moduleUrl('export const useApplicationStateContext=()=>undefined;');
 const rowsHook = moduleUrl('export const useQueryRepeater=()=>globalThis.__repeaterRows;');
 function loader(mode) {
   const cache = new Map();
@@ -23,7 +25,8 @@ function loader(mode) {
       .replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
       .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_match, prefix, _quote, dependency) => {
         const target = (mode === 'hook' && name === 'useQueryRepeater' || mode === 'cells') && dependency === 'react' ? hooks
-          : mode === 'hook' && name === 'useQueryRepeater' && dependency === './api' ? requests
+          : mode === 'hook' && ['useQueryRepeater','queryPropertyCoordinator'].includes(name) && dependency === './api' ? requests
+          : mode === 'hook' && name === 'useQueryRepeater' && dependency === './applicationState' ? appState
           : ['render', 'cells'].includes(mode) && name === 'templates' && dependency === './useQueryRepeater' ? rowsHook
           : dependency.startsWith('./') ? url(dependency.slice(2)) : pathToFileURL(require.resolve(dependency)).href;
         return `${prefix}${JSON.stringify(target)}`;
@@ -132,22 +135,22 @@ await check('query source edits invalidate authoring form context', () => {
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 function hookHarness() {
   const states = [], effects = [], pending = [], calls = [], listeners = new Map();
-  let cursor = 0, interval;
+  let cursor = 0;
   globalThis.__repeaterHooks = {
+    useRef(initial) { return states[cursor++] ??= { current: initial }; },
     useState(initial) { const index = cursor++; if (!(index in states)) states[index] = initial; return [states[index], next => { states[index] = typeof next === 'function' ? next(states[index]) : next; }]; },
     useEffect(run, deps) { const index = cursor++; const previous = effects[index]; if (!previous || deps.some((value, i) => value !== previous.deps[i])) pending.push(() => { previous?.cleanup?.(); effects[index] = { deps, cleanup: run() }; }); },
   };
   globalThis.__repeaterRequest = (...args) => new Promise((resolve, reject) => calls.push({ args, resolve, reject }));
   globalThis.window = {
-    setInterval(run, delay) { assert.equal(delay, 10000); interval = run; return 1; }, clearInterval() { interval = null; },
     addEventListener(name, run) { listeners.set(name, run); }, removeEventListener(name) { listeners.delete(name); },
   };
   return {
     calls, listeners,
-    render(parameters = {}, offline = false, publication, sourceValue = source, declaration = template) { cursor = 0; return useQueryRepeater(sourceValue, declaration, 'runtime', parameters, offline, publication); },
+    render(parameters = { area: 'A' }, offline = false, publication, sourceValue = source, declaration = template) { cursor = 0; return useQueryRepeater(sourceValue, declaration, 'runtime', parameters, offline, publication); },
     commit() { while (pending.length) pending.shift()(); },
     async respond(index, data) { calls[index].resolve(data); await flush(); },
-    tick() { interval?.(); },
+    tick() { listeners.get('sparkstudio:refresh-data')?.(); },
     stop() { effects.forEach(effect => effect?.cleanup?.()); },
   };
 }
@@ -160,46 +163,41 @@ await check('one initial load, synchronous context invalidation and stale comple
   await h.respond(1, result([row('a', 'Old A')]));
   assert.equal(h.render({ area: 'B' }).rows[0].id, 'b'); h.stop();
 });
-await check('latest poll/action refresh wins and offline removes all rows and listeners', async () => {
+await check('refresh coalesces an in-flight read and offline aborts and clears rows', async () => {
   const h = hookHarness(); h.render(); h.commit(); await h.respond(0, metadata); await h.respond(1, result([row()]));
-  h.tick(); assert.equal(h.render().loading, true); assert.equal(h.render().rows[0].id, 'a');
-  h.listeners.get('sparkstudio:refresh-data')();
-  await h.respond(3, metadata); await h.respond(4, result([row('c')]));
-  await h.respond(2, metadata); await h.respond(5, result([row('b')]));
-  assert.equal(h.render().rows[0].id, 'c');
-  const count = h.calls.length; assert.deepEqual(h.render({}, true).rows, []); h.commit();
-  assert.match(h.render({}, true).error, /Communication lost/); assert.equal(h.calls.length, count); assert.equal(h.listeners.size, 0); h.stop();
+  h.tick(); await flush(); assert.equal(h.render().loading, true); assert.equal(h.render().rows[0].id, 'a');
+  h.tick(); assert.equal(h.calls.length, 3);
+  await h.respond(2, result([row('b')])); assert.equal(h.calls.length, 4);
+  await h.respond(3, result([row('c')])); assert.equal(h.render().rows[0].id, 'c');
+  h.tick(); await flush(); const signal = h.calls[4].args[3];
+  assert.deepEqual(h.render({ area: 'A' }, true).rows, []); h.commit();
+  assert.equal(signal.aborted, true); assert.equal(h.listeners.size, 0);
+  await h.respond(4, result([row('late')])); assert.deepEqual(h.render({ area: 'A' }, true).rows, []); h.stop();
 });
-await check('query errors hide previous rows and recover through a later empty result', async () => {
+await check('query failure clears the complete result and an explicit refresh can recover empty rows', async () => {
   const h = hookHarness(); h.render(); h.commit(); await h.respond(0, metadata); await h.respond(1, result([row()]));
-  h.listeners.get('sparkstudio:refresh-queries')(); h.calls[2].reject(new Error('Database unavailable')); await flush();
+  h.tick(); await flush(); h.calls[2].reject(new Error('Database unavailable')); await flush();
   assert.equal(h.render().error, 'Database unavailable'); assert.deepEqual(h.render().rows, []);
-  h.tick(); await h.respond(3, metadata); await h.respond(4, result());
-  assert.deepEqual(h.render().rows, []); assert.equal(h.render().loading, false); assert.equal(h.render().error, ''); h.stop();
+  h.tick(); await flush(); await h.respond(3, result()); assert.deepEqual(h.render().rows, []); assert.equal(h.render().loading, false); h.stop();
 });
-await check('publication changes hide pending old rows and unmount cancels polling/results', async () => {
-  const h = hookHarness(); h.render({}, false, 'v1'); h.commit(); await h.respond(0, metadata);
-  assert.equal(h.calls[1].args[2].publishedAt, 'v1');
-  assert.deepEqual(h.render({}, false, 'v2').rows, []); h.commit();
-  await h.respond(2, metadata); await h.respond(3, result([row('new')]));
-  await h.respond(1, result([row('old')])); assert.equal(h.render({}, false, 'v2').rows[0].id, 'new');
-  h.tick(); h.stop(); await h.respond(4, metadata); await h.respond(5, result([row('unmounted')]));
-  assert.equal(h.render({}, false, 'v2').rows[0].id, 'new'); assert.equal(h.listeners.size, 0);
+await check('publication replacement aborts old reads and hides old data before effects commit', async () => {
+  const h = hookHarness(); h.render({ area: 'A' }, false, 'v1'); h.commit(); await h.respond(0, metadata);
+  const oldSignal = h.calls[1].args[3];
+  assert.deepEqual(h.render({ area: 'A' }, false, 'v2').rows, []); h.commit(); assert.equal(oldSignal.aborted, true);
+  await h.respond(2, metadata); await h.respond(3, result([row('new')])); await h.respond(1, result([row('old')]));
+  assert.equal(h.render({ area: 'A' }, false, 'v2').rows[0].id, 'new'); h.stop(); assert.equal(h.listeners.size, 0);
 });
 await check('saved repeaters do not request query data', () => {
   const h = hookHarness(); assert.equal(h.render({}, false, undefined, null).loading, false); h.commit();
   assert.equal(h.calls.length, 0); assert.equal(h.listeners.size, 0); h.stop();
 });
-await check('type metadata changes hide stale rows synchronously and reject late old requests', async () => {
+await check('current type metadata revalidates the shared raw dataset synchronously', async () => {
   const h = hookHarness(); h.render(); h.commit(); await h.respond(0, metadata); await h.respond(1, result([row()]));
   assert.equal(h.render().rows[0].parameters.amount, '2.5');
-  h.tick(); await h.respond(2, metadata);
-  assert.deepEqual(h.render({}, false, undefined, source, typedTemplate).rows, []); h.commit();
-  await h.respond(4, metadata); await h.respond(5, result([{ ...row('typed'), amount: 7, active: false }]));
-  await h.respond(3, result([row('old')]));
-  const state = h.render({}, false, undefined, source, typedTemplate);
-  assert.equal(state.rows[0].id, 'typed'); assert.equal(state.rows[0].parameters.amount, 7); assert.equal(state.rows[0].parameters.active, false);
-  h.stop();
+  assert.equal(h.render({ area: 'A' }, false, undefined, source, typedTemplate).rows[0].parameters.amount, 2.5);
+  const invalid = { ...typedTemplate, parameterTypes: { ...typedTemplate.parameterTypes, title: 'number' } };
+  assert.deepEqual(h.render({ area: 'A' }, false, undefined, source, invalid).rows, []);
+  assert.match(h.render({ area: 'A' }, false, undefined, source, invalid).error, /title/); h.stop();
 });
 delete globalThis.window;
 

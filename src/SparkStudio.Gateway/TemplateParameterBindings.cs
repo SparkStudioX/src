@@ -50,9 +50,10 @@ internal static class TemplateParameterBindings
                         if (!Alias(alias) || referenceNode is not JsonObject reference)
                             throw new ArgumentException("Parameter binding references need valid identifier aliases and definitions.");
                         var kind = ProjectStore.Required(reference, "kind");
-                        var allowed = kind == "custom" ? new[] { "kind", "key", "componentId" } : ["kind", "key"];
+                        var allowed = kind == "custom" ? new[] { "kind", "key", "componentId" } : kind == "tag" ? ["kind", "path"] : ["kind", "key"];
                         if (reference.Any(pair => !allowed.Contains(pair.Key, StringComparer.Ordinal)))
                             throw new ArgumentException("A parameter binding reference has unsupported fields.");
+                        if (kind == "tag") { TagBindingAddress.Validate(ProjectStore.Required(reference, "path"), parameters); continue; }
                         var source = ProjectStore.Required(reference, "key");
                         if (source.Length > 256 || source is "__proto__" or "constructor" or "prototype")
                             throw new ArgumentException("A parameter binding source key is invalid.");
@@ -115,7 +116,7 @@ internal static class TemplateParameterBindings
             inputKeys.Contains(ProjectStore.Required(item["props"]!.AsObject(), "fieldKey"))).Select(item =>
             {
                 var definition = new JsonObject { ["type"] = item["type"]!.DeepClone() };
-                foreach (var key in new[] { "fieldKey", "min", "max", "step", "options", "optionsSource" })
+                foreach (var key in new[] { "fieldKey", "min", "max", "step", "options", "optionsSource", "validation", "formatMask", "textCase", "scanTerminator" })
                     if (item["props"]![key] is { } value) definition[key] = value.DeepClone();
                 return (JsonNode)definition;
             }).ToArray());
@@ -159,16 +160,26 @@ internal static class TemplateParameterBindings
     }
 
     public static Dictionary<string, JsonElement> Evaluate(JsonObject scope, IReadOnlyDictionary<string, JsonElement> parentParameters,
-        IReadOnlyDictionary<string, JsonElement>? inputs, ParameterBindingState? state)
+        IReadOnlyDictionary<string, JsonElement>? inputs, ParameterBindingState? state, Func<string, JsonElement>? readTag = null)
     {
         var resolved = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var (parameter, node) in scope["parameterBindings"] as JsonObject ?? [])
         {
             var binding = node!.AsObject();
             var references = binding["references"]!.AsObject();
+            var tags = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            foreach (var (alias, raw) in references)
+                if (ProjectStore.Required(raw!.AsObject(), "kind") == "tag")
+                {
+                    var path = TagBindingAddress.Resolve(ProjectStore.Required(raw.AsObject(), "path"), parentParameters);
+                    tags[alias] = readTag?.Invoke(path) ?? throw new ArgumentException("The gateway tag source is unavailable.");
+                    // Validate unused tag aliases too, matching the browser's complete-source check.
+                    ComponentBindingValidator.EvaluateExpression(alias, [alias], _ => tags[alias]);
+                }
             resolved[parameter] = ComponentBindingValidator.EvaluateExpression(ProjectStore.Required(binding, "expression"), references.Select(pair => pair.Key), alias =>
             {
                 var reference = references[alias]!.AsObject();
+                if (ProjectStore.Required(reference, "kind") == "tag") return tags[alias];
                 var key = ProjectStore.Required(reference, "key");
                 return ProjectStore.Required(reference, "kind") switch
                 {

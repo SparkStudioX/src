@@ -92,11 +92,12 @@ public static class PythonComponentEvents
 
     private static void ValidateRequest(PythonComponentEventRequest request)
     {
-        if (request.EventHandler is not { } selector || selector.Family is not ("input" or "propertyChange" or "message" or "lifecycle") ||
+        if (request.EventHandler is not { } selector || selector.Family is not ("input" or "propertyChange" or "message" or "lifecycle" or "interaction") ||
             (selector.Family == "input" ? selector.Type is not ("change" or "commit") || selector.HandlerId is not null :
-             selector.Family == "lifecycle" ? selector.Type is not ("mount" or "unmount") : selector.Type is not null) ||
+             selector.Family == "lifecycle" ? selector.Type is not ("mount" or "unmount") :
+             selector.Family == "interaction" ? selector.Type is null || !ComponentEventValidator.InteractionNames.Contains(selector.Type) : selector.Type is not null) ||
             (selector.Family == "message" ? string.IsNullOrWhiteSpace(selector.HandlerId) || selector.HandlerId.Length > 80 : selector.HandlerId is not null))
-            throw new ArgumentException("Choose input change/commit, lifecycle mount/unmount, propertyChange, or a saved message handler ID.");
+            throw new ArgumentException("Choose a saved input, lifecycle, interaction, property-change or message handler.");
         if (request.Event is null || System.Text.Encoding.UTF8.GetByteCount(request.Event.ToJsonString()) > 100_000)
             throw new ArgumentException("An event payload must be an object up to 100,000 UTF-8 bytes.");
         if (request.Inputs?.Count > 1000 || System.Text.Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(request.Inputs)) > 262_144)
@@ -110,6 +111,7 @@ public static class PythonComponentEvents
             "input" when InputDefinitionValidator.IsInput(ProjectStore.Required(component, "type")) => props["events"]?[selector.Type!] as JsonObject,
             "propertyChange" => props["componentEvents"]?["propertyChange"] as JsonObject,
             "lifecycle" => props["componentEvents"]?[selector.Type!] as JsonObject,
+            "interaction" => props["componentEvents"]?[selector.Type!] as JsonObject,
             "message" => (props["messageHandlers"] as JsonArray)?.OfType<JsonObject>().FirstOrDefault(item => ProjectStore.Optional(item, "id") == selector.HandlerId),
             _ => null
         };
@@ -143,6 +145,7 @@ public static class PythonComponentEvents
             "input" => new[] { "type", "componentId", "fieldKey", "value", "previousValue", "origin" },
             "propertyChange" => ["type", "componentId", "property", "value", "previousValue", "available", "previousAvailable", "error", "previousError", "origin"],
             "lifecycle" => ["type", "componentId"],
+            "interaction" => InteractionFields(selector.Type!),
             _ => ["type", "componentId", "messageType", "payload", "scope", "messageId"]
         };
         if (input.Any(pair => !allowed.Contains(pair.Key, StringComparer.Ordinal))) throw new ArgumentException("The event contains unsupported fields.");
@@ -154,8 +157,38 @@ public static class PythonComponentEvents
             result[key] = value;
         }
         Identity("componentId", ProjectStore.Required(component, "id"));
-        Identity("type", selector.Family is "input" or "lifecycle" ? selector.Type! : selector.Family);
+        Identity("type", selector.Family is "input" or "lifecycle" or "interaction" ? selector.Type! : selector.Family);
         if (selector.Family == "lifecycle") return result;
+        if (selector.Family == "interaction")
+        {
+            Identity("origin", "user");
+            if (selector.Type is "focus" or "blur") return result;
+            foreach (var key in new[] { "altKey", "ctrlKey", "metaKey", "shiftKey" }) result[key] = EventBoolean(input[key], key);
+            if (selector.Type is "keyDown" or "keyUp")
+            {
+                var redacted = EventBoolean(input["redacted"], "redacted");
+                var key = Text(input["key"], "key", 128); var code = Text(input["code"], "code", 64);
+                if (ProjectStore.Optional(component, "type") == "passwordInput" && (!redacted || key.Length > 0 || code.Length > 0) || redacted && (key.Length > 0 || code.Length > 0))
+                    throw new ArgumentException("Password keyboard events must redact key and code.");
+                result["key"] = key; result["code"] = code; result["redacted"] = redacted;
+                result["repeat"] = EventBoolean(input["repeat"], "repeat"); result["isComposing"] = EventBoolean(input["isComposing"], "isComposing");
+            }
+            else
+            {
+                result["button"] = EventNumber(input["button"], "button", -1, 5, integer: true);
+                result["buttons"] = EventNumber(input["buttons"], "buttons", 0, 63, integer: true);
+                result["clientX"] = EventNumber(input["clientX"], "clientX", -10_000_000, 10_000_000);
+                result["clientY"] = EventNumber(input["clientY"], "clientY", -10_000_000, 10_000_000);
+                if (selector.Type != "doubleClick")
+                {
+                    var pointerType = Text(input["pointerType"], "pointerType", 8);
+                    if (pointerType is not ("mouse" or "pen" or "touch" or "")) throw new ArgumentException("Unsupported pointer type.");
+                    result["pointerType"] = pointerType;
+                    result["pointerId"] = EventNumber(input["pointerId"], "pointerId", -1, int.MaxValue, integer: true);
+                }
+            }
+            return result;
+        }
         if (selector.Family == "message")
         {
             Identity("messageType", ProjectStore.Required(definition, "messageType"));
@@ -204,6 +237,19 @@ public static class PythonComponentEvents
     private static string Text(JsonNode? node, string label, int maximum) => node is JsonValue scalar && scalar.TryGetValue<string>(out var text) && text.Length <= maximum
         ? text : throw new ArgumentException($"Event {label} must be text up to {maximum} characters.");
 
+    private static string[] InteractionFields(string type) => type is "focus" or "blur" ? ["type", "componentId", "origin"]
+        : type is "keyDown" or "keyUp" ? ["type", "componentId", "origin", "key", "code", "repeat", "isComposing", "redacted", "altKey", "ctrlKey", "metaKey", "shiftKey"]
+        : type == "doubleClick" ? ["type", "componentId", "origin", "button", "buttons", "clientX", "clientY", "altKey", "ctrlKey", "metaKey", "shiftKey"]
+        : ["type", "componentId", "origin", "button", "buttons", "clientX", "clientY", "pointerId", "pointerType", "altKey", "ctrlKey", "metaKey", "shiftKey"];
+    private static bool EventBoolean(JsonNode? node, string label) => node is JsonValue value && value.TryGetValue<bool>(out var result)
+        ? result : throw new ArgumentException($"Event {label} must be Boolean.");
+    private static double EventNumber(JsonNode? node, string label, double minimum, double maximum, bool integer = false)
+    {
+        if (node is JsonValue value && double.TryParse(value.ToJsonString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var result) &&
+            double.IsFinite(result) && result >= minimum && result <= maximum && (!integer || result == Math.Truncate(result))) return result;
+        throw new ArgumentException($"Event {label} must be a finite {(integer ? "integer" : "number")} from {minimum} to {maximum}.");
+    }
+
     private static object? Scalar(JsonNode? node, bool nullable)
     {
         if (node is null && nullable) return null;
@@ -237,7 +283,9 @@ public sealed partial class PublicationStore
         lock (gate)
         {
             var current = RequirePublication(request.PublishedAt);
-            return PythonComponentEvents.Capture(current["project"]!.AsObject(), (current["scriptQueries"] ?? current["queries"])!.AsArray(), screenId, componentId, request);
+            var action = PythonComponentEvents.Capture(current["project"]!.AsObject(), (current["scriptQueries"] ?? current["queries"])!.AsArray(), screenId, componentId, request);
+            action["libraries"] = CaptureLibraries(current);
+            return action;
         }
     }
 }
@@ -306,7 +354,7 @@ public sealed partial class RuntimeActions
             var eventContext = PythonComponentEvents.Event(action, request, inputs, actor);
             var parameters = await ResolveContextAsync(action, request.Parameters, request.BindingInputs, request.PopupOrigin?.BindingInputs,
                 request.BindingState, request.PopupOrigin?.BindingState, deadline.Token);
-            var result = await python.RunComponentEventAsync(action["code"]!.GetValue<string>(), parameters, inputs, eventContext, action["queries"]!.AsArray(), ui, deadline.Token);
+            var result = await python.RunComponentEventAsync(action["code"]!.GetValue<string>(), parameters, inputs, eventContext, action["queries"]!.AsArray(), ui, deadline.Token, CapturedLibraries(action));
             deadline.Token.ThrowIfCancellationRequested();
             return result;
         }

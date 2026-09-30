@@ -4,9 +4,11 @@ import { isInput } from "./inputs";
 import { BindingReferencesEditor, expressionBinding, expressionDraft, referenceRowsError, type ExpressionDraft } from "./BindingReferencesEditor";
 import type { BindingContext } from "./propertyBindings";
 import { loadQueryProperty, resolveQueryPropertyParameters, validateQueryPropertyBinding } from "./queryPropertyModel";
+import { loadDataset } from "./datasets";
 import type { BindingTarget, CanvasComponent, NamedQuery, QueryPropertyBinding } from "./types";
 
 interface Props {
+  datasetMode?: boolean;
   component: CanvasComponent;
   target: BindingTarget;
   context: BindingContext;
@@ -20,9 +22,9 @@ const own = <T,>(map: Record<string, T> | undefined, key: string) => map && Obje
 const describe = (value: unknown) => value === undefined ? "Not run" : JSON.stringify(value);
 
 /** A draft query never executes until Run preview. Apply commits one parent history entry. */
-export function QueryPropertyBindingEditor({ component, target, context, queries, allowUnresolvedScreenState = false, onApply, onRemove, onCancel }: Props) {
-  const saved = component.props.queryBindings?.[target];
-  const [source, setSource] = useState<QueryPropertyBinding>(() => saved ? structuredClone(saved) : { queryId: "", column: "" });
+export function QueryPropertyBindingEditor({ component, target, context, queries, allowUnresolvedScreenState = false, onApply, onRemove, onCancel, datasetMode = false }: Props) {
+  const saved = datasetMode ? component.props.dataSource && { ...component.props.dataSource, column: "dataset" } : component.props.queryBindings?.[target];
+  const [source, setSource] = useState<QueryPropertyBinding>(() => saved ? structuredClone(saved) : { queryId: "", column: datasetMode ? "dataset" : "" });
   const [mappings, setMappings] = useState<Record<string, ExpressionDraft>>(() => Object.fromEntries(Object.entries(saved?.parameters || {}).map(([key, value]) => [key, expressionDraft(value)])));
   const [applyError, setApplyError] = useState("");
   const [preview, setPreview] = useState<{ key: string; value?: string | number | boolean; error?: string; durationMs?: number; parameters?: Record<string, unknown>; busy?: boolean } | null>(null);
@@ -33,7 +35,7 @@ export function QueryPropertyBindingEditor({ component, target, context, queries
   const expressionBindings = { ...component.props.bindings }; delete expressionBindings[target];
   const draftComponent = { ...component, props: { ...component.props, bindings: expressionBindings } };
   const rowError = Object.entries(mappings).map(([name, draft]) => { const error = referenceRowsError(draft.rows); return error ? `${name}: ${error}` : undefined; }).find(Boolean);
-  const definitionError = rowError || validateQueryPropertyBinding(binding, target, draftComponent, context, queries, allowUnresolvedScreenState);
+  const definitionError = rowError || (datasetMode && !source.queryId ? "Choose a saved read query for this dataset." : validateQueryPropertyBinding(binding, target, draftComponent, context, queries, allowUnresolvedScreenState));
   const deferred = allowUnresolvedScreenState && Object.values(binding.parameters || {}).some(parameter => Object.values(parameter.references || {}).some(reference => reference.kind === "screenState" && !Object.hasOwn(context.state?.screen || {}, reference.key)));
   // Only declared mapping sources affect this read. Gateway tag samples and
   // unrelated form edits must not abort or erase an explicit preview.
@@ -66,7 +68,9 @@ export function QueryPropertyBindingEditor({ component, target, context, queries
     setPreview({ key, busy: true });
     try {
       const parameters = resolveQueryPropertyParameters(binding, draftComponent, context);
-      const value = await loadQueryProperty(binding, target, draftComponent, context, "designer", api, undefined, request.signal);
+      const value = datasetMode
+        ? JSON.stringify(await loadDataset({ queryId: binding.queryId, parameters: binding.parameters, refresh: binding.refresh }, draftComponent, context, "designer", api, undefined, request.signal))
+        : await loadQueryProperty(binding, target, draftComponent, context, "designer", api, undefined, request.signal);
       if (!request.signal.aborted && generation.current === run && currentKey.current === requestedKey)
         setPreview({ key: requestedKey, value, parameters, durationMs: Math.round(performance.now() - started) });
     } catch (reason) {
@@ -88,10 +92,12 @@ export function QueryPropertyBindingEditor({ component, target, context, queries
       {queries.filter(item => item.kind !== "update").map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
       {source.queryId && (!query || query.kind === "update") && <option value={source.queryId} disabled>{query ? "Unavailable update query" : "Missing query"}: {query?.name || source.queryId}</option>}
     </select></label>
-    <label>Result column<input aria-label="Property query result column" maxLength={128} value={source.column} onChange={event => changeSource({ column: event.target.value })} placeholder="total" /></label>
+    {!datasetMode && <><label>Result column<input aria-label="Property query result column" maxLength={128} value={source.column} onChange={event => changeSource({ column: event.target.value })} placeholder="total" /></label>
     <p className="binding-note">The query must return exactly one row. The selected column must contain a scalar, and its result expression must be compatible with <strong>{target}</strong>; empty results, multiple rows, null and invalid types are unavailable. Define SQL and connections in Named queries.</p>
     <label>Result expression<textarea aria-label="Property query result expression" className="binding-expression" rows={2} maxLength={2048} spellCheck={false} value={source.transform ?? "value"} onChange={event => changeSource({ transform: event.target.value })} /></label>
     <p className="binding-note">Use the single reference <code>value</code> for the selected cell. For example, <code>value &gt; 0</code> converts a numeric status to Boolean, and <code>value * 0.02</code> scales a number. The final result must match this property; other references are unavailable.</p>
+    </>}
+    {datasetMode && <p className="binding-note">A dataset returns up to 1,000 complete rows and 64 columns. Null cells remain null. Invalid cells or shapes make the whole dataset unavailable.</p>}
     <label>Refresh<select aria-label="Property query refresh" value={source.refresh?.mode || "onChange"} onChange={event => changeSource({ refresh: event.target.value === "poll" ? { mode: "poll", intervalMs: 10000 } : { mode: "onChange" } })}>
       <option value="onChange">When parameters change</option><option value="poll">When parameters change and periodically</option>
     </select></label>

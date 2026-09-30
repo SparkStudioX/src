@@ -1,0 +1,72 @@
+{
+  "name": "Component interaction workshop",
+  "tags": [],
+  "screens": [
+    {
+      "id": "interaction-lab", "name": "Interaction lab", "width": 1200, "height": 880,
+      "state": {
+        "focusStatus": { "type": "string", "value": "Focus the station note" },
+        "keyStatus": { "type": "string", "value": "Type, use arrows or press Tab" },
+        "pointerStatus": { "type": "string", "value": "Press and release the purple pad" },
+        "doubleClicks": { "type": "number", "value": 0 },
+        "maskedEvents": { "type": "number", "value": 0 },
+        "padEnabled": { "type": "boolean", "value": true },
+        "padVisible": { "type": "boolean", "value": true }
+      },
+      "components": [
+        { "id": "background", "type": "rectangle", "x": 0, "y": 0, "width": 1200, "height": 880, "props": { "fillColor": "#f6f4fb", "strokeColor": "#f6f4fb", "strokeWidth": 1 } },
+        { "id": "title", "type": "label", "x": 32, "y": 20, "width": 1136, "height": 46, "props": { "text": "Observe an interaction, keep its native behavior", "fontSize": 30, "foregroundColor": "#302146" } },
+        { "id": "intro", "type": "label", "x": 32, "y": 76, "width": 1136, "height": 54, "props": { "text": "Focus, keyboard and pointer scripts use the same Actions & Events editor. Every result below belongs to this browser session.", "fontSize": 17, "foregroundColor": "#5c5070" } },
+        { "id": "note", "type": "textInput", "x": 32, "y": 146, "width": 520, "height": 80, "props": {
+          "text": "Station note", "fieldKey": "stationNote", "defaultValue": "Inspect the packing label", "foregroundColor": "#302146", "backgroundColor": "#ffffff",
+          "componentEvents": {
+            "focus": { "language": "javascript", "code": "app.state.set('screen', 'focusStatus', 'Focus entered the station note');" },
+            "blur": { "language": "javascript", "code": "app.state.set('screen', 'focusStatus', 'Focus left the station note; its edit is retained');" },
+            "keyDown": { "language": "javascript", "code": "if (!event.isComposing) app.state.set('screen', 'keyStatus', 'Down: ' + event.key + (event.repeat ? ' (repeat)' : ''));" },
+            "keyUp": { "language": "javascript", "code": "if (!event.isComposing) app.state.set('screen', 'keyStatus', 'Up: ' + event.key + ' · editing was not cancelled');" }
+          }
+        } },
+        { "id": "focus-status", "type": "label", "x": 32, "y": 242, "width": 520, "height": 44, "props": { "text": "Focus status", "foregroundColor": "#5c5070", "bindings": { "text": { "expression": "status", "references": { "status": { "kind": "screenState", "key": "focusStatus" } } } } } },
+        { "id": "key-status", "type": "label", "x": 32, "y": 292, "width": 520, "height": 44, "props": { "text": "Keyboard status", "foregroundColor": "#5c5070", "bindings": { "text": { "expression": "status", "references": { "status": { "kind": "screenState", "key": "keyStatus" } } } } } },
+        { "id": "secret", "type": "passwordInput", "x": 32, "y": 354, "width": 520, "height": 80, "props": {
+          "text": "Disposable password sample", "fieldKey": "secretSample", "backgroundColor": "#ffffff",
+          "componentEvents": { "keyUp": { "language": "python", "code": "assert event.redacted and event.key == '' and event.code == ''\nassert 'secretSample' not in inputs\nself.parent.custom.maskedEvents = self.parent.custom.maskedEvents + 1" } }
+        } },
+        { "id": "masked-caption", "type": "label", "x": 32, "y": 444, "width": 410, "height": 44, "props": { "text": "Redacted Python key releases:", "foregroundColor": "#5c5070" } },
+        { "id": "masked-status", "type": "label", "x": 452, "y": 444, "width": 100, "height": 44, "props": { "text": "0", "foregroundColor": "#5c5070", "bindings": { "text": { "expression": "count", "references": { "count": { "kind": "screenState", "key": "maskedEvents" } } } } } },
+        { "id": "pointer-pad", "type": "rectangle", "x": 606, "y": 146, "width": 562, "height": 164, "props": {
+          "text": "Purple interaction pad", "fillColor": "#6d4dab", "strokeColor": "#6d4dab", "strokeWidth": 1,
+          "bindings": {
+            "enabled": { "expression": "active", "references": { "active": { "kind": "screenState", "key": "padEnabled" } } },
+            "visible": { "expression": "shown", "references": { "shown": { "kind": "screenState", "key": "padVisible" } } }
+          },
+          "componentEvents": {
+            "pointerDown": { "language": "javascript", "code": "app.state.set('screen', 'pointerStatus', 'Pressed: ' + event.pointerType + ', button ' + event.button);" },
+            "pointerUp": { "language": "javascript", "code": "app.state.set('screen', 'pointerStatus', 'Released: ' + event.pointerType + ' at ' + event.clientX + ', ' + event.clientY);" },
+            "doubleClick": { "language": "python", "code": "self.parent.custom.doubleClicks = self.parent.custom.doubleClicks + 1" }
+          }
+        } },
+        { "id": "pad-note", "type": "label", "x": 606, "y": 324, "width": 562, "height": 48, "props": { "text": "Press / release for JavaScript. Double click for Python. The pad never captures the pointer or cancels a gesture.", "fontSize": 15, "foregroundColor": "#5c5070" } },
+        { "id": "pointer-status", "type": "label", "x": 606, "y": 382, "width": 562, "height": 42, "props": { "text": "Pointer status", "foregroundColor": "#5c5070", "bindings": { "text": { "expression": "status", "references": { "status": { "kind": "screenState", "key": "pointerStatus" } } } } } },
+        { "id": "double-caption", "type": "label", "x": 606, "y": 432, "width": 400, "height": 40, "props": { "text": "Python double clicks:", "foregroundColor": "#5c5070" } },
+        { "id": "double-count", "type": "label", "x": 1026, "y": 432, "width": 142, "height": 40, "props": { "text": "0", "foregroundColor": "#5c5070", "bindings": { "text": { "expression": "count", "references": { "count": { "kind": "screenState", "key": "doubleClicks" } } } } } },
+        { "id": "pad-enabled", "type": "checkbox", "x": 606, "y": 480, "width": 258, "height": 62, "props": { "text": "Enable pad events", "fieldKey": "padEnabled", "defaultValue": true, "stateBinding": { "scope": "screen", "key": "padEnabled" } } },
+        { "id": "pad-visible", "type": "checkbox", "x": 886, "y": 480, "width": 282, "height": 62, "props": { "text": "Show pad", "fieldKey": "padVisible", "defaultValue": true, "stateBinding": { "scope": "screen", "key": "padVisible" } } },
+        { "id": "station-a", "type": "template", "x": 32, "y": 566, "width": 552, "height": 222, "props": { "text": "Station A", "templateId": "interaction-card", "parameters": { "station": "A" }, "backgroundColor": "#ebe4f7", "componentEvents": { "pointerDown": { "language": "javascript", "code": "app.notify('Station wrapper background pressed. Child controls do not bubble here.');" } } } },
+        { "id": "station-b", "type": "template", "x": 608, "y": 566, "width": 560, "height": 222, "props": { "text": "Station B", "templateId": "interaction-card", "parameters": { "station": "B" }, "backgroundColor": "#ebe4f7" } },
+        { "id": "footer", "type": "label", "x": 32, "y": 814, "width": 1136, "height": 44, "props": { "text": "Open a second operator tab to compare independent state. No database, device, tag or external service is used.", "fontSize": 15, "foregroundColor": "#5c5070" } }
+      ]
+    }
+  ],
+  "templates": [
+    {
+      "id": "interaction-card", "name": "Interaction station card", "width": 552, "height": 222, "parameters": { "station": "A" },
+      "instanceState": { "lastKey": { "type": "string", "value": "No key yet" } },
+      "components": [
+        { "id": "heading", "type": "label", "x": 20, "y": 14, "width": 512, "height": 34, "props": { "text": "Independent station {station}", "fontSize": 20, "foregroundColor": "#302146" } },
+        { "id": "note", "type": "textInput", "x": 20, "y": 62, "width": 512, "height": 72, "props": { "text": "Local station note", "fieldKey": "localNote", "defaultValue": "", "backgroundColor": "#ffffff", "componentEvents": { "keyDown": { "language": "javascript", "code": "app.state.set('instance', 'lastKey', 'Station ' + parameters.station + ': ' + event.key);" } } } },
+        { "id": "status", "type": "label", "x": 20, "y": 152, "width": 512, "height": 42, "props": { "text": "No key yet", "foregroundColor": "#5c5070", "bindings": { "text": { "expression": "last", "references": { "last": { "kind": "instanceState", "key": "lastKey" } } } } } }
+      ]
+    }
+  ]
+}

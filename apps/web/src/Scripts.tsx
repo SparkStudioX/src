@@ -1,3 +1,4 @@
+import ApplicationPublishDialog from "./ApplicationPublishDialog";
 import type { GatewayScriptEvent, RuntimeParameters, ScriptResource, ScriptType } from "./types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, id, projectPage, projectStorageKey } from "./api";
@@ -30,7 +31,7 @@ const scopes: { type: ScriptType; name: string; icon: string }[] = [
   { type: "client", name: "Browser events", icon: "monitor" },
 ];
 const gatewayEvents: { event: GatewayScriptEvent; title: string; description: string }[] = [
-  { event: "startup", title: "Startup", description: "Runs when this script publication starts, including gateway restart. Republishing the same revision does not run it again." },
+  { event: "startup", title: "Startup", description: "Runs when an application publication activates, including gateway restart and rollback. Each publication starts a new event generation." },
   { event: "update", title: "Update", description: "The published handler observes saved script or project resources, including the actor and changed resources. Saving does not execute draft code." },
   { event: "shutdown", title: "Shutdown", description: "Best-effort cleanup during an orderly stop, project archive or script-publication replacement. All shutdown work shares a bounded budget; forced termination cannot run cleanup." },
   { event: "timer", title: "Timer", description: "Runs repeatedly without overlapping itself. Fixed rate skips missed intervals instead of building a backlog." },
@@ -87,6 +88,7 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
   const { gatewayAdmin, permissions } = useAuth();
   const [draft, setDraft] = useState<ScriptDraft | null>(null);
   const [saved, setSaved] = useState("");
+  const [publishReview, setPublishReview] = useState(false);
   const [publication, setPublication] = useState<ScriptPublication | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openIds, setOpenIds] = useState<string[]>([]);
@@ -233,13 +235,7 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
   };
   const publish = async () => {
     if (!permissions.publish || !draft || busy || dirty || defaultError) return;
-    setBusy("publish"); setError("");
-    try {
-      const next = await api<ScriptPublication>("/scripts/publish", "POST", { revision: draft.revision });
-      if (!mounted.current) return;
-      setPublication(next); notify(`Scripts revision ${next.revision ?? draft.revision} published. Enabled events are now active.`);
-    } catch (reason) { if (mounted.current) setError(message(reason)); }
-    finally { if (mounted.current) setBusy(""); }
+    setPublishReview(true);
   };
   const run = async () => {
     if (!canRun) return;
@@ -302,12 +298,13 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
   return <div className="management-page scripting-workspace" onKeyDown={(event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); event.stopPropagation(); void save(); }
   }}>
+    {publishReview && draft && <ApplicationPublishDialog scriptsRevision={draft.revision} onClose={() => setPublishReview(false)} onPublished={published => { setPublication({ published: true, revision: published.scriptsRevision, publishedAt: published.publishedAt, draftRevision: draft.revision }); setPublishReview(false); notify(`Application revision ${published.revision} published with scripts revision ${published.scriptsRevision}.`); }} />}
     <div className="page-heading">
       <div><div className="eyebrow">APPLICATION LOGIC</div><h1>Scripting</h1><p>Reusable Python libraries, gateway automation and browser JavaScript events.</p></div>
       <div className="page-heading-actions">
         <button className="button" disabled={Boolean(busy) || loading} onClick={() => dirty || defaultError ? setConfirm("reload") : void load()}><Icon name="refresh" size={15} /> Reload</button>
         <button className="button" disabled={!draft || Boolean(busy) || !dirty || Boolean(defaultError)} onClick={() => void saveResources()}><Icon name="save" size={15} />{busy === "save" ? "Saving…" : "Save resources"}</button>
-        <button className="button primary" title={!permissions.publish ? "Your account needs publish permission for this project" : undefined} disabled={!permissions.publish || !draft || dirty || Boolean(defaultError) || Boolean(busy)} onClick={() => void publish()}><Icon name="play" size={15} />{busy === "publish" ? "Publishing…" : "Publish scripts"}</button>
+        <button className="button primary" title={!permissions.publish ? "Your account needs publish permission for this project" : undefined} disabled={!permissions.publish || !draft || dirty || Boolean(defaultError) || Boolean(busy)} onClick={() => void publish()}><Icon name="play" size={15} />{busy === "publish" ? "Publishing…" : "Publish application"}</button>
       </div>
     </div>
     <div className="scripting-statebar"><span>{draft ? `Saved draft r${draft.revision}${dirty ? " · Unsaved changes" : ""}` : "Loading resources…"}</span><span>{publishedLabel}</span><span className={pythonAvailable ? "" : "error-text"}>{pythonAvailable ? "CPython available" : "CPython unavailable"}</span></div>
@@ -321,7 +318,7 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
           {!draft?.resources.some(resource => resource.type === scope.type) && <p className="script-tree-empty">No resources yet</p>}
         </section>)}
         {gatewayAdmin && <button className={`script-resource-item console-resource ${selectedId === null ? "active" : ""}`} disabled={Boolean(busy)} onClick={() => open(null)}><Icon name="code" size={15} /><span>Console<small>Local Python scratchpad</small></span></button>}
-        <p className="script-tree-note">Save updates drafts. Publish activates enabled resources. Python runs import libraries from the script publication.</p>
+        <p className="script-tree-note">Save updates script drafts. Publish application reviews and activates saved screens, queries, libraries and events together.</p>
       </nav>
       <section className="script-editor-pane" aria-label="Script editor workspace">
         <div className="script-open-tabs" aria-label="Open scripts">{gatewayAdmin && <button className={selectedId === null ? "active" : ""} disabled={Boolean(busy)} onClick={() => open(null)}>Console</button>}{openIds.map(resourceId => {

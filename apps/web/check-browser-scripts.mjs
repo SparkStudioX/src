@@ -14,6 +14,20 @@ const publication = (revision = 1) => ({ revision, publishedAt: `publication-${r
 const context = (screenId = 'A', effects = [], projectKey = 'project-1') => ({ projectKey, screenId, screenName: `Screen ${screenId}`, notify: message => effects.push(['notify', message]), navigate: id => effects.push(['navigate', id]), refresh: () => effects.push(['refresh']) });
 const defer = () => { let resolve; const promise = new Promise(done => resolve = done); return { promise, resolve }; };
 const mount = execute => { const runner = new BrowserScriptLifecycle(execute); runner.activate(); return runner; };
+await test('whole-application identity rejects mismatched browser resources and restarts on query-only releases', async () => {
+  const events = [], effects = []; let oldApp;
+  const runner = mount((resource, event, parameters, app) => { events.push(resource.id); oldApp = app; });
+  runner.setContext({ ...context('A', effects, 'release-a'), applicationPublishedAt: 'a' });
+  runner.update({ ...publication(), applicationPublishedAt: 'b' }); await runner.whenIdle();
+  assert.deepEqual(events, []);
+  runner.update({ ...publication(), applicationPublishedAt: 'a' }); await runner.whenIdle();
+  runner.setContext({ ...context('A', effects, 'release-b'), applicationPublishedAt: 'b' });
+  oldApp.notify('stale');
+  runner.update({ ...publication(), applicationPublishedAt: 'a' }); await runner.whenIdle();
+  assert.deepEqual(events, ['start', 'open']); assert.deepEqual(effects, []);
+  runner.update({ ...publication(), applicationPublishedAt: 'b' }); await runner.whenIdle();
+  assert.deepEqual(events, ['start', 'open', 'start', 'open']);
+});
 await test('startup precedes screen-open and rerenders do not duplicate events', async () => {
   const events = [];
   const runner = mount((resource, event) => events.push(`${resource.id}:${event.screenId}`));

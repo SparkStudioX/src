@@ -6,16 +6,17 @@ using System.Text.RegularExpressions;
 namespace SparkStudio.Gateway;
 
 public sealed record ScriptRunRequest(int Revision, string? Source, Dictionary<string, JsonElement>? Parameters);
-public sealed record ScriptRunSnapshot(JsonObject Resource, int Revision, string Source, IReadOnlyDictionary<string, string> Libraries);
+public sealed record ScriptRunSnapshot(JsonObject Resource, int Revision, string Source, IReadOnlyDictionary<string, string> Libraries, JsonArray? Queries = null, string? PublishedAt = null);
 public sealed record ScriptUpdateNotice(string Actor, JsonObject Resources, string Reason);
 
-/// <summary>Script resources have an independent draft and explicitly published snapshot.</summary>
+/// <summary>Independent script drafts read active resources from the complete application publication, with legacy fallback.</summary>
 public sealed class ScriptResourceStore
 {
     private readonly object gate = GatewayConfigurationLock.SyncRoot;
     private readonly string directory;
     private JsonObject draft;
     private JsonObject? published;
+    private PublicationStore? application;
     public event Action? Published;
     public event Action<ScriptUpdateNotice>? Updated;
     public string DataDirectory => directory;
@@ -52,8 +53,27 @@ public sealed class ScriptResourceStore
     }
 
     public JsonObject GetDraft() { lock (gate) return draft.DeepClone().AsObject(); }
-    public JsonObject? CapturePublished() { lock (gate) return published?.DeepClone().AsObject(); }
-    public IReadOnlyDictionary<string, string> CaptureLibraries() { lock (gate) return ScriptLibrary.Capture(published); }
+    public void AttachApplication(PublicationStore publication) { lock (gate) application = publication; }
+    private JsonObject? ActivePublication => application?.CaptureScripts() ?? published;
+    public JsonObject? CapturePublished() { lock (gate) return ActivePublication?.DeepClone().AsObject(); }
+    public IReadOnlyDictionary<string, string> CaptureLibraries() { lock (gate) return ScriptLibrary.Capture(ActivePublication); }
+    public void NotifyPublished() => Published?.Invoke();
+    public JsonObject CaptureDraftForPublication(int? expectedRevision = null)
+    {
+        lock (gate)
+        {
+            if (expectedRevision is not null && expectedRevision != Revision(draft)) throw new InvalidOperationException("Script resources changed. Review the application again before publishing.");
+            return ValidatePublication(draft);
+        }
+    }
+    internal static JsonObject ValidatePublication(JsonObject document)
+    {
+        var next = Normalize(document, Revision(document));
+        foreach (var resource in Resources(next))
+            if (Enabled(resource) && string.IsNullOrWhiteSpace(ProjectStore.Required(resource, "code")))
+                throw new ArgumentException("Enabled script resources need code before publication.");
+        return next;
+    }
 
     public JsonObject SaveDraft(JsonObject value, string actor = "system")
     {
@@ -93,9 +113,13 @@ public sealed class ScriptResourceStore
 
     public JsonObject Metadata()
     {
-        lock (gate) return published is null
+        lock (gate)
+        {
+            var published = ActivePublication;
+            return published is null
             ? new JsonObject { ["published"] = false, ["draftRevision"] = Revision(draft) }
             : new JsonObject { ["published"] = true, ["revision"] = Revision(published), ["draftRevision"] = Revision(draft), ["publishedAt"] = published["publishedAt"]!.DeepClone() };
+        }
     }
 
     public JsonObject Publish(int revision, string actor = "system")
@@ -103,6 +127,7 @@ public sealed class ScriptResourceStore
         JsonObject result;
         lock (gate)
         {
+            if (application is not null) throw new InvalidOperationException("Publish the whole application from the publication review. Script resources are included in that release.");
             if (revision != Revision(draft)) throw new InvalidOperationException("Script resources changed. Save and reload before publishing.");
             // Repeated publication of an unchanged revision must not retrigger startup events.
             if (published is not null && Revision(published) == revision) return Metadata();
@@ -125,6 +150,7 @@ public sealed class ScriptResourceStore
     {
         lock (gate)
         {
+            var published = ActivePublication;
             // Construct a positive projection: browser runtime never receives Python code.
             return new JsonObject
             {
@@ -143,12 +169,13 @@ public sealed class ScriptResourceStore
         if (source is not ("draft" or "published")) throw new ArgumentException("Script run source must be draft or published.");
         lock (gate)
         {
+            var published = ActivePublication;
             var document = source == "draft" ? draft : published ?? throw new KeyNotFoundException("No script resources are published.");
             if (revision != Revision(document)) throw new InvalidOperationException("Script resources changed. Reload before running this script.");
             var resource = Resources(document).FirstOrDefault(item => ProjectStore.Required(item, "id") == id)
                 ?? throw new KeyNotFoundException("Script resource not found.");
             if (ProjectStore.Required(resource, "type") == "client") throw new ArgumentException("Client JavaScript runs in the browser, not in the Python gateway.");
-            return new ScriptRunSnapshot(resource.DeepClone().AsObject(), revision, source, ScriptLibrary.Capture(published));
+            return new ScriptRunSnapshot(resource.DeepClone().AsObject(), revision, source, ScriptLibrary.Capture(published), source == "published" ? published?["queries"]?.DeepClone().AsArray() : null, published?["publishedAt"]?.GetValue<string>());
         }
     }
 

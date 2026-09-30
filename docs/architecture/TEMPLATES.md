@@ -1,6 +1,6 @@
 # Reusable templates and repeaters
 
-SparkStudio templates reuse a fixed-canvas collection of components. Public parameters support Text, Number and Boolean types. Templates can contain other templates and saved-row repeaters, with a maximum of four template levels and no reference cycles. Query-backed repeaters remain restricted to a screen or popup's root component list. Typed private instance state and parent-context parameter fx are implemented. UDTs, template inheritance and arbitrary-depth nesting remain future work. See [NESTED_FORMS.md](NESTED_FORMS.md) for nested form identity and action contracts.
+SparkStudio templates reuse a fixed-canvas collection of components. Public parameters support Text, Number and Boolean types. Templates can contain other templates and saved-row repeaters, with a maximum of four template levels and no reference cycles. Query-backed repeaters can appear at any supported level; their declared maximum rows reserve the expansion budget. Typed private instance state and parent-context parameter fx are implemented. Template inheritance and arbitrary-depth nesting remain future work. Gateway UDT definitions and pinned instances have a separate [tag-model contract](TAG_MODELS.md). See [NESTED_FORMS.md](NESTED_FORMS.md) for nested form identity and action contracts.
 
 ## Authoring
 
@@ -30,7 +30,7 @@ The independent [template property workshop](../../examples/template-properties.
 
 ## Query-backed rows
 
-At the root of a screen or popup, choose a read named query in the repeater's property sheet, specify its string row-key column, and map result columns to declared template parameters. Query-backed repeater placement inside a template is rejected in this increment. A root query row can contain nested templates and saved-row repeaters. A query-backed repeater uses this shape instead of nonempty saved rows:
+On a screen, popup or shared template, choose a read named query in the repeater's property sheet, specify its string row-key column, and map result columns to declared template parameters. Query rows can contain nested templates, saved-row repeaters and bounded query repeaters; each nested query receives its containing typed parameter context. A query-backed repeater uses this shape instead of nonempty saved rows:
 
 ```json
 {
@@ -88,10 +88,10 @@ Run `node tools/load-data-controls-example.mjs` to create and immediately publis
 | Repeater gap | 0–64 |
 | Expanded components, including containers | 10,000 per project |
 | Nesting | At most four template levels; no cycles |
-| Query-backed repeater placement | Screen/popup root only |
+| Query-backed repeater placement | Every supported template level |
 
-Template inheritance, richer custom property types, unrestricted property observation and nesting beyond four template levels remain planned. Bounded [property/lifecycle events](COMPONENT_LIFECYCLE.md) and [private instance state](INSTANCE_STATE.md) are implemented. Invalid references, duplicate identities, cycles, excessive depth, nested query-backed repeaters and expansion limits are rejected at publication. Expansion budgeting reserves 100 rows for every query-backed repeater and includes each row's nested descendants.
+Template inheritance, richer custom property types, unrestricted property observation and nesting beyond four template levels remain planned. Bounded [property/lifecycle events](COMPONENT_LIFECYCLE.md) and [private instance state](INSTANCE_STATE.md) are implemented. Invalid references, duplicate identities, cycles, excessive depth and expansion limits are rejected at publication. Expansion budgeting reserves `rowsSource.maxRows` (1–100, default 100) per query-backed repeater and includes each row's nested descendants. See [datasets and nested query rows](DATASETS_NESTED_QUERIES.md).
 
-Publication captures screens, templates, action scripts and referenced table, dropdown, list, tree and repeater read queries. Runtime Python actions use captured named-query definitions. Published reads and actions carry a publication token, so a stale client fails explicitly after republishing and must reload. Script libraries retain their separate script-publication lifecycle.
+Publication captures screens, templates, component code, all named queries, Python libraries and gateway/browser script resources together. Runtime Python actions use captured named-query and library definitions. Published reads and actions carry a publication token, so a stale client fails explicitly after republishing and must reload. See [complete application publication](UNIFIED_PUBLICATION.md) for review, rollback and legacy compatibility.
 
 Verification covers independent instance and row writes, one-pass substitution, forged targets, invalid graphs, script-source omission, draft isolation and stale publications. See [PARITY.md](PARITY.md) for the evidence and its deployment limits.

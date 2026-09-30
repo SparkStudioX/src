@@ -111,18 +111,27 @@ function packScriptDraft(source) {
   assert.ok(Array.isArray(source.resources) && source.resources.length <= 100, 'Invalid authored script resources.');
   const common = ['id', 'name', 'type', 'code', 'enabled', 'parameters', 'event', 'timeoutMs', 'threading'];
   const options = { startup: [], update: [], shutdown: [], timer: ['intervalMs', 'delayType'], tagChange: ['tagPaths', 'changeTriggers'], message: ['requiredPermission'], scheduled: ['cron', 'timeZone'] };
-  const ids = new Set(), messageNames = new Set(); let totalCode = 0;
+  const ids = new Set(), messageNames = new Set(), libraryNames = new Set(); let totalCode = 0;
   for (const resource of source.resources) {
     assert.ok(resource && typeof resource === 'object' && !Array.isArray(resource), 'Invalid authored script resource.');
-    assert.equal(resource.type, 'gateway', 'Portable script-resource support currently covers reviewed gateway events only.');
-    assert.equal(resource.enabled, false, 'Portable gateway events must be disabled; activation requires explicit review and script publication.');
-    assert.ok(Object.hasOwn(options, resource.event), 'Unsupported gateway event.');
-    assert.ok(Object.keys(resource).every(key => common.includes(key) || options[resource.event].includes(key)), 'Unknown or unrelated script option.');
+    assert.ok(['gateway', 'library', 'client'].includes(resource.type), 'Unsupported script resource type.');
+    assert.equal(resource.enabled, false, 'Portable script resources must be disabled; activation requires explicit review and application publication.');
+    if (resource.type === 'gateway') {
+      assert.ok(Object.hasOwn(options, resource.event), 'Unsupported gateway event.');
+      assert.ok(Object.keys(resource).every(key => common.includes(key) || options[resource.event].includes(key)), 'Unknown or unrelated script option.');
+      assert.ok(Number.isInteger(resource.timeoutMs) && resource.timeoutMs >= 100 && resource.timeoutMs <= 300000, 'Invalid script timeout.');
+      assert.ok(['dedicated', 'shared'].includes(resource.threading), 'Invalid script threading.');
+    } else {
+      assert.ok(Object.keys(resource).every(key => ['id', 'name', 'type', 'code', 'enabled', 'parameters', ...(resource.type === 'client' ? ['event'] : [])].includes(key)), 'Unknown or unrelated script option.');
+      if (resource.type === 'client') assert.ok(['startup', 'screenOpen'].includes(resource.event), 'Unsupported browser event.');
+      else {
+        assert.match(resource.name, /^[A-Za-z_][A-Za-z0-9_]{0,63}$/);
+        assert.ok(!libraryNames.has(resource.name), 'Duplicate library name.'); libraryNames.add(resource.name);
+      }
+    }
     assert.match(resource.id, safeId); assert.ok(!ids.has(resource.id), 'Duplicate script ID.'); ids.add(resource.id);
     assert.ok(typeof resource.name === 'string' && resource.name.trim() && resource.name.length <= 100 && !/[\x00-\x1f\x7f]/.test(resource.name), 'Invalid script name.');
     assert.ok(typeof resource.code === 'string' && Buffer.byteLength(resource.code) <= 65536, 'Script code exceeds its limit.'); totalCode += Buffer.byteLength(resource.code);
-    assert.ok(Number.isInteger(resource.timeoutMs) && resource.timeoutMs >= 100 && resource.timeoutMs <= 300000, 'Invalid script timeout.');
-    assert.ok(['dedicated', 'shared'].includes(resource.threading), 'Invalid script threading.');
     assert.ok(resource.parameters && typeof resource.parameters === 'object' && !Array.isArray(resource.parameters) && Object.keys(resource.parameters).length <= 64, 'Invalid script parameters.');
     for (const [name, value] of Object.entries(resource.parameters)) {
       assert.match(name, /^[A-Za-z_][A-Za-z0-9_]{0,63}$/);
@@ -150,7 +159,7 @@ function packScriptDraft(source) {
   return structuredClone(source);
 }
 function guide(entry, version, compatibility) {
-  return `# ${entry.title}\n\n${entry.summary}\n\nWorkshop bundle: ${version}. Requires SparkStudio project format ${compatibility.packageFormat}. ${compatibility.note} Original collection baseline: ${compatibility.baseline.value}.\n\n## Open this workshop\n\n1. Sign in to engineering as a gateway administrator and open Projects.\n2. Choose Import .sparkproj and select projects/${entry.id}.sparkproj. Import creates an independent, unpublished project.\n3. Open the imported project in Designer, inspect its property sheets and scripts, then use Preview.\n4. Publish the saved project when ready. Open Operator application from the left navigation.\n\nPreview starts read-only: native inputs, pure bindings, read queries and navigation work. Authored JavaScript and Python exercises require an administrator to explicitly enable Live actions, or an explicitly published operator application.\n\n## Prerequisites\n\n${entry.prerequisites.map(value => `- ${value}`).join('\n') || '- No external devices, databases or Internet connection.'}\n\n## Try it\n\n${entry.walkthrough.map((value, index) => `${index + 1}. ${value}`).join('\n')}\n\n## What is saved\n\nThe package contains authored project defaults, read-query definitions and component scripts. Where included, gateway script resources are disabled drafts: enable and publish them separately after review. Operator state is transient. It contains no accounts, credentials, device configuration, gateway tags or database files. Import never publishes or starts gateway scripts. Review scripts before running an example.\n\nFeature guide: [${entry.title}](../${entry.guide}). Authoring source: [${entry.id}.json](../${entry.source}).\n`;
+  return `# ${entry.title}\n\n${entry.summary}\n\nWorkshop bundle: ${version}. Requires SparkStudio project format ${compatibility.packageFormat}. ${compatibility.note} Original collection baseline: ${compatibility.baseline.value}.\n\n## Open this workshop\n\n1. Sign in to engineering as a gateway administrator and open Projects.\n2. Choose Import .sparkproj and select projects/${entry.id}.sparkproj. Import creates an independent, unpublished project.\n3. Open the imported project in Designer, inspect its property sheets and scripts, then use Preview.\n4. Publish the saved project when ready. Open Operator application from the left navigation.\n\nPreview starts read-only: native inputs, pure bindings, read queries and navigation work. Authored JavaScript and Python exercises require an administrator to explicitly enable Live actions, or an explicitly published operator application.\n\n## Prerequisites\n\n${entry.prerequisites.map(value => `- ${value}`).join('\n') || '- No external devices, databases or Internet connection.'}\n\n## Try it\n\n${entry.walkthrough.map((value, index) => `${index + 1}. ${value}`).join('\n')}\n\n## What is saved\n\nThe package contains authored project defaults, read-query definitions and component scripts. Where included, library, gateway and browser script resources are disabled drafts: review and enable them, then publish the complete application. Operator state is transient. It contains no accounts, credentials, device configuration, gateway tags or database files. Import never publishes or starts gateway scripts. Review scripts before running an example.\n\nFeature guide: [${entry.title}](../${entry.guide}). Authoring source: [${entry.id}.json](../${entry.source}).\n`;
 }
 export async function buildBundleFiles(root, catalog, { version, exportedAt, sourceRevision, sourceDirty }) {
   assert.match(version, /^[A-Za-z0-9][A-Za-z0-9.+-]{0,63}$/); assert.match(sourceRevision, /^[a-f0-9]{40}$/);

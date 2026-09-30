@@ -28,3 +28,17 @@
 .table-cell-edit-actions button:first-child:not(:disabled) { color:var(--on-accent); background:var(--component-accent,var(--accent)); border-color:var(--component-accent,var(--accent)); }
 .table-cell-edit-actions button:disabled { opacity:.5; cursor:default; }
 .table-edit-validation { font-size:11px; line-height:1.4; white-space:normal; color:var(--danger,#c43d4b); }
+
+.table-selection-toolbar { display:flex; gap:8px; align-items:center; padding:6px 10px; flex-wrap:wrap; }
+.table-batch-dialog { width:min(760px, 90vw); max-height:90vh; padding:0; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--ink); }
+.table-batch-dialog::backdrop { background:#0008; }
+.table-batch-dialog header, .table-batch-dialog footer { padding:16px; }
+.table-batch-dialog header h2 { margin:0 0 8px; }
+.table-batch-dialog footer { display:flex; gap:8px; justify-content:flex-end; align-items:center; flex-wrap:wrap; }
+.table-batch-dialog footer p { flex-basis:100%; color:var(--danger); }
+.table-batch-fields { max-height:55vh; overflow:auto; padding:0 16px; display:grid; gap:10px; }
+.table-batch-fields fieldset { display:grid; grid-template-columns:160px minmax(0,1fr); gap:8px; border:1px solid var(--border); padding:10px; }
+.table-batch-fields fieldset p { grid-column:1 / -1; margin:0; color:var(--danger); }
+.table-batch-fields input, .table-batch-fields select { min-width:0; }
+.table-batch-fields input:not([type="checkbox"]), .table-batch-fields select { width:100%; box-sizing:border-box; padding:8px; border:1px solid var(--border); border-radius:4px; background:var(--surface); color:var(--ink); font:inherit; }
+.table-batch-fields label { display:flex; align-items:center; gap:8px; }

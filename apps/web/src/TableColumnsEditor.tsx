@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { validateTableColumns } from "./tableColumns";
 import type { CanvasComponent, TableColumnDefinition } from "./types";
+import { PropertyCollectionDialog } from "./PropertyCollectionEditor";
 import "./tableColumnsEditor.css";
 
 type DraftRow = { id: number; key: string; label: string; visible: boolean; width: string;
@@ -47,13 +48,11 @@ export function TableColumnsEditor({ component, onChange, notify }: {
     while (draft.some(row => row.key === `column${number}`)) number++;
     setDraft([...draft, { id: nextId.current++, key: `column${number}`, label: "", visible: true, width: "", align: "left", format: "auto", precision: "", suffix: "" }]);
   }
-  return <section className="table-columns-editor" aria-label="Table columns">
-    <div className="table-columns-heading"><strong>Table columns</strong>{draft === null && <button type="button" className="button small" onClick={edit}>Edit columns</button>}</div>
-    <p className="table-columns-help">Use exact query column names as source keys. Labels change headings. Hidden and unlisted columns remain in the query data for row selection; hiding is presentation only.</p>
-    {draft === null ? <>
-      {!source?.length ? <p className="table-columns-help">Automatic: show all columns returned by the query.</p> : <ol className="table-columns-summary">{source.map((column, index) => <li key={`${index}:${column.key}`}><span><strong>{column.label || column.key}</strong><small>{column.key}</small></span><small>{column.visible === false ? "Hidden" : column.format === "datetime" ? "Date/time (UTC)" : column.format ?? "Auto"}</small></li>)}</ol>}
-      {error && <p className="table-columns-error" role="alert">{error}</p>}
-    </> : <div className="table-columns-draft" role="group" aria-label="Edit table columns" onKeyDown={event => {
+  const help = "Use exact query column names as source keys. Labels change headings. Hidden and unlisted columns remain in the query data for row selection; hiding is presentation only.";
+  return <section className="property-sheet-group property-collection-group" aria-label="Table columns"><h4>Table columns</h4>
+    <div className="property-sheet-row" data-property="tableColumns"><label title={help}>Columns</label><div className="property-sheet-value property-collection-value"><span>{source?.length ? `${source.length} defined` : "Automatic"}</span><button type="button" className="button small" onClick={edit}>Edit columns</button></div><span aria-hidden="true" /></div>
+    {draft === null && error && <p className="table-columns-error" role="alert">{error}</p>}
+    {draft !== null && <PropertyCollectionDialog title="Table columns" onClose={() => setDraft(null)}><p className="table-columns-help">{help}</p><div className="table-columns-draft" role="group" aria-label="Edit table columns" onKeyDown={event => {
       event.stopPropagation();
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); apply(); }
       if (event.key === "Escape") { event.preventDefault(); setDraft(null); }
@@ -86,6 +85,6 @@ export function TableColumnsEditor({ component, onChange, notify }: {
       <p className="table-columns-help">Only listed, visible columns are shown. Source keys are checked when the query returns data. Changing the named query preserves these settings.</p>
       {error && <p className="table-columns-error" role="alert">{error}</p>}
       <div className="table-columns-actions"><button type="button" className="button small primary" disabled={Boolean(error)} onClick={apply}>Apply columns</button><button type="button" className="button small" onClick={() => setDraft(null)}>Cancel</button></div>
-    </div>}
+    </div></PropertyCollectionDialog>}
   </section>;
 }

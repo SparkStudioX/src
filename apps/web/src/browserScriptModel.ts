@@ -9,11 +9,13 @@ export interface BrowserResource {
   parameters: Record<string, unknown>;
 }
 export interface BrowserPublication {
+  applicationPublishedAt?: string;
   revision?: number;
   publishedAt?: string | null;
   resources: BrowserResource[];
 }
 export interface BrowserScriptContext {
+  applicationPublishedAt?: string;
   sendMessage?: ComponentMessageSender;
   projectKey: string;
   screenId: string;
@@ -80,8 +82,9 @@ export class BrowserScriptLifecycle {
 
   update(publication: BrowserPublication | null) {
     const context = this.context;
-    if (!this.active || !context || publication?.revision === undefined) return;
-    const key = JSON.stringify([publication.revision, publication.publishedAt]);
+    if (!this.active || !context || publication?.revision === undefined ||
+        context.applicationPublishedAt && context.applicationPublishedAt !== publication.applicationPublishedAt) return;
+    const key = JSON.stringify([publication.revision, publication.publishedAt, publication.applicationPublishedAt]);
     const screenKey = JSON.stringify([key, context.projectKey, context.screenId, context.scopeKey]);
     const startup = key !== this.publicationKey;
     const screenOpen = screenKey !== this.screenKey;

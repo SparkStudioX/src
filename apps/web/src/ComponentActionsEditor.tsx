@@ -5,7 +5,7 @@ import ScriptEditor from "./ScriptEditor";
 import EventScriptLanguagePicker, { PythonEventContext } from "./EventScriptLanguage";
 import { editEventScript, eventScriptDraft, eventScriptValue, pythonComponentEventRestriction, pythonInputEventsAvailable, pythonEventCompletions, selectEventLanguage, type EventScriptLanguage } from "./eventScriptAuthoring";
 import { applyComponentActionsDraft, componentActionsDraft, eventTabLabels, hasComponentAction, type ComponentActionsDraft, type ComponentEventTab } from "./componentActionsAuthoring";
-import { componentEventProperties } from "./componentEventModel";
+import { componentEventProperties, componentInteractionTypes, isComponentInteraction } from "./componentEventModel";
 import { componentMessageScopes, componentMessageScopeDescriptions } from "./componentMessageAuthoring";
 import { isInput } from "./inputs";
 import type { CanvasComponent, ComponentMessageHandler, ComponentMessageScope, InputValues, RuntimeParameters, Screen } from "./types";
@@ -20,8 +20,18 @@ const descriptions: Record<ComponentEventTab, string> = {
   propertyChange: "Runs when an observed value or its availability changes, including binding, script and input updates. Equal values are suppressed. Avoid writing back to the property that triggered this event.",
   unmount: "Cleanup when this component leaves its context. Python receives captured component, input, parameter and local-state reads; UI changes are rejected. JavaScript cleanup reads captured state and cannot update the closed UI.",
   messages: "Receive a named message in this component's form context. Each handler matches an exact message type and scope.",
+  focus: "Runs when focus enters this component. Moving between controls inside the same component does not fire another focus event.",
+  blur: "Runs when focus leaves this component. Native input commit behavior is preserved.",
+  keyDown: "Observes a pressed key before native editing. Repeated keys include repeat=true. The handler receives a snapshot and cannot cancel browser behavior.",
+  keyUp: "Observes a released key. Keyboard input, shortcuts and composition keep their native behavior.",
+  doubleClick: "Observes a double click. Normal click actions still run; this handler does not cancel or replace them.",
+  pointerDown: "Observes mouse, touch or pen contact. No pointer capture is added and native gestures are preserved.",
+  pointerUp: "Observes pointer release delivered to this component. A release outside it is delivered only when its native control already captures the pointer.",
 };
-const eventFields = (tab: ComponentEventTab) => tab === "action" ? [] : tab === "messages" ? ["type", "componentId", "messageType", "payload", "scope", "messageId"] : tab === "propertyChange" ? ["type", "componentId", "property", "value", "previousValue", "available", "previousAvailable", "error", "previousError", "origin"] : tab === "change" || tab === "commit" ? ["type", "componentId", "fieldKey", "value", "previousValue", "origin"] : ["type", "componentId"];
+const eventFields = (tab: ComponentEventTab) => tab === "action" ? [] : tab === "messages" ? ["type", "componentId", "messageType", "payload", "scope", "messageId"] : tab === "propertyChange" ? ["type", "componentId", "property", "value", "previousValue", "available", "previousAvailable", "error", "previousError", "origin"] : tab === "change" || tab === "commit" ? ["type", "componentId", "fieldKey", "value", "previousValue", "origin"]
+  : tab === "keyDown" || tab === "keyUp" ? ["type", "componentId", "origin", "key", "code", "repeat", "isComposing", "redacted", "altKey", "ctrlKey", "metaKey", "shiftKey"]
+  : tab === "pointerDown" || tab === "pointerUp" || tab === "doubleClick" ? ["type", "componentId", "origin", "button", "buttons", "clientX", "clientY", ...(tab === "doubleClick" ? [] : ["pointerType", "pointerId"]), "altKey", "ctrlKey", "metaKey", "shiftKey"]
+  : tab === "focus" || tab === "blur" ? ["type", "componentId", "origin"] : ["type", "componentId"];
 interface LibraryResource { name: string; type: string; enabled: boolean }
 
 /** One modal owns every action/event draft. Only Apply may mutate canvas history. */
@@ -41,7 +51,7 @@ export default function ComponentActionsEditor({ component, components, screens,
   const handler = draft.handlers.find(item => item.id === handlerId);
   const current = selected === "action" ? { language: "python" as const, code: draft.buttonCode } : selected === "messages" ? handler ? eventScriptValue(draft.messageScripts[handler.id]) : null : eventScriptValue(draft.scripts[selected]);
   const showCode = selected === "action" ? draft.action === "script" : selected !== "messages" || Boolean(handler);
-  const tabs: ComponentEventTab[] = [...(hasComponentAction(component) ? ["action" as const] : []), ...(isInput(component.type) ? ["change" as const, "commit" as const] : []), "mount", "propertyChange", "unmount", "messages"];
+  const tabs: ComponentEventTab[] = [...(hasComponentAction(component) ? ["action" as const] : []), ...(isInput(component.type) ? ["change" as const, "commit" as const] : []), ...componentInteractionTypes, "mount", "propertyChange", "unmount", "messages"];
   const allowedProperties = componentEventProperties(component, draft.scripts.propertyChange.language);
   const fields = components.filter(item => isInput(item.type) && item.type !== "passwordInput");
   const patch = (value: Partial<ComponentActionsDraft>) => { setError(""); setDraft(previous => ({ ...previous, ...value })); };
@@ -126,12 +136,13 @@ export default function ComponentActionsEditor({ component, components, screens,
             <p className={`component-event-count${current.code.length > 65536 ? " is-invalid" : ""}`}>{current.code.length.toLocaleString()} / 65,536 characters</p>
           </>}
           {error && <p className="input-events-error" role="alert">{error}</p>}
-          <p className="input-events-description">Leave an input or lifecycle handler empty to remove it. Apply changes all actions and events in one undo step. Save and publish to deploy. No code runs while editing.</p>
+          <p className="input-events-description">Leave a handler empty to remove it. Apply changes all actions and events in one undo step. Save and publish to deploy. No code runs while editing.</p>
         </section>
         <aside className="input-events-context" aria-label="Action and event context">
           <h3>Component context</h3><code>{component.id}</code>
           {["template", "repeater"].includes(component.type) && <p>For this wrapper, <code>self</code> is the template placement or repeater. <code>self.parent.custom</code> belongs to the containing screen or template. It does not expose each row's private state or traverse into child forms.</p>}
           {selected !== "action" && <><h4>Event payload</h4><pre>{eventFields(selected).map(field => `event.${field}`).join("\n")}</pre><p>Python supports attribute and dictionary access. Values are typed snapshots; unavailable values are None. Numeric edits can be empty or invalid text. Event origin describes a source, not a trusted identity.</p></>}
+          {isComponentInteraction(selected) && <p>Only this component receives its interaction; parent containers do not receive a child's event. Disabled, hidden and inactive panes do not run interaction handlers. Password keyboard events use empty key/code and redacted=true in both languages. Input snapshots omit passwords. Static displays gain a keyboard tab stop only when focus or keyboard handlers are configured.</p>}
           {showCode && current?.language === "python" ? <PythonEventContext cleanup={cleanup} buttonAction={selected === "action"} password={component.type === "passwordInput"} /> : showCode && <><h4>JavaScript context</h4><p><code>event</code>, <code>inputs</code> and <code>parameters</code> are snapshots. <code>app.state.get</code> reads declared session or screen state{instanceStateAvailable && ", or this template's private instance state"}.</p>{cleanup ? <p>The signal is already aborted. Use captured reads and release resources; UI setters and notifications do nothing.</p> : <p><code>app.notify</code>, <code>app.setInput</code>, <code>app.state.set/reset</code> and <code>app.sendMessage</code> affect this runtime tab. Pass <code>app.signal</code> to abortable work.{!inputEvent && <> Register timers and listeners with <code>app.onCleanup</code>.</>}</p>}{inputEvent && <p>JavaScript input handlers receive the form snapshot including password fields. Their helpers expire after timeout or context change. Use Mounted for resources that need <code>app.onCleanup</code>.</p>}<p>JavaScript is trusted browser code. Async deadlines cannot interrupt a synchronous infinite loop.</p></>}
           {selected === "action" && draft.action !== "script" && <p>Native actions run when the operator activates the component. Navigation opens a destination screen; popup overrides use parameter names declared on the chosen popup. Send message delivers a fixed JSON payload to matching listeners.</p>}
           {selected === "messages" && <><h4>Message delivery</h4><p>Use a button's Send message action or <code>app.sendMessage(messageType, payload, {"{scope: 'screen'}"})</code> for local instance, screen or tab delivery. Gateway <code>system.ui.sendMessage</code> reaches only session-scope handlers across this project's active operator tabs. Listeners receive their own component, form and state context. Messages are not replayed after a listener closes.</p></>}

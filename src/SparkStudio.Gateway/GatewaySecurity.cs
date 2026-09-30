@@ -152,7 +152,7 @@ public static class GatewaySecurity
             ValidateAudience(request.Audience);
             if (store.SetupRequired) throw new BadHttpRequestException("Complete local gateway setup first.", 409);
             var user = store.Login(request.Username, request.Password, context.Connection.RemoteIpAddress?.ToString() ?? "unknown");
-            var allowed = user.GatewayAdmin || (request.ProjectId is { Length: > 0 }
+            var allowed = user.GatewayAdmin || request.Audience == EngineeringAudience && string.IsNullOrEmpty(request.ProjectId) && store.GetGatewayCapabilities(user).Any || (request.ProjectId is { Length: > 0 }
                 ? store.Can(user, request.ProjectId, request.Audience == EngineeringAudience ? "design" : "view")
                 : user.ProjectGrants.Values.Any(grant => request.Audience == EngineeringAudience ? grant.Design : grant.View));
             if (!allowed)
@@ -238,21 +238,24 @@ public static class GatewaySecurity
         });
         endpoints.MapGet("/api/security/audit", async (HttpContext context, SecurityStore store, int? limit) =>
         {
-            await RequireAdmin(context, store);
+            await RequireCapability(context, store, "audit");
             return Results.Json(new { entries = store.ReadAudit(limit ?? 100) });
         });
         return endpoints;
     }
 
     private static async Task<SecurityUser> RequireAdmin(HttpContext context, SecurityStore store, bool mutation = false)
+        => await RequireCapability(context, store, "gatewayAdmin", mutation);
+
+    private static async Task<SecurityUser> RequireCapability(HttpContext context, SecurityStore store, string capability, bool mutation = false)
     {
         GuardTransportAndOrigin(context, json: mutation);
         var user = await AuthenticateAsync(context, EngineeringAudience);
         if (user is null) throw new BadHttpRequestException("Sign in to the gateway administration application.", 401);
-        if (!store.Can(user, null, "gatewayAdmin"))
+        if (!store.Can(user, null, capability))
         {
             store.Audit(user, "security.access", null, "denied");
-            throw new BadHttpRequestException("Gateway administrator permission is required.", 403);
+            throw new BadHttpRequestException($"Gateway {capability} permission is required.", 403);
         }
         if (mutation) ValidateCsrf(context, user);
         return user;
@@ -304,7 +307,7 @@ public static class GatewaySecurity
             setupRequired = store.SetupRequired, audience,
             user = user is null ? null : new { user.Id, user.Username, user.DisplayName, user.GatewayAdmin },
             csrfToken = user is null ? null : (Item(context, SessionKey) as SecuritySession)?.CsrfToken,
-            permissions, project, operatorBaseUrl = store.Settings.PublicBaseUrl
+            permissions, gatewayCapabilities = store.GetGatewayCapabilities(user), project, operatorBaseUrl = store.Settings.PublicBaseUrl
         };
     }
 

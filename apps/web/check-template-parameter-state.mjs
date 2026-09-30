@@ -22,7 +22,8 @@ function loader(harness = false) { const cache = new Map(); return function load
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText
     .replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
     .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, dependency) => {
-      const stub = harness && ['applicationState','templates','inputStateBindings','ComponentEvents'].includes(name) && dependency === 'react' ? hookUrl
+      const stub = harness && dependency === './ComponentActivity' ? url('export const useComponentActivity=()=>true; export const ComponentActivityProvider=({children})=>children;')
+        : harness && ['applicationState','templates','inputStateBindings','ComponentEvents'].includes(name) && dependency === 'react' ? hookUrl
         : harness && name === 'templates' ? ({'./BoundComponent':leafUrl,'./useQueryRepeater':queryUrl,'./VisualStyleContext':url('export const useVisualStyles=()=>undefined;'),'./LocalizationContext':url('export const useLocalization=()=>({});'),'./useQueryPropertyBindings':url('export const useQueryPropertyBindings=()=>({});export const useQueryPropertyContext=()=>undefined;export const QueryPropertyProvider=({children})=>children;')})[dependency] : undefined;
       return prefix + JSON.stringify(stub ?? (dependency.startsWith('./') ? load(dependency.slice(2)) : pathToFileURL(require.resolve(dependency)).href));
     });
@@ -82,9 +83,13 @@ await check('authoring may defer an unknown containing screen key but runtime an
   for(const kind of ['sessionState','instanceState']) assert.match(validateTemplateParameterBinding(ref(kind,'future'),embed,[embed],{},'count','number',current,true),/unavailable/);
   assert.match(validateTemplateParameterBinding(screenBinding,embed,[embed],{},'count','number',{...current,screen:{future:null}},true),/exact finite/);
 });
-await check('tags stay unsupported and root state cannot see a future child private declaration',()=>{
+await check('tag parameters require a good typed live sample and root state cannot see a future child private declaration',()=>{
   const component={...embed,props:{...embed.props,parameterBindings:{count:binding('value',{value:{kind:'tag',path:'[default]Live'}})}}};
-  assert.throws(()=>resolveParameterBindings(component,detail,context),/Tags/);
+  assert.throws(()=>resolveParameterBindings(component,detail,context),/not found/);
+  const tag={path:'[default]Live',quality:'Good',value:12};
+  assert.deepEqual(resolveParameterBindings(component,detail,{...context,tags:[tag]}),{count:12});
+  assert.throws(()=>resolveParameterBindings(component,detail,{...context,tags:[{...tag,quality:'Bad'}]}),/quality/);
+  assert.throws(()=>resolveParameterBindings(component,detail,{...context,tags:[{...tag,value:'wrong'}]}),/number/);
   assert.throws(()=>resolveParameterBindings(embed,detail,{...context,state:{session:current.session,screen:current.screen}}),/instance state/);
 });
 await check('transport captures only referenced scope/key pairs and preserves absent state for legacy identities',()=>{

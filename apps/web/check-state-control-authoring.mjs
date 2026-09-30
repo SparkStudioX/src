@@ -33,6 +33,7 @@ const { StateControlEditor: InteractiveEditor } = await import(interactiveModule
 const { PropertyBindingsEditor: InteractiveBindings } = await import(interactiveModules('PropertyBindingsEditor'));
 const { isInput, resolveInputs, validateInputs } = await import(staticModules('inputs'));
 const { resolveIndicatorState } = await import(staticModules('stateControls'));
+const { isChart, defaultChartProps } = await import(staticModules('chartModel'));
 const { isProcessDisplay } = await import(staticModules('processDisplays'));
 const hooks = await import(hookUrl);
 const make = (type = 'multiStateIndicator') => ({ id: 'state-control', type, x: 20, y: 30, width: 300, height: 90, props: type === 'multiStateIndicator'
@@ -73,6 +74,21 @@ check('indicator edits apply exact values, labels and colors atomically without 
   ui.button('Apply states').props.onClick(); ui.refresh();
   assert.deepEqual(patches, [{ states: [{ value: 'idle', label: 'Idle', color: '#0f08' }, before.props.states[1]] }]);
   assert.deepEqual(component, before);
+});
+
+check('state collections occupy grid rows and dismiss their staged dialog without mutating saved values', () => {
+  for (const type of ['multiStateIndicator', 'multiStateButton']) {
+    const component = make(type), patches = [], ui = drive(InteractiveEditor, { component, onChange: patch => patches.push(patch), notify: noOp });
+    const property = type === 'multiStateIndicator' ? 'states' : 'options', trigger = type === 'multiStateIndicator' ? 'Edit states' : 'Edit options';
+    const row = ui.find(node => node.props?.['data-property'] === property);
+    assert.match(row.props.className, /property-sheet-row/); assert.equal(React.Children.toArray(row.props.children).length, 3);
+    assert.ok(!ui.all().some(node => ['ul', 'ol', 'dialog'].includes(node.type)));
+    ui.button(trigger).props.onClick(); ui.refresh();
+    ui.change(type === 'multiStateIndicator' ? 'State 1 label' : 'Option 1 label', 'Unsaved');
+    ui.find(node => node.type?.name === 'PropertyCollectionDialog').props.onClose(); ui.refresh();
+    assert.deepEqual(patches, []); assert.ok(!ui.all().some(node => node.type?.name === 'PropertyCollectionDialog'));
+    ui.button(trigger).props.onClick(); ui.refresh(); assert.notEqual(ui.label(type === 'multiStateIndicator' ? 'State 1 label' : 'Option 1 label').props.value, 'Unsaved');
+  }
 });
 
 check('invalid duplicate states, empty labels and non-hex colors stay in the editor without saving', () => {
@@ -124,8 +140,8 @@ check('palette factories create valid empty passwords, selected segments and kno
   visit(ast);
   const script = ts.transpileModule(`const processDimensions=${declarations.get('processDimensions')}; const palettes=${declarations.get('palettes')}; const addComponent=${declarations.get('addComponent')}; return {palettes,addComponent};`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
   let screen = { id: 'screen', width: 1000, height: 700, components: [] };
-  const factory = new Function('screen', 'project', 'editingTemplate', 'availableTemplates', 'notify', 'id', 'assets', 'queries', 'isInput', 'isTemplateInstance', 'updateScreen', 'setSelectedId', 'isProcessDisplay', script)(
-    screen, { screens: [screen], templates: [] }, undefined, [], noOp, value => `new-${value}`, [], [], isInput, type => type === 'template' || type === 'repeater', update => { screen = update(screen); }, noOp, isProcessDisplay);
+  const factory = new Function('screen', 'project', 'editingTemplate', 'availableTemplates', 'notify', 'id', 'assets', 'queries', 'isInput', 'isTemplateInstance', 'updateScreen', 'setSelectedId', 'isProcessDisplay', 'isChart', 'defaultChartProps', script)(
+    screen, { screens: [screen], templates: [] }, undefined, [], noOp, value => `new-${value}`, [], [], isInput, type => type === 'template' || type === 'repeater', update => { screen = update(screen); }, noOp, isProcessDisplay, isChart, defaultChartProps);
   for (const type of ['passwordInput', 'multiStateButton', 'multiStateIndicator']) { assert.ok(factory.palettes.some(item => item.type === type)); factory.addComponent(type); }
   const [password, button, indicator] = screen.components;
   assert.equal(password.props.defaultValue, ''); assert.ok(!password.props.tagPath); assert.ok(!password.props.optionsSource);

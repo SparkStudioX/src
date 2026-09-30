@@ -46,6 +46,12 @@ export function collectDesignerDiagnostics(options: DesignerDiagnosticOptions, c
           target: { ...target, property: `props.queryBindings.${property}` } });
       }
     }
+    if (component.props.dataSource) {
+      queriesNotCaptured++;
+      add({ id: JSON.stringify(["dataset-not-captured", ownerKind, document!.id, component.id]), category: "query", level: "info",
+        location: `${location} · Dataset`, message: "Dataset sample is owned by this form. Inspect the chart in Preview; opening Diagnostics does not execute its read query.",
+        target: { ...target, property: "props.dataSource" } });
+    }
   }
   for (const entry of searchEntries ?? []) if (entry.missing && entry.reference && !entry.textOnly)
     add({ id: `reference:${entry.id}`, category: "reference", level: "error", location: `${entry.location} · ${entry.label}`,

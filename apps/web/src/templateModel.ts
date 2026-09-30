@@ -1,4 +1,5 @@
 import { resolvePath } from "./api";
+import { templatePlacements, viewLayoutError } from "./viewContainers";
 import type {
   CanvasComponent,
   ComponentType,
@@ -130,8 +131,8 @@ export function templatePlacementError(templates: Template[], parentTemplateId: 
   // Definitions can have several callers, including definitions not placed on a
   // screen yet. Every incoming path must still fit after the proposed addition.
   const parents = new Map<string, Set<string>>();
-  for (const template of templates) for (const component of template.components) {
-    if (!isTemplateInstance(component.type) || !component.props.templateId) continue;
+  for (const template of templates) for (const component of template.components.flatMap(templatePlacements)) {
+    if (!component.props.templateId) continue;
     const callers = parents.get(component.props.templateId) ?? new Set<string>();
     callers.add(template.id); parents.set(component.props.templateId, callers);
   }
@@ -168,20 +169,20 @@ export function templateExpansion(components: CanvasComponent[], templates: Temp
     if (saved) return saved;
     if (visiting.size >= MAX_TEMPLATE_DEPTH) throw depthError();
     visiting.add(id);
-    const child = measure(template.components, true);
+    const child = measure(template.components);
     const result = { count: child.count, depth: child.depth + 1 };
     if (result.depth + ancestors.length > MAX_TEMPLATE_DEPTH) throw depthError();
     visiting.delete(id); memo.set(id, result); return result;
   };
-  const measure = (items: CanvasComponent[], nested: boolean): Metrics => {
+  const measure = (items: CanvasComponent[]): Metrics => {
     let count = 0, depth = 0;
     for (const component of items) {
       count++;
-      if (isTemplateInstance(component.type)) {
-        if (component.props.rowsSource && nested)
-          throw new Error("Query-backed repeaters are only supported at the screen root.");
-        const child = definition(component.props.templateId ?? "");
-        const rows = component.type === "repeater" ? component.props.rowsSource ? 100 : (component.props.rows ?? []).length : 1;
+      if (component.type === "viewContainer") { const error = viewLayoutError(component.props.viewLayout, templates); if (error) throw new Error(error); }
+      for (const placement of templatePlacements(component)) {
+        const child = definition(placement.props.templateId ?? "");
+        const rows = placement.type === "repeater" ? placement.props.rowsSource ? placement.props.rowsSource.maxRows ?? 100 : (placement.props.rows ?? []).length : 1;
+        if (!Number.isInteger(rows) || rows < 0 || rows > 100) throw new Error("Repeaters support at most 100 rows.");
         count += rows * child.count;
         depth = Math.max(depth, child.depth);
       }
@@ -192,7 +193,7 @@ export function templateExpansion(components: CanvasComponent[], templates: Temp
     return { count, depth };
   };
   try {
-    const result = measure(components, ancestors.length > 0);
+    const result = measure(components);
     if (result.count > MAX_EXPANDED_COMPONENTS) throw new Error(`Template expansion exceeds ${MAX_EXPANDED_COMPONENTS.toLocaleString("en-US")} components.`);
     return { count: result.count };
   }
@@ -206,6 +207,7 @@ export function componentContexts(
 ): { component: CanvasComponent; parameters: RuntimeParameters }[] {
   if (templateExpansion(components, templates).error) return [];
   const expand = (items: CanvasComponent[], context: RuntimeParameters): { component: CanvasComponent; parameters: RuntimeParameters }[] => items.flatMap((component) => {
+    if (component.type === "viewContainer") return templatePlacements(component).flatMap(placement => expand([placement], context));
     if (!isTemplateInstance(component.type))
       return [{ component, parameters: context }];
     const template = templates.find(
@@ -247,6 +249,7 @@ export function projectInputContext(project: Project): string {
       parameterBindings: component.props.parameterBindings,
       rows: component.props.rows,
       rowsSource: component.props.rowsSource,
+      viewLayout: component.props.viewLayout,
     }));
   return JSON.stringify({
     parameters: project.parameters,

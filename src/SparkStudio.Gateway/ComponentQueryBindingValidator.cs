@@ -78,8 +78,9 @@ internal static class ComponentQueryBindingValidator
         }
     }
 
-    public static IEnumerable<JsonObject> Bindings(JsonObject component) => component["props"]?["queryBindings"] is JsonObject bindings
-        ? bindings.Select(pair => pair.Value).OfType<JsonObject>() : [];
+    public static IEnumerable<JsonObject> Bindings(JsonObject component) =>
+        (component["props"]?["queryBindings"] is JsonObject bindings ? bindings.Select(pair => pair.Value).OfType<JsonObject>() : [])
+        .Concat(component["props"]?["dataSource"] is JsonObject dataset ? [dataset] : []);
 
     public static IEnumerable<JsonObject> ParameterExpressions(JsonObject component) => Bindings(component)
         .Where(binding => binding["parameters"] is JsonObject)

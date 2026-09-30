@@ -48,6 +48,7 @@ public sealed class ScriptEventService : BackgroundService
     {
         public readonly JsonObject? Snapshot = snapshot;
         public readonly int? Revision = snapshot is null ? null : ScriptResourceStore.Revision(snapshot);
+        public readonly string? Stamp = snapshot?["publishedAt"]?.GetValue<string>();
         public readonly IReadOnlyDictionary<string, string> Libraries = ScriptLibrary.Capture(snapshot);
         public readonly CancellationTokenSource Cancellation = CancellationTokenSource.CreateLinkedTokenSource(stopping);
         public readonly Dictionary<string, Resource> Resources = new(StringComparer.Ordinal);
@@ -63,7 +64,7 @@ public sealed class ScriptEventService : BackgroundService
     }
     private sealed record Work(Resource Resource, JsonObject Context, Dictionary<string, JsonElement> Parameters,
         string Source, string Trigger, int Revision, IReadOnlyDictionary<string, string> Libraries,
-        CancellationToken Caller, string[] Chain, bool WaitForLease, TaskCompletionSource<JsonObject> Completion);
+        CancellationToken Caller, string[] Chain, bool WaitForLease, TaskCompletionSource<JsonObject> Completion, JsonArray? Queries);
 
     public ScriptEventService(ScriptResourceStore store, PythonRunner python, ILogger<ScriptEventService> logger, TagEngine tags)
     {
@@ -104,7 +105,13 @@ public sealed class ScriptEventService : BackgroundService
         var parameters = ScriptResourceStore.ResolveParameters(run.Resource, request.Parameters);
         Generation? generation;
         CancellationToken generationToken;
-        lock (gate) { generation = active; generationToken = generation?.Cancellation.Token ?? CancellationToken.None; }
+        lock (gate)
+        {
+            generation = active;
+            if (run.Source == "published" && (generation is null || generation.Stamp != run.PublishedAt || !generation.Accepting))
+                throw new InvalidOperationException("The application event generation is changing. Retry after the published version activates.");
+            generationToken = generation?.Cancellation.Token ?? CancellationToken.None;
+        }
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellation, lifetime.Token, generationToken);
         var context = Context("manual");
         context["actor"] = actor;
@@ -115,11 +122,11 @@ public sealed class ScriptEventService : BackgroundService
             lock (gate)
             {
                 if (Busy(id)) throw new InvalidOperationException("This script resource is already running.");
-                pending = Enqueue(generation, resource, context, parameters, run.Source, "manual", run.Revision, run.Libraries, linked.Token, [], false);
+                pending = Enqueue(generation, resource, context, parameters, run.Source, "manual", run.Revision, run.Libraries, linked.Token, [], false, run.Queries);
             }
             return await pending;
         }
-        return await RunCoreAsync(generation, resource, run.Revision, run.Source, "manual", parameters, run.Libraries, context, linked.Token, [], false);
+        return await RunCoreAsync(generation, resource, run.Revision, run.Source, "manual", parameters, run.Libraries, context, linked.Token, [], false, run.Queries);
     }
     public string GetMessageRequirement(string name)
     {
@@ -179,9 +186,9 @@ public sealed class ScriptEventService : BackgroundService
 
     private void OnPublished()
     {
-        var revision = store.Metadata()["revision"]?.GetValue<int>();
+        var stamp = store.Metadata()["publishedAt"]?.GetValue<string>();
         Generation? prior;
-        lock (gate) { prior = active?.Revision == revision ? null : active; if (prior is not null) prior.Accepting = false; }
+        lock (gate) { prior = active?.Stamp == stamp ? null : active; if (prior is not null) prior.Accepting = false; }
         if (prior is not null) TryCancel(prior.Cancellation);
         publications.Writer.TryWrite(true);
     }
@@ -205,12 +212,12 @@ public sealed class ScriptEventService : BackgroundService
             {
                 while (publications.Reader.TryRead(out _)) { }
                 var snapshot = store.CapturePublished();
-                var revision = snapshot is null ? (int?)null : ScriptResourceStore.Revision(snapshot);
+                var stamp = snapshot?["publishedAt"]?.GetValue<string>();
                 Generation? prior;
                 lock (gate)
                 {
                     prior = active;
-                    if (prior is not null && !prior.Cancellation.IsCancellationRequested && prior.Revision == revision) continue;
+                    if (prior is not null && !prior.Cancellation.IsCancellationRequested && prior.Stamp == stamp) continue;
                 }
                 if (prior is not null) await StopGenerationAsync(prior, "publication");
                 stopping.Token.ThrowIfCancellationRequested();
@@ -272,7 +279,7 @@ public sealed class ScriptEventService : BackgroundService
             generation.Tasks.Add(ConsumeUpdatesAsync(generation));
             foreach (var resource in generation.Resources.Values.Where(item => item.Event is "timer" or "scheduled"))
                 generation.Tasks.Add(RunClockAsync(generation, resource));
-            if (store.Metadata()["revision"]?.GetValue<int>() != generation.Revision)
+            if (store.Metadata()["publishedAt"]?.GetValue<string>() != generation.Stamp)
             { generation.Accepting = false; TryCancel(generation.Cancellation); publications.Writer.TryWrite(true); }
         }
         catch (OperationCanceledException) when (generation.Cancellation.IsCancellationRequested) { }
@@ -320,7 +327,7 @@ public sealed class ScriptEventService : BackgroundService
                 {
                     linked.Token.ThrowIfCancellationRequested();
                     var result = await RunCoreAsync(generation, work.Resource, work.Revision, work.Source, work.Trigger, work.Parameters,
-                        work.Libraries, work.Context, linked.Token, work.Chain, work.WaitForLease);
+                        work.Libraries, work.Context, linked.Token, work.Chain, work.WaitForLease, work.Queries);
                     work.Completion.TrySetResult(result);
                 }
                 catch (OperationCanceledException) { work.Completion.TrySetCanceled(linked.Token); }
@@ -339,11 +346,11 @@ public sealed class ScriptEventService : BackgroundService
     }
     private Task<JsonObject> Enqueue(Generation generation, Resource resource, JsonObject context,
         Dictionary<string, JsonElement> parameters, string source, string trigger, int revision,
-        IReadOnlyDictionary<string, string> libraries, CancellationToken caller, string[] chain, bool waitForLease)
+        IReadOnlyDictionary<string, string> libraries, CancellationToken caller, string[] chain, bool waitForLease, JsonArray? queryDefinitions = null)
     {
         generation.Cancellation.Token.ThrowIfCancellationRequested(); caller.ThrowIfCancellationRequested();
         var completion = new TaskCompletionSource<JsonObject>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var work = new Work(resource, context, parameters, source, trigger, revision, libraries, caller, chain.ToArray(), waitForLease, completion);
+        var work = new Work(resource, context, parameters, source, trigger, revision, libraries, caller, chain.ToArray(), waitForLease, completion, queryDefinitions);
         lock (gate)
         {
             if (!resource.Lane.Queue.Writer.TryWrite(work))
@@ -477,7 +484,7 @@ public sealed class ScriptEventService : BackgroundService
     }
     private async Task<JsonObject> RunCoreAsync(Generation? generation, Resource resource, int revision, string source, string trigger,
         Dictionary<string, JsonElement> parameters, IReadOnlyDictionary<string, string> libraries, JsonObject context,
-        CancellationToken cancellation, string[] chain, bool waitForLease)
+        CancellationToken cancellation, string[] chain, bool waitForLease, JsonArray? queryDefinitions = null)
     {
         cancellation.ThrowIfCancellationRequested();
         ExecutionLease lease;
@@ -528,7 +535,7 @@ public sealed class ScriptEventService : BackgroundService
                 runCancellation.Token.ThrowIfCancellationRequested();
                 var nextChain = chain.Append(Identity(resource.Id)).ToArray();
                 var result = await python.RunWithLibrariesAsync(ProjectStore.Optional(resource.Definition, "code") ?? "", parameters, null,
-                    libraries, runCancellation.Token, eventContext: context, timeoutMs: resource.Definition["timeoutMs"]?.GetValue<int>() ?? 10_000, messageChain: nextChain);
+                    libraries, runCancellation.Token, queryDefinitions: queryDefinitions ?? (source == "published" ? generation?.Snapshot?["queries"] as JsonArray : null), eventContext: context, timeoutMs: resource.Definition["timeoutMs"]?.GetValue<int>() ?? 10_000, messageChain: nextChain);
                 Complete(entry, result["success"]?.GetValue<bool>() == true ? "succeeded" : "failed", result, clock.Elapsed.TotalMilliseconds);
                 return result;
             }

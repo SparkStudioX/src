@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { authExpiredEvent, configureAuthSession, noPermissions } from "./authSession";
-import type { AuthAudience, ProjectPermissions } from "./authSession";
+import { authExpiredEvent, configureAuthSession, noPermissions, noGatewayCapabilities } from "./authSession";
+import type { AuthAudience, ProjectPermissions, GatewayCapabilities } from "./authSession";
 import { ThemePicker } from "./Theme";
 import "./security.css";
 
@@ -11,12 +11,15 @@ interface AuthSession {
   user: AuthUser | null;
   csrfToken: string | null;
   permissions: ProjectPermissions & { gatewayAdmin?: boolean };
+  gatewayCapabilities?: GatewayCapabilities;
   project: { id: string; name: string } | null;
   operatorBaseUrl: string | null;
 }
 interface AuthContextValue {
   user: AuthUser | null;
   gatewayAdmin: boolean;
+  gatewayCapabilities: GatewayCapabilities;
+  gatewayAccess: boolean;
   permissions: ProjectPermissions;
   csrfToken: string | null;
   audience: AuthAudience;
@@ -173,6 +176,8 @@ export function AuthProvider({ audience, projectId, children }: { audience: Auth
 
   const value = useMemo<AuthContextValue>(() => ({
     user: session?.user ?? null, gatewayAdmin: Boolean(session?.user?.gatewayAdmin), permissions: session?.permissions ?? noPermissions,
+    gatewayCapabilities: session?.gatewayCapabilities ?? noGatewayCapabilities,
+    gatewayAccess: Boolean(session?.user?.gatewayAdmin || Object.values(session?.gatewayCapabilities ?? noGatewayCapabilities).some(Boolean)),
     csrfToken: session?.csrfToken ?? null, audience, projectId, epoch, publicOperatorBaseUrl: session?.operatorBaseUrl ?? "",
     signOut, changePassword, refresh, phase, setupRequired: session?.setupRequired ?? false, notice,
     signIn: (username, password) => authenticate("login", { audience, username, password, ...(projectId ? { projectId } : {}) }),
@@ -186,15 +191,15 @@ function AuthFrame({ children }: { children: ReactNode }) {
   return <main className="auth-page"><div className="auth-theme"><ThemePicker /></div><section className="auth-card"><a href={auth.audience === "operator" ? "/?audience=operator" : "/"} className="auth-brand">SparkStudio<span>APPLICATION GATEWAY</span></a>{children}</section></main>;
 }
 
-export function AuthGate({ children, requireAdmin = false }: { children: ReactNode; requireAdmin?: boolean }) {
+export function AuthGate({ children, requireAdmin = false, requireGateway = false }: { children: ReactNode; requireAdmin?: boolean; requireGateway?: boolean }) {
   const auth = useAuth();
   if (auth.phase === "signingOut") return <AuthFrame><h1>Signing out</h1><p role="status">Closing your gateway session…</p></AuthFrame>;
   if (auth.phase === "checking") return <AuthFrame><h1>Connecting securely</h1><p role="status">Checking your gateway session…</p></AuthFrame>;
   if (auth.phase === "unavailable") return <AuthFrame><h1>Gateway unavailable</h1><p role="alert">{auth.notice}</p><button className="button primary" onClick={() => { void auth.refresh(); }}>Try again</button></AuthFrame>;
   if (auth.setupRequired && auth.audience === "operator") return <AuthFrame><h1>Gateway setup pending</h1><p>An administrator must finish setting up this gateway before operators can sign in.</p><button className="button" onClick={() => { void auth.refresh(); }}>Check again</button></AuthFrame>;
   if (!auth.user) return <AuthFrame><SignInForm key={String(auth.setupRequired)} setup={auth.setupRequired} /></AuthFrame>;
-  const denied = requireAdmin ? !auth.gatewayAdmin : auth.projectId !== null && !(auth.audience === "operator" ? auth.permissions.view : auth.permissions.design);
-  if (denied) return <AuthFrame><h1>Access not granted</h1><p role="alert">{requireAdmin ? "Gateway administrator access is required." : `This account does not have ${auth.audience === "operator" ? "view" : "design"} permission for this project.`}</p><p>Signed in as {auth.user.displayName}.</p><div className="auth-actions"><button className="button" onClick={() => { void auth.signOut(); }}>Switch user</button>{auth.audience === "engineering" && <a className="button" href="/">Projects</a>}</div></AuthFrame>;
+  const denied = requireAdmin ? !auth.gatewayAdmin : requireGateway ? !auth.gatewayAccess : auth.projectId !== null && !(auth.audience === "operator" ? auth.permissions.view : auth.permissions.design);
+  if (denied) return <AuthFrame><h1>Access not granted</h1><p role="alert">{requireAdmin ? "Gateway administrator access is required." : requireGateway ? "A gateway capability is required." : `This account does not have ${auth.audience === "operator" ? "view" : "design"} permission for this project.`}</p><p>Signed in as {auth.user.displayName}.</p><div className="auth-actions"><button className="button" onClick={() => { void auth.signOut(); }}>Switch user</button>{auth.audience === "engineering" && <a className="button" href="/">Projects</a>}</div></AuthFrame>;
   return <div className="authenticated-app" key={auth.epoch}>{children}</div>;
 }
 

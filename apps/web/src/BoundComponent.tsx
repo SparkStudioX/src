@@ -3,9 +3,10 @@ import type { CSSProperties } from "react";
 import { ComponentView } from "./Components";
 import { evaluateComponentBindings } from "./propertyBindings";
 import { initialInput, isInput, stateInputError } from "./inputs";
-import { InputEventLifecycle } from "./inputEvents";
+import { InputEventLifecycle, inputEventFormIdentity } from "./inputEvents";
 import { useApplicationStateContext } from "./applicationState";
 import { useComponentEvents, usePythonComponentEvents } from "./ComponentEvents";
+import { useComponentActivity } from "./ComponentActivity";
 import type { PythonEventTransport } from "./pythonComponentEvents";
 import { useQueryPropertyContext } from "./useQueryPropertyBindings";
 import { useVisualStyles } from "./VisualStyleContext";
@@ -29,6 +30,7 @@ export type InheritedComponentAppearance = Pick<CanvasComponent["props"], "color
 
 /** Evaluate in the current form scope; retain the authored component for actions. */
 export default function BoundComponent({ components, inheritedAppearance, onAutomaticInputChange, onPythonEvent, ...props }: BoundComponentProps) {
+  const activity = useComponentActivity();
   const applicationState = useApplicationStateContext();
   const queryProperties = useQueryPropertyContext();
   const styles = useVisualStyles();
@@ -37,9 +39,10 @@ export default function BoundComponent({ components, inheritedAppearance, onAuto
   const lifecycle = useRef<InputEventLifecycle | null>(null);
   if (!lifecycle.current) lifecycle.current = new InputEventLifecycle();
   const scope = components ?? [props.component];
-  const uiIdentity = JSON.stringify([scope, props.parameters, props.publishedAt, props.preview, props.queryScope]);
+  const pythonIdentity = JSON.stringify([scope, props.parameters, props.publishedAt, props.preview, props.queryScope]);
+  const uiIdentity = JSON.stringify([pythonIdentity, activity]);
   const uiLifetime = useRef({ identity: uiIdentity, epoch: 0, active: true });
-  uiLifetime.current.identity = uiIdentity;
+  if (uiLifetime.current.identity !== uiIdentity) { uiLifetime.current.identity = uiIdentity; uiLifetime.current.epoch++; }
   useEffect(() => { uiLifetime.current.active = true; return () => { uiLifetime.current.active = false; uiLifetime.current.epoch++; }; }, []);
   const localized = localizeComponent(props.component, localization.catalog, localization.locale);
   const styled = applyVisualStyle(localized.component, styles, inheritedAppearance);
@@ -68,11 +71,12 @@ export default function BoundComponent({ components, inheritedAppearance, onAuto
     ? props.inputs[fieldKey]
     : initialInput(props.component, props.tags, props.parameters, props.communicationLost, applicationState?.values);
   const python = usePythonComponentEvents({ component: props.component, components: scope, parameters: props.parameters,
-    identity: uiIdentity, enabled: props.preview && !props.readOnly, transport: onPythonEvent, onAutomaticInputChange });
-  useComponentEvents({ component: props.component, evaluated: result.component, components: scope, errors: result.errors,
+    identity: pythonIdentity, enabled: props.preview && !props.readOnly, transport: onPythonEvent, onAutomaticInputChange });
+  const interactionEvents = useComponentEvents({ component: props.component, evaluated: result.component, components: scope, errors: result.errors,
     parameters: props.parameters, inputs: props.inputs ?? {}, inputValue: currentInput, inputError: stateError,
-    preview: props.preview, scopeKey: props.queryScope, onAutomaticInputChange, python });
-  const inputActive = props.preview && enabled && visible && !props.interactionLocked && !props.readOnly && isInput(props.component.type);
+    preview: props.preview, scopeKey: props.queryScope, onAutomaticInputChange, python,
+    interactionEnabled: props.preview && enabled && visible && !props.interactionLocked && !props.readOnly });
+  const inputActive = activity && props.preview && enabled && visible && !props.interactionLocked && !props.readOnly && isInput(props.component.type);
   const contextKey = inputActive ? JSON.stringify([
     props.queryScope,
     applicationState?.key,
@@ -80,7 +84,7 @@ export default function BoundComponent({ components, inheritedAppearance, onAuto
     fieldKey,
     props.component.props.events,
     props.parameters,
-    scope.map((item) => [item.id, item.type, item.props.fieldKey, item.props.stateBinding, item.props.min, item.props.max, item.props.step, item.props.options, item.props.optionsSource, item.props.selectionFields]),
+    inputEventFormIdentity(scope),
   ]) : "";
   // Invalidating during render prevents old asynchronous helpers from affecting
   // a new form context before React runs effect cleanup.
@@ -117,6 +121,7 @@ export default function BoundComponent({ components, inheritedAppearance, onAuto
   const borderWidth = typeof appearance.borderWidth === "number" ? appearance.borderWidth : undefined;
   const fontSize = typeof appearance.fontSize === "number" ? appearance.fontSize : undefined;
   return <div
+    {...interactionEvents}
     className={`bound-component${!visible ? " design-hidden" : ""}${errors.length ? " binding-failed" : ""}${props.preview && eventStatus && isInput(props.component.type) ? " has-input-event-status" : ""}${background !== undefined ? " has-custom-background" : ""}${foreground !== undefined ? " has-custom-foreground" : ""}${fontSize !== undefined ? " has-custom-font" : ""}`}
     style={{
       "--component-accent": color || "var(--accent)",
@@ -136,14 +141,14 @@ export default function BoundComponent({ components, inheritedAppearance, onAuto
     lang={localized.locale}
     aria-disabled={props.preview && !enabled || undefined}
   >
-    <div className="bound-component-content" inert={props.preview && !enabled}>
+    <div className="bound-component-content" inert={props.preview && (!enabled || !activity)}>
       <ComponentView {...props}
         component={result.component}
         literalText={props.preview && Object.hasOwn(applicationState?.propertyOverrides ?? {}, props.component.id) && Object.hasOwn(applicationState!.propertyOverrides[props.component.id], "text")}
         scopeComponents={scope}
-        interactionLocked={props.interactionLocked || !enabled}
+        interactionLocked={props.interactionLocked || !enabled || !activity}
         onInputChange={(key, value) => {
-          if (!props.preview || !enabled || !visible || props.interactionLocked || props.readOnly) return;
+          if (!activity || !props.preview || !enabled || !visible || props.interactionLocked || props.readOnly) return;
           props.onInputChange?.(key, value);
           lifecycle.current!.updateInputs({ [key]: value });
           if (inputActive && key === fieldKey) lifecycle.current!.change(value);
@@ -154,7 +159,7 @@ export default function BoundComponent({ components, inheritedAppearance, onAuto
           props.onInputCommit?.(key, value);
         }}
         onAction={() => {
-          if (!props.preview || !enabled || !visible || props.interactionLocked || props.readOnly) return;
+          if (!activity || !props.preview || !enabled || !visible || props.interactionLocked || props.readOnly) return;
           if (props.component.props.action !== "message") {
             try {
               const epoch = uiLifetime.current.epoch;
@@ -174,8 +179,8 @@ export default function BoundComponent({ components, inheritedAppearance, onAuto
             setEventStatus(null);
           } catch (error) { setEventStatus({ message: error instanceof Error ? error.message : String(error), error: true }); }
         }}
-        onTableEdit={props.preview && enabled && visible && !props.interactionLocked && !props.readOnly ? props.onTableEdit : undefined}
-        onOpenPopup={() => { if (enabled && visible) props.onOpenPopup?.(props.component); }}
+        onTableEdit={activity && props.preview && enabled && visible && !props.interactionLocked && !props.readOnly ? props.onTableEdit : undefined}
+        onOpenPopup={() => { if (activity && enabled && visible) props.onOpenPopup?.(props.component); }}
       />
     </div>
     {!props.preview && !visible && <span className="binding-visibility-note">Hidden in runtime</span>}

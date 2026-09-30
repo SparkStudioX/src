@@ -20,7 +20,7 @@ function url(name) {
     .replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
     .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_match, prefix, _quote, dependency) => {
       const target = ['Popup', 'applicationState', 'inputStateBindings', 'useQueryPropertyBindings'].includes(name) && dependency === 'react' ? hooks
-        : name === 'Popup' && dependency === './useQueryRepeater' ? rows
+        : name === 'Popup' && dependency === './usePopupSource' ? moduleUrl(`import {popupQuerySource,popupSourceStatus} from ${JSON.stringify(url('popupModel'))}; export const usePopupSource=(project,popup,tags,scope,offline,publication)=>{const source=popupQuerySource(project,popup);globalThis.__popupQueryCalls.push([source.source,source.template,scope,source.parameters,offline,publication]); return popupSourceStatus(popup,source,globalThis.__popupRows);};`)
         : name === 'Popup' && dependency === './Icon' ? icon
         : name === 'Popup' && dependency === './templates' ? moduleUrl(`export {actionKey} from ${JSON.stringify(url('templateModel'))}; export function ProjectComponentView(){return null;}`)
         : dependency.startsWith('./') ? url(dependency.slice(2)) : pathToFileURL(require.resolve(dependency)).href;

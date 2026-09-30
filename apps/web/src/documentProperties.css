@@ -69,3 +69,7 @@
 .template-parameter-unknown { display: flex; gap: 8px; align-items: center; margin-top: 7px; color: var(--danger); font-size: 11px; overflow-wrap: anywhere; }
 .template-parameter-unknown > span { flex: 1; }
 .template-parameter-context-error { padding: 10px 14px; border-bottom: 1px solid var(--danger); color: var(--danger); background: var(--surface-subtle); font-size: 12px; line-height: 1.5; }
+.document-parameters .property-structured-editor textarea, .template-parameters .property-structured-editor textarea { min-height: 28px; font: inherit; font-size: 11px; }
+.template-parameter-overrides .property-sheet-value > code { display: block; font-size: 11px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.template-parameter-overrides .property-sheet-value > p { padding: 5px 0; }
+.document-properties .property-sheet-value input[readonly] { color: var(--muted); cursor: text; }

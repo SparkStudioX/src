@@ -33,7 +33,7 @@ internal static class TemplateParameterTypes
             }
             ValidateConstants(declared, template["parameterTypes"] as JsonObject);
         }
-        foreach (var component in ProjectTemplates.Components(project))
+        foreach (var component in ProjectTemplates.Components(project).SelectMany(ViewContainerValidator.Placements))
         {
             if (ProjectStore.Optional(component, "type") is not ("template" or "repeater") || component["props"] is not JsonObject props ||
                 !templates.TryGetValue(ProjectStore.Optional(props, "templateId") ?? "", out var template)) continue;

@@ -8,18 +8,52 @@ public static class TagEngineering
 {
     public static void MapTagEngineeringEndpoints(this RouteGroupBuilder routes)
     {
-        routes.MapGet("/tag-engineering/export", (ProjectStore store) => store.ExportTags()).Access("admin");
-        routes.MapPost("/tag-engineering/preview", (JsonObject package, ProjectStore store) => store.PreviewTagImport(package)).Access("admin");
-        routes.MapPost("/tag-engineering/apply", (TagImportRequest request, TagEngine tags) => tags.ApplyImport(request)).Access("admin", audit: true);
+        routes.MapGet("/tag-engineering/export", (ProjectStore store) => store.ExportTags()).Access("configuration");
+        routes.MapPost("/tag-engineering/preview", (JsonObject package, ProjectStore store) => store.PreviewTagImport(package)).Access("configuration");
+        routes.MapPost("/tag-engineering/apply", (TagImportRequest request, TagEngine tags) => tags.ApplyImport(request)).Access("configuration", audit: true);
+        routes.MapGet("/tag-engineering/status", (TagEngine tags) => tags.ProviderSnapshot()).Access("configuration");
+        routes.MapGet("/tag-engineering/values", (TagEngine tags) => tags.Snapshot()).Access("configuration");
     }
 }
 
 public sealed record TagImportRequest(JsonObject Package, string Revision, string PreviewToken);
-public sealed record TagImportChange(string Path, string Action, string Kind);
-public sealed record TagImportPreview(string Revision, string PreviewToken, int TotalTags, TagImportChange[] Changes);
+public sealed record TagImportChange(string Path, string Action, string Kind, string[]? OverrideFields = null);
+public sealed record TagImportPreview(string Revision, string PreviewToken, int TotalTags, TagImportChange[] Changes, string[]? Conflicts = null)
+{
+    public bool CanApply => Conflicts is null || Conflicts.Length == 0;
+}
 
 public sealed partial class ProjectStore
 {
+    private JsonObject tagModel = TagModel.Empty();
+    private void LoadTagModel(JsonNode? saved)
+    {
+        if (saved is JsonArray legacy) tagModel["tags"] = legacy.DeepClone();
+        else if (saved is JsonObject model && model["version"]?.GetValue<int>() == 2) tagModel = (JsonObject)model.DeepClone();
+        else if (saved is not null) throw new ArgumentException("Unsupported stored tag configuration format.");
+        definitions = tagModel["tags"]!.AsArray();
+    }
+    private void PersistTagModel(JsonObject next)
+    {
+        Persist("tags.json", next);
+        tagModel = next;
+        definitions = next["tags"]!.AsArray();
+    }
+    private JsonObject ModelWithTags(JsonArray tags)
+    {
+        var model = (JsonObject)tagModel.DeepClone(); model["tags"] = tags; return model;
+    }
+    public JsonArray GetRuntimeTagDefinitions()
+    {
+        var result = GetTagDefinitions();
+        foreach (var tag in result.OfType<JsonObject>()) tag["enabled"] = tag["effectiveEnabled"]!.DeepClone();
+        return result;
+    }
+    public bool DefaultTagProviderEnabled()
+    {
+        if (gatewayStore is not null) return gatewayStore.DefaultTagProviderEnabled();
+        lock (gate) return TagDefinitionValidator.Enabled(tagModel["provider"]!.AsObject());
+    }
     private JsonObject NormalizeTag(JsonObject value)
     {
         var kind = TagDefinitionValidator.Kind(value);
@@ -29,6 +63,7 @@ public sealed partial class ProjectStore
             ["path"] = TagDefinitionValidator.Path(TagDefinitionValidator.Text(value, "path")), ["kind"] = kind,
             ["enabled"] = TagDefinitionValidator.Enabled(value), ["publishingIntervalMs"] = TagDefinitionValidator.PublishingInterval(value)
         };
+        if (value["scanGroup"] is not null) node["scanGroup"] = TagModel.Name(value, "scanGroup");
         if (kind == "opcua")
         {
             var id = TagDefinitionValidator.Text(value, "connectionId");
@@ -55,7 +90,7 @@ public sealed partial class ProjectStore
     public JsonObject ExportTags()
     {
         if (gatewayStore is not null) return gatewayStore.ExportTags();
-        lock (gate) return new JsonObject { ["format"] = "sparkstudio.tags", ["version"] = 1, ["tags"] = GetTagDefinitions() };
+        lock (gate) return (JsonObject)tagModel.DeepClone();
     }
 
     public TagImportPreview PreviewTagImport(JsonObject package)
@@ -73,44 +108,86 @@ public sealed partial class ProjectStore
             var prepared = PrepareTagImport(request.Package);
             if (prepared.Preview.Revision != request.Revision || prepared.Preview.PreviewToken != request.PreviewToken)
                 throw new InvalidOperationException("Tags, connections or the import changed after preview. Preview the import again.");
-            Persist("tags.json", prepared.Definitions);
-            definitions = prepared.Definitions;
+            if (!prepared.Preview.CanApply) throw new ArgumentException("Resolve tag model conflicts before applying: " + string.Join(" ", prepared.Preview.Conflicts!));
+            PersistTagModel(prepared.Model);
             return prepared.Preview;
         }
     }
 
-    private (JsonArray Definitions, TagImportPreview Preview) PrepareTagImport(JsonObject package)
+    private (JsonObject Model, TagImportPreview Preview) PrepareTagImport(JsonObject package)
     {
-        if (package.Any(item => item.Key is not ("format" or "version" or "tags"))
-            || Optional(package, "format") != "sparkstudio.tags" || package["version"] is not JsonValue version || !version.TryGetValue<int>(out var number) || number != 1
-            || package["tags"] is not JsonArray imported || imported.Count is < 1 or > 1000)
-            throw new ArgumentException("Import requires sparkstudio.tags version 1 with 1–1000 tag definitions and no unsupported fields.");
-        var normalized = new List<JsonObject>(); var incoming = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var item in imported)
+        if (Optional(package, "format") != "sparkstudio.tags" || package["version"] is not JsonValue version || !version.TryGetValue<int>(out var number) || number is not (1 or 2))
+            throw new ArgumentException("Import requires sparkstudio.tags version 1 or 2.");
+        if (number == 1) TagModel.Fields(package, "format", "version", "tags");
+        else TagModel.Fields(package, "format", "version", "tags", "provider", "scanGroups", "udtDefinitions", "instances", "removeTags", "removeInstances", "removeScanGroups", "removeUdtDefinitions");
+        var imported = TagModel.Array(package, "tags", 1000);
+        if (number == 1 && imported.Count == 0) throw new ArgumentException("Version 1 imports require at least one tag.");
+        if (number == 2)
         {
-            if (item is not JsonObject value || value.Any(field => field.Key is not ("path" or "kind" or "dataType" or "value" or "enabled" or "publishingIntervalMs" or "connectionId" or "nodeId" or "expression" or "inputs")))
-                throw new ArgumentException("Every import tag must be an object with supported fields only. UDT and provider definitions are not supported.");
-            var kind = TagDefinitionValidator.Kind(value);
-            var sourceFields = kind switch { "memory" => new[] { "value" }, "expression" => new[] { "expression", "inputs" }, _ => new[] { "connectionId", "nodeId" } };
-            if (value.Any(field => field.Key is not ("path" or "kind" or "dataType" or "enabled" or "publishingIntervalMs") && !sourceFields.Contains(field.Key, StringComparer.Ordinal)))
-                throw new ArgumentException("Import tag fields must match the selected value source.");
-            var node = NormalizeTag(value); var path = Required(node, "path");
-            if (!incoming.Add(path)) throw new ArgumentException($"Duplicate import tag path: {path}.");
-            normalized.Add(node);
+            TagModel.Array(package, "scanGroups", 32); TagModel.Array(package, "udtDefinitions", 128); TagModel.Array(package, "instances", 128);
         }
-        var next = (JsonArray)definitions.DeepClone(); var changes = new List<TagImportChange>();
-        foreach (var node in normalized)
+        var next = (JsonObject)tagModel.DeepClone(); var changes = new List<TagImportChange>();
+        void Merge(string collection, JsonArray incoming, Func<JsonObject, string> key, Func<JsonObject, JsonObject>? normalize = null, bool immutable = false)
         {
-            var path = Required(node, "path"); var old = next.OfType<JsonObject>().FirstOrDefault(item => Optional(item, "path") == path);
-            changes.Add(new(path, old is null ? "add" : JsonNode.DeepEquals(TagDefinitionValidator.WithLegacyDefaults(old), node) ? "unchanged" : "update", Required(node, "kind")));
-            if (old is not null) next.Remove(old);
-            next.Add(node);
+            var seen = new HashSet<string>(StringComparer.Ordinal); var target = next[collection]!.AsArray();
+            foreach (var value in incoming.OfType<JsonObject>())
+            {
+                var node = normalize is null ? (JsonObject)value.DeepClone() : normalize(value); var id = key(node);
+                if (!seen.Add(id)) throw new ArgumentException($"Duplicate {collection} key: {id}.");
+                var old = target.OfType<JsonObject>().FirstOrDefault(item => key(item) == id);
+                if (immutable && old is not null && !JsonNode.DeepEquals(old, node)) throw new ArgumentException($"UDT {id} is immutable. Create a new version and explicitly upgrade instances.");
+                if (collection != "tags") changes.Add(new(id, old is null ? "add" : JsonNode.DeepEquals(old, node) ? "unchanged" : "update", collection));
+                if (old is not null) target.Remove(old); target.Add(node);
+            }
         }
-        if (next.Count > 1000) throw new ArgumentException("A gateway supports at most 1000 configured tags in this version.");
-        TagExpressions.Order(next.OfType<JsonObject>().ToArray());
-        var revision = Hash(GetTagDefinitions().ToJsonString());
+        Merge("tags", imported, tag => Required(tag, "path"), tag => { TagModel.ValidateTagFields(tag); return NormalizeTag(tag); });
+        if (number == 2)
+        {
+            Merge("scanGroups", package["scanGroups"]!.AsArray(), group => TagModel.Name(group, "name"));
+            Merge("udtDefinitions", package["udtDefinitions"]!.AsArray(), TagModel.DefinitionKey, immutable: true);
+            Merge("instances", package["instances"]!.AsArray(), item => TagDefinitionValidator.Path(Required(item, "path")));
+            if (package["provider"] is JsonObject provider)
+            {
+                changes.Add(new("default", JsonNode.DeepEquals(next["provider"], provider) ? "unchanged" : "update", "provider"));
+                next["provider"] = provider.DeepClone();
+            }
+            else if (package.ContainsKey("provider")) throw new ArgumentException("provider must be an object.");
+            void Remove(string field, string collection, Func<JsonObject, string> key)
+            {
+                if (!package.ContainsKey(field)) return;
+                if (package[field] is not JsonArray remove || remove.Count > 1000) throw new ArgumentException($"{field} must be an array of keys.");
+                foreach (var item in remove)
+                {
+                    if (item is not JsonValue scalar || !scalar.TryGetValue<string>(out var id)) throw new ArgumentException($"{field} must contain text keys.");
+                    if (package[collection]!.AsArray().OfType<JsonObject>().Any(value => key(value) == id)) throw new ArgumentException($"Cannot import and remove {id} together.");
+                    var target = next[collection]!.AsArray(); var old = target.OfType<JsonObject>().FirstOrDefault(value => key(value) == id);
+                    if (old is null) throw new ArgumentException($"Cannot remove missing {collection}: {id}.");
+                    target.Remove(old); if (collection != "tags") changes.Add(new(id, "remove", collection));
+                }
+            }
+            Remove("removeTags", "tags", tag => Required(tag, "path")); Remove("removeInstances", "instances", tag => Required(tag, "path"));
+            Remove("removeScanGroups", "scanGroups", tag => Required(tag, "name")); Remove("removeUdtDefinitions", "udtDefinitions", TagModel.DefinitionKey);
+        }
+        var previous = GetTagDefinitions().OfType<JsonObject>().ToDictionary(tag => Required(tag, "path"), StringComparer.Ordinal);
+        JsonArray expanded; string[] conflicts = [];
+        try { expanded = TagModel.Expand(next, NormalizeTag); }
+        catch (ArgumentException error) when (number == 2) { expanded = []; conflicts = [error.Message]; }
+        if (conflicts.Length == 0)
+        {
+            foreach (var node in expanded.OfType<JsonObject>())
+            {
+                var path = Required(node, "path"); var old = previous.GetValueOrDefault(path);
+                var action = old is null ? "add" : JsonNode.DeepEquals(old, node) ? "unchanged" : "update";
+                // Include unchanged incoming direct tags as in the version-1 contract, and all affected instance members.
+                if (action != "unchanged" || imported.OfType<JsonObject>().Any(tag => Required(tag, "path") == path) || number == 2 && node["udtInstance"] is not null)
+                    changes.Add(new(path, action, Required(node, "kind"), node["overrideFields"]?.AsArray().Select(field => field!.GetValue<string>()).ToArray()));
+                previous.Remove(path);
+            }
+            foreach (var old in previous.Values) changes.Add(new(Required(old, "path"), "remove", TagDefinitionValidator.Kind(old)));
+        }
+        var revision = Hash(tagModel.ToJsonString());
         var token = Hash(revision + "\n" + connections.ToJsonString() + "\n" + package.ToJsonString());
-        return (next, new(revision, token, next.Count, changes.ToArray()));
+        return (next, new(revision, token, expanded.Count, changes.ToArray(), conflicts));
     }
     private static string Hash(string text) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 }

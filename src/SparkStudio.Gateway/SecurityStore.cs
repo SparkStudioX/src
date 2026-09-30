@@ -11,10 +11,14 @@ using Microsoft.Extensions.Options;
 
 namespace SparkStudio.Gateway;
 
-public sealed record SecurityProjectGrant(bool View = false, bool Operate = false, bool Design = false, bool Publish = false);
-public sealed record SecurityPermissions(bool View, bool Operate, bool Design, bool Publish, bool GatewayAdmin);
+public sealed record SecurityProjectGrant(bool View = false, bool Operate = false, bool Design = false, bool Publish = false, bool Commands = false);
+public sealed record SecurityPermissions(bool View, bool Operate, bool Design, bool Publish, bool GatewayAdmin, bool Commands = false);
+public sealed record SecurityGatewayCapabilities(bool Diagnostics = false, bool Configuration = false, bool Backups = false, bool Audit = false, bool Sessions = false)
+{
+    [JsonIgnore] public bool Any => Diagnostics || Configuration || Backups || Audit || Sessions;
+}
 public sealed record SecurityUser(string Id, string Username, string DisplayName, bool GatewayAdmin, bool Disabled,
-    long Revision, IReadOnlyDictionary<string, SecurityProjectGrant> ProjectGrants, string CreatedAt, string UpdatedAt);
+    long Revision, IReadOnlyDictionary<string, SecurityProjectGrant> ProjectGrants, string CreatedAt, string UpdatedAt, SecurityGatewayCapabilities? GatewayCapabilities = null);
 public sealed record SecuritySettings(long Revision, string? PublicBaseUrl, IReadOnlyDictionary<string, string[]> ProjectTagPrefixes);
 public sealed record SecurityAuditEntry(string Id, string RecordedAt, string Actor, string Action, string? ProjectId,
     string Outcome, string? TargetUserId, string? Resource = null);
@@ -23,9 +27,9 @@ public sealed record SecuritySession(string Id, string UserId, long UserRevision
 public sealed record SessionInventoryItem(string Id, string Username, string DisplayName, string Audience,
     DateTimeOffset CreatedAt, DateTimeOffset LastActivityAt, DateTimeOffset ExpiresAt);
 public sealed record SecurityCreateUser(string Username, string Password, string? DisplayName = null, bool GatewayAdmin = false,
-    bool Disabled = false, Dictionary<string, SecurityProjectGrant>? ProjectGrants = null);
+    bool Disabled = false, Dictionary<string, SecurityProjectGrant>? ProjectGrants = null, SecurityGatewayCapabilities? GatewayCapabilities = null);
 public sealed record SecurityUpdateUser(long Revision, string? DisplayName, bool GatewayAdmin, bool Disabled,
-    Dictionary<string, SecurityProjectGrant>? ProjectGrants, string? Password = null);
+    Dictionary<string, SecurityProjectGrant>? ProjectGrants, string? Password = null, SecurityGatewayCapabilities? GatewayCapabilities = null);
 public sealed record SecurityUpdateSettings(long Revision, string? PublicBaseUrl, Dictionary<string, string[]>? ProjectTagPrefixes);
 
 /// <summary>Gateway-owned identities and grants. Password hashes never leave this store.</summary>
@@ -117,19 +121,33 @@ public sealed class SecurityStore
             // Re-read the account for long-lived streams and request-local snapshots.
             var current = user is null ? null : state.Users.FirstOrDefault(item => item.User.Id == user.Id)?.User;
             if (current is null || current.Disabled || current.Revision != user!.Revision) return new(false, false, false, false, false);
-            if (current.GatewayAdmin) return new(true, true, true, true, true);
+            if (current.GatewayAdmin) return new(true, true, true, true, true, true);
             var grant = projectId is not null && current.ProjectGrants.TryGetValue(projectId, out var value) ? value : new();
-            return new(grant.View, grant.Operate, grant.Design, grant.Publish, false);
+            return new(grant.View, grant.Operate, grant.Design, grant.Publish, false, grant.Commands);
+        }
+    }
+
+    public SecurityGatewayCapabilities GetGatewayCapabilities(SecurityUser? user)
+    {
+        lock (gate)
+        {
+            var current = user is null ? null : state.Users.FirstOrDefault(item => item.User.Id == user.Id)?.User;
+            if (current is null || current.Disabled || current.Revision != user!.Revision) return new();
+            return current.GatewayAdmin ? new(true, true, true, true, true) : current.GatewayCapabilities ?? new();
         }
     }
 
     public bool Can(SecurityUser? user, string? projectId, string permission)
     {
         var grants = GetPermissions(user, projectId);
+        var gateway = GetGatewayCapabilities(user);
         return permission switch
         {
             "view" => grants.View, "operate" => grants.Operate, "design" => grants.Design,
-            "publish" => grants.Publish && grants.Design, "gatewayAdmin" => grants.GatewayAdmin, _ => false
+            "publish" => grants.Publish && grants.Design, "command" => grants.Commands && grants.Operate && grants.View,
+            "gatewayAdmin" => grants.GatewayAdmin, "gateway" => gateway.Any,
+            "diagnostics" => gateway.Diagnostics, "configuration" => gateway.Configuration, "backups" => gateway.Backups,
+            "audit" => gateway.Audit, "sessions" => gateway.Sessions, _ => false
         };
     }
 
@@ -238,7 +256,7 @@ public sealed class SecurityStore
             if (existing.User.Revision != request.Revision) throw new BadHttpRequestException("This account changed. Reload before saving.", 409);
             var grants = ValidateGrants(request.ProjectGrants ?? new Dictionary<string, SecurityProjectGrant>());
             var user = existing.User with { DisplayName = DisplayName(request.DisplayName, existing.User.Username),
-                GatewayAdmin = request.GatewayAdmin, Disabled = request.Disabled, ProjectGrants = grants,
+                GatewayAdmin = request.GatewayAdmin, Disabled = request.Disabled, ProjectGrants = grants, GatewayCapabilities = request.GatewayCapabilities ?? existing.User.GatewayCapabilities ?? new(),
                 Revision = checked(existing.User.Revision + 1), UpdatedAt = Now() };
             if (existing.User.GatewayAdmin && !existing.User.Disabled && (!user.GatewayAdmin || user.Disabled)
                 && !state.Users.Any(item => item.User.Id != id && item.User.GatewayAdmin && !item.User.Disabled))
@@ -393,7 +411,7 @@ public sealed class SecurityStore
             throw new ArgumentException("That username is already in use.");
         var now = Now();
         var user = new SecurityUser(Guid.NewGuid().ToString("N"), request.Username, DisplayName(request.DisplayName, request.Username),
-            request.GatewayAdmin, request.Disabled, 1, ValidateGrants(request.ProjectGrants ?? new Dictionary<string, SecurityProjectGrant>()), now, now);
+            request.GatewayAdmin, request.Disabled, 1, ValidateGrants(request.ProjectGrants ?? new Dictionary<string, SecurityProjectGrant>()), now, now, request.GatewayCapabilities ?? new());
         return new(user, hasher.HashPassword(user, request.Password));
     }
 
@@ -418,9 +436,10 @@ public sealed class SecurityStore
         foreach (var (id, grant) in grants)
         {
             if (!ProjectPattern.IsMatch(id) || grant is null) throw new ArgumentException("Project grants contain an invalid project or permission.");
-            if (grant.Operate && !grant.View) throw new ArgumentException("Operate permission requires View permission.");
+            var normalized = grant.Commands ? grant with { Operate = true, View = true } : grant;
+            if (normalized.Operate && !normalized.View) throw new ArgumentException("Operate permission requires View permission.");
             if (grant.Publish && !grant.Design) throw new ArgumentException("Publish permission requires Design permission.");
-            result.Add(id, grant);
+            result.Add(id, normalized);
         }
         return result;
     }

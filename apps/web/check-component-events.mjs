@@ -160,4 +160,77 @@ await check('read-only owner cannot execute an unmount script after Preview has 
     const runner=mounted(executeComponentEvent,ctx);await runner.whenIdle();setPreviewRequestContext(null,false);runner.deactivate();await runner.whenIdle();assert.equal(calls,0);
   } finally {globalThis.fetch=original;setPreviewRequestContext(null,false);}
 });
+const {componentInteractionTypes,componentInteractionEvent}=await import(load('componentEventModel'));
+const {componentInteractionHandlers}=await import(load('ComponentEvents'));
+const interactiveContext=(extra={})=>{
+  const control=c('control','textInput',{fieldKey:'entry',componentEvents:Object.fromEntries(componentInteractionTypes.map(type=>[type,script(type)]))});
+  return context({component:control,components:[control,c('secret','passwordInput',{fieldKey:'secret'})],inputs:{entry:'hello',secret:'never copy'},interactionEnabled:true,...extra});
+};
+await check('all seven interactions share ordered frozen snapshots and omit password fields',async()=>{
+  const seen=[],ctx=interactiveContext(),runner=mounted((_source,event,inputs)=>{assert.ok(Object.isFrozen(event)&&Object.isFrozen(inputs));seen.push([event.type,inputs]);},ctx,{});
+  for(const type of componentInteractionTypes)assert.equal(runner.interaction(ctx.key,componentInteractionEvent(type,'control',{key:'Enter',code:'Enter',pointerType:'mouse'})),true);
+  ctx.inputs.entry='later';await runner.whenIdle();assert.deepEqual(seen.map(item=>item[0]),componentInteractionTypes);
+  for(const[,inputs]of seen)assert.deepEqual(inputs,{entry:'hello'});runner.deactivate();await runner.whenIdle();
+});
+await check('keyboard and pointer snapshots are bounded primitives with password keystrokes redacted',()=>{
+  const secret=componentInteractionEvent('keyDown','secret',{key:'s',code:'KeyS',repeat:true,isComposing:true,ctrlKey:true},true);
+  assert.deepEqual(secret,{type:'keyDown',componentId:'secret',origin:'user',altKey:false,ctrlKey:true,metaKey:false,shiftKey:false,key:'',code:'',repeat:true,isComposing:true,redacted:true});
+  const key=componentInteractionEvent('keyUp','x',{key:'x'.repeat(140),code:'x'.repeat(100)});assert.equal(key.key.length,128);assert.equal(key.code.length,64);
+  const pointer=componentInteractionEvent('pointerDown','x',{pointerType:'forged',pointerId:Infinity,clientX:NaN,clientY:1e20,buttons:100,button:1.5});
+  assert.equal(pointer.pointerType,'');assert.equal(pointer.pointerId,0);assert.equal(pointer.clientX,0);assert.equal(pointer.clientY,1e7);assert.equal(pointer.buttons,63);assert.equal(pointer.button,1);
+  assert.deepEqual(componentInteractionEvent('focus','x',{key:'secret'}),{type:'focus',componentId:'x',origin:'user'});
+});
+await check('native boundary observes once without cancelling editing and ignores child owners, hidden controls and internal focus hops',()=>{
+  const seen=[],control=interactiveContext().component;
+  const owner={contains:()=>true},childOwner={};let hidden=false,nested=false,password=false;
+  const target={closest:selector=>selector==='[data-component-event-owner]'?(nested?childOwner:owner):selector.startsWith('[inert]')?(hidden?{}:null):password?{}:null};
+  const inside={closest:()=>owner};let prevented=0,stopped=0;
+  const native={currentTarget:owner,target,relatedTarget:null,key:'x',code:'KeyX',nativeEvent:{isComposing:false},preventDefault(){prevented++;},stopPropagation(){stopped++;}};
+  const handlers=componentInteractionHandlers(control,true,event=>seen.push(event));
+  handlers.onFocusCapture(native);handlers.onFocusCapture({...native,relatedTarget:inside});handlers.onBlurCapture({...native,relatedTarget:inside});
+  handlers.onKeyDownCapture(native);nested=true;handlers.onPointerDownCapture(native);nested=false;hidden=true;handlers.onKeyDownCapture(native);hidden=false;
+  componentInteractionHandlers(control,false,event=>seen.push(event)).onKeyUpCapture(native);
+  password=true;handlers.onKeyUpCapture(native);handlers.onBlurCapture(native);
+  assert.deepEqual(seen.map(item=>item.type),['focus','keyDown','keyUp','blur']);assert.equal(seen[2].key,'');assert.equal(seen[2].redacted,true);
+  assert.equal(prevented,0);assert.equal(stopped,0);assert.equal(handlers.tabIndex,undefined);
+  assert.equal(componentInteractionHandlers({...control,type:'label'},true,()=>{}).tabIndex,0);
+});
+await check('interaction permission changes revoke running helpers and invalidate queued work even if re-enabled before it runs',async()=>{
+  const gate=defer(),started=defer(),writes=[],ctx=interactiveContext({state:{get:()=>0,set:(...args)=>writes.push(args),reset(){} }});
+  let count=0;const runner=mounted(async(_s,_e,_i,_p,app)=>{count++;started.resolve();await gate.promise;app.state.set('screen','count',99);assert.equal(app.signal.aborted,true);},ctx,{});
+  runner.interaction(ctx.key,componentInteractionEvent('keyDown','control'));await started.promise;
+  runner.interaction(ctx.key,componentInteractionEvent('keyUp','control'));
+  runner.prepare({...ctx,interactionEnabled:false},{});runner.commit();runner.prepare(ctx,{});runner.commit();gate.resolve();await runner.whenIdle();
+  assert.equal(count,1);assert.deepEqual(writes,[]);assert.equal(runner.interaction('old',componentInteractionEvent('focus','control')),false);
+  runner.deactivate();await runner.whenIdle();assert.equal(runner.interaction(ctx.key,componentInteractionEvent('focus','control')),false);
+});
+await check('inactive retained owners pause automatic and interaction events and resume from a silent baseline without remounting',async()=>{
+  const seen=[],ctx=interactiveContext();ctx.component.props.componentEvents={...ctx.component.props.componentEvents,mount:script('mount'),unmount:script('unmount'),propertyChange:{...script('change'),properties:['text']}};
+  const runner=mounted((_s,event)=>seen.push(event.type),ctx,{text:value('first')});await runner.whenIdle();
+  runner.prepare({...ctx,suspended:true},{text:value('hidden')});runner.commit();assert.equal(runner.interaction(ctx.key,componentInteractionEvent('focus','control')),false);
+  runner.prepare({...ctx,suspended:true},{text:value('still hidden')});runner.commit();await runner.whenIdle();assert.deepEqual(seen,['mount']);
+  runner.prepare(ctx,{text:value('resumed')});runner.commit();await runner.whenIdle();assert.deepEqual(seen,['mount']);
+  runner.prepare(ctx,{text:value('next')});runner.commit();runner.interaction(ctx.key,componentInteractionEvent('focus','control'));await runner.whenIdle();assert.deepEqual(seen,['mount','propertyChange','focus']);
+  runner.prepare({...ctx,suspended:true},{text:value('next')});runner.commit();runner.deactivate();await runner.whenIdle();assert.ok(!seen.includes('unmount'));
+});
+await check('initially inactive owners defer mount until first activation and release registered resources on final removal',async()=>{
+  const seen=[],ctx=interactiveContext();ctx.component.props.componentEvents={mount:script('mount')};
+  const runner=mounted((_s,e,_i,_p,app)=>{seen.push(e.type);app.onCleanup(()=>seen.push('disposed'));},{...ctx,suspended:true},{});
+  await runner.whenIdle();assert.deepEqual(seen,[]);runner.prepare(ctx,{});runner.commit();await runner.whenIdle();assert.deepEqual(seen,['mount']);
+  runner.prepare({...ctx,suspended:true},{});runner.commit();runner.deactivate();await runner.whenIdle();assert.deepEqual(seen,['mount','disposed']);
+});
+await check('interaction Python dispatch uses only its saved selector and each receiving session owns its local effects',async()=>{
+  const calls=[],ctx=interactiveContext({python:async(...args)=>{calls.push(args.slice(0,4));return'';}});ctx.component.props.componentEvents.keyDown={language:'python',code:'saved'};
+  const first=mounted(()=>{},ctx,{}),other=mounted(()=>{throw Error('wrong session');},interactiveContext(),{});
+  first.interaction(ctx.key,componentInteractionEvent('keyDown','control',{key:'Enter',code:'Enter'}));await first.whenIdle();await other.whenIdle();
+  assert.equal(calls.length,1);assert.deepEqual(calls[0][0],{family:'interaction',type:'keyDown'});assert.deepEqual(calls[0][2],{entry:'hello'});
+  first.deactivate();other.deactivate();await first.whenIdle();await other.whenIdle();
+});
+await check('interaction queues are bounded and read-only Preview never dispatches them',async()=>{
+  const gate=defer(),ctx=interactiveContext();let runs=0;const runner=mounted(async()=>{runs++;await gate.promise;},ctx,{});
+  const accepted=Array.from({length:35},()=>runner.interaction(ctx.key,componentInteractionEvent('pointerDown','control')));assert.equal(accepted.filter(Boolean).length,32);
+  gate.resolve();await runner.whenIdle();assert.equal(runs,32);assert.ok(ctx.coordinator.snapshot().diagnostics.some(item=>item.message.includes('queue is full')));runner.deactivate();await runner.whenIdle();
+  const {setPreviewRequestContext}=await import(load('previewRequest'));
+  try{setPreviewRequestContext({token:'x',mode:'read-only',expiresAt:new Date(Date.now()+60000).toISOString()});const blocked=mounted(()=>{throw Error('must not run');},ctx,{});assert.equal(blocked.interaction(ctx.key,componentInteractionEvent('focus','control')),false);blocked.deactivate();await blocked.whenIdle();}finally{setPreviewRequestContext(null,false);}
+});
 console.log(`${passed} component-event checks passed.`);

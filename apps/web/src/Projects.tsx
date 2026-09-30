@@ -77,7 +77,7 @@ export default function Projects() {
   useEffect(() => { void load(); }, [load]);
   const projects = (catalog?.projects || []).filter(project => (manage && showArchived || !project.archived) && (engineering || project.published) && `${project.name} ${project.id}`.toLowerCase().includes(filter.toLowerCase()));
   const complete = (project: ProjectSummary, kind: ProjectAction["kind"] | "import") => {
-    setNotice({ message: kind === "create" ? `Created ${project.name}. Open the designer to build your application.` : kind === "duplicate" || kind === "import" ? `${project.name} is ready for review. Publish the project and script resources separately when ready.` : kind === "archive" ? `${project.name} archived. Use Show archived to restore it.` : kind === "restore" ? `${project.name} restored.` : `${project.name} renamed.`, project: ["create", "duplicate", "restore"].includes(kind) ? project : undefined });
+    setNotice({ message: kind === "create" ? `Created ${project.name}. Open the designer to build your application.` : kind === "duplicate" || kind === "import" ? `${project.name} is ready for review. Review and publish the complete application when ready.` : kind === "archive" ? `${project.name} archived. Use Show archived to restore it.` : kind === "restore" ? `${project.name} restored.` : `${project.name} renamed.`, project: ["create", "duplicate", "restore"].includes(kind) ? project : undefined });
     void load();
   };
   async function download(project: ProjectSummary) {

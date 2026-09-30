@@ -1,12 +1,13 @@
 import type { RuntimeParameters } from "./types";
 import { resolvePath } from "./api";
 import { resolveInputs, stateInputError } from "./inputs";
-import { evaluateComponentBindings } from "./propertyBindings";
+import { evaluateComponentBindings, evaluatePropertyBinding } from "./propertyBindings";
 import { resolveIndicatorState } from "./stateControls";
 import { isProcessDisplay, resolveProcessDisplay } from "./processDisplays";
 import { isDrawingComponent, resolveDrawingComponent } from "./drawingComponents";
 import { instanceInputKey, isTemplateInstance, templateParameters, templateExpansion } from "./templateModel";
 import { resolveParameterBindings } from "./templateParameterBindings";
+import { viewLayoutError } from "./viewContainers";
 import { stateDefaults } from "./applicationStateModel";
 import type { InputValues, InstancePathStep, Screen, Tag, Template } from "./types";
 
@@ -32,15 +33,27 @@ export function runtimeBindingHealth(
       // that are owned by a nested form and unavailable to this summary.
       const unknownQueries = !localQueries && Object.keys(component.props.queryBindings ?? {}).length > 0;
       if (unknownQueries) health.unknownCount = (health.unknownCount ?? 0) + 1;
+      if (component.props.dataSource) health.unknownCount = (health.unknownCount ?? 0) + 1;
       const resolved = evaluateComponentBindings(component, { components: document.components, tags, parameters: context, inputs, communicationLost, state: localState, queryProperties: localQueries });
       const errors = Object.keys(resolved.errors).length > 0 || Boolean(stateInputError(component, localState));
       if (resolved.simulated) health.simulated = true;
+      if (component.type === "viewContainer") {
+        const graphError = viewLayoutError(component.props.viewLayout, templates) || templateExpansion([component], templates, ancestors).error;
+        if (errors || graphError || limitError && !limitReported) health.badCount++;
+        if (limitError) limitReported = true;
+        // Retained pane forms own their live edits/private state. Their values
+        // are not the screen's saved input map and must not be reported as fresh.
+        if (!graphError && !limitError) health.unknownCount = (health.unknownCount ?? 0) + (component.props.viewLayout?.panes.length ?? 0);
+        continue;
+      }
       if (isTemplateInstance(component.type)) {
         const graphError = templateExpansion([component], templates, ancestors).error;
         const template = templates.find(item => item.id === component.props.templateId);
         let boundValues: RuntimeParameters = {}, parameterError = false;
         try {
-          if (template) boundValues = resolveParameterBindings(component, template, { components: document.components, tags, parameters: context, inputs, state: localState });
+          if (template) boundValues = resolveParameterBindings(component, template, { components: document.components, tags, parameters: context, inputs, state: localState, communicationLost });
+          for (const binding of Object.values(component.props.parameterBindings ?? {}))
+            if (evaluatePropertyBinding(binding, component, { components: document.components, tags, parameters: context, inputs, state: localState, communicationLost }).simulated) health.simulated = true;
         } catch { parameterError = true; }
         if (errors || parameterError || graphError || limitError && !limitReported) health.badCount++;
         if (limitError) limitReported = true;

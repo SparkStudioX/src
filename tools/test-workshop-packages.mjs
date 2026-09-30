@@ -19,7 +19,7 @@ assert.ok(directory.startsWith(allowedRoot + path.sep), 'Generated workshop bund
 const base = new URL(verifyOnly ? 'http://127.0.0.1:5091' : process.argv[3] ?? 'http://127.0.0.1:5091');
 assert.equal(base.protocol, 'http:');
 assert.ok(['localhost', '127.0.0.1'].includes(base.hostname));
-assert.equal(base.port, '5091', 'Workshop integration checks require the isolated gateway on port 5091.');
+assert.ok(['5091', '5093'].includes(base.port), 'Workshop integration checks require an isolated gateway on port 5091 or 5093.');
 assert.equal(base.pathname, '/');
 assert.ok(!base.username && !base.password && !base.hash && !base.search);
 
@@ -158,7 +158,7 @@ try {
     const runtime = await api(scoped(imported.id, '/runtime/project'));
     assert.deepEqual(runtime, operatorProject(project, publication.publishedAt), `${workshop.id}: operator snapshot differs from the imported draft.`);
     assert.equal(runtime.navigation.startupScreenId, originalProject.navigation.startupScreenId);
-    assert.equal((await api(scoped(imported.id, '/scripts/publication'))).published, false, 'Project publication must not publish script-resource drafts.');
+    assert.equal((await api(scoped(imported.id, '/scripts/publication'))).published, true, 'Application publication includes the disabled script-resource drafts.');
     assert.deepEqual((await api(scoped(imported.id, '/runtime/scripts'))).resources, []);
     const publishedQueries = await api(scoped(imported.id, `/runtime/queries?publishedAt=${encodeURIComponent(publication.publishedAt)}`));
     for (const query of publishedQueries) {

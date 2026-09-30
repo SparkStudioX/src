@@ -1,0 +1,164 @@
+{
+  "name": "Tag-driven template parameters",
+  "tags": [
+    {
+      "path": "[default]BindingWorkshop/A/Count",
+      "kind": "memory",
+      "dataType": "Double",
+      "value": 12
+    },
+    {
+      "path": "[default]BindingWorkshop/B/Count",
+      "kind": "memory",
+      "dataType": "Double",
+      "value": 27
+    }
+  ],
+  "templates": [
+    {
+      "id": "tag-machine",
+      "name": "Machine address scope",
+      "width": 460,
+      "height": 290,
+      "parameters": {
+        "machine": "A"
+      },
+      "components": [
+        {
+          "id": "form",
+          "type": "template",
+          "x": 10,
+          "y": 10,
+          "width": 440,
+          "height": 255,
+          "props": {
+            "templateId": "tag-form",
+            "parameterBindings": {
+              "count": {
+                "expression": "count",
+                "references": {
+                  "count": {
+                    "kind": "tag",
+                    "path": "[default]BindingWorkshop/{machine}/Count"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "tag-form",
+      "name": "Tag parameter form",
+      "width": 440,
+      "height": 255,
+      "parameters": {
+        "count": "0"
+      },
+      "parameterTypes": {
+        "count": "number"
+      },
+      "components": [
+        {
+          "id": "reading",
+          "type": "label",
+          "x": 16,
+          "y": 12,
+          "width": 408,
+          "height": 45,
+          "props": {
+            "text": "{machine} \u00b7 Current count {count}",
+            "fontSize": 20
+          }
+        },
+        {
+          "id": "note",
+          "type": "textInput",
+          "x": 16,
+          "y": 68,
+          "width": 408,
+          "height": 65,
+          "props": {
+            "text": "Draft belongs to this tag value",
+            "fieldKey": "note",
+            "defaultValue": ""
+          }
+        },
+        {
+          "id": "preview",
+          "type": "button",
+          "x": 16,
+          "y": 153,
+          "width": 408,
+          "height": 44,
+          "props": {
+            "text": "Read current gateway context",
+            "action": "script",
+            "script": "result = {\"parameters\": parameters, \"inputs\": inputs}"
+          }
+        }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "id": "tag-template-parameters",
+      "name": "Tag template parameters",
+      "width": 1020,
+      "height": 510,
+      "components": [
+        {
+          "id": "title",
+          "type": "label",
+          "x": 24,
+          "y": 22,
+          "width": 972,
+          "height": 48,
+          "props": {
+            "text": "Typed tag values select a fresh form context.",
+            "fontSize": 26
+          }
+        },
+        {
+          "id": "hint",
+          "type": "label",
+          "x": 24,
+          "y": 78,
+          "width": 972,
+          "height": 75,
+          "props": {
+            "text": "Setup: create the two synthetic memory tags listed in this workshop. Changing either tag resets only its dependent form. Bad quality blocks the form. Buttons only report data."
+          }
+        },
+        {
+          "id": "machines",
+          "type": "repeater",
+          "x": 24,
+          "y": 180,
+          "width": 972,
+          "height": 300,
+          "props": {
+            "templateId": "tag-machine",
+            "rows": [
+              {
+                "id": "a",
+                "parameters": {
+                  "machine": "A"
+                }
+              },
+              {
+                "id": "b",
+                "parameters": {
+                  "machine": "B"
+                }
+              }
+            ],
+            "columns": 2,
+            "gap": 20
+          }
+        }
+      ]
+    }
+  ]
+}

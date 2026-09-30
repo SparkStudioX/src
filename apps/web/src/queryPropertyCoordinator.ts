@@ -6,6 +6,7 @@ import type { NamedQuery, QueryResult, RuntimeParameters } from "./types";
 
 export interface QueryPropertyRequest {
   queryId: string; parameters: RuntimeParameters; scope: "designer" | "runtime"; projectId: string | null; publishedAt?: string;
+  inheritParameters?: boolean;
 }
 export interface QueryReadSample { result?: QueryResult; loading: boolean; error: string }
 type Subscriber = { listener: () => void; poll?: number };
@@ -16,7 +17,7 @@ type Entry = {
   notificationQueued?: boolean;
 };
 export const queryPropertyRequestKey = (request: QueryPropertyRequest) => JSON.stringify([request.projectId, request.scope, request.publishedAt,
-  request.queryId, Object.entries(request.parameters).sort(([a], [b]) => a.localeCompare(b))]);
+  request.queryId, request.inheritParameters, Object.entries(request.parameters).sort(([a], [b]) => a.localeCompare(b))]);
 
 /** Shared only within one application owner. Never caches across auth sessions. */
 export class QueryPropertyCoordinator {
@@ -124,9 +125,11 @@ export class QueryPropertyCoordinator {
     const timeout = setTimeout(() => controller.abort(new Error("Query property read timed out after 30 seconds.")), 30000);
     const isCurrent = () => entry.controller === controller && this.entries.get(entry.key) === entry && entry.subscribers.size > 0 && !controller.signal.aborted;
     try {
-      const { queryId, parameters, scope, publishedAt } = entry.request;
+      const { queryId, scope, publishedAt } = entry.request;
       const catalog = await this.catalogRead(entry, controller.signal);
-      validateQueryPropertyParameters(catalog.find(query => query.id === queryId), parameters);
+      const query = catalog.find(query => query.id === queryId);
+      const parameters = entry.request.inheritParameters ? Object.fromEntries((query?.parameters ?? []).filter(parameter => Object.hasOwn(entry.request.parameters, parameter.name)).map(parameter => [parameter.name, entry.request.parameters[parameter.name]])) : entry.request.parameters;
+      validateQueryPropertyParameters(query, parameters);
       if (!isCurrent()) return;
       const result = await this.abortable(this.request<QueryResult>(`${scope === "runtime" ? "/runtime" : ""}/queries/${encodeURIComponent(queryId)}/execute`, "POST",
         { parameters, ...(publishedAt === undefined ? {} : { publishedAt }) }, controller.signal), controller.signal);

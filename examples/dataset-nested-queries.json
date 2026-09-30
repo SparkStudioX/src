@@ -1,0 +1,308 @@
+{
+  "name": "Datasets and nested query rows",
+  "parameters": {
+    "line": ""
+  },
+  "queries": [
+    {
+      "id": "production-summary",
+      "name": "Production summary (sample)",
+      "connectionId": "sample",
+      "sql": "SELECT Line, Product, Produced, Target FROM ProductionSummary WHERE Line = @line",
+      "parameters": [
+        {
+          "name": "line",
+          "type": "string",
+          "defaultValue": ""
+        }
+      ]
+    }
+  ],
+  "templates": [
+    {
+      "id": "dataset-group",
+      "name": "Nested query group",
+      "width": 480,
+      "height": 450,
+      "parameters": {
+        "line": "Line1",
+        "product": "Assembly",
+        "produced": "0"
+      },
+      "parameterTypes": {
+        "produced": "number"
+      },
+      "components": [
+        {
+          "id": "rows",
+          "type": "repeater",
+          "x": 10,
+          "y": 10,
+          "width": 460,
+          "height": 420,
+          "props": {
+            "templateId": "dataset-detail",
+            "rowsSource": {
+              "queryId": "production-summary",
+              "rowKey": "Line",
+              "parameterMap": {
+                "line": "Line",
+                "product": "Product",
+                "produced": "Produced"
+              },
+              "maxRows": 2
+            },
+            "columns": 1,
+            "gap": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "dataset-detail",
+      "name": "Dataset detail",
+      "width": 450,
+      "height": 400,
+      "parameters": {
+        "line": "Line1",
+        "product": "Assembly",
+        "produced": "0"
+      },
+      "parameterTypes": {
+        "produced": "number"
+      },
+      "components": [
+        {
+          "id": "title",
+          "type": "label",
+          "x": 12,
+          "y": 8,
+          "width": 426,
+          "height": 36,
+          "props": {
+            "text": "{product}",
+            "fontSize": 20
+          }
+        },
+        {
+          "id": "plot",
+          "type": "chart",
+          "x": 12,
+          "y": 48,
+          "width": 426,
+          "height": 180,
+          "props": {
+            "text": "Current production",
+            "chart": {
+              "kind": "bar",
+              "xKey": "Line",
+              "series": [
+                {
+                  "key": "Produced",
+                  "label": "Produced",
+                  "color": "#2457b2"
+                },
+                {
+                  "key": "Target",
+                  "label": "Target",
+                  "color": "#97b4df"
+                }
+              ]
+            },
+            "dataSource": {
+              "queryId": "production-summary",
+              "parameters": {
+                "line": {
+                  "expression": "value",
+                  "references": {
+                    "value": {
+                      "kind": "parameter",
+                      "key": "line"
+                    }
+                  }
+                }
+              },
+              "refresh": {
+                "mode": "poll",
+                "intervalMs": 10000
+              }
+            }
+          }
+        },
+        {
+          "id": "note",
+          "type": "textInput",
+          "x": 12,
+          "y": 240,
+          "width": 426,
+          "height": 64,
+          "props": {
+            "text": "Independent row note",
+            "fieldKey": "note",
+            "defaultValue": ""
+          }
+        },
+        {
+          "id": "inspect",
+          "type": "button",
+          "x": 12,
+          "y": 314,
+          "width": 206,
+          "height": 46,
+          "props": {
+            "text": "Inspect this row",
+            "action": "openPopup",
+            "targetScreenId": "dataset-inspection",
+            "parameters": {
+              "line": "{line}",
+              "product": "{product}"
+            }
+          }
+        },
+        {
+          "id": "preview",
+          "type": "button",
+          "x": 232,
+          "y": 314,
+          "width": 206,
+          "height": 46,
+          "props": {
+            "text": "Read form context",
+            "action": "script",
+            "script": "result = {\"parameters\": parameters, \"inputs\": inputs}"
+          }
+        }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "id": "dataset-nested-queries",
+      "name": "Datasets and nested queries",
+      "width": 1040,
+      "height": 620,
+      "components": [
+        {
+          "id": "title",
+          "type": "label",
+          "x": 24,
+          "y": 20,
+          "width": 992,
+          "height": 48,
+          "props": {
+            "text": "Each nested query reads its containing row.",
+            "fontSize": 26
+          }
+        },
+        {
+          "id": "hint",
+          "type": "label",
+          "x": 24,
+          "y": 72,
+          "width": 992,
+          "height": 60,
+          "props": {
+            "text": "The first query returns two production lines. Each inner query receives only its containing line. Notes, chart data and popups remain separate."
+          }
+        },
+        {
+          "id": "groups",
+          "type": "repeater",
+          "x": 24,
+          "y": 145,
+          "width": 992,
+          "height": 440,
+          "props": {
+            "templateId": "dataset-group",
+            "rowsSource": {
+              "queryId": "production-summary",
+              "rowKey": "Line",
+              "parameterMap": {
+                "line": "Line",
+                "product": "Product",
+                "produced": "Produced"
+              },
+              "maxRows": 2
+            },
+            "columns": 2,
+            "gap": 20
+          }
+        }
+      ]
+    },
+    {
+      "id": "dataset-inspection",
+      "name": "Inspect a nested record",
+      "kind": "popup",
+      "width": 580,
+      "height": 350,
+      "parameters": {
+        "line": "Line1",
+        "product": "Assembly"
+      },
+      "components": [
+        {
+          "id": "title",
+          "type": "label",
+          "x": 22,
+          "y": 18,
+          "width": 536,
+          "height": 45,
+          "props": {
+            "text": "{line} \u00b7 {product}",
+            "fontSize": 22
+          }
+        },
+        {
+          "id": "plot",
+          "type": "chart",
+          "x": 22,
+          "y": 75,
+          "width": 536,
+          "height": 190,
+          "props": {
+            "text": "Popup dataset",
+            "chart": {
+              "kind": "bar",
+              "xKey": "Line",
+              "series": [
+                {
+                  "key": "Produced"
+                },
+                {
+                  "key": "Target"
+                }
+              ]
+            },
+            "dataSource": {
+              "queryId": "production-summary",
+              "parameters": {
+                "line": {
+                  "expression": "value",
+                  "references": {
+                    "value": {
+                      "kind": "parameter",
+                      "key": "line"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "close",
+          "type": "button",
+          "x": 378,
+          "y": 282,
+          "width": 180,
+          "height": 44,
+          "props": {
+            "text": "Close",
+            "action": "closePopup"
+          }
+        }
+      ]
+    }
+  ]
+}

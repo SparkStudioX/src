@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type { CanvasComponent } from "./types";
+import { PropertyCollectionDialog } from "./PropertyCollectionEditor";
 import "./stateControlEditor.css";
 
 type StateRow = { id: number; value: string; label: string; color: string };
@@ -49,20 +50,14 @@ export function StateControlEditor({ component, onChange, notify }: {
   function changeRow(id: number, patch: Partial<StateRow>) {
     if (draft) setDraft({ ...draft, rows: draft.rows.map(row => row.id === id ? { ...row, ...patch } : row) });
   }
-  return <section className="state-control-editor" aria-label={label}>
-    <div className="state-control-heading"><strong>{label}</strong>{!draft && <button type="button" className="button small" onClick={edit}>Edit {indicator ? "states" : "options"}</button>}</div>
-    <p className="state-control-help">{indicator
+  const help = indicator
       ? "Each exact state value selects its label and color. Use the State value binding to read a tag, parameter, or form input."
-      : "Segments stage a selection in this form. Input events can respond; selecting a segment does not write to a device."}</p>
-    {!draft && <>
-      <ul className="state-control-summary">{source.map((row, index) => <li key={`${index}:${row.value}`}>
-        {indicator && "color" in row && typeof row.color === "string" && <span className="state-control-swatch" style={{ backgroundColor: row.color }} />}
-        <span>{row.label}<small>{row.value}</small></span>
-        {!indicator && row.value === String(component.props.defaultValue ?? source[0]?.value ?? "") && <small>Default</small>}
-      </li>)}</ul>
-      {!source.length && <p className="state-control-error" role="alert">No {indicator ? "states" : "options"} configured.</p>}
-    </>}
-    {draft && <div className="state-control-draft" role="group" aria-label={`Edit ${label.toLowerCase()}`} onKeyDown={event => {
+      : "Segments stage a selection in this form. Input events can respond; selecting a segment does not write to a device.";
+  return <section className="property-sheet-group property-collection-group" aria-label={label}><h4>{label}</h4>
+    <div className="property-sheet-row" data-property={indicator ? "states" : "options"}><label title={help}>{indicator ? "States" : "Options"}</label><div className="property-sheet-value property-collection-value"><span>{source.length} defined</span><button type="button" className="button small" onClick={edit}>Edit {indicator ? "states" : "options"}</button></div><span aria-hidden="true" /></div>
+    {!indicator && <div className="property-sheet-row" data-property="defaultValue"><label>Default selection</label><div className="property-sheet-value"><span className="property-sheet-summary">{source.find(row => row.value === String(component.props.defaultValue ?? source[0]?.value ?? ""))?.label ?? "Unavailable"}</span></div><span aria-hidden="true" /></div>}
+    {!source.length && <p className="state-control-error" role="alert">No {indicator ? "states" : "options"} configured.</p>}
+    {draft && <PropertyCollectionDialog title={label} onClose={() => setDraft(null)}><p className="state-control-help">{help}</p><div className="state-control-draft" role="group" aria-label={`Edit ${label.toLowerCase()}`} onKeyDown={event => {
       event.stopPropagation();
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); apply(); }
       if (event.key === "Escape") { event.preventDefault(); setDraft(null); }
@@ -89,6 +84,6 @@ export function StateControlEditor({ component, onChange, notify }: {
       {error && <p className="state-control-error" role="alert">{error}</p>}
       <div className="state-control-actions"><button type="button" className="button small primary" onClick={apply}>Apply {indicator ? "states" : "options"}</button>
         <button type="button" className="button small" onClick={() => setDraft(null)}>Cancel</button></div>
-    </div>}
+    </div></PropertyCollectionDialog>}
   </section>;
 }

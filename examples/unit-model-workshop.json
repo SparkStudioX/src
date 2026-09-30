@@ -1,0 +1,35 @@
+{
+  "name": "Reusable unit model workshop",
+  "tagPackage": {
+    "format": "sparkstudio.tags",
+    "version": 2,
+    "tags": [],
+    "scanGroups": [{ "name": "WorkshopRefresh", "publishingIntervalMs": 200, "enabled": true }],
+    "udtDefinitions": [{
+      "id": "WorkshopCounter", "version": 1,
+      "members": [
+        { "path": "Completed", "kind": "memory", "dataType": "Int32", "value": 8 },
+        { "path": "Goal", "kind": "memory", "dataType": "Int32", "value": 10 },
+        { "path": "Progress", "kind": "expression", "dataType": "Double", "expression": "completed * 100 / goal", "inputs": { "completed": "./Completed", "goal": "./Goal" }, "scanGroup": "WorkshopRefresh" }
+      ]
+    }],
+    "instances": [
+      { "path": "[default]UnitModelWorkshop/West", "definitionId": "WorkshopCounter", "version": 1, "enabled": true, "overrides": { "Goal": { "value": 16 } } },
+      { "path": "[default]UnitModelWorkshop/East", "definitionId": "WorkshopCounter", "version": 1, "enabled": true, "overrides": { "Completed": { "value": 9 }, "Goal": { "value": 12 } } }
+    ]
+  },
+  "navigation": { "startupScreenId": "unit-model", "mode": "none", "items": [] },
+  "screens": [{
+    "id": "unit-model", "name": "Reusable unit model", "width": 1120, "height": 640,
+    "components": [
+      { "id": "title", "type": "label", "x": 32, "y": 28, "width": 1048, "height": 54, "props": { "text": "One definition, two independent units", "fontSize": 30 } },
+      { "id": "intro", "type": "label", "x": 32, "y": 94, "width": 1048, "height": 52, "props": { "text": "Both counters start on WorkshopCounter version 1. Member overrides keep each unit’s readings separate, while a named scan group schedules their expressions.", "fontSize": 17 } },
+      { "id": "west", "type": "label", "x": 32, "y": 178, "width": 492, "height": 42, "props": { "text": "WEST", "fontSize": 24 } },
+      { "id": "east", "type": "label", "x": 580, "y": 178, "width": 492, "height": 42, "props": { "text": "EAST", "fontSize": 24 } },
+      { "id": "west-progress", "type": "value", "x": 32, "y": 246, "width": 492, "height": 160, "props": { "text": "Calculated completion", "tagPath": "[default]UnitModelWorkshop/West/Progress", "unit": "%" } },
+      { "id": "east-progress", "type": "value", "x": 580, "y": 246, "width": 492, "height": 160, "props": { "text": "Calculated completion", "tagPath": "[default]UnitModelWorkshop/East/Progress", "unit": "%" } },
+      { "id": "exercise", "type": "label", "x": 32, "y": 448, "width": 1048, "height": 88, "props": { "text": "In Tags → UDTs / scan groups, create version 2 with Completed default 10. Upgrade West only: its Goal override stays 16, and progress becomes 62.5%. East remains at 75% on version 1.", "fontSize": 18 } },
+      { "id": "scope", "type": "label", "x": 32, "y": 580, "width": 1048, "height": 30, "props": { "text": "Synthetic data · Gateway setup required · No equipment connection or device command", "fontSize": 14 } }
+    ]
+  }]
+}

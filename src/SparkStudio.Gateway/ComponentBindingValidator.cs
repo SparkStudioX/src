@@ -132,6 +132,7 @@ internal static class ComponentBindingValidator
                 case "tag":
                     if (context.QueryParameter) throw new ArgumentException("Query parameter expressions cannot reference tags.");
                     var path = Text(reference, "path", 1024);
+                    TagBindingAddress.Validate(path, context.Parameters);
                     foreach (Match match in TagParameter.Matches(path))
                         if (!SafeKey(match.Groups[1].Value) || !context.Parameters.Contains(match.Groups[1].Value))
                             throw new ArgumentException("Tag path parameters must name declared parameters.");

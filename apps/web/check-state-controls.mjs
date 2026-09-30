@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 function loader(fakeHooks = false) {
   const modules = new Map();
   const asModule = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
-  const hooks = asModule('export const useId=()=>"state-test"; export const useRef=v=>({current:v}); export const useState=v=>[v,()=>{}]; export const useEffect=()=>{};');
+  const hooks = asModule(`export * from ${JSON.stringify(pathToFileURL(require.resolve("react")).href)}; export const useId=()=>"state-test"; export const useRef=v=>({current:v}); export const useState=v=>[v,()=>{}]; export const useEffect=()=>{};`);
   return function url(name) {
     if (modules.has(name)) return modules.get(name);
     const file = ['tsx', 'ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(file => fs.existsSync(file));

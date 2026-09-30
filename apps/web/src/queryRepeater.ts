@@ -2,15 +2,16 @@ import type { NamedQuery, QueryRepeaterSource, QueryResult, Template, ResolvedTe
 import { coerceTemplateParameter, validateTemplateParameterTypes } from "./templateModel";
 
 export interface RepeaterApi {
-  <T>(path: string, method?: string, body?: unknown): Promise<T>;
+  <T>(path: string, method?: string, body?: unknown, signal?: AbortSignal): Promise<T>;
 }
 const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
 const column = (value: unknown): value is string => typeof value === "string" && Boolean(value.trim()) && value.length <= 128;
 
 export function validateRepeaterSource(source: QueryRepeaterSource, template: Template): void {
   validateTemplateParameterTypes(template);
-  if (!object(source) || Object.keys(source).length !== 3 || !column(source.queryId) || !column(source.rowKey) || !object(source.parameterMap))
+  if (!object(source) || Object.keys(source).some(key => !["queryId", "rowKey", "parameterMap", "maxRows"].includes(key)) || !column(source.queryId) || !column(source.rowKey) || !object(source.parameterMap))
     throw new Error("Choose a rows query, its row-key column, and a parameter mapping in Properties.");
+  if (source.maxRows !== undefined && (!Number.isInteger(source.maxRows) || source.maxRows < 1 || source.maxRows > 100)) throw new Error("Repeater maximum rows must be an integer from 1 to 100.");
   if (Object.keys(source.parameterMap).length > 64 || Object.entries(source.parameterMap).some(([parameter, field]) =>
     !Object.hasOwn(template.parameters, parameter) || !column(field)))
     throw new Error("Map at most 64 declared template parameters to nonempty column names of up to 128 characters.");
@@ -20,7 +21,7 @@ export function validateRepeaterSource(source: QueryRepeaterSource, template: Te
 export function queryRepeaterRows(result: QueryResult, source: QueryRepeaterSource, template: Template): ResolvedTemplateRow[] {
   validateRepeaterSource(source, template);
   if (!result || !Array.isArray(result.columns) || !Array.isArray(result.rows)) throw new Error("The rows query returned an invalid result.");
-  if (result.rows.length > 100) throw new Error("The rows query returned more than 100 records. Narrow the query.");
+  if (result.rows.length > (source.maxRows ?? 100)) throw new Error(`The rows query returned more than ${source.maxRows ?? 100} records. Narrow the query.`);
   if (![source.rowKey, ...Object.values(source.parameterMap)].every(name => result.columns.includes(name)))
     throw new Error("The rows query must return its configured row-key and parameter columns.");
   const ids = new Set<string>();
@@ -43,18 +44,21 @@ export function queryRepeaterRows(result: QueryResult, source: QueryRepeaterSour
 /** Only declared screen/root query parameters are sent; missing values use saved query defaults. */
 export async function loadQueryRepeater(
   source: QueryRepeaterSource, template: Template, scope: "designer" | "runtime",
-  parameters: RuntimeParameters, request: RepeaterApi, publishedAt?: string,
+  parameters: RuntimeParameters, request: RepeaterApi, publishedAt?: string, signal?: AbortSignal,
 ): Promise<ResolvedTemplateRow[]> {
   validateRepeaterSource(source, template);
   const prefix = scope === "runtime" ? "/runtime" : "";
   const publication = scope === "runtime" ? publishedAt : undefined;
-  const queries = await request<Pick<NamedQuery, "id" | "kind" | "parameters">[]>(`${prefix}/queries${publication === undefined ? "" : `?publishedAt=${encodeURIComponent(publication)}`}`);
+  signal?.throwIfAborted();
+  const queries = await request<Pick<NamedQuery, "id" | "kind" | "parameters">[]>(`${prefix}/queries${publication === undefined ? "" : `?publishedAt=${encodeURIComponent(publication)}`}`, "GET", undefined, signal);
+  signal?.throwIfAborted();
   const query = queries.find(item => item.id === source.queryId);
   if (!query || query.kind === "update") throw new Error("The rows query is not available as a read query in this application.");
   const queryParameters = Object.fromEntries(query.parameters.filter(item => Object.hasOwn(parameters, item.name)).map(item => [item.name, parameters[item.name]]));
   const result = await request<QueryResult>(`${prefix}/queries/${encodeURIComponent(source.queryId)}/execute`, "POST", {
     parameters: queryParameters, ...(publication === undefined ? {} : { publishedAt: publication }),
-  });
+  }, signal);
+  signal?.throwIfAborted();
   return queryRepeaterRows(result, source, template);
 }
 

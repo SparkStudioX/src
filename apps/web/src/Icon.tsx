@@ -1,4 +1,5 @@
 const shapes: Record<string, React.ReactNode> = {
+  scan: <><path d="M4 7V4h3m10 0h3v3M4 17v3h3m10 0h3v-3M7 8v8m3-8v8m4-8v8m3-8v8" /></>,
   spark: <path d="m13 2-8 12h7l-1 8 8-12h-7z" />,
   grid: (
     <>

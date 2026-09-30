@@ -9,6 +9,9 @@ public sealed partial class PublicationStore
     private readonly string path;
     private readonly LocalAssetStore assets;
     private JsonObject? publication;
+    private ScriptResourceStore? scripts;
+
+    public void AttachScripts(ScriptResourceStore resources) { lock (gate) scripts = resources; }
 
     public PublicationStore(string dataDirectory, LocalAssetStore assets)
     {
@@ -23,17 +26,27 @@ public sealed partial class PublicationStore
     {
         lock (gate)
             return publication is null ? new JsonObject { ["published"] = false }
-                : new JsonObject { ["published"] = true, ["revision"] = publication["project"]!["revision"]!.DeepClone(), ["publishedAt"] = publication["publishedAt"]!.DeepClone(), ["warnings"] = HistoryWarnings() };
+                : new JsonObject { ["published"] = true, ["revision"] = publication["project"]!["revision"]!.DeepClone(), ["scriptsRevision"] = publication["scripts"]?["revision"]?.DeepClone(), ["complete"] = publication["scripts"] is JsonObject && publication["legacyScriptCompatibility"]?.GetValue<bool>() != true, ["publishedAt"] = publication["publishedAt"]!.DeepClone(), ["warnings"] = PublicationWarnings() };
     }
 
-    public JsonObject Publish(ProjectStore store, int revision)
+    public JsonObject Publish(ProjectStore store, int revision, int? scriptsRevision = null, string? reviewToken = null, bool onlyWhenChanged = false)
     {
+        JsonObject result;
         lock (gate)
         {
+            if (reviewToken is not null && Review(store)["reviewToken"]!.GetValue<string>() != reviewToken)
+                throw new InvalidOperationException("The saved application or active publication changed. Review the application again before publishing.");
             var snapshot = store.CapturePublication(revision);
+            snapshot["scripts"] = scripts?.CaptureDraftForPublication(scriptsRevision) ?? new JsonObject { ["revision"] = 0, ["resources"] = new JsonArray() };
+            // Preserve the legacy script endpoint's retry behavior, but only when
+            // every application resource is unchanged, including query definitions.
+            if (onlyWhenChanged && publication is not null && publication["legacyScriptCompatibility"]?.GetValue<bool>() != true &&
+                JsonNode.DeepEquals(snapshot["project"], publication["project"]) && JsonNode.DeepEquals(snapshot["scripts"], publication["scripts"]) &&
+                JsonNode.DeepEquals(snapshot["queries"], publication["scriptQueries"] ?? publication["queries"])) return Metadata();
             var project = snapshot["project"]!.AsObject();
             ValidateScreens(project);
             ComponentQueryBindingValidator.ValidateQueries(project, snapshot["queries"]!.AsArray());
+            TableEditValidator.ValidateQueries(project, snapshot["queries"]!.AsArray(), store);
             var referenced = ProjectTemplates.Components(project)
                 .SelectMany(component => new[] { component["props"] is not JsonObject props ? null
                     : ProjectStore.Optional(component, "type") == "table" ? ProjectStore.Optional(props, "queryId")
@@ -49,10 +62,12 @@ public sealed partial class PublicationStore
             snapshot["scriptQueries"] = snapshot["queries"]!.DeepClone();
             snapshot["queries"] = new JsonArray(queries.Select(query => query.DeepClone()).ToArray());
             snapshot["publishedAt"] = DateTimeOffset.UtcNow.ToString("O");
-            snapshot["schemaVersion"] = 1;
+            snapshot["schemaVersion"] = 2;
             CommitWithHistory(snapshot);
-            return Metadata();
+            result = Metadata();
         }
+        scripts?.NotifyPublished();
+        return result;
     }
 
     private void ValidateScreens(JsonObject project)
@@ -169,17 +184,17 @@ public sealed partial class PublicationStore
                 {
                     var definition = new JsonObject { ["type"] = item["type"]!.DeepClone() };
                     var properties = item["props"]!.AsObject();
-                    foreach (var key in new[] { "fieldKey", "defaultValue", "min", "max", "step", "options", "optionsSource", "tagPath" })
+                    foreach (var key in new[] { "fieldKey", "defaultValue", "min", "max", "step", "options", "optionsSource", "tagPath", "validation", "formatMask", "textCase", "scanTerminator" })
                         // Browser state is never supplied by gateway defaults.
                         // Bound fields must arrive as explicit, validated inputs.
                         if (!(key == "defaultValue" && properties.ContainsKey("stateBinding")) && properties[key] is { } value)
                             definition[key] = value.DeepClone();
                     return (JsonNode)definition;
                 }).ToArray();
-            var result = new JsonObject { ["code"] = (tableEdit ? props["tableEdit"]!["script"] : props["script"])!.DeepClone(), ["projectParameters"] = project["parameters"]!.DeepClone(),
+            var result = new JsonObject { ["code"] = (tableEdit ? props["tableEdit"]!["script"] : props["script"])?.DeepClone(), ["projectParameters"] = project["parameters"]!.DeepClone(),
                 ["screenParameters"] = ProjectTemplates.ScreenParameters(screen).DeepClone(), ["popupOrigin"] = opener,
                 ["templateScopes"] = templateScopes, ["inputs"] = new JsonArray(inputs),
-                ["queries"] = (current["scriptQueries"] ?? current["queries"])!.DeepClone() };
+                ["queries"] = (current["scriptQueries"] ?? current["queries"])!.DeepClone(), ["libraries"] = CaptureLibraries(current) };
             if (!tableEdit) result["uiContext"] = PythonUiContext.Describe(project, screen, scope, componentId, templateScopes.Count > 0);
             if (tableEdit)
             {

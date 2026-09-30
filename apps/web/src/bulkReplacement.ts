@@ -31,12 +31,12 @@ type Validator = (value: string) => string[];
 type Writer = (next: Project, value: string) => void;
 const controls = /[\u0000-\u001f\u007f-\u009f]/;
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
-const knownTypes = new Set(["label", "value", "gauge", "button", "table", "list", "treeView", "textInput", "passwordInput", "multiStateButton",
+const knownTypes = new Set(["viewContainer", "formattedInput", "barcodeInput", "equipmentCommand", "chart", "sparkline", "label", "value", "gauge", "button", "table", "list", "treeView", "textInput", "passwordInput", "multiStateButton",
   "multiStateIndicator", "ledDisplay", "progressBar", "cylindricalTank", "levelIndicator", "thermometer", "textArea", "numberInput", "spinner",
   "slider", "checkbox", "toggle", "select", "radioGroup", "dateTimeInput", "template", "repeater", "image", "icon", "line", "rectangle", "ellipse", "polyline", "pipe", "equipmentSymbol"]);
 const unitTypes = new Set(["value", "gauge", "slider", "ledDisplay", "progressBar", "cylindricalTank", "levelIndicator", "thermometer"]);
 const choiceTypes = new Set(["select", "radioGroup", "multiStateButton", "list", "treeView"]);
-const tagInputTypes = new Set(["textInput", "multiStateButton", "list", "treeView", "textArea", "numberInput", "spinner", "slider", "checkbox", "toggle", "select", "radioGroup", "dateTimeInput"]);
+const tagInputTypes = new Set(["textInput", "formattedInput", "barcodeInput", "multiStateButton", "list", "treeView", "textArea", "numberInput", "spinner", "slider", "checkbox", "toggle", "select", "radioGroup", "dateTimeInput"]);
 const commonBindingTargets = new Set(["text", "enabled", "visible", "color", "x", "y", "width", "height", "fontSize", "backgroundColor", "foregroundColor", "borderColor", "borderWidth"]);
 const processTypes = new Set(["ledDisplay", "progressBar", "cylindricalTank", "levelIndicator", "thermometer"]);
 const drawingTypes = new Set(["line", "rectangle", "ellipse", "polyline", "pipe", "equipmentSymbol"]);

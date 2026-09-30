@@ -12,6 +12,12 @@ const Context = createContext<QueryPropertyValues | undefined>(undefined);
 export const QueryPropertyProvider = Context.Provider;
 export const useQueryPropertyContext = () => useContext(Context);
 const coordinators = new WeakMap<object, QueryPropertyCoordinator>();
+export function sharedQueryCoordinator(owner: ApplicationStateContext["store"] | undefined, fallback: QueryPropertyCoordinator): QueryPropertyCoordinator {
+  if (!owner) return fallback;
+  let coordinator = coordinators.get(owner);
+  if (!coordinator) { coordinator = new QueryPropertyCoordinator(owner.componentEvents); coordinators.set(owner, coordinator); }
+  return coordinator;
+}
 type Descriptor = { component: CanvasComponent; target: BindingTarget; binding: QueryPropertyBinding; request?: QueryPropertyRequest; error?: string };
 
 /** One owner per containing form keeps geometry, rendering and events in agreement. */
@@ -21,9 +27,7 @@ export function useQueryPropertyBindings(components: CanvasComponent[], context:
   const fallback = useRef<QueryPropertyCoordinator | null>(null);
   if (!fallback.current) fallback.current = new QueryPropertyCoordinator(new ComponentEventCoordinator());
   const owner = options.state?.store;
-  let coordinator = owner && coordinators.get(owner);
-  if (!coordinator && owner) { coordinator = new QueryPropertyCoordinator(owner.componentEvents); coordinators.set(owner, coordinator); }
-  coordinator ??= fallback.current;
+  const coordinator = sharedQueryCoordinator(owner, fallback.current);
   const [, update] = useState(0);
   const subscriptions = useRef<{ coordinator: QueryPropertyCoordinator; held: Map<string, () => void> } | null>(null);
   const descriptors: Descriptor[] = components.flatMap(component => Object.entries(component.props.queryBindings ?? {}).map(([key, binding]) => {

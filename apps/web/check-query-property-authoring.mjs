@@ -151,5 +151,27 @@ await check('Designer supplies the named-query catalog and template parameter fx
   function visit(node) { if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(ast) === 'PropertyBindingsEditor') catalog = node.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.text === 'queries')?.initializer.expression.getText(ast); ts.forEachChild(node, visit); } visit(ast); assert.equal(catalog, 'queries');
   const template = { id: 't', name: 'T', width: 100, height: 100, parameters: { text: '' }, components: [] }, ui = editor(c('wrapper', 'template', { templateId: 't' }), { parameterTemplate: template }); ui.field('Add parameter text binding').props.onClick(); ui.refresh(); assert.ok(!ui.all().some(node => node.props?.['aria-label'] === 'Property binding source'));
 });
+await check('dataset fx opens the styled binding dialog and isolates title-bar shortcuts while native cancel discards drafts', () => {
+  globalThis.__queryRequest = async () => { throw Error('Opening dataset authoring must not execute a query.'); };
+  const ui = editor(c('plot', 'chart'));
+  const open = () => { ui.field('Edit dataset binding').props.onClick(); ui.refresh(); };
+  open(); const dialog = ui.find(node => node.type === 'dialog'); assert.equal(dialog.props.className, 'property-binding-dialog');
+  assert.ok(nodes(dialog).some(node => node.props?.className === 'binding-dialog-heading'));
+  assert.ok(nodes(dialog).some(node => node.props?.className === 'binding-dialog-body'));
+  assert.ok(!ui.all().some(node => node.props?.['aria-label'] === 'Property query result column'));
+  ui.change('Property named query', 'summary'); assert.deepEqual(ui.patches, []);
+  for (const key of ['z', 'y', 's']) { let stopped = false, prevented = false; dialog.props.onKeyDown({ key, ctrlKey: true, target: ui.field('Close dataset binding'), stopPropagation() { stopped = true; }, preventDefault() { prevented = true; } }); assert.equal(stopped, true); assert.equal(prevented, false); }
+  let canceled = false; dialog.props.onCancel({ preventDefault() { canceled = true; } }); ui.refresh(); assert.equal(canceled, true); assert.deepEqual(ui.patches, []); assert.ok(!ui.all().some(node => node.type === 'dialog'));
+  open(); assert.equal(ui.field('Property named query').props.value, ''); ui.change('Property named query', 'summary'); ui.click('Apply');
+  assert.deepEqual(ui.patches, [{ dataSource: { queryId: 'summary' } }]); assert.ok(!ui.all().some(node => node.type === 'dialog'));
+});
+await check('closing the dataset title bar aborts its explicit preview and late completion cannot revive the dialog', async () => {
+  let complete, signal;
+  globalThis.__queryRequest = async (path, method, body, incoming) => path === '/queries' ? [query] : (signal = incoming, await new Promise(resolve => { complete = () => resolve({ columns: ['total'], rows: [{ total: 999 }] }); }));
+  const ui = editor(c('plot', 'chart', { dataSource: { queryId: 'summary' } })); ui.field('Edit dataset binding').props.onClick(); ui.refresh(); ui.click('Run preview'); await flush(ui); assert.ok(complete);
+  ui.field('Close dataset binding').props.onClick(); ui.refresh(); assert.equal(signal.aborted, true); complete(); await flush(ui);
+  assert.deepEqual(ui.patches, []); assert.ok(!ui.all().some(node => node.type === 'dialog')); assert.doesNotMatch(ui.content(), /999/);
+  ui.field('Edit dataset binding').props.onClick(); ui.refresh(); ui.click('Remove binding'); assert.deepEqual(ui.patches, [{ dataSource: undefined }]);
+});
 hooks.clear(); delete globalThis.document; delete globalThis.__queryRequest;
 console.log(`${passed}/${passed} query property authoring checks passed.`);

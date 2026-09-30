@@ -1,4 +1,6 @@
 /* Shared form controls: identical behavior in screens, templates and popups. */
+.render-input .input-validation-error { display: block; color: var(--danger); font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; padding: 4px 1px; }
+.render-input input[aria-invalid="true"], .render-input textarea[aria-invalid="true"] { border-color: var(--danger); }
 .render-input .state-options .radio-option-list {
   display: flex;
   flex-direction: row;

@@ -3,7 +3,8 @@ import type { InputValue, TableEditColumn } from "./types";
 const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const key = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= 128 && value === value.trim() && !/[\u0000-\u001f\u007f-\u009f]/.test(value);
 const boundedNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= Number.MAX_SAFE_INTEGER;
-const definitionFields = new Set(["versionColumn", "columns", "script"]);
+const definitionFields = new Set(["versionColumn", "columns", "script", "batch"]);
+const identifier = (value: unknown): value is string => typeof value === "string" && value === value.trim() && /^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(value);
 const columnFields = new Set(["key", "type", "required", "maxLength", "min", "max", "integer"]);
 
 export function validateTableEditDefinition(value: unknown, rowKey: unknown, allowRuntime = false): string | null {
@@ -11,12 +12,17 @@ export function validateTableEditDefinition(value: unknown, rowKey: unknown, all
   if (!record(value) || Object.keys(value).some(field => !definitionFields.has(field))) return "Table editing contains an unsupported definition or property.";
   if (!key(rowKey)) return "Table editing requires an exact row key of 1–128 characters without outer whitespace or control characters.";
   if (!key(value.versionColumn) || value.versionColumn === rowKey) return "Choose a version column distinct from the row key, with an exact source key of 1–128 characters.";
+  const batch = Object.hasOwn(value, "batch");
+  if (batch && (!record(value.batch) || Object.keys(value.batch).length !== 1 || !identifier(value.batch.table) || Object.hasOwn(value, "script"))) return "Atomic editing requires one database table name and cannot contain a Python handler.";
+  if (batch && (!identifier(rowKey) || !identifier(value.versionColumn) || rowKey.toLowerCase() === value.versionColumn.toLowerCase())) return "Atomic row key and version must be different ASCII database identifiers.";
   if (!Array.isArray(value.columns) || value.columns.length < 1 || value.columns.length > 64) return "Configure 1–64 editable columns.";
   const keys = new Set<string>();
   for (const [index, column] of value.columns.entries()) {
     const prefix = `Editable column ${index + 1}`;
     if (!record(column) || Object.keys(column).some(field => !columnFields.has(field))) return `${prefix} contains an unsupported definition or property.`;
     if (!key(column.key) || keys.has(column.key) || column.key === rowKey || column.key === value.versionColumn) return `${prefix} needs a unique exact source key distinct from the row key and version column.`;
+    const columnName = column.key;
+    if (batch && (!identifier(columnName) || [...keys, rowKey, value.versionColumn].some(existing => existing.toLowerCase() === columnName.toLowerCase()))) return `${prefix} needs a unique ASCII database identifier distinct from the row key and version.`;
     keys.add(column.key);
     if (!["string", "number", "boolean"].includes(column.type as string)) return `${prefix} must have string, number or boolean type.`;
     for (const field of ["required", "maxLength"]) if (Object.hasOwn(column, field) && column.type !== "string") return `${prefix}: ${field} applies only to string values.`;
@@ -27,7 +33,7 @@ export function validateTableEditDefinition(value: unknown, rowKey: unknown, all
     if (typeof column.min === "number" && typeof column.max === "number" && column.min > column.max) return `${prefix}: minimum must not exceed maximum.`;
     if (Object.hasOwn(column, "integer") && typeof column.integer !== "boolean") return `${prefix}: integer must be true or false.`;
   }
-  if ((!allowRuntime || Object.hasOwn(value, "script")) && (typeof value.script !== "string" || !value.script.trim() || value.script.length > 64000)) return "Table editing requires a Python handler of 1–64,000 characters.";
+  if (!batch && (!allowRuntime || Object.hasOwn(value, "script")) && (typeof value.script !== "string" || !value.script.trim() || value.script.length > 64000)) return "Table editing requires a Python handler of 1–64,000 characters.";
   return null;
 }
 

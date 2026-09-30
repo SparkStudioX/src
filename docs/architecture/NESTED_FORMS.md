@@ -1,6 +1,6 @@
 # Nested templates and local forms
 
-A template can contain another template or a saved-row repeater. Each rendered instance and repeater row adds a form boundary. Reusing one machine-card definition twice, including its identical child component IDs, therefore creates independent nested forms. Layout remains a proportional, fixed-canvas layout at every level.
+A template can contain another template, a saved-row repeater or a bounded query-backed repeater. Each rendered instance and repeater row adds a form boundary. Reusing one machine-card definition twice, including its identical child component IDs, therefore creates independent nested forms. Layout remains a proportional, fixed-canvas layout at every level.
 
 ## Supported structure
 
@@ -14,10 +14,10 @@ The screen or popup is the root document; it is not counted as a template level.
 | Saved rows or query result rows in one repeater | 100 |
 | Repeater columns / gap | 1–12 / 0–64 pixels |
 | Expanded components, including containers | 10,000 per project |
-| Query-backed repeater placement | Screen or popup root only |
+| Query-backed repeater placement | Every supported template level |
 | Modal depth | One popup |
 
-The expansion budget includes repeated descendants, not just the unique template definitions. A query-backed repeater reserves 100 rows when checking that budget. Its root-level rows may contain nested templates and saved-row repeaters. A query-backed repeater inside any template is unsupported and rejected. Templates placed inside popups cannot open another popup, including from a deeper descendant.
+The expansion budget includes repeated descendants, not just the unique template definitions. A query-backed repeater reserves its `maxRows` (1–100, default 100) when checking that budget. Rows can contain nested templates, saved-row repeaters and additional bounded query repeaters. Nested queries use their immediately containing typed parameter context. See [datasets and nested query rows](DATASETS_NESTED_QUERIES.md). Templates placed inside popups cannot open another popup, including from a deeper descendant.
 
 ## Parameters, inputs and state
 

@@ -11,8 +11,7 @@ import { actionKey, ProjectComponentView } from "./templates";
 import { componentGeometry } from "./propertyBindings";
 import { QueryPropertyProvider, useQueryPropertyBindings } from "./useQueryPropertyBindings";
 import { ApplicationStateProvider, useApplicationStateContext, usePopupApplicationState } from "./applicationState";
-import { popupQuerySource, popupSourceStatus } from "./popupModel";
-import { useQueryRepeater } from "./useQueryRepeater";
+import { usePopupSource } from "./usePopupSource";
 import type {
   CanvasComponent,
   InputValues,
@@ -23,7 +22,7 @@ import type {
   ScriptResult,
   PythonUiAction,
   Tag,
-  TableCellEdit,
+  TableEditIntent,
 } from "./types";
 import "./popups.css";
 
@@ -51,7 +50,7 @@ export default function Popup({
   onExecute: (action: PopupAction) => Promise<ScriptResult>;
   onBusyChange: (busy: boolean) => void;
   onStale?: () => void;
-  onTableEdit?: (component: CanvasComponent, edit: TableCellEdit, instance?: InstanceAction) => Promise<ScriptResult>;
+  onTableEdit?: (component: CanvasComponent, edit: TableEditIntent, instance?: InstanceAction) => Promise<ScriptResult>;
   readOnly?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -68,10 +67,7 @@ export default function Popup({
   const screen = project.screens.find((item) => item.id === popup.screenId);
   const parentApplicationState = useApplicationStateContext();
   const applicationState = usePopupApplicationState(parentApplicationState, popup.id, screen?.state);
-  const source = popupQuerySource(project, popup);
-  const sourceRows = useQueryRepeater(source.source, source.template, queryScope, source.parameters,
-    communicationLost, queryScope === "runtime" ? project.publishedAt : undefined);
-  const sourceState = popupSourceStatus(popup, source, sourceRows);
+  const sourceState = usePopupSource(project, popup, tags, queryScope, communicationLost, queryScope === "runtime" ? project.publishedAt : undefined);
   const sourceLocked = Boolean(invalidSource) || !sourceState.ready;
   const sourceMessage = invalidSource || sourceState.message;
   useEffect(() => {
@@ -192,7 +188,7 @@ export default function Popup({
       if (active.current) { setBusy(""); onBusyChange(false); }
     }
   };
-  const editTable = async (component: CanvasComponent, edit: TableCellEdit, instance?: InstanceAction): Promise<ScriptResult> => {
+  const editTable = async (component: CanvasComponent, edit: TableEditIntent, instance?: InstanceAction): Promise<ScriptResult> => {
     if (busy || sourceLocked || readOnly || queryScope !== "runtime" || !onTableEdit || instance?.isCurrent?.() === false) throw new Error("Table editing is unavailable in this popup.");
     setBusy(actionKey(component.id, instance));
     onBusyChange(true);

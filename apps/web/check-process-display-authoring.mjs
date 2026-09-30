@@ -32,6 +32,7 @@ const { PropertyBindingsEditor } = await import(modules('PropertyBindingsEditor'
 const { PropertyBindingsEditor: InteractiveEditor } = await import(loader(true)('PropertyBindingsEditor'));
 const { evaluateComponentBindings, validatePropertyBinding } = await import(modules('propertyBindings'));
 const { isProcessDisplay, resolveProcessDisplay } = await import(modules('processDisplays'));
+const { isChart, defaultChartProps } = await import(modules('chartModel'));
 const { isInput } = await import(modules('inputs'));
 const { iconNames } = await import(modules('Icon'));
 const hooks = await import(hookUrl);
@@ -119,7 +120,7 @@ check('actual palette factories create supported defaults, dimensions and distin
   visit(ast);
   const script = ts.transpileModule(`const processDimensions=${declarations.get('processDimensions')}; const palettes=${declarations.get('palettes')}; const typeIcon=${declarations.get('typeIcon')}; const acceptsInitialTag=${declarations.get('acceptsInitialTag')}; ${declarations.get('tagBindingPatch')} const addComponent=${declarations.get('addComponent')}; return {palettes,typeIcon,addComponent,tagBindingPatch,acceptsInitialTag};`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
   let screen = { id: 'screen', width: 1000, height: 700, components: [] };
-  appFactory = new Function('screen', 'project', 'editingTemplate', 'availableTemplates', 'notify', 'id', 'assets', 'queries', 'isInput', 'isTemplateInstance', 'updateScreen', 'setSelectedId', 'isProcessDisplay', script)(screen, { screens: [screen], templates: [] }, undefined, [], noOp, type => type, [], [], isInput, type => type === 'template' || type === 'repeater', update => { screen = update(screen); }, noOp, isProcessDisplay);
+  appFactory = new Function('screen', 'project', 'editingTemplate', 'availableTemplates', 'notify', 'id', 'assets', 'queries', 'isInput', 'isTemplateInstance', 'updateScreen', 'setSelectedId', 'isProcessDisplay', 'isChart', 'defaultChartProps', script)(screen, { screens: [screen], templates: [] }, undefined, [], noOp, type => type, [], [], isInput, type => type === 'template' || type === 'repeater', update => { screen = update(screen); }, noOp, isProcessDisplay, isChart, defaultChartProps);
   for (const type of types) {
     assert.ok(appFactory.palettes.some(item => item.type === type)); appFactory.addComponent(type);
     assert.ok(iconNames.includes(appFactory.typeIcon[type]));

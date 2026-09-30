@@ -10,14 +10,18 @@ import { resolveIndicatorState } from "./stateControls";
 import { isProcessDisplay } from "./processDisplays";
 import ProcessDisplay from "./ProcessDisplay";
 import DrawingComponent from "./DrawingComponent";
+import ChartComponent from "./ChartComponent";
+import EquipmentCommand from "./EquipmentCommand";
+import { isChart } from "./chartModel";
 import { isDrawingComponent } from "./drawingComponents";
 import ListTreeInput from "./ListTreeInput";
+import { formatInputText, inputConstraintError, textValidationTypes } from "./inputValidation";
 import type {
   CanvasComponent,
   InputValue,
   InputValues,
   ScriptResult,
-  TableCellEdit,
+  TableEditIntent,
   Tag,
 } from "./types";
 import {
@@ -67,7 +71,7 @@ export function ComponentView({
   onInputChange?: (fieldKey: string, value: InputValue) => void;
   onInputCommit?: (fieldKey: string, value: InputValue) => void;
   onAction?: (component: CanvasComponent) => void;
-  onTableEdit?: (edit: TableCellEdit) => Promise<ScriptResult>;
+  onTableEdit?: (edit: TableEditIntent) => Promise<ScriptResult>;
   actionBusy?: boolean;
   interactionLocked?: boolean;
   readOnly?: boolean;
@@ -106,6 +110,8 @@ export function ComponentView({
     : precisionLimited
       ? "Precision limit"
       : tag?.quality || "Tag not found";
+  if (type === "equipmentCommand") return <EquipmentCommand component={{ ...component, props }} queryScope={queryScope} publishedAt={publishedAt} communicationLost={communicationLost} interactionLocked={interactionLocked || readOnly} />;
+  if (isChart(type)) return <ChartComponent component={{ ...component, props }} tags={tags} parameters={parameters} preview={preview} onNavigate={onNavigate} communicationLost={communicationLost} queryScope={queryScope} publishedAt={publishedAt} scopeComponents={scopeComponents} inputs={inputs} />;
   if (isProcessDisplay(type)) return <ProcessDisplay component={{ ...component, props }} parameters={parameters} />;
   if (isDrawingComponent(type)) return <DrawingComponent component={{ ...component, props }} preview={preview} interactionLocked={interactionLocked} onNavigate={onNavigate} onOpenPopup={onOpenPopup} />;
   if (type === "multiStateIndicator") {
@@ -167,12 +173,13 @@ export function ComponentView({
       ? inputs[fieldKey]
       : initialInput(component, tags, parameters, communicationLost);
     latestInputValue.current = value;
+    const constraintError = value === null ? null : inputConstraintError(component, value);
     const inputProps = {
       tabIndex: preview ? 0 : -1,
       disabled: interactionLocked || readOnly || !preview,
       "aria-label": props.text || fieldKey,
-      "aria-invalid": value === null,
-      "aria-describedby": value === null ? initialStatusId : undefined,
+      "aria-invalid": value === null || Boolean(constraintError),
+      "aria-describedby": value === null || constraintError ? initialStatusId : undefined,
     };
     const inputId = `${initialStatusId}-control`;
     const label = caption(fieldKey);
@@ -183,10 +190,26 @@ export function ComponentView({
       }
     };
     const commit = () => {
-      if (preview && !interactionLocked && !readOnly && latestInputValue.current !== null) onInputCommit?.(fieldKey, latestInputValue.current);
+      if (preview && !interactionLocked && !readOnly && latestInputValue.current !== null) {
+        if (type === "formattedInput" && typeof latestInputValue.current === "string") {
+          const formatted = formatInputText(component, latestInputValue.current);
+          if (formatted !== latestInputValue.current) change(formatted);
+        }
+        onInputCommit?.(fieldKey, latestInputValue.current!);
+      }
     };
     const changeAndCommit = (next: InputValue) => { change(next); commit(); };
     const commitKey = (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      if (type === "barcodeInput") {
+        if (event.key === (props.scanTerminator === "tab" ? "Tab" : "Enter") && !event.nativeEvent.isComposing && !event.repeat && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+          if (event.key === "Enter") event.preventDefault();
+          if (latestInputValue.current !== null && !inputConstraintError(component, latestInputValue.current)) {
+            commit();
+            if (preview && !interactionLocked && !readOnly) event.currentTarget.select();
+          }
+        }
+        return;
+      }
       if (event.key === "Enter" && !event.nativeEvent.isComposing && (type !== "textArea" || event.ctrlKey || event.metaKey)) { event.preventDefault(); commit(); }
     };
     const numeric = isNumericInput(type);
@@ -347,7 +370,7 @@ export function ComponentView({
               <textarea
                 {...inputProps}
                 value={value === null ? "" : String(value)}
-                maxLength={4096}
+                maxLength={props.validation?.maxLength ?? 4096}
                 placeholder={value === null ? "Initial value unavailable" : undefined}
                 onChange={(event) => change(event.target.value)}
                 onBlur={commit}
@@ -358,24 +381,25 @@ export function ComponentView({
                 {...inputProps}
                 type={numeric ? "number" : type === "dateTimeInput" ? "datetime-local" : type === "passwordInput" ? "password" : "text"}
                 autoComplete={type === "passwordInput" ? "new-password" : undefined}
-                spellCheck={type === "passwordInput" ? false : undefined}
+                spellCheck={type === "passwordInput" || type === "barcodeInput" || type === "formattedInput" ? false : undefined}
                 step={numeric ? numericProps.step : type === "dateTimeInput" ? 60 : undefined}
                 min={numeric ? props.min : type === "dateTimeInput" ? "0001-01-01T00:00" : undefined}
                 max={numeric ? props.max : type === "dateTimeInput" ? "9999-12-31T23:59" : undefined}
-                maxLength={type === "textInput" || type === "passwordInput" ? 4096 : undefined}
+                maxLength={textValidationTypes.has(type) ? props.validation?.maxLength ?? 4096 : undefined}
                 value={
                   typeof value === "boolean" ? String(value) : (value ?? "")
                 }
                 placeholder={
-                  value === null ? "Initial value unavailable" : undefined
+                  value === null ? "Initial value unavailable" : type === "formattedInput" ? props.formatMask : type === "barcodeInput" ? `Scan, then ${props.scanTerminator === "tab" ? "Tab" : "Enter"}` : undefined
                 }
                 onChange={(event) => change(numeric ? numericInputValue(event.target.value) : event.target.value)}
-                onBlur={commit}
+                onBlur={type === "barcodeInput" ? undefined : commit}
                 onKeyDown={commitKey}
               />
             )}
           </label>
         )}
+        {constraintError && <small className="input-validation-error" id={initialStatusId} role="status">{constraintError}</small>}
         {value === null && !props.optionsSource && (
           <small
             className="input-initial-status"
@@ -450,6 +474,7 @@ export function ComponentView({
         selectionFields={props.selectionFields}
         pageSize={props.pageSize}
         tableColumns={props.tableColumns}
+        selectionMode={props.selectionMode}
       tableEdit={props.tableEdit}
       onTableEdit={preview && queryScope === "runtime" && !interactionLocked && !actionBusy && !readOnly ? onTableEdit : undefined}
         components={scopeComponents ?? [component]}

@@ -30,7 +30,7 @@ try {
   assert.deepEqual(await call(prefix+'/project'),savedDraft);
   history=await call(prefix+'/project/history');assert.equal(history.entries.length,3);assert.equal(history.entries.filter(item=>item.current).length,1);
   pass('restore creates a fresh operator version and preserves the complete draft');
-  assert.ok(history.scope.includes('Script-library'));assert.ok(!JSON.stringify(history).includes('Third unsent operator draft'));assert.ok(!JSON.stringify(history).includes('props'));
+  assert.ok(history.scope.includes('Python libraries'));assert.ok(!JSON.stringify(history).includes('Third unsent operator draft'));assert.ok(!JSON.stringify(history).includes('props'));
   await call(prefix+'/project/history/not-an-id/restore','POST',{expectedPublishedAt:restored.publishedAt},400);
   await call(prefix+`/project/history/${randomUUID().replaceAll('-','')}/restore`,'POST',{expectedPublishedAt:restored.publishedAt},404);
   pass('history discloses snapshot scope, excludes authored bodies and rejects invalid identifiers');
