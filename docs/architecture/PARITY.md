@@ -6,7 +6,7 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
-## Installer-generated HTTPS certificates and preview.8 preparation, 2026-09-29
+## Installer-generated HTTPS certificates and preview.8 release, 2026-09-29
 
 Network setup now offers **Generate a self-signed certificate (no files needed)** alongside existing PEM certificate/key import. Generation uses a fresh RSA-3072 key, SHA-256 signature, exact DNS or IPv4 subject alternative name, server-auth usage and non-CA constraints. The certificate lasts one year with a five-minute starting clock allowance. Preflight validates the requested identity without creating files; installation writes the private key with explicit restricted permissions, validates the persisted pair, and then stages the listener. Default **Keep existing listener settings** upgrades preserve certificate identity and expiry.
 
@@ -14,7 +14,9 @@ Setup exports `gateway-public.cer` and `gateway-trust.txt` in the protected depl
 
 The helper compiled without warnings/errors and passed 24 ownership, 85 network/generation/trust/ACL/rollback, 18 readiness and six shutdown checks plus privilege-scope checks. Generated DNS and IP certificates each passed real local TLS, exact identity validation, private-key ACL inspection and Windows chain validation with only their public certificate as an explicit test trust anchor; normal OS trust still rejected them. Failed replacement restored the exact earlier deployment/export bytes and public-file permissions. TypeScript/production browser build, all 38 source-boundary fixtures and nine workshop-build groups passed. Fixtures did not modify the Windows certificate trust store or installed service.
 
-Preview.8 package checks and publication are recorded after completion. Actual elevated service installation, a second computer's browser trust and firewall traversal remain separate acceptance gates; existing preview.5/preview.7 evidence does not establish them. The installed gateway and data are not used for fixtures.
+Published [preview.8](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.8) from clean source `a8c9106adbbee5c9501e203e988581a68eae2a66`. Source-boundary CI passed. The exact installer matched all 486 payload hashes, reran the helper checks above, and used its bundled .NET and CPython 3.14.7. Nineteen gateway/SSE, 12 asset/popup, three deployment, four connection and three query-cancellation checks passed; all 24 portable workshops passed import, explicit publication, operator reads and re-export. Windows integration and shared test credentials remained unchanged. The 11 release assets matched local sizes and SHA-256 digests; installer SHA-256 is `dfd70032746b442c20c3826f8887e2e5a2504c178b078bca53e426afa5ab3e3c` (86,235,178 bytes). The website's download links were updated to preview.8.
+
+Actual elevated service installation, a second computer's browser trust and firewall traversal remain separate acceptance gates; existing preview.5/preview.7 evidence does not establish them. The installed gateway and data were not used for fixtures.
 
 ## HTTPS by IPv4 address and preview.7 release, 2026-09-29
 
