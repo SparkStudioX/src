@@ -49,10 +49,18 @@ Keep scratch payloads and verification output local. After release, archive or r
 ## 3. Verify the exact release artifacts
 
 ```powershell
-.\tools\test-installer.ps1 -ExpectedVersion $releaseVersion -WorkshopDirectory "artifacts/workshops/$releaseVersion"
+$previousDemoSetting = [Environment]::GetEnvironmentVariable('SparkStudio:EnableDemoTags', 'Process')
+try {
+    # The smoke suite explicitly exercises synthetic demo values. This setting
+    # applies only to the disposable verifier process, never the packaged defaults.
+    [Environment]::SetEnvironmentVariable('SparkStudio:EnableDemoTags', 'true', 'Process')
+    .\tools\test-installer.ps1 -ExpectedVersion $releaseVersion -WorkshopDirectory "artifacts/workshops/$releaseVersion"
+} finally {
+    [Environment]::SetEnvironmentVariable('SparkStudio:EnableDemoTags', $previousDemoSetting, 'Process')
+}
 ```
 
-This verifies extraction, payload hashes, version/source provenance, bundled runtimes, served browser assets and authenticated workshop import/publication/re-export against the extracted package on isolated loopback port 5091. Ensure that port is available; do not stop an unrelated running gateway. Read `artifacts/installer/verification-result.json` and the test output. A successful extraction test does **not** establish elevated service installation, upgrade, uninstall, network trust or rollback acceptance.
+This verifies extraction, payload hashes, version/source provenance, bundled runtimes, served browser assets and authenticated workshop import/publication/re-export against the extracted package on isolated loopback port 5091. The smoke fixture requires explicit demo-tag opt-in because production defaults disable simulation. The colon-form configuration key above survives the verifier's clearing of inherited host/listener overrides. Check production-default readiness separately; do not enable simulation in shipped configuration to satisfy a test. Ensure that port is available; do not stop an unrelated running gateway. Read `artifacts/installer/verification-result.json` and the test output. A successful extraction test does **not** establish elevated service installation, upgrade, uninstall, network trust or rollback acceptance.
 
 Exercise the changed Designer/operator flows against the packaged gateway. For installer or service changes, use a disposable Windows environment for the relevant install/upgrade/service-account/uninstall checks. Record what passed and what remains unverified; retain existing acceptance limitations in the notes. Fix failures and rebuild a clean candidate before proceeding. If code changes after the build, produce and verify fresh artifacts with new provenance.
 

@@ -6,6 +6,61 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Preview.10 release verification, 2026-09-30
+
+The unsigned Windows x64 installer and 35-project portable workshop bundle were
+built from clean revision `e0b37332a9f19df00dd199edc1a0244c68d65209`.
+[Windows/Linux product CI passed](https://github.com/SparkStudioX/src/actions/runs/36753658069),
+as did the source-boundary workflow. This documentation-only evidence was added
+after packaging; it is not the installer build revision. Companion assets belong
+to [v0.2.0-preview.10](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.10).
+
+Installer size is **86,555,922 bytes**, SHA-256
+`8babdff9ca6e4e0e8a2ca11c4cab8ebfe29d5189cf4634aa99e380c1eb81b7d8`.
+The workshop ZIP is **375,046 bytes**, SHA-256
+`93afd3e36e0edb3cf82dd007ea3d9a4a449339511f46a896b0aebbe115bc9197`.
+Both manifests identify the same clean build revision. The payload contains a
+61-component dependency inventory and third-party notices; notice-less NuGet
+entries were checked against their declared MIT/Apache-2.0 package metadata.
+This is a distribution inventory review, not a vulnerability or legal audit.
+
+Exact-package acceptance verified **500 payload hashes**, bundled .NET paths,
+actual CPython 3.14.7, the real process-bound installer readiness probe before
+authentication, isolated first-account setup, 19 gateway/SSE smoke checks,
+12 assets/popup checks, deployment/connection/query-cancellation checks and all
+**35 workshop import/publication/operator-read/re-export round trips**. Helper
+fixtures covered ownership, network identity/certificates, readiness, process exit
+and unavailable debug privilege. Windows service registration, shortcuts, trust
+stores and shared test credentials were unchanged.
+
+The first production-default extraction reached readiness and passed setup/Python
+checks with demo tags disabled; the older smoke suite then rejected its absent
+synthetic tags. The successful complete run explicitly enabled demo tags only in
+the disposable process, as documented in [the release process](RELEASE_PROCESS.md).
+The packaged production default remains disabled. A separate restart without that
+override passed **14 tag-definition HTTP groups**, including 10,000 accepted,
+10,001 rejected, edits at capacity and cleanup. Browser acceptance with 10,000
+synthetic memory tags verified 100-row pages, last-page navigation, filter/page
+clamping, and the Designer's 200-match display with search reaching tag 9,999.
+Browser error logs were empty. This is functional acceptance, not a browser
+throughput or real OPC load measurement.
+
+Local offline acceptance passed **97 suites**, including **1,006 gateway checks**.
+The first Windows CI run exposed a host-speed-dependent queue fixture. Its
+replacement controls admission occupancy, retains the production two-second
+deadline, and passed all 139 focused Python event checks. A temporary negative
+control resetting the budget after queueing failed the intended assertion;
+restoring production code passed again. The final Windows/Linux CI run passed.
+
+Evidence remains local under `artifacts/installer/verification-result.json`,
+`.data/installer-verification-8b76953e63334ebc83067612d154da72/` and
+`.data/test-results/`. Elevated preview.10 service installation/upgrade/uninstall,
+rollback, full installed-data preservation, remote trust/SMB/FTPS, real SQL Server,
+broader OPC interoperability and long-duration load acceptance remain open.
+Docker and macOS distributions are not included. High-rate multi-session limits
+remain as recorded in [load testing](LOAD_TESTING.md). GitHub publication and live
+website deployment are separate final release gates.
+
 ## Reliability, security and process-data review follow-up, 2026-09-30
 
 The subsequent capacity increment raises the gateway validation ceiling to

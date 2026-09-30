@@ -76,7 +76,7 @@ Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md).
 
 ## Workshops and verification
 
-Use [the example catalog and build instructions](../../examples/README.md) for independently authored workshops. Portable examples import as unpublished projects; setup-required examples also need the documented gateway resources. Match a workshop to its companion build. Use the preview.9 companion bundle for Python component events and lifecycle/session messaging; preview.8 and earlier do not include those features.
+Use [the example catalog and build instructions](../../examples/README.md) for independently authored workshops. Portable examples import as unpublished projects; setup-required examples also need the documented gateway resources. Match a workshop to its companion build. Use the preview.10 companion bundle for the current 35 portable projects, including application publication, containers, validated inputs and charts. Python component events and lifecycle/session messaging require preview.9 or newer; preview.8 and earlier do not include those features.
 
 `artifacts/sparkproj/` is the only maintained location for loose `.sparkproj` packages, with guides and provenance in `index.json`. It is ignored by Git. `node tools/build-workshops.mjs --version <version>` updates this directory and creates an immutable ZIP, manifest and checksums under `artifacts/workshops/<version>/`, without duplicate loose packages. Example loaders import authored JSON directly. Historical artifact paths in dated verification records may have been archived or removed; use the current package directory or the frozen release ZIP.
 
