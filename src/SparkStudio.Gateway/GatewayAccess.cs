@@ -81,6 +81,15 @@ public static class GatewayAccess
                 catalog.Get(projectId);
             if (!HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method))
                 GatewaySecurity.RequireCsrf(context);
+            var sessionValid = GatewaySecurity.CaptureSessionValidator(context);
+            bool TagAllowed(string path, bool write)
+            {
+                if (!sessionValid() || !store.Can(actor, projectId, write ? "operate" : "view")) return false;
+                if (actor.GatewayAdmin) return true;
+                return store.CanReadProjectTag(projectId, path);
+            }
+            using var scriptAuthority = PythonExecutionAccess.Enter(audience == "operator"
+                ? new PythonExecutionAccess(path => TagAllowed(path, false), path => TagAllowed(path, true)) : null);
             // Do not cache authenticated assets or project data after sign-out.
             if (!policy.Audit) { await next(); return; }
             // Persist an attempt before allowing a side effect. A failed final append
@@ -149,10 +158,7 @@ public static class GatewayAccess
     public static bool CanReadTag(HttpContext context, SecurityStore security, string path)
     {
         if (!IsOperator(context) || Actor(context).GatewayAdmin) return true;
-        var scopes = security.Settings.ProjectTagPrefixes;
-        if (!scopes.TryGetValue(ProjectId(context), out var prefixes)) return false;
-        return prefixes.Any(prefix => prefix == "*" || (prefix.EndsWith('/')
-            ? path.StartsWith(prefix, StringComparison.Ordinal) : string.Equals(path, prefix, StringComparison.Ordinal)));
+        return security.CanReadProjectTag(ProjectId(context), path);
     }
 
     public static TagValue[] Tags(HttpContext context, SecurityStore security, TagValue[] values) =>

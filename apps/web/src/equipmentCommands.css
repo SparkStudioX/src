@@ -11,3 +11,6 @@
 .command-confirmation { width:min(540px,94vw); }
 .command-confirmation dl { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 @media(max-width:580px) { .command-fields { grid-template-columns:1fr; } }
+.equipment-command-compact { padding:0; gap:4px; font-size:12px; overflow:auto; }
+.equipment-command-compact > button { min-height:28px; padding:4px 8px; }
+.equipment-command-compact > p { margin:2px 0; }

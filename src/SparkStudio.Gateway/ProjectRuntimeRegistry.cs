@@ -10,6 +10,8 @@ public sealed class ProjectRuntimeRegistry(ProjectCatalog catalog, TagEngine tag
     private readonly object gate = new();
     private readonly Dictionary<string, ProjectRuntime> runtimes = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim lifecycle = new(1, 1);
+    private readonly Dictionary<string, string> startupFailures = new(StringComparer.Ordinal);
+    public IReadOnlyDictionary<string, string> StartupFailures { get { lock (gate) return new Dictionary<string, string>(startupFailures); } }
 
     public ProjectRuntime Get(string id)
     {
@@ -17,6 +19,7 @@ public sealed class ProjectRuntimeRegistry(ProjectCatalog catalog, TagEngine tag
         {
             var workspace = catalog.Get(id);
             if (runtimes.TryGetValue(id, out var existing)) return existing;
+            _ = workspace.Publication.Metadata();
             if (lifetime.ApplicationStopping.IsCancellationRequested) throw new InvalidOperationException("Gateway is stopping; new project runtimes cannot start.");
             var queries = new QueryExecutor(workspace.Store, connectors);
             var python = new PythonRunner(tags, queries, workspace.Scripts, configuration, recovery);
@@ -45,14 +48,23 @@ public sealed class ProjectRuntimeRegistry(ProjectCatalog catalog, TagEngine tag
             }));
             if (recovery?.Active != true) events.StartAsync(lifetime.ApplicationStopping).GetAwaiter().GetResult();
             runtimes.Add(id, runtime);
+            startupFailures.Remove(id);
             return runtime;
         }
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        foreach (var item in catalog.List().OfType<System.Text.Json.Nodes.JsonObject>())
-            Get(ProjectStore.Required(item, "id"));
+        foreach (var id in catalog.ActiveIds())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try { Get(id); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException or ArgumentException)
+            {
+                lock (gate) startupFailures[id] = "Project resources are unreadable; files were preserved for recovery.";
+                loggers.CreateLogger<ProjectRuntimeRegistry>().LogError("Project {ProjectId} could not start ({ErrorType}); other projects remain available.", id, error.GetType().Name);
+            }
+        }
         return Task.CompletedTask;
     }
 
@@ -74,7 +86,7 @@ public sealed class ProjectRuntimeRegistry(ProjectCatalog catalog, TagEngine tag
         try
         {
             var result = catalog.SetArchived(id, archived);
-            if (archived) await DeactivateAsync(id, CancellationToken.None);
+            if (archived) { await DeactivateAsync(id, CancellationToken.None); catalog.ReleaseArchived(id); }
             else Get(id);
             return result;
         }

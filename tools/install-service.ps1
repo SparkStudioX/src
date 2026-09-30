@@ -1,35 +1,36 @@
-# Run from the published directory in an elevated PowerShell session.
-[CmdletBinding()]
-param([string]$DataDirectory = "$env:ProgramData\SparkStudio", [ValidateRange(1, 65535)][int]$Port = 5090)
 #Requires -RunAsAdministrator
+# Run the copy in a published installation directory, from elevated PowerShell.
+[CmdletBinding()]
+param(
+    [ValidateRange(1024, 65535)][int]$Port = 5090,
+    [ValidateSet('local', 'network', 'keep')][string]$Access,
+    [ValidateRange(1024, 65535)][int]$HttpsPort = 5443,
+    [string]$Hostname,
+    [ValidateSet('provided', 'self-signed')][string]$CertificateMode = 'provided',
+    [string]$Certificate,
+    [string]$PrivateKey
+)
 $ErrorActionPreference = 'Stop'
-$exe = Join-Path $PSScriptRoot 'SparkStudio.Gateway.exe'
-if (!(Test-Path -LiteralPath $exe)) { throw 'Use the copy of this script in artifacts/windows-x64 after publishing.' }
-if (Get-Service -Name SparkStudio -ErrorAction SilentlyContinue) { throw 'SparkStudio service already exists. Stop and update it explicitly before reinstalling.' }
-# Fail before service registration when the development gateway already owns this port.
-$listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, $Port)
-try { $listener.Start() }
-catch { throw "Cannot listen on 127.0.0.1:$Port. Stop the existing gateway or choose another -Port before installing the service." }
-finally { $listener.Stop() }
-$data = [IO.Path]::GetFullPath($DataDirectory)
-New-Item -ItemType Directory -Force -Path $data | Out-Null
-$command = '"{0}" --contentRoot "{1}" --DataDirectory "{2}" --urls http://127.0.0.1:{3}' -f $exe, $PSScriptRoot, $data, $Port
-$created = $false
+$helper = Join-Path $PSScriptRoot 'SparkStudio.ServiceHelper.exe'
+if (!(Test-Path -LiteralPath $helper -PathType Leaf)) { throw 'Use the copy in the published Windows payload; the same service helper used by Setup is required.' }
+if (!$Access) { $Access = if (Get-Service SparkStudio -ErrorAction SilentlyContinue) { 'keep' } else { 'local' } }
+$options = @('--install-dir', $PSScriptRoot, '--port', $Port.ToString(), '--access', $Access, '--https-port', $HttpsPort.ToString(), '--certificate-mode', $CertificateMode)
+if ($Hostname) { $options += @('--hostname', $Hostname) }
+if ($Certificate) { $options += @('--certificate', $Certificate) }
+if ($PrivateKey) { $options += @('--private-key', $PrivateKey) }
+# The helper checks ownership, stops only the owned service, preserves its data,
+# applies the same ACL/listener policy as Setup and verifies bundled-Python health.
+& $helper --action preflight @options
+if ($LASTEXITCODE -ne 0) { throw 'Service preflight failed; no service was changed.' }
+& $helper --action prepare @options
+if ($LASTEXITCODE -ne 0) { throw 'The owned service could not be prepared.' }
 try {
-    & sc.exe create SparkStudio binPath= $command start= auto obj= 'NT AUTHORITY\LocalService' DisplayName= 'SparkStudio Gateway'
-    if ($LASTEXITCODE -ne 0) { throw 'Service creation failed.' }
-    $created = $true
-    & sc.exe sidtype SparkStudio unrestricted
-    if ($LASTEXITCODE -ne 0) { throw 'Could not enable the service identity.' }
-    & icacls.exe $data /grant 'NT SERVICE\SparkStudio:(OI)(CI)M'
-    if ($LASTEXITCODE -ne 0) { throw 'Could not grant gateway access to its data folder.' }
-    Start-Service SparkStudio
+    & $helper --action install @options
+    if ($LASTEXITCODE -ne 0) { throw 'Service installation or readiness failed; inspect the helper diagnostics.' }
 } catch {
-    if ($created) {
-        Stop-Service SparkStudio -ErrorAction SilentlyContinue
-        & sc.exe delete SparkStudio
-        if ($LASTEXITCODE -ne 0) { Write-Warning 'Installation failed and service cleanup was unsuccessful. Inspect the SparkStudio service before retrying.' }
-    }
+    & $helper --action resume @options
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'The service could not be resumed. Existing gateway data is retained.' }
     throw
 }
-Write-Host "SparkStudio service is running on http://127.0.0.1:$Port. Configure connections under the service account; do not copy user-encrypted development credentials."
+Write-Host "SparkStudio is ready at http://127.0.0.1:$Port. Gateway data: $env:ProgramData\SparkStudio."
+if ($Access -eq 'network') { Write-Host "Network URL: https://${Hostname}:$HttpsPort. Configure client trust and the intended firewall rule separately." }

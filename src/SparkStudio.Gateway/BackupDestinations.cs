@@ -12,7 +12,7 @@ using Microsoft.Win32.SafeHandles;
 namespace SparkStudio.Gateway;
 
 public sealed record BackupDestination(string Kind, string Address, string? Username = null, string? Password = null,
-    string? Domain = null, int TimeoutSeconds = 300)
+    string? Domain = null, int TimeoutSeconds = 300, bool AllowInsecureFtp = false)
 {
     // The temporary cleartext credential DTO must not acquire a secret-bearing generated ToString.
     public override string ToString() => "BackupDestination { credentials redacted }";
@@ -39,6 +39,7 @@ public static class BackupDestinations
     public static BackupDestination Validate(BackupDestination destination)
     {
         if (destination is null || destination.Kind is not ("smb" or "ftp" or "ftps")) throw new ArgumentException("Backup destination must be SMB, FTP or explicit FTPS.");
+        if (destination.Kind == "ftp" && !destination.AllowInsecureFtp) throw new ArgumentException("Plain FTP sends credentials without encryption. Choose FTPS, or explicitly acknowledge insecure FTP in backup settings.");
         if (destination.TimeoutSeconds is < 30 or > 3600) throw new ArgumentException("Backup destination timeout must be 30–3600 seconds.");
         if (string.IsNullOrWhiteSpace(destination.Address) || destination.Address.Length > 1000 || destination.Address.Any(c => char.IsControl(c)))
             throw new ArgumentException("An ordinary destination address is required.");

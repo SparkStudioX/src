@@ -56,6 +56,7 @@ export function inputAssignmentError(components: CanvasComponent[], fieldKey: st
 
 // Authors are trusted: browser event code has the page's privileges. The app
 // helpers restrict form effects, but are not a JavaScript security sandbox.
+// Promise timeouts revoke async helpers; they cannot interrupt synchronous code.
 export const executeInputEvent: InputEventExecutor = (script, event, inputs, parameters, app) => {
   requirePreviewScriptPermission();
   if (script.language !== "javascript") throw new Error("Python events require the gateway event transport.");

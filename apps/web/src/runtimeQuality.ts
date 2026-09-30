@@ -1,5 +1,5 @@
 import type { RuntimeParameters } from "./types";
-import { resolvePath } from "./api";
+import { resolvePath, tagByPath } from "./api";
 import { resolveInputs, stateInputError } from "./inputs";
 import { evaluateComponentBindings, evaluatePropertyBinding } from "./propertyBindings";
 import { resolveIndicatorState } from "./stateControls";
@@ -85,7 +85,7 @@ export function runtimeBindingHealth(
       const needsTag = !unknownTagPath && (component.type === "value" || component.type === "gauge" || Boolean(path));
       // Failed dynamic paths are deliberately empty. Never consult the authored
       // fallback: that could report another machine as healthy or simulated.
-      const tag = path && !unknownTagPath ? tags.find(item => item.path === (component.props.queryBindings?.tagPath ? path : resolvePath(path, context))) : undefined;
+      const tag = path && !unknownTagPath ? tagByPath(tags, component.props.queryBindings?.tagPath ? path : resolvePath(path, context)) : undefined;
       const precisionLimited = typeof tag?.value === "number" && Number.isInteger(tag.value) && !Number.isSafeInteger(tag.value);
       const stateUnavailable = !(unknownQueries && component.props.queryBindings?.stateValue) && component.type === "multiStateIndicator" && !resolveIndicatorState({
         ...resolved.component.props,

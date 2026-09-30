@@ -14,6 +14,8 @@ export interface RuntimeSessionTransport {
   open(identity: RuntimeSessionIdentity): Stream;
   unregister(identity: RuntimeSessionIdentity): Promise<unknown>;
   tags(values: unknown[]): void;
+  tagDelta?(value: unknown): void;
+  heartbeat?(): void;
   message(value: GatewaySessionMessage): void;
   status(connected: boolean, error?: string): void;
   schedule?(callback: () => void, delay: number): ReturnType<typeof setTimeout>;
@@ -106,9 +108,18 @@ export class RuntimeSessionConnection {
       });
       stream.addEventListener("tags", event => {
         if (!current() || !ready) return;
-        try { const values: unknown = JSON.parse(event.data); if (Array.isArray(values)) { heartbeat(); this.transport.tags(values); } }
-        catch { /* The polling fallback and next frame can recover tag samples. */ }
+        try {
+          const values: unknown = JSON.parse(event.data);
+          if (!Array.isArray(values)) throw new Error("Invalid gateway tag snapshot.");
+          this.transport.tags(values); heartbeat();
+        } catch (error) { fail(error); }
       });
+      stream.addEventListener("tags-delta", event => {
+        if (!current() || !ready) return;
+        try { this.transport.tagDelta?.(JSON.parse(event.data)); heartbeat(); }
+        catch (error) { fail(error); }
+      });
+      stream.addEventListener("heartbeat", () => { if (current() && ready) { heartbeat(); this.transport.heartbeat?.(); } });
       stream.addEventListener("message", event => {
         if (!current() || !ready) return;
         try { const message = gatewaySessionMessage(JSON.parse(event.data), identity); heartbeat(); this.transport.message(message); }

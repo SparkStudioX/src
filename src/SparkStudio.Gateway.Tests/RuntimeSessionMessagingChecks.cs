@@ -116,7 +116,7 @@ internal static class RuntimeSessionMessagingChecks
             using var connectors = new ConnectorService(directory);
             using var tags = new TagEngine(catalog.GatewayStore, connectors, NullLogger<TagEngine>.Instance);
             var queries = new QueryExecutor(workspace.Store, connectors);
-            var pythonPath = OperatingSystem.IsWindows() ? Path.GetFullPath("runtimes/python/windows-x64/python.exe") : "/usr/bin/python3";
+            var pythonPath = TestEnvironment.PythonExecutable();
             var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Python:Executable"] = pythonPath }).Build();
             var python = new PythonRunner(tags, queries, workspace.Scripts, config)
             {

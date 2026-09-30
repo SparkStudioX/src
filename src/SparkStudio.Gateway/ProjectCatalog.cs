@@ -69,6 +69,11 @@ public sealed class ProjectCatalog
                 .OrderBy(entry => entry.Id == DefaultId ? 0 : 1).ThenBy(entry => entry.CreatedAt, StringComparer.Ordinal)
                 .Select(entry => (JsonNode)DescribeCore(entry)).ToArray());
     }
+    public string[] ActiveIds() { lock (gate) return entries.Values.Where(entry => !entry.Archived).Select(entry => entry.Id).ToArray(); }
+    public void ReleaseArchived(string id)
+    {
+        lock (gate) if (entries.TryGetValue(id, out var entry) && entry.Archived) workspaces.Remove(id);
+    }
 
     public JsonObject Describe(string id, bool includeArchived = false)
     {
@@ -201,18 +206,28 @@ public sealed class ProjectCatalog
 
     private JsonObject DescribeCore(Entry entry)
     {
-        var workspace = Get(entry.Id, includeArchived: true);
-        var project = workspace.Store.GetProject();
-        var publication = workspace.Publication.Metadata();
-        var result = new JsonObject
+        try
         {
-            ["id"] = entry.Id, ["name"] = project["name"]!.DeepClone(), ["revision"] = project["revision"]!.DeepClone(),
-            ["archived"] = entry.Archived, ["createdAt"] = entry.CreatedAt, ["isDefault"] = entry.Id == DefaultId,
-            ["published"] = publication["published"]!.DeepClone()
-        };
-        if (publication["revision"] is { } revision) result["publishedRevision"] = revision.DeepClone();
-        if (publication["publishedAt"] is { } publishedAt) result["publishedAt"] = publishedAt.DeepClone();
-        return result;
+            var workspace = Get(entry.Id, includeArchived: true);
+            var project = workspace.Store.ProjectMetadata();
+            var publication = workspace.Publication.Metadata();
+            var result = new JsonObject
+            {
+                ["id"] = entry.Id, ["name"] = project["name"]!.DeepClone(), ["revision"] = project["revision"]!.DeepClone(),
+                ["archived"] = entry.Archived, ["createdAt"] = entry.CreatedAt, ["isDefault"] = entry.Id == DefaultId,
+                ["published"] = publication["published"]!.DeepClone()
+            };
+            if (publication["revision"] is { } revision) result["publishedRevision"] = revision.DeepClone();
+            if (publication["publishedAt"] is { } publishedAt) result["publishedAt"] = publishedAt.DeepClone();
+            return result;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException or ArgumentException)
+        {
+            return new() { ["id"] = entry.Id, ["name"] = entry.Id, ["revision"] = 0, ["archived"] = entry.Archived,
+                ["createdAt"] = entry.CreatedAt, ["isDefault"] = entry.Id == DefaultId, ["published"] = false,
+                ["available"] = false, ["error"] = "Project resources are unreadable. The stored files and catalog entry are preserved for recovery." };
+        }
+        finally { if (entry.Archived) workspaces.Remove(entry.Id); }
     }
 
     private static JsonObject BlankProject() => new()
@@ -381,7 +396,7 @@ public sealed class ProjectCatalog
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
-    private static void WriteJson(string path, JsonNode value) => File.WriteAllText(path, value.ToJsonString(ProjectStore.Json));
+    private static void WriteJson(string path, JsonNode value) => DurableJsonFile.Write(path, value, ProjectStore.Json);
     private static void RejectLink(string path)
     {
         if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)

@@ -7,4 +7,5 @@
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../SparkStudio.Connectors/SparkStudio.Connectors.csproj" /></ItemGroup>
   <ItemGroup><PackageReference Include="OPCFoundation.NetStandard.Opc.Ua.Server" Version="1.5.378.176" /></ItemGroup>
+  <ItemGroup><Compile Include="../../tools/fixtures/TestReport.cs" Link="TestReport.cs" /></ItemGroup>
 </Project>

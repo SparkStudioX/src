@@ -39,6 +39,12 @@ export function componentGeometry(component: CanvasComponent, context: BindingCo
   const resolved = preview ? evaluateComponentBindings(component, context).component : component;
   return { left: resolved.x, top: resolved.y, width: resolved.width, height: resolved.height };
 }
+const tagIndexes = new WeakMap<Tag[], Map<string, Tag>>();
+function tagByPath(tags: Tag[], path: string) {
+  let index = tagIndexes.get(tags);
+  if (!index) { index = new Map(tags.map(tag => [tag.path, tag])); tagIndexes.set(tags, index); }
+  return index.get(path);
+}
 const reserved = new Set(["__proto__", "constructor", "prototype", "true", "false", "null"]);
 const identifier = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 const own = (value: object, key: string) => Object.prototype.hasOwnProperty.call(value, key);
@@ -283,7 +289,7 @@ function resolveReference(ref: BindingReference, component: CanvasComponent, con
   }
   if (context.communicationLost) return fail("Gateway connection is offline.");
   const path = resolveTagAddress(ref.path, context.parameters);
-  const tag = context.tags.find(item => item.path === path);
+  const tag = tagByPath(context.tags, path);
   if (!tag) return fail(`Tag '${path}' was not found.`);
   if (!/^good(?:$|[_ (])/i.test(tag.quality)) return fail(`Tag '${path}' quality is ${tag.quality || "unknown"}.`);
   return { value: scalar(tag.value), ...(tag.source === "simulated" ? { simulated: true as const } : {}) };

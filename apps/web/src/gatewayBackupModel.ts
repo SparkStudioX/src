@@ -1,7 +1,7 @@
 export type BackupDestinationKind = "smb" | "ftp" | "ftps";
 export interface BackupConfiguration {
   enabled: boolean; dailyTime: string; timeZoneId: string; retentionDays: number;
-  destination: { kind: BackupDestinationKind; address: string; username: string; domain: string; timeoutSeconds: number };
+  destination: { kind: BackupDestinationKind; address: string; username: string; domain: string; timeoutSeconds: number; allowInsecureFtp?: boolean };
 }
 export interface BackupStatus {
   revision: string; saved: BackupConfiguration; hasDestinationPassword: boolean; hasArchivePassphrase: boolean;
@@ -12,7 +12,7 @@ export interface BackupStatus {
 export interface BackupDraft {
   enabled: boolean; dailyTime: string; timeZoneId: string; retentionDays: number;
   kind: BackupDestinationKind; sharePath: string; ftpHost: string; ftpPort: number; ftpFolder: string;
-  username: string; domain: string; timeoutSeconds: number;
+  username: string; domain: string; timeoutSeconds: number; allowInsecureFtp: boolean;
 }
 export interface BackupSecretEdits {
   replaceDestinationPassword: boolean; destinationPassword: string; clearDestinationPassword: boolean;
@@ -31,10 +31,12 @@ export function backupDraftFromSaved(saved: BackupConfiguration, gatewayTimeZone
     retentionDays: saved.retentionDays, kind: saved.destination.kind,
     sharePath: saved.destination.kind === "smb" ? saved.destination.address : "", ftpHost, ftpPort, ftpFolder,
     username: saved.destination.username || "", domain: saved.destination.domain || "", timeoutSeconds: saved.destination.timeoutSeconds,
+    allowInsecureFtp: saved.destination.allowInsecureFtp === true,
   };
 }
 
 export function backupSettingsRequest(revision: string, draft: BackupDraft, secrets: BackupSecretEdits) {
+  if (draft.kind === "ftp" && !draft.allowInsecureFtp) throw new Error("Choose FTPS or explicitly acknowledge that FTP sends credentials without encryption.");
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(draft.dailyTime)) throw new Error("Choose a daily time in HH:mm format.");
   if (!draft.timeZoneId.trim()) throw new Error("Enter a gateway-supported time zone ID.");
   if (!Number.isInteger(draft.retentionDays) || draft.retentionDays < 1 || draft.retentionDays > 3650) throw new Error("Keep backups for a whole number of days from 1 to 3650.");
@@ -60,7 +62,7 @@ export function backupSettingsRequest(revision: string, draft: BackupDraft, secr
   if (draft.enabled && !address) throw new Error("Configure a destination before enabling daily backups.");
   const settings: BackupConfiguration = {
     enabled: draft.enabled, dailyTime: draft.dailyTime, timeZoneId: draft.timeZoneId.trim(), retentionDays: draft.retentionDays,
-    destination: { kind: draft.kind, address, username: draft.username.trim(), domain: draft.kind === "smb" ? draft.domain.trim() : "", timeoutSeconds: draft.timeoutSeconds },
+    destination: { kind: draft.kind, address, username: draft.username.trim(), domain: draft.kind === "smb" ? draft.domain.trim() : "", timeoutSeconds: draft.timeoutSeconds, allowInsecureFtp: draft.kind === "ftp" && draft.allowInsecureFtp },
   };
   const request: { revision: string; settings: BackupConfiguration; destinationPassword?: string; archivePassphrase?: string; clearDestinationPassword?: boolean } = { revision, settings };
   if (secrets.clearDestinationPassword) request.clearDestinationPassword = true;

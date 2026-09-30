@@ -11,6 +11,8 @@ const dataTypes = [
   "Int16",
   "Int32",
   "Int64",
+  "UInt16",
+  "UInt32",
   "Float",
   "Double",
   "String",
@@ -136,6 +138,7 @@ export default function Tags({
         throw new Error(
           "The publishing interval must be between 100 and 60,000 milliseconds.",
         );
+      if (current.kind === "opcua" && (!Number.isFinite(current.absoluteDeadband ?? 0) || (current.absoluteDeadband ?? 0) < 0 || !Number.isInteger(current.queueSize ?? 16) || (current.queueSize ?? 16) < 1 || (current.queueSize ?? 16) > 1000)) throw new Error("OPC UA deadband must be nonnegative; monitored queue size must be 1–1,000.");
       const next: TagDefinition = {
         ...current,
         kind: current.kind || "opcua",
@@ -159,9 +162,9 @@ export default function Tags({
           throw new Error(
             `The initial value must match the ${next.dataType} data type.`,
           );
-        if (next.dataType.startsWith("Int") && !Number.isInteger(value))
+        if (/^(?:U?Int)/.test(next.dataType) && !Number.isInteger(value))
           throw new Error("Integer tags require a whole-number value.");
-        if (next.dataType.startsWith("Int") && Number.isInteger(value) && !Number.isSafeInteger(value))
+        if (/^(?:U?Int)/.test(next.dataType) && Number.isInteger(value) && !Number.isSafeInteger(value))
           throw new Error("This integer exceeds the browser’s exact-number range. Use a value between −9,007,199,254,740,991 and 9,007,199,254,740,991.");
         next.value = value;
         delete next.connectionId;
@@ -539,6 +542,10 @@ export default function Tags({
                     </Field>
                   </>
                 )}
+                {(!current.kind || current.kind === "opcua") && <>
+                  <Field label="Absolute deadband" hint="Server-side numeric change threshold. Zero reports every change; quality changes remain visible."><input type="number" min={0} step="any" value={current.absoluteDeadband ?? 0} onChange={event => edit({ absoluteDeadband: Number(event.target.value) })} /></Field>
+                  <Field label="Monitored queue size" hint="1–1,000 server samples; oldest samples are discarded on overflow."><input type="number" min={1} max={1000} step={1} value={current.queueSize ?? 16} onChange={event => edit({ queueSize: Number(event.target.value) })} /></Field>
+                </>}
                 <Field label="Scan group" hint="Choose a shared timing/availability group, or use an individual interval.">
                   <select value={current.scanGroup || ""} onChange={event => edit({ scanGroup: event.target.value || undefined })}>
                     <option value="">Individual timing</option>{scanGroups.map(group => <option key={group.name} value={group.name}>{group.name} · {group.publishingIntervalMs} ms{group.enabled === false ? " · disabled" : ""}</option>)}

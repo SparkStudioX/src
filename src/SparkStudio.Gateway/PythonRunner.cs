@@ -36,6 +36,7 @@ sys.stdout.flush()
         if (code.Length > 65_536) throw new ArgumentException("Python source is limited to 65,536 characters.");
         if (Executable is null) throw new InvalidOperationException("Python syntax validation is unavailable because the Python runtime is not installed.");
         cancellation.ThrowIfCancellationRequested();
+        using var processSlot = PythonProcessAdmission.Acquire(cancellation);
         if (!await SyntaxSlots.WaitAsync(0, cancellation)) throw new BadHttpRequestException("Python syntax validation is busy. Try again shortly.", 429);
         Process? process = null;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
@@ -109,6 +110,8 @@ sys.stdout.flush()
         if (timeoutMs is < 100 or > 300000) throw new ArgumentException("Script timeout must be between 100 and 300000 milliseconds.");
         if (code.Length > 65536) throw new ArgumentException("Scripts are limited to 64 KB.");
         if (Executable is null) throw new InvalidOperationException("Python runtime is not installed. Run tools/bootstrap.ps1.");
+        using var processSlot = PythonProcessAdmission.Acquire(cancellation);
+        var authority = PythonExecutionAccess.Current;
         uiContext?.CaptureInputs(inputs);
         var worker = Path.Combine(AppContext.BaseDirectory, "python", "worker.py");
         var info = new ProcessStartInfo(Executable) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, WorkingDirectory = Path.GetDirectoryName(worker)! };
@@ -145,8 +148,8 @@ sys.stdout.flush()
                     timeout.Token.ThrowIfCancellationRequested();
                     object? value = method switch
                     {
-                        "tag.read" => tags.Read(args["paths"]!.Deserialize<string[]>()!, args["parameters"]?.Deserialize<Dictionary<string, JsonElement>>() ?? parameters),
-                        "tag.write" => tags.WriteMemory(args["paths"]!.Deserialize<string[]>()!, args["values"]!.Deserialize<JsonElement[]>()!),
+                        "tag.read" => ReadTags(args, parameters, authority),
+                        "tag.write" => WriteTags(args, authority),
                         "db.query" => queryDefinitions is null
                             ? await queries.ExecuteScriptAsync(args["name"]!.GetValue<string>(), args["parameters"]?.Deserialize<Dictionary<string, JsonElement>>(), timeout.Token)
                             : await queries.ExecuteScriptDefinitionAsync(queryDefinitions.OfType<JsonObject>().FirstOrDefault(query => ProjectStore.Optional(query, "id") == args["name"]!.GetValue<string>())
@@ -183,6 +186,22 @@ sys.stdout.flush()
             try { await stderr; } catch (OperationCanceledException) { }
         }
     }
+    private TagValue[] ReadTags(JsonObject args, Dictionary<string, JsonElement>? parameters, PythonExecutionAccess? authority)
+    {
+        var paths = args["paths"]!.Deserialize<string[]>()!;
+        var substitutions = args["parameters"]?.Deserialize<Dictionary<string, JsonElement>>() ?? parameters;
+        var resolved = paths.Select(path => TagEngine.Resolve(path, substitutions)).ToArray();
+        authority?.RequireTags(resolved, false);
+        return tags.Read(resolved, null);
+    }
+
+    private object WriteTags(JsonObject args, PythonExecutionAccess? authority)
+    {
+        var paths = args["paths"]!.Deserialize<string[]>()!;
+        authority?.RequireTags(paths, true);
+        return tags.WriteMemory(paths, args["values"]!.Deserialize<JsonElement[]>()!);
+    }
+
     private async Task<JsonObject> DispatchMessage(JsonObject args, bool oneWay, JsonObject? context, string[]? chain, CancellationToken cancellation)
     {
         if (MessageDispatch is null) throw new InvalidOperationException("Gateway messaging is unavailable in this execution context.");

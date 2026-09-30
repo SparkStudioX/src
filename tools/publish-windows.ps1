@@ -3,6 +3,8 @@ param([switch]$SkipBuild, [string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Split-Path $PSScriptRoot -Parent))
 $gitRoot = $root.Replace('\', '/')
+& node (Join-Path $PSScriptRoot 'version.mjs')
+if ($LASTEXITCODE -ne 0) { throw 'Release versions are inconsistent.' }
 
 function Get-CleanSourceCommit {
     $commit = & git -c "safe.directory=$gitRoot" -C $root rev-parse HEAD
@@ -83,10 +85,15 @@ Push-Location $root
 try {
     & $dotnet publish src/SparkStudio.Gateway -c Release -r win-x64 --self-contained true -o $output --configfile NuGet.Config -p:NuGetLockFilePath=packages.win-x64.lock.json -p:RestoreLockedMode=true "-p:SourceRevisionId=$sourceCommit"
     if ($LASTEXITCODE -ne 0) { throw 'Windows publish failed. Its incomplete directory is preserved; choose a fresh output for the next attempt.' }
+    $helperOutput = Join-Path $root ('.data\publish-service-helper-' + [guid]::NewGuid().ToString('N'))
+    & $dotnet publish installer/ServiceHelper/ServiceHelper.csproj -c Release -r win-x64 --self-contained true -o $helperOutput --configfile NuGet.Config -p:NuGetLockFilePath=packages.win-x64.lock.json -p:RestoreLockedMode=true "-p:Version=$version" "-p:FileVersion=$fileVersion" "-p:SourceRevisionId=$sourceCommit"
+    if ($LASTEXITCODE -ne 0) { throw 'Shared Windows service helper build failed.' }
+    Copy-Item -LiteralPath (Join-Path $helperOutput 'SparkStudio.ServiceHelper.exe') -Destination $output
     $runtime = Join-Path $output 'runtimes\python\windows-x64'
     New-Item -ItemType Directory -Path $runtime -Force | Out-Null
     Copy-Item -Path (Join-Path $pythonSource '*') -Destination $runtime -Recurse
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install-service.ps1') -Destination $output
+    Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $output 'SparkStudio-LICENSE.txt')
     if ((Get-CleanSourceCommit) -ne $sourceCommit) { throw 'Source changed during publishing; this package cannot be released.' }
     $assembly = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $output 'SparkStudio.Gateway.dll'))
     if ($assembly.FileVersion -ne $fileVersion -or !$assembly.ProductVersion.StartsWith($version + '+') -or !$assembly.ProductVersion.Contains($sourceCommit)) { throw 'Gateway assembly version/provenance does not match this source build.' }

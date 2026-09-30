@@ -14,13 +14,15 @@ public sealed partial class ConnectorService
     /// </summary>
     public async Task WatchAsync(ConnectionDefinition connection, IReadOnlyList<string> nodeIds,
         int publishingIntervalMs, Action<IReadOnlyList<ConnectorValue>> onValues,
-        Action<string> onStatus, CancellationToken ct)
+        Action<string> onStatus, CancellationToken ct, IReadOnlyDictionary<string, OpcMonitorSettings>? settings = null)
     {
         _ensureOperationsAllowed?.Invoke();
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         ArgumentNullException.ThrowIfNull(onValues);
         ArgumentNullException.ThrowIfNull(onStatus);
         var requests = ValidateWatch(connection, nodeIds, publishingIntervalMs);
+        if (settings is not null && settings.Values.Any(value => !double.IsFinite(value.AbsoluteDeadband) || value.AbsoluteDeadband < 0 || value.QueueSize is < 1 or > 1000))
+            throw new ArgumentException("OPC UA deadband must be finite and nonnegative; monitored queues support 1–1000 values.");
         using var stopping = CancellationTokenSource.CreateLinkedTokenSource(ct, _watchStopping);
         var failedAttempts = 0;
         string? previousStatus = null;
@@ -40,7 +42,7 @@ public sealed partial class ConnectorService
                 {
                     await WatchSessionAsync(connection, requests, publishingIntervalMs,
                         values => InvokeWatchCallback(() => onValues(values)),
-                        () => { connectedFor.Start(); Status("Connected"); }, stopping.Token);
+                        () => { connectedFor.Start(); Status("Connected"); }, stopping.Token, settings);
                 }
                 catch (OperationCanceledException) when (stopping.IsCancellationRequested) { break; }
                 catch (Exception error) when (error is ServiceResultException or IOException or SocketException or TimeoutException or OperationCanceledException or InvalidOperationException)
@@ -90,7 +92,7 @@ public sealed partial class ConnectorService
     }
 
     private async Task WatchSessionAsync(ConnectionDefinition connection, ReadValueIdCollection requests,
-        int interval, Action<IReadOnlyList<ConnectorValue>> onValues, Action onConnected, CancellationToken ct)
+        int interval, Action<IReadOnlyList<ConnectorValue>> onValues, Action onConnected, CancellationToken ct, IReadOnlyDictionary<string, OpcMonitorSettings>? settings)
     {
         ISession? session = null;
         Subscription? subscription = null;
@@ -123,10 +125,13 @@ public sealed partial class ConnectorService
             foreach (var request in requests)
             {
                 var nodeId = (string)request.Handle;
+                var options = settings?.GetValueOrDefault(nodeId) ?? new OpcMonitorSettings();
                 var item = new MonitoredItem(subscription.DefaultItem)
                 {
                     StartNodeId = request.NodeId, AttributeId = Attributes.Value, DisplayName = nodeId,
-                    SamplingInterval = interval, QueueSize = 1, DiscardOldest = true, MonitoringMode = MonitoringMode.Reporting
+                    SamplingInterval = interval, QueueSize = options.QueueSize, DiscardOldest = true, MonitoringMode = MonitoringMode.Reporting,
+                    Filter = options.AbsoluteDeadband > 0 ? new DataChangeFilter { Trigger = DataChangeTrigger.StatusValue,
+                        DeadbandType = (uint)DeadbandType.Absolute, DeadbandValue = options.AbsoluteDeadband } : null
                 };
                 item.Notification += (monitored, _) =>
                 {

@@ -8,6 +8,9 @@ public sealed partial class PublicationStore
 {
     private const int MaximumRecordBytes = 16 * 1024 * 1024;
     private const int MaximumPublicationBytes = 32 * 1024 * 1024;
+    private JsonObject? validatedHistoryPublication;
+    private WeakReference<JsonObject[]>? validatedHistoryRecords;
+    public long HistoryValidationCount { get; private set; }
     private const string LegacyMigrationWarning = "A legacy publication exceeded the 16 MiB history limit and could not be retained when it was replaced. That legacy version is not available for rollback from this history.";
     private sealed class OversizedPublicationRecordException() : ArgumentException("A publication history snapshot exceeds the 16 MiB limit. Reduce project or query resources before publishing.");
     private static JsonObject BareSnapshot(JsonObject snapshot)
@@ -33,10 +36,16 @@ public sealed partial class PublicationStore
     }
     private JsonObject[] HistoryRecords()
     {
-        if (publication?["history"] is null) return [];
-        if (publication["history"] is not JsonArray records || records.Count > 20) throw new InvalidOperationException("Invalid publication history.");
+        if (publication is not null && ReferenceEquals(validatedHistoryPublication, publication) && validatedHistoryRecords?.TryGetTarget(out var cached) == true) return cached;
+        if (!hasPersistedHistory) return [];
+        if (new FileInfo(path).Length > MaximumPublicationBytes) throw new InvalidOperationException("The publication history exceeds its file-size limit.");
+        var stored = JsonNode.Parse(File.ReadAllText(path))?.AsObject();
+        if (stored?["history"] is not JsonArray records || records.Count > 20) throw new InvalidOperationException("Invalid publication history.");
         var result = records.Select(item => item as JsonObject ?? throw new InvalidOperationException("Invalid publication history entry.")).ToArray();
         foreach (var record in result) ValidateRecord(record);
+        validatedHistoryPublication = publication;
+        validatedHistoryRecords = new(result);
+        HistoryValidationCount++;
         return result;
     }
     public JsonObject History()
@@ -45,7 +54,7 @@ public sealed partial class PublicationStore
         {
             var records = HistoryRecords();
             var warnings = HistoryWarnings();
-            if (publication is not null && !publication.ContainsKey("history"))
+            if (publication is not null && !hasPersistedHistory)
             {
                 try { MakeRecord(publication); }
                 catch (OversizedPublicationRecordException)
@@ -83,7 +92,7 @@ public sealed partial class PublicationStore
         if (publication is not null && !records.Any(item => item["snapshot"]?["publishedAt"]?.GetValue<string>() == publication["publishedAt"]?.GetValue<string>()))
         {
             try { records.Insert(0, MakeRecord(publication)); }
-            catch (OversizedPublicationRecordException) when (!publication.ContainsKey("history"))
+            catch (OversizedPublicationRecordException) when (!hasPersistedHistory)
             {
                 // Pre-feature applications had no history-size admission limit.
                 // Do not make an oversized old version impossible to replace.
@@ -111,9 +120,11 @@ public sealed partial class PublicationStore
             staged.Flush(flushToDisk: true);
         }
         File.Move(path + ".tmp", path, true);
+        hasPersistedHistory = next.Remove("history");
         publication = next;
+        validatedHistoryPublication = null; validatedHistoryRecords = null;
     }
-    public JsonObject Rollback(string id, string expectedPublishedAt, bool acknowledgeLegacy = false)
+    public JsonObject Rollback(string id, string expectedPublishedAt, bool acknowledgeLegacy = false, bool allowExecutableChanges = true)
     {
         JsonObject result;
         lock (gate)
@@ -136,6 +147,7 @@ public sealed partial class PublicationStore
             ValidateScreens(snapshot["project"]!.AsObject());
             ComponentQueryBindingValidator.ValidateQueries(snapshot["project"]!.AsObject(), snapshot["queries"]!.AsArray());
             snapshot["publishedAt"] = DateTimeOffset.UtcNow.ToString("O");
+            ExecutablePublication.RequireAllowed(publication, snapshot, allowExecutableChanges);
             CommitWithHistory(snapshot);
             result = Metadata();
         }

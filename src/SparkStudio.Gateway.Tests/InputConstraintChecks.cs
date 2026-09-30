@@ -40,7 +40,7 @@ internal static class InputConstraintChecks
             var stamp = publication["publishedAt"]!.GetValue<string>();
             var captured = workspace.Publication.GetAction("main", "save", stamp);
             Check(captured["inputs"]![0]!["validation"]!["required"]!.GetValue<bool>() && captured["inputs"]![0]!["formatMask"]!.GetValue<string>() == "AA-####", "published actions capture input rules");
-            var python = OperatingSystem.IsWindows() ? Path.GetFullPath("runtimes/python/windows-x64/python.exe") : "/usr/bin/python3";
+            var python = TestEnvironment.PythonExecutable();
             using var connectors = new ConnectorService(directory);
             using var tags = new TagEngine(catalog.GatewayStore, connectors, NullLogger<TagEngine>.Instance);
             var queries = new QueryExecutor(workspace.Store, connectors);

@@ -97,7 +97,7 @@ internal static class SqliteIntegration
                 command.ExecuteNonQuery();
                 var timer = Stopwatch.StartNew();
                 await Reject(() => service.ExecuteAsync(connection, "UPDATE production_records SET quantity=quantity+1 WHERE id=1", [], default), "locked database update stops within timeout");
-                check(timer.Elapsed < TimeSpan.FromSeconds(3), "SQLite lock wait is bounded to approximately one second");
+                check(timer.Elapsed >= TimeSpan.FromSeconds(4) && timer.Elapsed < TimeSpan.FromSeconds(8), "SQLite writer contention waits approximately five seconds, then fails within a bounded deadline");
                 transaction.Rollback();
             }
             var empty = connection with { Database = "empty.sqlite" };

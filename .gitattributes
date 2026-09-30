@@ -1,4 +1,7 @@
-* text=auto
-*.sh text eol=lf
-.githooks/* text eol=lf
-*.png binary
+* text=auto eol=lf
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.gif -text
+*.ico -text
+*.woff2 -text

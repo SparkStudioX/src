@@ -16,7 +16,18 @@ For the **offline full backup command**, stop the service, gateway process, Pyth
 
 The v1 archive format is bounded to 10,000 files, 8 GiB total content, 2 GiB per file and an 8 MiB manifest; online capture has the smaller limits above. It rejects links, duplicate/colliding paths, traversal, unknown format versions, missing/truncated records and failed authentication or file digests. The offline backup command writes no plaintext staging archive. Restore creates private staging, verifies the entire snapshot and installs it with a same-filesystem directory rename into a **new, previously nonexistent** destination. A failed restore leaves the original data directory untouched. Keep the source directory until the restored gateway has been verified.
 
-Archive format validation does not establish application-version compatibility. Use the same companion gateway build for backup and restoration; there is no cross-version migration or downgrade contract yet. A later build can use a different data schema even when its archive format is unchanged. Keep the original directory and matching binaries until verification succeeds.
+Archive format validation does not establish application-version compatibility. Use the same companion gateway build for backup and restoration. Gateway startup now records data format version 2 in `gateway-format.json` and supports the specific legacy version-1 tag migration below; that is not a general downgrade or arbitrary cross-version restore contract. Keep the original directory and matching binaries until verification succeeds.
+
+At startup, while holding the data-directory lease, an unmarked directory is
+treated as version 1. A legacy flat `tags.json` array becomes the version-2 tag
+model. Before replacement, its original bytes and a SHA-256 receipt are saved
+under `migration-backups/format-2/`. The transformation and version marker use
+durable atomic file replacement and can resume after interruption between those
+steps. Reopening version 2 does not repeat the transformation. A newer unknown
+format is rejected before normal stores open, rather than being rewritten by an
+older reader. Preserve a full pre-upgrade backup for rollback; do not lower the
+version marker manually. Online configuration backups include the format marker
+and alarm/history rule configuration, but not recorded process samples.
 
 Daily scheduled configuration copies, manual configuration backups and managed remote retention are available now. Live database quiescence, automatic service switching, gateway replication/failover, and an atomic release combining project and script publication remain open G03 work.
 

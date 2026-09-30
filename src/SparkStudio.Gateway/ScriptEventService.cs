@@ -24,6 +24,8 @@ public sealed class ScriptEventService : BackgroundService
     private bool journalAvailable = true;
     private Generation? active;
     private string? journalError;
+    private readonly Dictionary<string, JsonObject> journalPending = new(StringComparer.Ordinal);
+    private Task journalWriter = Task.CompletedTask;
     public string MessageScope { get; set; }
 
     private sealed class ExecutionLease { public readonly SemaphoreSlim Semaphore = new(1, 1); public int Users; }
@@ -37,13 +39,14 @@ public sealed class ScriptEventService : BackgroundService
         public Lane Lane = null!;
         public long Executions;
         public long Missed;
+        public long DroppedTagNotifications;
     }
     private sealed class Lane
     {
         public readonly Channel<Work> Queue = Channel.CreateBounded<Work>(new BoundedChannelOptions(QueueCapacity)
         { SingleReader = true, FullMode = BoundedChannelFullMode.Wait, AllowSynchronousContinuations = false });
     }
-    private sealed record TagNotice(TagValue? Previous, TagValue Current);
+    private sealed record TagNotice(TagValue? Previous, TagValue Current, Resource[] Recipients);
     private sealed class Generation(JsonObject? snapshot, CancellationToken stopping)
     {
         public readonly JsonObject? Snapshot = snapshot;
@@ -58,13 +61,12 @@ public sealed class ScriptEventService : BackgroundService
         { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
         public readonly Channel<TagNotice> Tags = Channel.CreateBounded<TagNotice>(new BoundedChannelOptions(256)
         { SingleReader = true, FullMode = BoundedChannelFullMode.Wait, AllowSynchronousContinuations = false });
-        public long DroppedTags;
         public Action<TagValue?, TagValue>? TagHandler;
         public volatile bool Accepting;
     }
     private sealed record Work(Resource Resource, JsonObject Context, Dictionary<string, JsonElement> Parameters,
         string Source, string Trigger, int Revision, IReadOnlyDictionary<string, string> Libraries,
-        CancellationToken Caller, string[] Chain, bool WaitForLease, TaskCompletionSource<JsonObject> Completion, JsonArray? Queries);
+        CancellationToken Caller, string[] Chain, bool WaitForLease, TaskCompletionSource<JsonObject> Completion, JsonArray? Queries, PythonExecutionAccess? Access);
 
     public ScriptEventService(ScriptResourceStore store, PythonRunner python, ILogger<ScriptEventService> logger, TagEngine tags)
     {
@@ -203,6 +205,7 @@ public sealed class ScriptEventService : BackgroundService
     }
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        using var automaticAccess = PythonExecutionAccess.Enter(null);
         using var stopping = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, lifetime.Token);
         store.Published += OnPublished; store.Updated += OnUpdated;
         publications.Writer.TryWrite(true);
@@ -235,6 +238,8 @@ public sealed class ScriptEventService : BackgroundService
             Task[] manual;
             lock (gate) manual = activeRuns.Values.Select(run => run.Done.Task).ToArray();
             await Task.WhenAll(manual);
+            Task writer; lock (gate) writer = journalWriter;
+            await writer;
         }
     }
     private async Task ActivateAsync(JsonObject? snapshot, CancellationToken cancellation)
@@ -269,10 +274,15 @@ public sealed class ScriptEventService : BackgroundService
             generation.Accepting = true;
             if (generation.Resources.Values.Any(item => item.Event == "tagChange"))
             {
-                // This callback runs under the tag-engine lock: it must only enqueue.
+                var tagResources = generation.Resources.Values.Where(item => item.Event == "tagChange").ToArray();
+                // Tag delivery is serialized outside the engine state monitor;
+                // callbacks must still enqueue promptly for other consumers.
                 generation.TagHandler = (previous, current) =>
                 {
-                    if (generation.Accepting && !generation.Tags.Writer.TryWrite(new(previous, current))) Interlocked.Increment(ref generation.DroppedTags);
+                    if (!generation.Accepting) return;
+                    var recipients = tagResources.Where(item => MatchesTag(item, current.Path)).ToArray();
+                    if (recipients.Length > 0 && !generation.Tags.Writer.TryWrite(new(previous, current, recipients)))
+                        foreach (var recipient in recipients) Interlocked.Increment(ref recipient.DroppedTagNotifications);
                 };
                 generation.Tasks.Add(ConsumeTagsAsync(generation, tags.SubscribeWithSnapshot(generation.TagHandler)));
             }
@@ -325,6 +335,7 @@ public sealed class ScriptEventService : BackgroundService
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(generation.Cancellation.Token, work.Caller);
                 try
                 {
+                    using var access = PythonExecutionAccess.Enter(work.Access);
                     linked.Token.ThrowIfCancellationRequested();
                     var result = await RunCoreAsync(generation, work.Resource, work.Revision, work.Source, work.Trigger, work.Parameters,
                         work.Libraries, work.Context, linked.Token, work.Chain, work.WaitForLease, work.Queries);
@@ -350,7 +361,7 @@ public sealed class ScriptEventService : BackgroundService
     {
         generation.Cancellation.Token.ThrowIfCancellationRequested(); caller.ThrowIfCancellationRequested();
         var completion = new TaskCompletionSource<JsonObject>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var work = new Work(resource, context, parameters, source, trigger, revision, libraries, caller, chain.ToArray(), waitForLease, completion, queryDefinitions);
+        var work = new Work(resource, context, parameters, source, trigger, revision, libraries, caller, chain.ToArray(), waitForLease, completion, queryDefinitions, PythonExecutionAccess.Current);
         lock (gate)
         {
             if (!resource.Lane.Queue.Writer.TryWrite(work))
@@ -400,6 +411,13 @@ public sealed class ScriptEventService : BackgroundService
                 else await Task.Delay(TimeSpan.FromMilliseconds(fixedRate ? Math.Max(0, nextTick - clock.ElapsedMilliseconds) : interval), cancellation);
                 var context = Context(resource.Event); context["scheduledAt"] = due.ToString("O");
                 await EnqueueAutomatic(generation, resource, context);
+                if (resource.Event == "scheduled")
+                {
+                    var after = DateTimeOffset.UtcNow; var cursor = due; long skipped = 0;
+                    while (ScriptCron.Next(ProjectStore.Required(resource.Definition, "cron"), ProjectStore.Optional(resource.Definition, "timeZone") ?? "local", cursor) is { } occurrence && occurrence <= after)
+                    { skipped++; cursor = occurrence; }
+                    if (skipped > 0) lock (gate) Missed(resource, skipped);
+                }
                 if (fixedRate)
                 {
                     var following = nextTick + interval;
@@ -455,10 +473,12 @@ public sealed class ScriptEventService : BackgroundService
                 foreach (var resource in resources.Where(item => MatchesTag(item, value.Path))) QueueTag(generation, resource, null, value, true);
             await foreach (var notice in generation.Tags.Reader.ReadAllAsync(generation.Cancellation.Token))
             {
-                var dropped = Interlocked.Exchange(ref generation.DroppedTags, 0);
-                if (dropped > 0) lock (gate) foreach (var resource in resources) Missed(resource, dropped);
-                foreach (var resource in resources.Where(item => MatchesTag(item, notice.Current.Path)))
+                foreach (var resource in notice.Recipients)
+                {
+                    var dropped = Interlocked.Exchange(ref resource.DroppedTagNotifications, 0);
+                    if (dropped > 0) lock (gate) Missed(resource, dropped);
                     QueueTag(generation, resource, notice.Previous, notice.Current, false);
+                }
             }
         }
         catch (OperationCanceledException) when (generation.Cancellation.IsCancellationRequested) { }
@@ -528,7 +548,7 @@ public sealed class ScriptEventService : BackgroundService
                     state["running"] = true; state["nextRunAt"] = null; state["currentRunId"] = runId;
                     state["lastRunAt"] = entry["startedAt"]!.DeepClone(); state["executionCount"] = resource.Executions;
                 }
-                PersistLogs();
+                PersistLog(entry);
             }
             try
             {
@@ -580,15 +600,37 @@ public sealed class ScriptEventService : BackgroundService
                 if (value.ToJsonString().Length <= 8192) entry["result"] = value.DeepClone(); else entry["resultTruncated"] = true;
             }
             if (states.TryGetValue(entry["resourceId"]!.GetValue<string>(), out var state)) state["lastSuccess"] = entry["success"]!.DeepClone();
-            PersistLogs();
+            PersistLog(entry);
         }
     }
-    private void PersistLogs()
+    private void PersistLog(JsonObject entry)
     {
         if (!journalAvailable) return;
-        try { journal.Save(logs); journalError = null; }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
-        { journalError = "Execution history could not be persisted. Check project storage."; logger.LogError(error, "Could not persist script execution history"); }
+        journalPending[entry["runId"]!.GetValue<string>()] = entry.DeepClone().AsObject();
+        var retained = logs.Select(item => item["runId"]!.GetValue<string>()).ToHashSet(StringComparer.Ordinal);
+        foreach (var id in journalPending.Keys.Where(id => !retained.Contains(id)).ToArray()) journalPending.Remove(id);
+        if (journalWriter.IsCompleted) journalWriter = Task.Run(WriteJournalAsync);
+    }
+    private async Task WriteJournalAsync()
+    {
+        // Coalesce transitions for 250 ms. Filesystem flushes never own the scheduler lock.
+        await Task.Delay(250);
+        while (true)
+        {
+            JsonObject[] entries;
+            lock (gate)
+            {
+                entries = journalPending.Values.ToArray(); journalPending.Clear();
+                if (entries.Length == 0) { journalWriter = Task.CompletedTask; return; }
+            }
+            try { journal.Append(entries); lock (gate) journalError = null; }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                lock (gate) journalError = "Execution history could not be persisted. Check project storage.";
+                logger.LogError(error, "Could not persist script execution history");
+            }
+            await Task.Delay(250);
+        }
     }
     private JsonObject Context(string trigger) => new()
     { ["type"] = trigger, ["reason"] = trigger, ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"), ["projectId"] = MessageScope, ["actor"] = "gateway-script" };

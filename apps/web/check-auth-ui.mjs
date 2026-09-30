@@ -12,7 +12,7 @@ const realReact = pathToFileURL(require.resolve('react')).href;
 const hooks = asModule(`export * from ${JSON.stringify(realReact)};
 export const useState = initial => [typeof initial === 'function' ? initial() : initial, value => globalThis.__authWrites.push(value)];
 export const useEffect = () => {}; export const useCallback = value => value; export const useMemo = value => value();
-export const useRef = value => ({current:value});`);
+export const useRef = value => ({current:value}); export const useSyncExternalStore = (_subscribe, snapshot) => snapshot();`);
 modules.set('Auth', asModule('export const useAuth=()=>globalThis.__authUiIdentity;'));
 modules.set('Theme', asModule('export const ThemePicker=()=>null;'));
 modules.set('ScriptEditor', asModule('export default function ScriptEditor(){return null;}'));
@@ -46,7 +46,7 @@ function moduleUrl(name) {
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
     transformers: seeded.has(name) ? { before: [seedState] } : undefined }).outputText
     .replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
-    .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_full, prefix, _quote, dependency) => `${prefix}${JSON.stringify(dependency === 'react' && (seeded.has(name) || ['applicationState', 'inputStateBindings', 'LocalizationContext', 'useRuntimeSessionMessaging', 'useQueryPropertyBindings'].includes(name)) ? hooks : dependency.startsWith('./') ? moduleUrl(dependency.slice(2)) : pathToFileURL(require.resolve(dependency)).href)}`);
+    .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_full, prefix, _quote, dependency) => `${prefix}${JSON.stringify(dependency === 'react' && (seeded.has(name) || ['applicationState', 'inputStateBindings', 'LocalizationContext', 'useRuntimeSessionMessaging', 'useQueryPropertyBindings', 'useTagSnapshot'].includes(name)) ? hooks : dependency.startsWith('./') ? moduleUrl(dependency.slice(2)) : pathToFileURL(require.resolve(dependency)).href)}`);
   const url = asModule(code); modules.set(name, url); return url;
 }
 const { operatorProjectLink, runtimePresentation } = await import(moduleUrl('operatorAccessModel'));

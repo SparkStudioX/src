@@ -45,3 +45,20 @@ You may export the project as `.sparkproj` and distribute it separately from a r
 G10 now has bounded expression tags, dependency validation, source quality/timestamp propagation and reviewed atomic bulk import/export. Provider lifecycle, reusable named scan groups, versioned UDT definitions/instances and their migration workflow remain future work. Existing OPC UA subscriptions continue to group by connection and publishing interval.
 
 Run `node tools/test-tag-engineering.mjs --model` for isolated filesystem, graph, parser, live engine and concurrency tests. Run `node tools/test-tag-engineering.mjs` with `SPARKSTUDIO_TEST_AUTH_FILE` pointing to an isolated authenticated port 5091 test-account fixture to check HTTP authorization, audience separation, CSRF, import conflicts and live expression results. Neither test targets the installed gateway on port 5090.
+
+## Live values and write durability
+
+Runtime tag definitions are cached per configuration generation. Memory writes
+update the shared in-memory value set immediately and checkpoint `tag-values.json`
+in a coalesced batch about once per second. `tags.json` retains definitions and
+configured defaults. Clean shutdown and scheduled configuration backups flush the
+value checkpoint. Abrupt power loss can lose approximately the latest second of
+memory updates; use a transactional database for records that need stronger
+commit guarantees. Multi-path memory writes do not rewrite tag configuration once
+per path.
+
+Synthetic `[default]Line/*` demonstration values are disabled by default. Enable
+`SparkStudio:EnableDemoTags` explicitly only for a development/demo gateway.
+Operator event streams send an initial snapshot, then bounded `tags-delta`
+upserts/removals and heartbeats. Each authenticated sign-in is limited to 32 tag
+streams; overflow causes a fresh snapshot rather than silent permanent drift.

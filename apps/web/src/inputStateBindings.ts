@@ -33,6 +33,7 @@ export class InputStateBindingForm {
   private fieldRevisions = new Map<string, number>();
   private observed: InputValues = {};
   constructor(private readonly changed: () => void = () => {}) {}
+  assignmentGeneration() { return this.generation; }
   activate() { this.active = true; }
   deactivate() { this.active = false; this.generation++; this.contextGeneration++; }
   update(options: FormInputOptions) {
@@ -131,5 +132,10 @@ export function useFormInputs(options: FormInputOptions): { inputs: InputValues;
   const form = ref.current;
   form.update(options);
   useEffect(() => { form.activate(); refresh(value => value + 1); return () => form.deactivate(); }, [form]);
-  return { inputs: form.values(), assign: form.assignment(), assignAutomatic: form.assignment(true) };
+  const stable = useRef<{ key: string; inputs: InputValues; assign: ReturnType<InputStateBindingForm["assignment"]>; assignAutomatic: ReturnType<InputStateBindingForm["assignment"]> } | null>(null);
+  const values = form.values();
+  const key = JSON.stringify([form.assignmentGeneration(), values, options.active, options.contextKey, options.state?.key, options.document, options.parameters]);
+  if (!stable.current || stable.current.key !== key || options.state?.isCurrent() === false)
+    stable.current = { key, inputs: values, assign: form.assignment(), assignAutomatic: form.assignment(true) };
+  return stable.current;
 }

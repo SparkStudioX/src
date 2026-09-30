@@ -28,9 +28,9 @@ Check(BackupDestinations.IsOwnedArchiveName(old, owner) && !BackupDestinations.I
 foreach (var invalid in new[] { "../" + old, "nested/" + old, ".\\" + old, old + ".partial", old.ToUpperInvariant(), "x" + old }) Check(!BackupDestinations.IsOwnedArchiveName(invalid, owner), "Unsafe retention name accepted.");
 BackupDestinations.Validate(new("smb", @"\\fixture-server\share\backups", "fixture", null, "fixture-domain"));
 BackupDestinations.Validate(new("smb", @"\\fixture-server\share"));
-BackupDestinations.Validate(new("ftp", "ftp://localhost:2121/backups/", "fixture"));
+BackupDestinations.Validate(new("ftp", "ftp://localhost:2121/backups/", "fixture", AllowInsecureFtp: true));
 foreach (var invalid in new[] {
-    new BackupDestination("smb", @"C:\backups"), new("smb", @"\\?\UNC\host\share"), new("smb", @"\\host\share\..\secret"),
+    new BackupDestination("smb", @"C:\backups"), new("ftp", "ftp://localhost:2121/backups/", "fixture"), new("smb", @"\\?\UNC\host\share"), new("smb", @"\\host\share\..\secret"),
     new("smb", @"\\host\share", "a\\b", "pw", "domain"), new("smb", @"\\host\share", "\\b", "pw"),
     new("ftp", "ftp://user:password@localhost/path/", "fixture"), new("ftp", "ftp://localhost/path/../other/", "fixture"),
     new("ftp", "ftp://localhost/%2e%2e/", "fixture"), new("ftps", "ftps://localhost/", "fixture"), new("ftp", "ftp://localhost/"),
@@ -53,7 +53,7 @@ Check(result.RetentionWarning is not null && Directory.Exists(Path.Combine(remot
 Console.WriteLine("PASS post-promotion retention failure reports successful delivery with warning");
 
 await using var ftp = new FtpFixture();
-BackupDestination Target(string kind = "ftp") => new(kind, $"ftp://127.0.0.1:{ftp.Port}/backups/", "fixture-user", "fixture-password", TimeoutSeconds: 30);
+BackupDestination Target(string kind = "ftp") => new(kind, $"ftp://127.0.0.1:{ftp.Port}/backups/", "fixture-user", "fixture-password", TimeoutSeconds: 30, AllowInsecureFtp: kind == "ftp");
 void Seed() { ftp.Files.Clear(); ftp.Commands.Clear(); ftp.ResetPromotion(); foreach (var name in new[] { old, fresh, foreign, badDate }) ftp.Files[name] = [1,2,3]; ftp.ExtraListing = new[] { "../" + old, "nested/" + old, "./" + old, "operator-notes.txt" }; }
 Seed(); delivered = NewName(); result = await BackupDestinations.DeliverAsync(Target(), archive, delivered, owner);
 Check(result.RemovedCount == 1 && ftp.Files[delivered].SequenceEqual(payload) && !ftp.Files.ContainsKey(old) && ftp.Files.ContainsKey(fresh) && ftp.Files.ContainsKey(foreign) && ftp.Files.ContainsKey(badDate), "FTP delivery/retention differs.");
@@ -111,7 +111,7 @@ sealed class FtpFixture : IAsyncDisposable
     {
         using var rsa = RSA.Create(2048); var request = new CertificateRequest("CN=untrusted-backup-fixture", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         using var issued = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
-        certificate = X509CertificateLoader.LoadPkcs12(issued.Export(X509ContentType.Pfx), null, X509KeyStorageFlags.DefaultKeySet);
+        certificate = X509CertificateLoader.LoadPkcs12(issued.Export(X509ContentType.Pfx), null, X509KeyStorageFlags.EphemeralKeySet);
         control.Start(); accept = Accept();
     }
     private async Task Accept()

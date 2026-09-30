@@ -1,3 +1,7 @@
+import ProcessDataProperties from "./ProcessDataProperties";
+import { isProcessDataComponent } from "./processDataModel";
+import { TagSnapshotStore } from "./tagStore";
+import { useTagSnapshot } from "./useTagSnapshot";
 import { PropertyCollectionDialog } from "./PropertyCollectionEditor";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
@@ -101,6 +105,9 @@ import "./designerDocuments.css";
 type Workspace = "designer" | "tags" | "connections" | "queries" | "scripts";
 type Toast = { message: string; error?: boolean };
 const palettes: { type: ComponentType; name: string; hint: string; viewKind?: ViewLayoutKind }[] = [
+  { type: "alarmStatusTable", name: "Alarm status", hint: "Live conditions and operator acknowledgement" },
+  { type: "alarmJournalTable", name: "Alarm journal", hint: "Recorded alarm transitions and acknowledgements" },
+  { type: "historicalTrend", name: "Historical trend", hint: "Recorded tags with quality gaps and bounded queries" },
   { type: "viewContainer", viewKind: "embedded", name: "Embedded view", hint: "Place an independently scoped template" },
   { type: "viewContainer", viewKind: "tabs", name: "Tab container", hint: "Switch between retained application forms" },
   { type: "viewContainer", viewKind: "split", name: "Split pane", hint: "Resize two independent views" },
@@ -151,6 +158,7 @@ const palettes: { type: ComponentType; name: string; hint: string; viewKind?: Vi
   },
 ];
 const typeIcon: Record<ComponentType, string> = {
+  alarmStatusTable: "shield", alarmJournalTable: "table", historicalTrend: "activity",
   equipmentCommand: "settings",
   chart: "activity",
   sparkline: "activity",
@@ -201,6 +209,7 @@ function tagBindingPatch(component: CanvasComponent, path: string): CanvasCompon
 }
 const processDimensions: Partial<Record<ComponentType, { width: number; height: number }>> = {
   equipmentCommand: { width: 360, height: 230 },
+  alarmStatusTable: { width: 780, height: 360 }, alarmJournalTable: { width: 780, height: 360 }, historicalTrend: { width: 640, height: 380 },
   chart: { width: 520, height: 340 }, sparkline: { width: 300, height: 120 },
   ledDisplay: { width: 280, height: 100 }, progressBar: { width: 340, height: 100 },
   cylindricalTank: { width: 180, height: 260 }, levelIndicator: { width: 140, height: 260 }, thermometer: { width: 140, height: 280 },
@@ -269,7 +278,8 @@ export default function App() {
   });
   const [project, setProject] = useState<Project | null>(null);
   const projectLocale = useLocaleSelection(project);
-  const [tags, setTags] = useState<Tag[]>([]);
+  const [tagStore] = useState(() => new TagSnapshotStore());
+  const setTags = tagStore.replace;
   const [connections, setConnections] = useState<Connection[]>([]);
   const [queries, setQueries] = useState<NamedQuery[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -308,6 +318,8 @@ export default function App() {
   >({});
   const [previewActionBusy, setPreviewActionBusy] = useState("");
   const [leftTab, setLeftTab] = useState<"project" | "components" | "tags">("project");
+  const tagDocument = useMemo(() => workspace === "designer" ? [project?.screens.find(item => item.id === screenId), project?.templates] : [], [project, screenId, workspace]);
+  const tags = useTagSnapshot(tagStore, tagDocument, project?.parameters ?? {}, workspace === "tags" || workspace === "designer" && leftTab === "tags");
   const [tagFilter, setTagFilter] = useState("");
   const [tagSelection, setTagSelection] = useState<Tag | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -432,26 +444,33 @@ export default function App() {
   }, [load]);
   useEffect(() => {
     const events = new EventSource(eventStreamUrl());
+    let lastFrame = 0;
+    const markConnected = () => {
+      const now = Date.now();
+      if (now - lastFrame >= 5000) setLastUpdate(new Date().toLocaleTimeString());
+      lastFrame = now; setConnected(true);
+    };
     const receive = (event: MessageEvent) => {
       try {
         const next = JSON.parse(event.data) as Tag[];
         if (Array.isArray(next)) {
           setTags(next);
-          setConnected(true);
-          setLastUpdate(new Date().toLocaleTimeString());
+          markConnected();
         }
       } catch {
         /* Polling recovers malformed or interrupted events. */
       }
     };
     events.addEventListener("tags", receive);
+    events.addEventListener("tags-delta", (event: MessageEvent) => { try { tagStore.delta(JSON.parse(event.data)); markConnected(); } catch { lastFrame = 0; } });
+    events.addEventListener("heartbeat", markConnected);
     events.onerror = () => setConnected(false);
     const polling = setInterval(() => {
+      if (Date.now() - lastFrame <= 8000) return;
       void api<Tag[]>("/tags")
         .then((next) => {
           setTags(next);
-          setConnected(true);
-          setLastUpdate(new Date().toLocaleTimeString());
+          markConnected();
         })
         .catch(() => setConnected(false));
     }, 4000);
@@ -624,12 +643,12 @@ export default function App() {
     }
   };
   const change = useCallback(
-    (updater: (current: Project) => Project, recordHistory = true) => {
+    (updater: (current: Project) => Project, recordHistory = true, historyKey?: string) => {
       const current = projectRef.current;
       if (!current) return;
       const next = reconcileNavigationAfterScreenChange(current, updater(current));
       if (next === current) return;
-      if (recordHistory) updateHistory(checkpoint(historyRef.current, current));
+      if (recordHistory) updateHistory(checkpoint(historyRef.current, current, historyKey));
       else if (historyRef.current.future.length) updateHistory({ ...historyRef.current, future: [] });
       if (projectInputContext(current) !== projectInputContext(next)) {
         setPreviewInputs({});
@@ -645,6 +664,7 @@ export default function App() {
   const updateScreen = (
     updater: (current: Screen) => Screen,
     recordHistory = true,
+    historyKey?: string,
   ) => {
     if (!screen) return;
     change(
@@ -664,7 +684,7 @@ export default function App() {
               ),
             }),
       }),
-      recordHistory,
+      recordHistory, historyKey,
     );
   };
   const updateComponent = (
@@ -686,12 +706,12 @@ export default function App() {
     if (selected)
       updateComponent(selected.id, { props: { ...selected.props, ...patch } });
   };
-  const replaceComponents = (components: CanvasComponent[], recordHistory = true) => {
+  const replaceComponents = (components: CanvasComponent[], recordHistory = true, historyKey?: string) => {
     const latest = editingTemplate
       ? projectRef.current?.templates?.find((item) => item.id === editingTemplate.id)
       : projectRef.current?.screens.find((item) => item.id === screen?.id);
     if (!latest || components.every((component, index) => component === latest.components[index]) && components.length === latest.components.length) return;
-    updateScreen((current) => ({ ...current, components }), recordHistory);
+    updateScreen((current) => ({ ...current, components }), recordHistory, historyKey);
   };
   const deleteSelection = () => {
     if (!screen || !selection.length) return;
@@ -762,7 +782,7 @@ export default function App() {
       replaceComponents(moveSelected(screen.components, selectedIds, {
         x: event.key === "ArrowLeft" ? -amount : event.key === "ArrowRight" ? amount : 0,
         y: event.key === "ArrowUp" ? -amount : event.key === "ArrowDown" ? amount : 0,
-      }, screen));
+      }, screen), true, `nudge:${screen.id}:${selectedIds.join(",")}`);
     }
   };
   const save = useCallback(async () => {
@@ -892,6 +912,7 @@ export default function App() {
                 : 170),
       props: {
         text: {
+          alarmStatusTable: "Alarm status", alarmJournalTable: "Alarm journal", historicalTrend: "Historical trend",
           equipmentCommand: "Equipment command",
           chart: "Production chart",
           sparkline: "Production sparkline",
@@ -934,6 +955,7 @@ export default function App() {
           template: reusable?.name || "Template",
           repeater: reusable?.name || "Repeater",
         }[type],
+        ...(type === "historicalTrend" ? { historyPaths: [], historyMinutes: 60, historyMaxPoints: 1000 } : {}),
         ...(isChart(type) ? defaultChartProps(type === "sparkline") : {}),
         ...(type === "viewContainer" ? { viewLayout: defaultViewLayout(viewKind ?? "embedded", reusable!.id) } : {}),
         ...(type === "formattedInput" ? { formatMask: "AA-####", textCase: "upper" as const } : {}),
@@ -1957,6 +1979,8 @@ export default function App() {
                       onChange={updateProps}
                       onGeometryChange={patch => updateComponent(selected.id, patch)}
                     />
+                    {selected.type === "numberInput" && <div className="property-sheet-group"><h4>Setpoint command</h4><div className="property-sheet-row" data-property="commandId"><label htmlFor="input-command-id">Review on commit</label><div className="property-sheet-value"><select id="input-command-id" value={selected.props.commandId ?? ""} onChange={event => updateProps({ commandId: event.target.value || undefined })}><option value="">Local form value only</option>{project.commands?.filter(command => !["Boolean", "String"].includes(command.dataType)).map(command => <option key={command.id} value={command.id}>{command.name}</option>)}</select><small>Enter or leaving the input opens review. Every device write needs explicit confirmation, Commands permission and readback.</small></div><span /></div></div>}
+                    {isProcessDataComponent(selected.type) && <ProcessDataProperties component={selected} onChange={updateProps} />}
                     <ComponentStyleAssignment component={selected} styles={project.styles} onChange={updateProps} onManage={() => setStylesEditorOpen(true)} />
                     <ComponentTranslationAssignment component={selected} catalog={project.localization} onChange={updateProps} onManage={() => setTranslationsOpen(true)} />
                     <div className="inspector-section">
@@ -2151,7 +2175,7 @@ export default function App() {
                       </div>
                     )}
                     {selected.type === "equipmentCommand" && <div className="inspector-section"><h3>Equipment command</h3><Field label="Declared command"><select value={selected.props.commandId ?? ""} onChange={event => updateProps({ commandId: event.target.value })}><option value="">Select a command</option>{project.commands?.map(command => <option key={command.id} value={command.id}>{command.name}</option>)}</select></Field><Field label="Command definitions"><button className="button" onClick={() => setEquipmentCommandsOpen(true)}>Configure project commands</button></Field><p>Operators need Commands permission. Designer Preview never dispatches equipment commands.</p></div>}
-                    {!isTemplateInstance(selected.type) && !isProcessDisplay(selected.type) && !isChart(selected.type) && !["viewContainer", "equipmentCommand", "button", "label"].includes(selected.type) && !isDrawingComponent(selected.type) && <div className="inspector-section">
+                    {!isTemplateInstance(selected.type) && !isProcessDisplay(selected.type) && !isChart(selected.type) && !isProcessDataComponent(selected.type) && !["viewContainer", "equipmentCommand", "button", "label"].includes(selected.type) && !isDrawingComponent(selected.type) && <div className="inspector-section">
                       <h3>Content</h3>
                       {selected.type === "multiStateIndicator" && <StateControlEditor key={selected.id} component={selected} onChange={updateProps} notify={notify} />}
                       {selected.type === "image" && (

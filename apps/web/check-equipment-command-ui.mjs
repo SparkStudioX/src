@@ -10,7 +10,7 @@ import ts from 'typescript';
 // All requests are promises controlled by this file; no network/device is used.
 const require=createRequire(import.meta.url), asModule=code=>`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
 const realReact=pathToFileURL(require.resolve('react')).href;
-const hooks=asModule(`export * from ${JSON.stringify(realReact)};export const useState=initial=>globalThis.__commandHost.useState(initial);export const useRef=initial=>globalThis.__commandHost.useRef(initial);export const useEffect=()=>{};`);
+const hooks=asModule(`export * from ${JSON.stringify(realReact)};export const useState=initial=>globalThis.__commandHost.useState(initial);export const useRef=initial=>globalThis.__commandHost.useRef(initial);export const useEffect=effect=>globalThis.__commandHost.effects.push(effect);`);
 const dependencies={react:hooks,'./Auth':asModule('export const useAuth=()=>globalThis.__commandAuth;'),'./api':asModule('export const api=(...args)=>globalThis.__commandHost.request(...args);')};
 const code=ts.transpileModule(fs.readFileSync(new URL('src/EquipmentCommand.tsx',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText
   .replace(/import "\.\/[^"\n]+\.css";\r?\n/g,'')
@@ -22,11 +22,11 @@ const component={id:'command',type:'equipmentCommand',x:0,y:0,width:500,height:1
 const defaults={component,publishedAt:'publication-1',queryScope:'runtime'};
 const descendants=(node,predicate)=>!node||typeof node!=='object'?[]:[...(predicate(node)?[node]:[]),...React.Children.toArray(node.props?.children).flatMap(child=>descendants(child,predicate))];
 function host({value='2',pendingReview,commands=true,type='Int32'}={}) {
-  const data={states:[{...definition,dataType:type},value,pendingReview,undefined,'',false],refs:[],calls:[],stateIndex:0,refIndex:0,
+  const data={states:[{...definition,dataType:type},value,pendingReview,undefined,'',false],refs:[],calls:[],effects:[],stateIndex:0,refIndex:0,
     useState(initial){const index=this.stateIndex++;if(index>=this.states.length)this.states[index]=typeof initial==='function'?initial():initial;return[this.states[index],next=>{this.states[index]=typeof next==='function'?next(this.states[index]):next;}];},
     useRef(initial){const index=this.refIndex++;return this.refs[index]??= {current:initial};},
     request(...args){let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});this.calls.push({args,resolve,reject});return promise;},
-    render(props={}){this.stateIndex=0;this.refIndex=0;return EquipmentCommand({...defaults,...props});}};
+    render(props={}){this.stateIndex=0;this.refIndex=0;this.effects=[];return EquipmentCommand({...defaults,...props});}};
   globalThis.__commandHost=data;globalThis.__commandAuth={permissions:{view:true,operate:true,commands}};return data;
 }
 const button=(tree,text)=>descendants(tree,node=>node.type==='button'&&node.props.children===text)[0];
@@ -37,6 +37,7 @@ await check('integer inputs cannot silently round, truncate fractions or accept 
     const target={...definition,dataType};for(const value of ['9007199254740993','9007199254740992','-9007199254740992','1.0000000000000001','1.1','1e2','',true])assert.throws(()=>commandRequestedValue(target,value));
     assert.equal(commandRequestedValue(target,'42'),42);assert.equal(commandRequestedValue(target,'-2'),-2);assert.equal(commandRequestedValue(target,'9007199254740991'),9007199254740991);
   }
+  for(const [dataType,max] of [['UInt16',65535],['UInt32',4294967295]]) { const target={...definition,dataType}; assert.equal(commandRequestedValue(target,'0'),0); assert.equal(commandRequestedValue(target,String(max)),max); for(const value of ['-1','1.1','1e2',String(max+1)]) assert.throws(()=>commandRequestedValue(target,value)); }
   assert.equal(commandRequestedValue({...definition,dataType:'Double'},'1.25'),1.25);assert.equal(commandRequestedValue({...definition,dataType:'Boolean'},false),false);assert.equal(commandRequestedValue({...definition,dataType:'String'},'exact text'),'exact text');
   assert.throws(()=>commandRequestedValue({...definition,dataType:'Double'},'Infinity'));
 });
@@ -73,5 +74,17 @@ await check('confirmation is disabled while interaction is unavailable and uncer
 });
 await check('Designer shows a descriptive placeholder with no execution controls',()=>{
   const state=host(),html=renderToStaticMarkup(state.render({queryScope:'designer'}));assert.match(html,/published operator application/);assert.doesNotMatch(html,/<button|<input|<select/);assert.equal(state.calls.length,0);
+});
+await check('numeric input commit reviews once and cancellation never executes a write', async()=>{
+  const state=host(), props={component:{...component,type:'numberInput'},commit:{value:27,sequence:1}};
+  let tree=state.render(props);state.effects.at(-1)();assert.equal(state.calls.length,1);assert.equal(state.calls[0].args[0],'/runtime/commands/setpoint/review');assert.equal(state.calls[0].args[2].value,27);
+  state.render(props);state.effects.at(-1)();assert.equal(state.calls.length,1);
+  state.calls[0].resolve({...review,requestedValue:27});await settle();tree=state.render(props);button(tree,'Cancel').props.onClick();assert.equal(state.calls.length,1);assert.equal(state.states[2],undefined);
+});
+await check('setpoint commits preserve Commands and communication guards and require explicit confirmation',async()=>{
+  const numeric={component:{...component,type:'numberInput'},commit:{value:8,sequence:2}};
+  for(const options of [{commands:false},{communicationLost:true},{interactionLocked:true}]){const state=host(options);state.render({...numeric,...options});state.effects.at(-1)();assert.equal(state.calls.length,0);}
+  const state=host();state.render(numeric);state.effects.at(-1)();state.calls[0].resolve({...review,requestedValue:8});await settle();assert.equal(state.calls.length,1);
+  button(state.render(numeric),'Confirm command').props.onClick();assert.equal(state.calls.length,2);assert.equal(state.calls[1].args[0],'/runtime/commands/setpoint/execute');assert.deepEqual(state.calls[1].args[2],{token:'review-token',confirmed:true});state.calls[1].resolve({status:'Conflict',message:'The setpoint changed.',requestedValue:8,observedValue:3,correlationId:'conflict'});await settle();assert.equal(state.states[3].status,'Conflict');
 });
 console.log(`${passed} equipment command UI checks passed.`);

@@ -5,8 +5,9 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { root, dotnet, testEnv } from './test-environment.mjs';
 
-const root = process.cwd(), directory = path.resolve('.data/test-evidence', `configuration-backup-${randomUUID()}`);
+const directory = path.join(root, '.data/test-evidence', `configuration-backup-${randomUUID()}`);
 await mkdir(directory, { recursive: true });
 const xml = value => value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
 await writeFile(path.join(directory, 'Check.csproj'), `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup><ItemGroup><FrameworkReference Include="Microsoft.AspNetCore.App"/><ProjectReference Include="${xml(path.join(root, 'src/SparkStudio.Gateway/SparkStudio.Gateway.csproj'))}"/></ItemGroup></Project>`);
@@ -27,9 +28,10 @@ var protection = DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(so
 var catalog = new ProjectCatalog(source, protection);
 var project = catalog.Create("Online configuration lab");
 var draft = project.Store.GetProject();
-project.Publication.Publish(project.Store, draft["revision"]!.GetValue<int>());
+project.Scripts.SaveDraft(project.Scripts.GetDraft());
+var review = project.Publication.Review(project.Store);
+project.Publication.Publish(project.Store, review["revision"]!.GetValue<int>(), review["scriptsRevision"]!.GetValue<int>(), review["reviewToken"]!.GetValue<string>());
 draft["name"] = "Unpublished configuration draft"; project.Store.SaveProject(draft);
-var script = project.Scripts.SaveDraft(project.Scripts.GetDraft()); project.Scripts.Publish(script["revision"]!.GetValue<int>());
 var security = new SecurityStore(source);
 var account = security.Setup(File.ReadAllText(Path.Combine(source, "security/setup-code.txt")).Trim(), new("fixture-admin", "synthetic-account-password"));
 catalog.GatewayStore.SaveConnection(new JsonObject { ["id"]="fixture-opc", ["name"]="Fixture", ["type"]="opcua", ["endpoint"]="opc.tcp://127.0.0.1:59999", ["password"]="synthetic-secret" });
@@ -122,11 +124,10 @@ static void Assert(bool value,string message) { if(!value) throw new Exception(m
 static async Task Reject(Func<Task> work,string description)
 { try { await work(); } catch(Exception error) when(error is ArgumentException or InvalidOperationException or InvalidDataException or IOException or UnauthorizedAccessException or OperationCanceledException) { return; } throw new Exception("Expected rejection: "+description); }
 `);
-const dotnet = path.resolve('.tools/dotnet/dotnet.exe');
 await mkdir(path.join(directory, 'dotnet-roaming'), { recursive: true });
 const result = spawnSync(dotnet, ['run', '--project', path.join(directory, 'Check.csproj'), '--configuration', 'ConfigurationBackupModel', '--verbosity', 'quiet', `-p:RestoreConfigFile=${path.join(directory, 'NuGet.Config')}`, '-p:NuGetAudit=false'], {
   cwd: root, encoding: 'utf8', timeout: 180000, maxBuffer: 4*1024*1024,
-  env: {...process.env, APPDATA:path.join(directory,'dotnet-roaming'), DOTNET_ROOT:path.dirname(dotnet), DOTNET_CLI_HOME:path.resolve('.tools/dotnet-home'), NUGET_PACKAGES:path.resolve('.tools/nuget'), DOTNET_CLI_TELEMETRY_OPTOUT:'1'},
+  env: testEnv,
 });
 process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? '');
 assert.equal(result.status, 0, result.error?.message ?? 'Online configuration backup tests failed.');

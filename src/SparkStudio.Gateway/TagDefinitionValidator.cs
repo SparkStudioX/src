@@ -9,7 +9,7 @@ namespace SparkStudio.Gateway;
 public static class TagDefinitionValidator
 {
     private static readonly HashSet<string> DataTypes = new(StringComparer.Ordinal)
-    { "Boolean", "Int16", "Int32", "Int64", "Float", "Double", "String" };
+    { "Boolean", "Int16", "UInt16", "Int32", "UInt32", "Int64", "Float", "Double", "String" };
 
     public static string Path(string? path)
     {
@@ -57,8 +57,22 @@ public static class TagDefinitionValidator
     {
         var type = Text(value, "dataType");
         if (!DataTypes.Contains(type))
-            throw new ArgumentException("dataType must be Boolean, Int16, Int32, Int64, Float, Double or String.");
+            throw new ArgumentException("dataType must be Boolean, Int16, UInt16, Int32, UInt32, Int64, Float, Double or String.");
         return type;
+    }
+    public static double AbsoluteDeadband(JsonObject value)
+    {
+        if (value["absoluteDeadband"] is null) return 0;
+        if (value["absoluteDeadband"] is not JsonValue scalar || !scalar.TryGetValue<double>(out var deadband) || !double.IsFinite(deadband) || deadband < 0)
+            throw new ArgumentException("absoluteDeadband must be a finite nonnegative number.");
+        return deadband;
+    }
+    public static uint MonitorQueueSize(JsonObject value)
+    {
+        if (value["queueSize"] is null) return 16;
+        if (value["queueSize"] is not JsonValue scalar || !scalar.TryGetValue<uint>(out var size) || size is < 1 or > 1000)
+            throw new ArgumentException("queueSize must be an integer from 1 through 1000.");
+        return size;
     }
 
     public static string NodeIdentifier(JsonObject value)
@@ -95,16 +109,18 @@ public static class TagDefinitionValidator
             return JsonValue.Create(value.GetString())!;
         }
         if (value.ValueKind != JsonValueKind.Number) throw new ArgumentException($"{type} tags require a numeric value.");
-        if (type is "Int16" or "Int32" or "Int64")
+        if (type is "Int16" or "UInt16" or "Int32" or "UInt32" or "Int64")
         {
             var number = Integer(value);
-            var minimum = type == "Int16" ? short.MinValue : type == "Int32" ? int.MinValue : long.MinValue;
-            var maximum = type == "Int16" ? short.MaxValue : type == "Int32" ? int.MaxValue : long.MaxValue;
+            var minimum = type is "UInt16" or "UInt32" ? 0 : type == "Int16" ? short.MinValue : type == "Int32" ? int.MinValue : long.MinValue;
+            var maximum = type == "UInt16" ? ushort.MaxValue : type == "UInt32" ? uint.MaxValue : type == "Int16" ? short.MaxValue : type == "Int32" ? int.MaxValue : long.MaxValue;
             if (number < minimum || number > maximum) throw new ArgumentException($"Memory tag value is outside the {type} range.");
             return type switch
             {
                 "Int16" => JsonValue.Create((short)number)!,
+                "UInt16" => JsonValue.Create((ushort)number)!,
                 "Int32" => JsonValue.Create((int)number)!,
+                "UInt32" => JsonValue.Create((uint)number)!,
                 _ => JsonValue.Create((long)number)!
             };
         }

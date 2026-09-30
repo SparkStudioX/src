@@ -17,3 +17,4 @@ public sealed record DatabaseColumn(string Name, string DataType, bool Nullable,
 public sealed record DatabaseTable(string Name, IReadOnlyList<DatabaseColumn> Columns);
 public sealed record OpcEndpoint(string EndpointUrl, string SecurityMode, string SecurityPolicy,
     string? ServerCertificateSha256, string? ServerCertificateSubject, string[] UserTokenTypes);
+public sealed record OpcMonitorSettings(double AbsoluteDeadband = 0, uint QueueSize = 16);

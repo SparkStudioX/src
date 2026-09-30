@@ -9,6 +9,7 @@ public sealed partial class PublicationStore
     private readonly string path;
     private readonly LocalAssetStore assets;
     private JsonObject? publication;
+    private bool hasPersistedHistory;
     private ScriptResourceStore? scripts;
 
     public void AttachScripts(ScriptResourceStore resources) { lock (gate) scripts = resources; }
@@ -18,8 +19,19 @@ public sealed partial class PublicationStore
         this.assets = assets;
         path = Path.Combine(dataDirectory, "published.json");
         if (File.Exists(path))
+        {
+            if (new FileInfo(path).Length > MaximumPublicationBytes) throw new InvalidOperationException("The published project exceeds its file-size limit.");
             publication = JsonNode.Parse(File.ReadAllText(path))?.AsObject()
                 ?? throw new InvalidOperationException("The published project is invalid.");
+            if (publication["project"] is not JsonObject publishedProject || publication["queries"] is not JsonArray ||
+                publishedProject["name"] is not JsonValue name || !name.TryGetValue<string>(out _) ||
+                publishedProject["revision"] is not JsonValue revision || !revision.TryGetValue<int>(out _) ||
+                publication["publishedAt"] is not JsonValue stamp || !stamp.TryGetValue<string>(out var date) || !DateTimeOffset.TryParse(date, out _))
+                throw new InvalidOperationException("The stored publication metadata is invalid.");
+            // Running screens keep only the active application. Historical DOMs are
+            // loaded on demand and weakly cached, not retained by every workspace.
+            hasPersistedHistory = publication.Remove("history");
+        }
     }
 
     public JsonObject Metadata()
@@ -29,7 +41,7 @@ public sealed partial class PublicationStore
                 : new JsonObject { ["published"] = true, ["revision"] = publication["project"]!["revision"]!.DeepClone(), ["scriptsRevision"] = publication["scripts"]?["revision"]?.DeepClone(), ["complete"] = publication["scripts"] is JsonObject && publication["legacyScriptCompatibility"]?.GetValue<bool>() != true, ["publishedAt"] = publication["publishedAt"]!.DeepClone(), ["warnings"] = PublicationWarnings() };
     }
 
-    public JsonObject Publish(ProjectStore store, int revision, int? scriptsRevision = null, string? reviewToken = null, bool onlyWhenChanged = false)
+    public JsonObject Publish(ProjectStore store, int revision, int? scriptsRevision = null, string? reviewToken = null, bool onlyWhenChanged = false, bool allowExecutableChanges = true)
     {
         JsonObject result;
         lock (gate)
@@ -38,6 +50,7 @@ public sealed partial class PublicationStore
                 throw new InvalidOperationException("The saved application or active publication changed. Review the application again before publishing.");
             var snapshot = store.CapturePublication(revision);
             snapshot["scripts"] = scripts?.CaptureDraftForPublication(scriptsRevision) ?? new JsonObject { ["revision"] = 0, ["resources"] = new JsonArray() };
+            ExecutablePublication.RequireAllowed(publication, snapshot, allowExecutableChanges);
             // Preserve the legacy script endpoint's retry behavior, but only when
             // every application resource is unchanged, including query definitions.
             if (onlyWhenChanged && publication is not null && publication["legacyScriptCompatibility"]?.GetValue<bool>() != true &&

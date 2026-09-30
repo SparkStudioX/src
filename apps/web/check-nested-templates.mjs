@@ -12,7 +12,7 @@ process.on('unhandledRejection', error => { console.error(error?.message ?? erro
 const require = createRequire(import.meta.url), modules = new Map();
 const url = code => 'data:text/javascript;base64,' + Buffer.from(code).toString('base64');
 const reactUrl = pathToFileURL(require.resolve('react')).href;
-const hookUrl = url(`export * from ${JSON.stringify(reactUrl)}; export const useState=v=>globalThis.__nestedHooks.useState(v); export const useRef=v=>globalThis.__nestedHooks.useRef(v); export const useEffect=(run,deps)=>globalThis.__nestedHooks.useEffect(run,deps);`);
+const hookUrl = url(`export * from ${JSON.stringify(reactUrl)}; export const memo=component=>component; export const useMemo=fn=>fn(); export const useState=v=>globalThis.__nestedHooks.useState(v); export const useRef=v=>globalThis.__nestedHooks.useRef(v); export const useEffect=(run,deps)=>globalThis.__nestedHooks.useEffect(run,deps);`);
 const leafUrl = url(`import React from ${JSON.stringify(reactUrl)}; export default function BoundComponent(props) { return React.createElement('bound-leaf', props); }`);
 const stateUrl = url('export const useApplicationStateContext=()=>globalThis.__nestedState; export const useInstanceApplicationState=parent=>parent; export const ApplicationStateProvider=({children})=>children;');
 const queryUrl = url('export const useQueryRepeater=(source)=>source ? globalThis.__nestedQuery : {rows:[],key:"none",loading:false,error:""};');
@@ -26,7 +26,7 @@ function load(name, harness = false) {
   }}).outputText.replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
     .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, dependency) => {
       const stub = harness && dependency === './ComponentActivity' ? url('export const useComponentActivity=()=>true; export const ComponentActivityProvider=({children})=>children;')
-        : harness && name === 'inputStateBindings' && dependency === 'react' ? hookUrl : harness && name === 'templates' ? ({react: hookUrl, './BoundComponent': leafUrl,
+        : harness && name === 'inputStateBindings' && dependency === 'react' ? hookUrl : harness && name === 'templates' ? ({react: hookUrl, './BoundComponent': leafUrl, './RenderBoundary':url('export default ({children})=>children;'),
         './applicationState': stateUrl, './useQueryRepeater': queryUrl, './ComponentEvents': url('export const useComponentEvents=()=>{}; export const usePythonComponentEvents=()=>undefined;'),
         './VisualStyleContext': url('export const useVisualStyles=()=>undefined;'), './LocalizationContext': url('export const useLocalization=()=>({});'),
         './useQueryPropertyBindings': url('export const useQueryPropertyBindings=()=>({});export const useQueryPropertyContext=()=>undefined;export const QueryPropertyProvider=({children})=>children;')})[dependency] : undefined;

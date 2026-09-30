@@ -50,7 +50,7 @@ internal static class BindingDataChecks
             var excessive = Draft(); excessive["templates"]![0]!["components"]![0]!["props"]!["rowsSource"]!.AsObject().Remove("maxRows"); excessive["templates"]![1]!["components"]![0]!["props"]!["rowsSource"]!.AsObject().Remove("maxRows");
             var oversized = catalog.Create("Oversized binding data", excessive, queryDefinitions);
             Reject(() => oversized.Publication.Publish(oversized.Store, oversized.Store.GetProject()["revision"]!.GetValue<int>()), "multiplicative query expansion still bounded");
-            var pythonPath = OperatingSystem.IsWindows() ? Path.GetFullPath("runtimes/python/windows-x64/python.exe") : "/usr/bin/python3";
+            var pythonPath = TestEnvironment.PythonExecutable();
             if (!File.Exists(pythonPath)) throw new Exception("Binding reconstruction tests require the bundled Python runtime.");
             using var connectors = new ConnectorService(directory);
             await connectors.CreateSqliteDatabaseAsync(workspace.Store.GetConnection("binding-data"), false, CancellationToken.None);

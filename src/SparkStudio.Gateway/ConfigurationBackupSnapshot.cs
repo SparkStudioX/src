@@ -11,7 +11,7 @@ public static class ConfigurationBackupSnapshot
     public static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(30);
     private static readonly HashSet<string> RootFiles = new(StringComparer.OrdinalIgnoreCase)
     {
-        "projects.json", "connections.json", "tags.json", "deployment.json", "deployment.json.previous", "backup-settings.json",
+        "gateway-format.json", "projects.json", "connections.json", "tags.json", "tag-values.json", "process-data.json", "deployment.json", "deployment.json.previous", "backup-settings.json",
         "project.json", "queries.json", "published.json", "scripts-draft.json", "scripts-published.json"
     };
     private static readonly HashSet<string> ProjectFiles = new(StringComparer.OrdinalIgnoreCase)

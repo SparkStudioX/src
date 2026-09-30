@@ -1,12 +1,41 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Text.Json.Nodes;
 using SparkStudio.Gateway;
 
-if (args.Contains("--unified-publication-only")) { Console.WriteLine($"PASS {await UnifiedPublicationChecks.RunAsync()} unified publication checks."); return; }
-if (args.Contains("--equipment-commands-only")) { Console.WriteLine($"PASS {await EquipmentCommandChecks.RunAsync()} equipment command checks."); return; }
-if (args.Contains("--interaction-events-only")) { Console.WriteLine($"PASS {await InteractionEventChecks.RunAsync()} interaction event checks."); return; }
-if (args.Contains("--input-constraints-only")) { Console.WriteLine($"PASS {await InputConstraintChecks.RunAsync()} input constraint checks."); return; }
+if (args.Contains("--live-opc"))
+{
+    try { await LiveOpcAcceptance.RunAsync(); }
+    catch (Exception error) { Console.Error.WriteLine($"Live OPC acceptance failed: {error.GetType().Name}: {error.Message}"); Environment.ExitCode = 1; }
+    return;
+}
 
+var suites = new List<(string Name, Func<Task<int>> Run)> { ("Gateway model and journal", () => Task.FromResult(RunModelChecks())) };
+var only = new Dictionary<string, string> {
+    ["--unified-publication-only"] = "UnifiedPublicationChecks", ["--equipment-commands-only"] = "EquipmentCommandChecks",
+    ["--interaction-events-only"] = "InteractionEventChecks", ["--input-constraints-only"] = "InputConstraintChecks"
+};
+var selected = only.FirstOrDefault(item => args.Contains(item.Key)).Value;
+var suiteArgument = Array.IndexOf(args, "--suite");
+if (suiteArgument >= 0)
+{
+    if (suiteArgument + 1 >= args.Length) throw new ArgumentException("--suite needs a check class name.");
+    selected = args[suiteArgument + 1];
+}
+if (selected is not null) suites.Clear();
+foreach (var type in Assembly.GetExecutingAssembly().GetTypes().Where(type => type.Name.EndsWith("Checks", StringComparison.Ordinal)).OrderBy(type => type.Name))
+{
+    if (selected is not null && type.Name != selected) continue;
+    var method = type.GetMethods(BindingFlags.Public | BindingFlags.Static).FirstOrDefault(method =>
+        method.GetParameters().Length == 0 && (method.Name is "Run" or "RunAsync") && (method.ReturnType == typeof(int) || method.ReturnType == typeof(Task<int>)));
+    if (method is null) continue;
+    suites.Add((type.Name, async () => { var result = method.Invoke(null, null); return result is Task<int> task ? await task : (int)result!; }));
+}
+if (suites.Count == 0) throw new ArgumentException("No matching test suite.");
+await TestReport.RunAsync("Gateway", args, suites);
+
+static int RunModelChecks()
+{
 var passed = 0;
 void Check(bool condition, string description)
 {
@@ -177,15 +206,5 @@ try
     catch (InvalidOperationException) { passed++; }
 }
 finally { if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true); }
-passed += ComponentMessagingChecks.Run();
-passed += await InputConstraintChecks.RunAsync();
-passed += await InteractionEventChecks.RunAsync();
-passed += ChartChecks.Run();
-passed += await BindingDataChecks.RunAsync();
-passed += await TableBatchChecks.RunAsync();
-passed += await UnifiedPublicationChecks.RunAsync();
-passed += await EquipmentCommandChecks.RunAsync();
-passed += await PythonUiChecks.RunAsync();
-passed += await PythonComponentEventChecks.RunAsync();
-passed += await RuntimeSessionMessagingChecks.RunAsync();
-Console.WriteLine($"PASS {passed} gateway script, cron, journal, component messaging, Python UI and component event checks.");
+return passed;
+}

@@ -6,6 +6,7 @@ import GatewayDeployment from "./GatewayDeployment";
 import GatewayRecovery from "./GatewayRecovery";
 import GatewayBackups from "./GatewayBackups";
 import GatewayConfiguration from "./GatewayConfiguration";
+import GatewayProcessData from "./GatewayProcessData";
 import { useAuth } from "./Auth";
 import "./gatewayConsole.css";
 
@@ -14,13 +15,13 @@ interface Metrics { observedAt: string; uptimeSeconds: number; cpuPercent: numbe
 interface Overview { recoveryMode: boolean; currentSessionId: string; observedAt: string; identity: string; version: string; framework: string; platform: string; sessions: Session[]; metrics: Metrics | null; projects: { id: string; name: string; archived: boolean; published: boolean }[]; connections: { id: string; name: string; type: string; status: string }[]; tags: { total: number; configured: number; good: number; unavailable: number } }
 const bytes = (value: number | null) => value === null ? "Unavailable" : `${(value / 1024 / 1024).toLocaleString(undefined, { maximumFractionDigits: 0 })} MiB`;
 const time = (value: string) => new Date(value).toLocaleString();
-const sections = [{ id: "overview", name: "Overview" }, { id: "configuration", name: "Configuration" }, { id: "deployment", name: "Deployment" }, { id: "backups", name: "Backups" }, { id: "recovery", name: "Recovery" }, { id: "sessions", name: "Sessions" }, { id: "diagnostics", name: "Diagnostics" }, { id: "security", name: "Security" }, { id: "audit", name: "Audit" }] as const;
+const sections = [{ id: "overview", name: "Overview" }, { id: "configuration", name: "Configuration" }, { id: "process-data", name: "Alarms & history" }, { id: "deployment", name: "Deployment" }, { id: "backups", name: "Backups" }, { id: "recovery", name: "Recovery" }, { id: "sessions", name: "Sessions" }, { id: "diagnostics", name: "Diagnostics" }, { id: "security", name: "Security" }, { id: "audit", name: "Audit" }] as const;
 type Section = typeof sections[number]["id"];
 const sectionFromHash = (): Section => sections.find(item => `#${item.id}` === window.location.hash)?.id ?? "overview";
 
 export default function GatewayConsole() {
   const { gatewayAdmin, gatewayCapabilities } = useAuth();
-  const allowed = (id: Section) => gatewayAdmin || (id === "overview" ? gatewayCapabilities.diagnostics || gatewayCapabilities.configuration : id === "deployment" || id === "configuration" ? gatewayCapabilities.configuration : id === "security" || id === "recovery" ? false : gatewayCapabilities[id]);
+  const allowed = (id: Section) => gatewayAdmin || (id === "overview" ? gatewayCapabilities.diagnostics || gatewayCapabilities.configuration : id === "deployment" || id === "configuration" || id === "process-data" ? gatewayCapabilities.configuration : id === "security" || id === "recovery" ? false : gatewayCapabilities[id]);
   const visibleSections = sections.filter(item => allowed(item.id));
   const [requestedSection, setSection] = useState<Section>(sectionFromHash);
   const section = allowed(requestedSection) ? requestedSection : visibleSections[0]?.id ?? "overview";
@@ -60,7 +61,7 @@ export default function GatewayConsole() {
     <main><div className="gateway-heading"><div><div className="eyebrow">GATEWAY ADMINISTRATION</div><h1>{data?.identity || "Gateway Settings"}</h1><p>Shared resources, deployment, active sessions, security and diagnostics.</p></div>{!securitySection && section !== "deployment" && section !== "recovery" && <button className="button" disabled={busy} onClick={() => void refresh()}>{busy ? "Refreshing…" : "Refresh status"}</button>}</div>
       {data?.recoveryMode && section !== "recovery" && <p className="gateway-stale" role="status">This restored gateway is isolated. Connections, Python and operator applications are blocked. {gatewayAdmin && <a href="#recovery">Review recovery</a>}</p>}
       <nav aria-label="Gateway sections">{visibleSections.map(item => <a key={item.id} href={`#${item.id}`} aria-current={section === item.id ? "page" : undefined}>{item.name}</a>)}</nav>
-      {securitySection ? <Security key={section} section={section} /> : section === "deployment" ? <GatewayDeployment /> : section === "configuration" ? <GatewayConfiguration /> : section === "backups" ? <GatewayBackups /> : section === "recovery" ? <GatewayRecovery /> : <>
+      {securitySection ? <Security key={section} section={section} /> : section === "deployment" ? <GatewayDeployment /> : section === "configuration" ? <GatewayConfiguration /> : section === "process-data" ? <GatewayProcessData /> : section === "backups" ? <GatewayBackups /> : section === "recovery" ? <GatewayRecovery /> : <>
       {error && <p className="gateway-error" role="alert">{error}</p>}
       {data && <p className={stale ? "gateway-stale" : "gateway-observation"} role="status">{stale ? "Stale observation — refresh before relying on this status." : "Snapshot"} · Observed {time(data.observedAt)}</p>}
       {!data ? <p>{busy ? "Loading gateway status…" : "Status unavailable. Use Refresh status to retry."}</p> : <>

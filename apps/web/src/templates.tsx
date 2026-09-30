@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { tagDependencyPaths } from "./tagStore";
+import RenderBoundary from "./RenderBoundary";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import BoundComponent from "./BoundComponent";
 import type { InheritedComponentAppearance } from "./BoundComponent";
@@ -104,6 +106,37 @@ type TemplateInstanceProps = ProjectComponentProps & {
 };
 
 export function ProjectComponentView(props: ProjectComponentProps) {
+  const current = useRef(props); current.current = props;
+  // Stable forwarding functions preserve fresh closures without invalidating every tile.
+  const callbacks = useMemo(() => ({
+    onNavigate: (...args: Parameters<ProjectComponentProps["onNavigate"]>) => current.current.onNavigate(...args),
+    onAction: props.onAction ? (...args: Parameters<NonNullable<ProjectComponentProps["onAction"]>>) => current.current.onAction?.(...args) : undefined,
+    onTableEdit: props.onTableEdit ? (...args: Parameters<NonNullable<ProjectComponentProps["onTableEdit"]>>) => current.current.onTableEdit!(...args) : undefined,
+    onPythonEvent: props.onPythonEvent ? (...args: Parameters<NonNullable<ProjectComponentProps["onPythonEvent"]>>) => current.current.onPythonEvent!(...args) : undefined,
+    onOpenPopup: props.onOpenPopup ? (...args: Parameters<NonNullable<ProjectComponentProps["onOpenPopup"]>>) => current.current.onOpenPopup?.(...args) : undefined,
+    onClosePopup: props.onClosePopup ? () => current.current.onClosePopup?.() : undefined,
+    onInputChange: props.onInputChange ? (...args: Parameters<NonNullable<ProjectComponentProps["onInputChange"]>>) => current.current.onInputChange?.(...args) : undefined,
+    onScopedInputChange: props.onScopedInputChange ? (...args: Parameters<NonNullable<ProjectComponentProps["onScopedInputChange"]>>) => current.current.onScopedInputChange?.(...args) : undefined,
+  }), [Boolean(props.onAction), Boolean(props.onTableEdit), Boolean(props.onPythonEvent), Boolean(props.onOpenPopup), Boolean(props.onClosePopup), Boolean(props.onInputChange), Boolean(props.onScopedInputChange)]);
+  return <RenderBoundary tile label={typeof props.component.props.text === "string" ? props.component.props.text || props.component.type : props.component.type} resetKey={props.component}><MemoProjectComponent {...props} {...callbacks} /></RenderBoundary>;
+}
+export function projectComponentPropsEqual(previous: ProjectComponentProps, next: ProjectComponentProps) {
+  for (const key of new Set([...Object.keys(previous), ...Object.keys(next)]) as Set<keyof ProjectComponentProps>) {
+    if (key === "tags") continue;
+    // Automatic assignments carry per-invocation capture helpers; keep their identity checks.
+    if (["inputs", "parameters", "scopedInputs", "templateAncestors"].includes(key)) {
+      if (JSON.stringify(previous[key]) !== JSON.stringify(next[key])) return false;
+    } else if (previous[key] !== next[key]) return false;
+  }
+  if (previous.tags === next.tags) return true;
+  const paths = tagDependencyPaths([next.component, isTemplateInstance(next.component.type) || next.component.type === "viewContainer" ? next.templates : []], next.parameters, next.tags.map(tag => tag.path));
+  if (paths === null) return false;
+  const before = previous.tags.filter(tag => paths.has(tag.path)), after = next.tags.filter(tag => paths.has(tag.path));
+  return before.length === after.length && before.every((tag, index) => tag === after[index]);
+}
+const MemoProjectComponent = memo(ProjectComponentContents, projectComponentPropsEqual);
+
+function ProjectComponentContents(props: ProjectComponentProps) {
   if (isTemplateInstance(props.component.type) || props.component.type === "viewContainer")
     return <BoundTemplateInstance {...props} />;
   return (

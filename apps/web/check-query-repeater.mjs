@@ -259,7 +259,9 @@ await check('rendered row keys isolate edits and action callbacks carry the reso
   const calls = [], parentHooks = localHooks();
   const props = { ...viewProps, onAction: (...args) => calls.push(args) };
   const list = () => {
-    parentHooks.begin(); const wrapper = CellView(props); const frame = wrapper.type(wrapper.props);
+    parentHooks.begin(); let wrapper = CellView(props).props.children;
+    if (typeof wrapper.type === "object" && wrapper.type.type) wrapper = wrapper.type.type(wrapper.props);
+    const frame = wrapper.type(wrapper.props);
     const host = descendants(frame, node => typeof node.type === 'function' && node.type.name === 'TemplateInstances')[0];
     const tree = host.type(host.props);
     return descendants(tree, node => typeof node.type === 'function' && node.type.name === 'TemplateInstanceCell');
@@ -289,7 +291,9 @@ await check('rendered row keys isolate edits and action callbacks carry the reso
 await check('typed cell actions and child event contexts keep scalar types and invalidate on metadata edits', () => {
   const calls = [], parentHooks = localHooks(), props = { ...viewProps, templates: [typedTemplate], onAction: (...args) => calls.push(args) };
   globalThis.__repeaterRows = { key: 'typed', rows: [{ id: 'a', parameters: { title: 'A', amount: 6, active: false } }], loading: false, error: '' };
-  const cells = () => { parentHooks.begin(); const wrapper = CellView(props); const frame = wrapper.type(wrapper.props);
+  const cells = () => { parentHooks.begin(); let wrapper = CellView(props).props.children;
+    if (typeof wrapper.type === "object" && wrapper.type.type) wrapper = wrapper.type.type(wrapper.props);
+    const frame = wrapper.type(wrapper.props);
     const host = descendants(frame, node => typeof node.type === 'function' && node.type.name === 'TemplateInstances')[0];
     return descendants(host.type(host.props), node => typeof node.type === 'function' && node.type.name === 'TemplateInstanceCell'); };
   const first = cells()[0], rowHooks = localHooks(); rowHooks.begin();
@@ -303,7 +307,9 @@ await check('typed cell actions and child event contexts keep scalar types and i
 
 await check('saved templates and rows keep mounted owners across connection changes while query-owned rows invalidate', () => {
   const parentHooks = localHooks(), props = {...viewProps};
-  const cells = () => { parentHooks.begin(); const wrapper = CellView(props); const frame = wrapper.type(wrapper.props);
+  const cells = () => { parentHooks.begin(); let wrapper = CellView(props).props.children;
+    if (typeof wrapper.type === "object" && wrapper.type.type) wrapper = wrapper.type.type(wrapper.props);
+    const frame = wrapper.type(wrapper.props);
     const host = descendants(frame, node => typeof node.type === 'function' && node.type.name === 'TemplateInstances')[0];
     return descendants(host.type(host.props), node => typeof node.type === 'function' && node.type.name === 'TemplateInstanceCell'); };
   for (const type of ['template', 'repeater']) {

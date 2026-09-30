@@ -1,10 +1,12 @@
-import { createContext, useContext, useState } from "react";
+import { runtimeText } from "./runtimeText";
+import { createContext, useContext, useMemo, useState } from "react";
 import type { PropsWithChildren } from "react";
 import type { Project, TranslationCatalog } from "./types";
 import "./localization.css";
 const context = createContext<{ catalog?: TranslationCatalog; locale?: string }>({});
 export function LocalizationProvider({ catalog, locale, children }: PropsWithChildren<{ catalog?: TranslationCatalog; locale?: string }>) {
-  return <context.Provider value={{ catalog, locale }}>{children}</context.Provider>;
+  const value = useMemo(() => ({ catalog, locale }), [catalog, locale]);
+  return <context.Provider value={value}>{children}</context.Provider>;
 }
 export function useLocalization() { return useContext(context); }
 
@@ -27,5 +29,5 @@ export function useLocaleSelection(project: Project | null | undefined) {
 }
 export function LocaleSelector({ catalog, locale, onChange }: { catalog?: TranslationCatalog; locale: string; onChange: (value: string) => void }) {
   if (!catalog) return null;
-  return <label className="locale-selector">Language<select value={locale} onChange={event => onChange(event.target.value)}>{catalog.locales.map(value => <option key={value} value={value}>{value}</option>)}</select></label>;
+  return <label className="locale-selector">{runtimeText(catalog, locale, "language", "Language")}<select value={locale} onChange={event => onChange(event.target.value)}>{catalog.locales.map(value => <option key={value} value={value}>{value}</option>)}</select></label>;
 }

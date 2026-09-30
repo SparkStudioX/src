@@ -21,6 +21,7 @@ builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.P
 var dataDir = Path.GetFullPath(Environment.GetEnvironmentVariable("SPARKSTUDIO_DATA_DIR") ?? builder.Configuration["DataDirectory"] ?? Path.Combine(AppContext.BaseDirectory, "data"));
 Directory.CreateDirectory(dataDir);
 using var dataLease = DataDirectoryLease.Acquire(dataDir);
+GatewayDataMigrations.Prepare(dataDir);
 var recovery = new RecoveryQuarantine(dataDir);
 builder.Services.AddSingleton(recovery);
 DeploymentSettings.Configure(builder, dataDir, recovery.Active ? "Gateway recovery quarantine" : null);
@@ -32,18 +33,21 @@ builder.Services.AddSingleton<GatewayReadiness>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayReadiness>());
 builder.Services.AddSingleton(new GatewayDeployment(builder.Configuration, builder.Environment, dataDir));
 builder.Services.AddSingleton(new GatewayObservations(dataDir));
+builder.Services.AddSingleton(new OpcCertificateAdministration(dataDir));
 builder.Services.AddSingleton<PreviewSessions>();
 builder.Services.AddSingleton<RuntimeSessionMessaging>();
 builder.Services.AddSingleton<EquipmentCommands>();
 builder.Services.AddSingleton(sp => new ProjectCatalog(dataDir, sp.GetRequiredService<IDataProtectionProvider>()));
 builder.Services.AddSingleton(_ => new ConnectorService(dataDir, recovery.EnsureOperationsAllowed));
 builder.Services.AddSingleton(sp => new TagEngine(sp.GetRequiredService<ProjectCatalog>().GatewayStore,
-    sp.GetRequiredService<ConnectorService>(), sp.GetRequiredService<ILogger<TagEngine>>(), recovery));
+    sp.GetRequiredService<ConnectorService>(), sp.GetRequiredService<ILogger<TagEngine>>(), recovery, enableDemoTags: builder.Configuration.GetValue<bool>("SparkStudio:EnableDemoTags")));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TagEngine>());
+builder.Services.AddSingleton(sp => new ProcessDataService(dataDir, sp.GetRequiredService<TagEngine>(), recovery, sp.GetRequiredService<ILogger<ProcessDataService>>()));
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ProcessDataService>());
 builder.Services.AddSingleton<ProjectRuntimeRegistry>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ProjectRuntimeRegistry>());
 builder.Services.AddSingleton(sp => new GatewayBackups(dataDir, sp.GetRequiredService<IDataProtectionProvider>(), recovery,
-    sp.GetRequiredService<SecurityStore>(), sp.GetRequiredService<IHostApplicationLifetime>()));
+    sp.GetRequiredService<SecurityStore>(), sp.GetRequiredService<IHostApplicationLifetime>(), sp.GetRequiredService<ProjectCatalog>().GatewayStore));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayBackups>());
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped(sp => sp.GetRequiredService<ProjectRuntimeRegistry>().Get(
@@ -62,6 +66,8 @@ app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     context.Response.Headers["Referrer-Policy"] = "same-origin";
+    context.Response.Headers["Content-Security-Policy"] = "frame-ancestors 'self'; object-src 'none'; base-uri 'self'";
+    if (GatewaySecurity.IsDirectTls(context)) context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000";
     if (context.Request.Path.StartsWithSegments("/api") && context.Request.Headers.Origin.FirstOrDefault() is { } origin)
     {
         var expected = $"{context.Request.Scheme}://{context.Request.Host}";
@@ -96,6 +102,8 @@ app.MapGatewayDeploymentEndpoints();
 app.MapDeploymentSettingsEndpoints();
 app.MapGatewayRecoveryEndpoints();
 app.MapGatewayBackupEndpoints();
+app.MapProcessDataConfiguration();
+OpcCertificateAdministration.MapEndpoints(app);
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapGet("/api/ready", GatewayReadiness.Respond);
@@ -142,10 +150,11 @@ routes.MapPreviewEndpoints();
 routes.MapPythonComponentEventEndpoints();
 routes.MapRuntimeSessionMessageEndpoints();
 routes.MapEquipmentCommandEndpoints();
-routes.MapGet("/health", (PythonRunner python) => new { status = "ok", version = typeof(PythonRunner).Assembly
+routes.MapProcessDataRuntime();
+routes.MapGet("/health", (PythonRunner python, TagEngine tags, IHostEnvironment environment) => new { status = "ok", version = typeof(PythonRunner).Assembly
     .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
     .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "unknown",
-    pythonAvailable = python.Available, demoMode = true, deployment = "local-development" }).Access("signedIn", "context");
+    pythonAvailable = python.Available, demoMode = tags.DemoMode, deployment = environment.EnvironmentName }).Access("signedIn", "context");
 routes.MapGet("/project", (ProjectStore store) => store.GetProject()).Access("design");
 routes.MapGet("/assets", (LocalAssetStore assets) => assets.List()).Access("design");
 routes.MapPost("/assets", (AssetUpload upload, LocalAssetStore assets, ScriptResourceStore scripts, HttpContext context) =>
@@ -185,11 +194,11 @@ routes.MapPut("/project", (JsonObject project, ProjectStore store, ScriptResourc
 routes.MapGet("/project/publication", (PublicationStore publication) => publication.Metadata()).Access("read", "context");
 routes.MapGet("/project/publication-review", (ProjectStore store, PublicationStore publication) => publication.Review(store)).Access("publish");
 routes.MapGet("/project/history", (PublicationStore publication) => publication.History()).Access("design");
-routes.MapPost("/project/history/{id}/restore", (string id, PublicationRollbackRequest request, PublicationStore publication) => publication.Rollback(id, request.ExpectedPublishedAt, request.AcknowledgeLegacy)).Access("publish", audit: true);
+routes.MapPost("/project/history/{id}/restore", (string id, PublicationRollbackRequest request, PublicationStore publication, HttpContext context) => publication.Rollback(id, request.ExpectedPublishedAt, request.AcknowledgeLegacy, allowExecutableChanges: GatewayAccess.Actor(context).GatewayAdmin)).Access("publish", audit: true);
 routes.MapPost("/project/publish", (PublishRequest request, ProjectStore store, PublicationStore publication, ScriptResourceStore scripts, HttpContext context) =>
 {
     var before = publication.Metadata();
-    var saved = publication.Publish(store, request.Revision, request.ScriptsRevision, request.ReviewToken);
+    var saved = publication.Publish(store, request.Revision, request.ScriptsRevision, request.ReviewToken, allowExecutableChanges: GatewayAccess.Actor(context).GatewayAdmin);
     if (!JsonNode.DeepEquals(before, publication.Metadata())) scripts.NotifyUpdate(ScriptProjectUpdates.Resource(GatewayAccess.Actor(context).Username, "publication", "application", false, "projectPublished"));
     return saved;
 }).Access("publish", audit: true);
@@ -251,8 +260,8 @@ routes.MapPost("/scripts/validate", (ScriptSyntaxRequest request, PythonRunner p
     => python.ValidateSyntaxAsync(request.Code, cancellation)).Access("design");
 routes.MapPut("/scripts/resources", (JsonObject draft, ScriptResourceStore scripts, HttpContext context) => scripts.SaveDraft(draft, GatewayAccess.Actor(context).Username)).Access("design", audit: true);
 routes.MapGet("/scripts/publication", (ScriptResourceStore scripts) => scripts.Metadata()).Access("design");
-routes.MapPost("/scripts/publish", (PublishRequest request, ProjectStore store, PublicationStore publication) => {
-    var result = publication.Publish(store, store.GetProject()["revision"]!.GetValue<int>(), request.Revision, request.ReviewToken, onlyWhenChanged: true);
+routes.MapPost("/scripts/publish", (PublishRequest request, ProjectStore store, PublicationStore publication, HttpContext context) => {
+    var result = publication.Publish(store, store.GetProject()["revision"]!.GetValue<int>(), request.Revision, request.ReviewToken, onlyWhenChanged: true, allowExecutableChanges: GatewayAccess.Actor(context).GatewayAdmin);
     result["applicationRevision"] = result["revision"]?.DeepClone(); result["revision"] = result["scriptsRevision"]?.DeepClone();
     result["draftRevision"] = request.Revision;
     return result;
@@ -267,22 +276,7 @@ routes.MapPost("/scripts/run", (ScriptRequest request, PythonRunner python, Scri
     => python.RunWithLibrariesAsync(request.Code, request.Parameters, request.Inputs, scripts.CaptureLibraries(), cancellation,
         eventContext: new JsonObject { ["type"] = "manual", ["reason"] = "console", ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
             ["actor"] = GatewayAccess.Actor(context).Username }, uiContext: PythonUiContext.ForPreview(store, request.UiContext, request.Ui))).Access("admin", audit: true);
-routes.MapGet("/events", async (HttpContext context, TagEngine tags, SecurityStore security) =>
-{
-    context.Response.ContentType = "text/event-stream";
-    context.Response.Headers.CacheControl = "no-store";
-    try
-    {
-        while (!context.RequestAborted.IsCancellationRequested)
-        {
-            if (!GatewayAccess.SessionStillAllowed(context, security)) break;
-            await context.Response.WriteAsync("event: tags\ndata: " + JsonSerializer.Serialize(GatewayAccess.Tags(context, security, tags.Snapshot()), new JsonSerializerOptions(JsonSerializerDefaults.Web)) + "\n\n", context.RequestAborted);
-            await context.Response.Body.FlushAsync(context.RequestAborted);
-            await Task.Delay(1000, context.RequestAborted);
-        }
-    }
-    catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested) { }
-}).Access("read", "context");
+routes.MapGet("/events", TagEventStream.WriteAsync).Access("read", "context");
 }
 
 public record TagReadRequest(string[] Paths, Dictionary<string, JsonElement>? Parameters);

@@ -1260,3 +1260,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+@media (pointer: coarse) {
+  .operator-header button, .operator-header select, .operator-screenbar button, .operator-screenbar select,
+  .operator-notifications button, .operator-empty button, .operator-header input { min-width: 44px; min-height: 44px; }
+  .operator-viewport { touch-action: pan-x pan-y; overscroll-behavior: contain; }
+  .operator-canvas-scaler { flex-shrink: 0; }
+  .view-split-divider { touch-action: none; }
+}

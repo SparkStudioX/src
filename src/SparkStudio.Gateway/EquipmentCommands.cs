@@ -20,7 +20,7 @@ public static class EquipmentCommandDefinitions
     {
         if (!project.ContainsKey("commands"))
         {
-            if (ProjectTemplates.Components(project).Any(item => ProjectStore.Optional(item, "type") == "equipmentCommand")) throw new ArgumentException("Declare project equipment commands before adding a command control.");
+            if (ProjectTemplates.Components(project).Any(item => ProjectStore.Optional(item, "type") == "equipmentCommand" || item["props"]?["commandId"] is not null)) throw new ArgumentException("Declare project equipment commands before adding a command control or setpoint input.");
             return;
         }
         if (project["commands"] is not JsonArray commands || commands.Count > 128) throw new ArgumentException("A project supports up to 128 equipment commands.");
@@ -46,6 +46,13 @@ public static class EquipmentCommandDefinitions
         }
         foreach (var component in ProjectTemplates.Components(project).Where(item => ProjectStore.Optional(item, "type") == "equipmentCommand"))
             if (component["props"] is not JsonObject props || !ids.Contains(ProjectStore.Required(props, "commandId"))) throw new ArgumentException("An equipment command control must reference a declared project command.");
+        foreach (var component in ProjectTemplates.Components(project).Where(item => ProjectStore.Optional(item, "type") != "equipmentCommand" && item["props"]?["commandId"] is not null))
+        {
+            if (ProjectStore.Optional(component, "type") != "numberInput") throw new ArgumentException("Write-on-commit commands require a numeric input.");
+            var id = ProjectStore.Required(component["props"]!.AsObject(), "commandId");
+            var command = commands.OfType<JsonObject>().FirstOrDefault(item => ProjectStore.Required(item, "id") == id);
+            if (command is null || TagDefinitionValidator.DataType(command) is "String" or "Boolean") throw new ArgumentException("A setpoint input must reference a declared numeric equipment command.");
+        }
     }
     public static JsonNode Value(JsonObject definition, JsonElement value)
     {

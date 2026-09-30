@@ -37,6 +37,14 @@ The worktree check inventories tracked and nonignored files; ignored local data 
 
 ## Limits
 
+Product behavior has been researched using public documentation, the reference
+application's user interface and private reference material outside this
+repository. This is not a claim that implementation authors never viewed
+reference source or a certification of a clean-room development process.
+Source review must establish the provenance of each submitted implementation;
+the boundary checker only helps exclude prohibited artifacts. Synthetic examples
+and tests are authored for SparkStudio and must not embed reference exports.
+
 These checks supplement source and secret review. They cannot prove authorship, detect every renamed or transformed artifact, or prevent an administrator from bypassing hooks or changing CI. Review policy changes as carefully as application code, and require the `Source boundary` workflow through repository protection settings where available. Those remote settings are separate from these local files.
 
 If a check fails, remove the unintended file from the index while preserving any local material outside the checkout. Do not commit an artifact and remove it in a later commit: it remains in history and the push guard will reject it.

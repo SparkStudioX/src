@@ -14,7 +14,7 @@ export const finish=()=>{for(const [scope,values]of scopes)if(!alive.has(scope))
 export const useState=initial=>{const values=scopes.get(current),at=index++;if(!(at in values))values[at]=typeof initial==='function'?initial():initial;return[values[at],next=>{values[at]=typeof next==='function'?next(values[at]):next;}];};
 export const useRef=initial=>{const values=scopes.get(current),at=index++;return values[at]??={current:initial};};
 export const useId=()=>'query-authoring';export const useEffect=(callback,deps)=>{const values=scopes.get(current),at=index++,old=values[at];if(!old||deps.some((value,i)=>!Object.is(value,old.deps[i]))){const next={deps};values[at]=next;pending.push(()=>{old?.cleanup?.();next.cleanup=callback();});}};`);
-const apiUrl = asModule('export const api=(...args)=>globalThis.__queryRequest(...args); export const resolvePath=(value,parameters)=>value.replace(/\\{([^{}]+)\\}/g,(all,key)=>Object.hasOwn(parameters,key)?String(parameters[key]):all); export const displayValue=value=>String(value ?? "");');
+const apiUrl = asModule('export const api=(...args)=>globalThis.__queryRequest(...args); export const resolvePath=(value,parameters)=>value.replace(/\\{([^{}]+)\\}/g,(all,key)=>Object.hasOwn(parameters,key)?String(parameters[key]):all); export const tagByPath=(tags,path)=>tags.find(tag=>tag.path===path); export const displayValue=value=>String(value ?? "");');
 const portalUrl = asModule('export const createPortal=children=>children;'), modules = new Map();
 function url(name) {
   if (modules.has(name)) return modules.get(name);

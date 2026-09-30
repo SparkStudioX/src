@@ -13,7 +13,7 @@ export const useState=initial=>{const values=scopes.get(current),at=index++;if(!
 export const useRef=initial=>{const values=scopes.get(current),at=index++;return values[at]??={current:initial};};
 export const useId=()=>'message-authoring';export const useEffect=()=>{};export const useMemo=factory=>factory();`);
 const scriptUrl = asModule(`import React from ${JSON.stringify(pathToFileURL(require.resolve('react')).href)};export default function ScriptEditor(props){return React.createElement('script-editor',props);}`);
-const apiUrl = asModule(`let sequence=0;export const id=prefix=>prefix+'-'+(++sequence);export const resolvePath=value=>value;export const api=async()=>({resources:[]});`);
+const apiUrl = asModule(`let sequence=0;export const id=prefix=>prefix+'-'+(++sequence);export const resolvePath=value=>value;export const tagByPath=(tags,path)=>tags.find(tag=>tag.path===path);export const api=async()=>({resources:[]});`);
 const modules = new Map();
 function url(name) {
   if (modules.has(name)) return modules.get(name);

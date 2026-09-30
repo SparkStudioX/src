@@ -4,6 +4,30 @@ using Microsoft.Data.SqlClient;
 using Opc.Ua;
 using SparkStudio.Connectors;
 
+var suites = new List<(string Name, Func<Task<int>> Run)> { ("Connector guards and pooling", RunModelChecks) };
+if (args.Contains("--sqlite-integration")) suites.Add(("SQLite integration", async () => {
+    var passed = 0;
+    await SqliteIntegration.RunAsync((condition, message) => { if (!condition) throw new Exception(message); passed++; });
+    return passed;
+}));
+var gatewayArgument = Array.IndexOf(args, "--gateway");
+Uri? gatewayAddress = null;
+if (gatewayArgument >= 0)
+{
+    if (gatewayArgument + 1 >= args.Length) throw new ArgumentException("Pass the isolated gateway URL after --gateway.");
+    gatewayAddress = new Uri(args[gatewayArgument + 1]);
+    GatewaySubscriptionLifecycle.ValidateAddress(gatewayAddress);
+}
+if (args.Contains("--opc-integration") || gatewayAddress is not null) suites.Add(("OPC integration", async () => {
+    var passed = 0;
+    await OpcSubscriptionIntegration.RunAsync((condition, message) => { if (!condition) throw new Exception(message); passed++; }, gatewayAddress);
+    return passed;
+}));
+suites.Add(("Connector reliability", ConnectorReliabilityChecks.RunAsync));
+await TestReport.RunAsync("Connectors", args, suites);
+
+static async Task<int> RunModelChecks()
+{
 var passed = 0;
 void Check(bool condition, string description)
 {
@@ -134,17 +158,8 @@ using (var cancelRead = new CancellationTokenSource())
     try { await waiting; throw new Exception("FAILED: waiting subscription must cancel"); }
     catch (OperationCanceledException) { passed++; }
 }
-var gatewayArgument = Array.IndexOf(args, "--gateway");
-Uri? gatewayAddress = null;
-if (gatewayArgument >= 0)
-{
-    if (gatewayArgument + 1 >= args.Length) throw new ArgumentException("Pass the isolated gateway URL after --gateway.");
-    gatewayAddress = new Uri(args[gatewayArgument + 1]);
-    GatewaySubscriptionLifecycle.ValidateAddress(gatewayAddress);
+return passed;
 }
-if (args.Contains("--opc-integration") || gatewayAddress is not null) await OpcSubscriptionIntegration.RunAsync(Check, gatewayAddress);
-if (args.Contains("--sqlite-integration")) await SqliteIntegration.RunAsync(Check);
-Console.WriteLine($"Connector checks passed: {passed}.");
 
 sealed class FakeResource : IDisposable
 {

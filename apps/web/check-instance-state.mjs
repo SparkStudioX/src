@@ -10,7 +10,7 @@ process.on('uncaughtException',error=>{console.error(error.stack?.split('\n').fi
 process.on('unhandledRejection',error=>{console.error(error?.message??error);process.exit(1);});
 const require=createRequire(import.meta.url),moduleUrl=code=>'data:text/javascript;base64,'+Buffer.from(code).toString('base64');
 const reactUrl=pathToFileURL(require.resolve('react')).href;
-const hookUrl=moduleUrl(`export * from ${JSON.stringify(reactUrl)};
+const hookUrl=moduleUrl(`export * from ${JSON.stringify(reactUrl)}; export const memo=component=>component; export const useMemo=fn=>fn();
 export const useContext=()=>globalThis.__instanceContext;
 export const useState=value=>globalThis.__instanceHooks.useState(value);
 export const useRef=value=>globalThis.__instanceHooks.useRef(value);
@@ -25,7 +25,7 @@ function loader(harness=false){const cache=new Map();return function load(name){
     .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g,(_all,prefix,_quote,dependency)=>{
       const stub=harness&&dependency==='./ComponentActivity'?moduleUrl('export const useComponentActivity=()=>true; export const ComponentActivityProvider=({children})=>children;')
         :harness&&['applicationState','templates','inputStateBindings','ComponentEvents'].includes(name)&&dependency==='react'?hookUrl
-        :harness&&name==='templates'?({'./BoundComponent':leafUrl,'./useQueryRepeater':queryUrl,'./VisualStyleContext':moduleUrl('export const useVisualStyles=()=>undefined;'),'./LocalizationContext':moduleUrl('export const useLocalization=()=>({});'),'./useQueryPropertyBindings':moduleUrl('export const useQueryPropertyBindings=()=>({});export const useQueryPropertyContext=()=>undefined;export const QueryPropertyProvider=({children})=>children;')})[dependency]:undefined;
+        :harness&&name==='templates'?({'./BoundComponent':leafUrl, './RenderBoundary':moduleUrl('export default ({children})=>children;'),'./useQueryRepeater':queryUrl,'./VisualStyleContext':moduleUrl('export const useVisualStyles=()=>undefined;'),'./LocalizationContext':moduleUrl('export const useLocalization=()=>({});'),'./useQueryPropertyBindings':moduleUrl('export const useQueryPropertyBindings=()=>({});export const useQueryPropertyContext=()=>undefined;export const QueryPropertyProvider=({children})=>children;')})[dependency]:undefined;
       return prefix+JSON.stringify(stub??(dependency.startsWith('./')?load(dependency.slice(2)):pathToFileURL(require.resolve(dependency)).href));
     });
   const result=moduleUrl(code);cache.set(name,result);return result;

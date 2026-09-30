@@ -46,8 +46,8 @@ public static class TagModel
     }
     public static void ValidateTagFields(JsonObject value)
     {
-        Fields(value, "path", "kind", "dataType", "value", "enabled", "publishingIntervalMs", "scanGroup", "connectionId", "nodeId", "expression", "inputs");
-        var sourceFields = TagDefinitionValidator.Kind(value) switch { "memory" => new[] { "value" }, "expression" => new[] { "expression", "inputs" }, _ => new[] { "connectionId", "nodeId" } };
+        Fields(value, "path", "kind", "dataType", "value", "enabled", "publishingIntervalMs", "scanGroup", "connectionId", "nodeId", "absoluteDeadband", "queueSize", "expression", "inputs");
+        var sourceFields = TagDefinitionValidator.Kind(value) switch { "memory" => new[] { "value" }, "expression" => new[] { "expression", "inputs" }, _ => new[] { "connectionId", "nodeId", "absoluteDeadband", "queueSize" } };
         if (value.Any(field => field.Key is not ("path" or "kind" or "dataType" or "enabled" or "publishingIntervalMs" or "scanGroup") && !sourceFields.Contains(field.Key, StringComparer.Ordinal)))
             throw new ArgumentException("Tag fields must match the selected value source.");
     }
@@ -156,7 +156,7 @@ public static class TagModel
                 if (overrides.TryGetPropertyValue(memberPath, out var patch))
                 {
                     if (patch is not JsonObject memberOverrides) throw new ArgumentException("Member overrides must be objects.");
-                    Fields(memberOverrides, "value", "enabled", "publishingIntervalMs", "scanGroup", "connectionId", "nodeId", "expression", "inputs");
+                    Fields(memberOverrides, "value", "enabled", "publishingIntervalMs", "scanGroup", "connectionId", "nodeId", "absoluteDeadband", "queueSize", "expression", "inputs");
                     fields = memberOverrides.Select(pair => pair.Key).ToArray();
                     foreach (var pair in memberOverrides) authored[pair.Key] = pair.Value?.DeepClone();
                 }

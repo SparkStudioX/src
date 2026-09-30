@@ -12,6 +12,7 @@ public sealed partial class ConnectorService
         object typed = dataType switch
         {
             "Boolean" => value.GetBoolean(), "Int16" => value.GetInt16(), "Int32" => value.GetInt32(),
+            "UInt16" => value.GetUInt16(), "UInt32" => value.GetUInt32(),
             "Int64" => value.GetInt64(), "Float" => value.GetSingle(), "Double" => value.GetDouble(),
             "String" => value.GetString() ?? throw new ArgumentException("A write cannot contain null text."),
             _ => throw new ArgumentException("Unsupported scalar write type.")

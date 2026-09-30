@@ -2,7 +2,7 @@
 
 Each major user-facing feature should ship with an independently authored workshop project, a short exercise guide, compatibility information and a verified import/publish/runtime check. Workshops serve as both learning material and reproducible acceptance examples. Use synthetic data and make any gateway setup or writes explicit.
 
-[catalog.json](catalog.json) is the machine-readable inventory of all 41 source examples. Twenty-nine are portable project workshops; twelve require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
+[catalog.json](catalog.json) is the machine-readable inventory of all 53 source examples. 35 are portable project workshops; 18 require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
 
 ## Use a downloaded workshop
 
@@ -16,7 +16,7 @@ The portable collection needs no OPC UA server, SQL Server, external database or
 
 Project packages carry saved screens, templates, queries, script drafts, styles, translations, authoring defaults and referenced local images. They do not contain accounts, grants, credentials, connection configuration, tag definitions or values, databases, active publications/history or live browser state. See [project packages](../docs/architecture/PROJECTS.md) for the complete format and import rules.
 
-The Gateway events workshop includes seven disabled Python resources. Import and screen publication leave them inactive; review, enable, save and **Publish scripts** separately to exercise them. Its optional tag-change exercise requires one memory tag configured outside the package. The other event examples require no equipment or database setup.
+The Gateway events workshop includes seven disabled Python resources. Import leaves them inactive; review, enable and save them before publishing the complete application. Screen and script resources are published together. Its optional tag-change exercise requires one memory tag configured outside the package. The other event examples require no equipment or database setup.
 
 The Python UI workshop keeps its core exercise local to the calling browser form: property overrides and declared state are returned by Python without changing the project or other operator tabs. Its optional shared-title display begins unavailable. The [Python UI guide](../docs/architecture/PYTHON_UI.md) explains how to create a separate String memory tag and add a deliberate shared write action; neither gateway setup nor that write action is included in the portable package.
 
@@ -123,3 +123,5 @@ The initial collection passed all nine offline build checks and real import/publ
 4. Record the build/revision and verification with the release. Distribute the `.sparkproj`, guide and checksum together, either with the installer release or as a separate workshop collection. Keep generated packages and test/runtime data out of Git.
 
 Feature completion includes its workshop and validation. The exercises may expand as the feature grows, but compatibility changes must be reflected in the catalog and distribution metadata.
+
+The [alarms and history workshop](../docs/architecture/PROCESS_DATA.md) adds one synthetic memory tag, two alarm conditions and a retained history source through `tools/load-process-data-example.mjs`. It is setup-required and never uses a physical device.

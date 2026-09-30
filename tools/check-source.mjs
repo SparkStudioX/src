@@ -16,6 +16,7 @@ const rootFiles = new Set([
   'Dockerfile', 'compose.yaml', 'Directory.Build.props', 'global.json', 'NuGet.Config',
 ]);
 const webFiles = new Set([
+  'apps/web/check-resilience.mjs', 'apps/web/check-process-data-settings.mjs', 'apps/web/check-opc-certificates.mjs',
   'apps/web/check-input-validation.mjs', 'apps/web/check-table-batch-editor.mjs', 'apps/web/check-view-containers.mjs',
   'apps/web/check-chart-renderer.mjs', 'apps/web/check-chart-authoring.mjs', 'apps/web/check-equipment-command-ui.mjs', 'apps/web/check-application-publication.mjs', 'apps/web/check-binding-data.mjs',
   'apps/web/package.json', 'apps/web/package-lock.json', 'apps/web/tsconfig.json',
@@ -71,6 +72,7 @@ const webFiles = new Set([
   'apps/web/check-input-state-bindings.mjs', 'apps/web/check-input-state-authoring.mjs',
 ]);
 const toolFiles = new Set([
+  'load-process-data-example.mjs', 'test-all.mjs', 'test-engineering-policy.mjs', 'test-environment.mjs', 'version.mjs', 'write-sbom.mjs', 'fixtures/TestReport.cs',
   'load-table-batch-example.mjs', 'test-application-workflows.mjs', 'test-view-containers.mjs',
   'test-equipment-commands.mjs', 'test-tag-parameter-workshop.mjs', 'test-fine-grained-access.mjs', 'load-access-permissions-example.mjs', 'test-charts.mjs', 'test-tag-model.mjs', 'test-unified-publication-workshop.mjs',
   'load-unit-model-example.mjs', 'load-equipment-commands-example.mjs',
@@ -131,6 +133,7 @@ const toolFiles = new Set([
   'test-input-state-bindings.mjs',
 ]);
 const architectureDocs = new Set([
+  'PROCESS_DATA.md',
   'VALIDATED_INPUTS.md', 'COMPONENT_INTERACTIONS.md', 'TABLE_BATCH_EDITING.md', 'VIEW_CONTAINERS.md',
   'CHARTS.md', 'DATASETS_NESTED_QUERIES.md', 'TAG_PARAMETER_BINDINGS.md', 'TAG_MODELS.md',
   'FINE_GRAINED_ACCESS.md', 'UNIFIED_PUBLICATION.md', 'EQUIPMENT_COMMANDS.md',
@@ -172,7 +175,10 @@ const explicitFiles = new Set([
   'examples/tag-template-parameters.json', 'examples/unit-model-workshop.json', 'examples/access-permissions-workshop.json', 'examples/equipment-commands.json',
   'src/SparkStudio.Gateway.Tests/EquipmentCommandChecks.cs', 'src/SparkStudio.Gateway.Tests/ChartChecks.cs', 'src/SparkStudio.Gateway.Tests/BindingDataChecks.cs',
   'src/SparkStudio.Gateway.Tests/UnifiedPublicationChecks.cs',
-  '.githooks/pre-commit', '.githooks/pre-push', '.github/workflows/source-boundary.yml',
+  '.githooks/pre-commit', '.githooks/pre-push', '.github/workflows/source-boundary.yml', '.github/workflows/product.yml',
+  'src/SparkStudio.Gateway.Tests/TestEnvironment.cs', 'src/SparkStudio.Gateway.Tests/ProcessDataChecks.cs',
+  'src/SparkStudio.Gateway.Tests/DataMigrationChecks.cs', 'src/SparkStudio.Gateway.Tests/LiveOpcAcceptance.cs', 'src/SparkStudio.Gateway.Tests/ScriptScopePropagationChecks.cs',
+  'src/SparkStudio.Gateway.Tests/SecurityHardeningChecks.cs', 'src/SparkStudio.Gateway.Tests/BackendReliabilityChecks.cs',
   'runtimes/python/worker.py', 'installer/SparkStudio.iss', 'installer/INSTALL-NOTES.txt',
   'examples/application-form.json', 'examples/reusable-applications.json', 'examples/assets-popups.json',
   'examples/catalog.json', 'examples/README.md',
@@ -180,7 +186,7 @@ const explicitFiles = new Set([
   'examples/resource-changes.json',
   'examples/bulk-replacement.json',
   'examples/canvas-precision.json', 'examples/visual-styles.json',
-  'examples/preview-communication.json', 'examples/publication-history.json',
+  'examples/process-data-workshop.json', 'examples/preview-communication.json', 'examples/publication-history.json',
   'examples/asset-library.json', 'examples/designer-diagnostics.json',
   'examples/localization.json', 'examples/authoring-defaults.json', 'examples/gateway-operations.json',
   'examples/operator-inputs.json',

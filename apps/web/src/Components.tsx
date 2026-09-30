@@ -1,6 +1,8 @@
+import ProcessDataComponent from "./ProcessDataComponent";
+import { isProcessDataComponent } from "./processDataModel";
 import type { RuntimeParameters } from "./types";
 import { useEffect, useId, useRef, useState } from "react";
-import { apiUrl, displayValue, resolvePath } from "./api";
+import { apiUrl, displayValue, resolvePath, tagByPath } from "./api";
 import Icon from "./Icon";
 import { QueryTable } from "./QueryTable";
 export { QueryTable } from "./QueryTable";
@@ -25,6 +27,7 @@ import type {
   Tag,
 } from "./types";
 import {
+  validateInputs,
   incrementInput,
   initialInput,
   isInput,
@@ -83,6 +86,8 @@ export function ComponentView({
   const initialStatusId = useId();
   const latestInputValue = useRef<InputValue | null>(null);
   const [failedAsset, setFailedAsset] = useState("");
+  const [commandCommit, setCommandCommit] = useState<{ value: number; sequence: number }>();
+  const committedValue = useRef<string | null>(null);
   const { type } = component;
   const props = {
     ...component.props,
@@ -93,9 +98,7 @@ export function ComponentView({
   const caption = (fallback: string) => literalText || Object.hasOwn(component.props.bindings ?? {}, "text") || Object.hasOwn(component.props.queryBindings ?? {}, "text")
     ? props.text
     : props.text || fallback;
-  const tag = tags.find(
-    (item) => item.path === (props.queryBindings?.tagPath ? props.tagPath : resolvePath(props.tagPath || "", parameters)),
-  );
+  const tag = tagByPath(tags, props.queryBindings?.tagPath ? props.tagPath ?? "" : resolvePath(props.tagPath || "", parameters));
   const precisionLimited =
     typeof tag?.value === "number" &&
     Number.isInteger(tag.value) &&
@@ -111,6 +114,7 @@ export function ComponentView({
       ? "Precision limit"
       : tag?.quality || "Tag not found";
   if (type === "equipmentCommand") return <EquipmentCommand component={{ ...component, props }} queryScope={queryScope} publishedAt={publishedAt} communicationLost={communicationLost} interactionLocked={interactionLocked || readOnly} />;
+  if (isProcessDataComponent(type)) return <ProcessDataComponent component={{ ...component, props }} parameters={parameters} preview={preview} communicationLost={communicationLost} queryScope={queryScope} publishedAt={publishedAt} readOnly={readOnly} interactionLocked={interactionLocked} />;
   if (isChart(type)) return <ChartComponent component={{ ...component, props }} tags={tags} parameters={parameters} preview={preview} onNavigate={onNavigate} communicationLost={communicationLost} queryScope={queryScope} publishedAt={publishedAt} scopeComponents={scopeComponents} inputs={inputs} />;
   if (isProcessDisplay(type)) return <ProcessDisplay component={{ ...component, props }} parameters={parameters} />;
   if (isDrawingComponent(type)) return <DrawingComponent component={{ ...component, props }} preview={preview} interactionLocked={interactionLocked} onNavigate={onNavigate} onOpenPopup={onOpenPopup} />;
@@ -185,7 +189,7 @@ export function ComponentView({
     const label = caption(fieldKey);
     const change = (next: InputValue) => {
       if (preview && !interactionLocked && !readOnly) {
-        latestInputValue.current = next;
+        latestInputValue.current = next; committedValue.current = null;
         onInputChange?.(fieldKey, next);
       }
     };
@@ -194,6 +198,14 @@ export function ComponentView({
         if (type === "formattedInput" && typeof latestInputValue.current === "string") {
           const formatted = formatInputText(component, latestInputValue.current);
           if (formatted !== latestInputValue.current) change(formatted);
+        }
+        if (type === "numberInput" && props.commandId) {
+          const requested = latestInputValue.current;
+          if (typeof requested !== "number" || !Number.isFinite(requested) || validateInputs({ id: "setpoint", name: "Setpoint", width: 1, height: 1, components: [component] }, { [fieldKey]: requested }, parameters)) return;
+          const stamp = JSON.stringify([props.commandId, publishedAt, requested]);
+          if (committedValue.current === stamp) return;
+          committedValue.current = stamp;
+          setCommandCommit(previous => ({ value: requested, sequence: (previous?.sequence ?? 0) + 1 }));
         }
         onInputCommit?.(fieldKey, latestInputValue.current!);
       }
@@ -399,6 +411,7 @@ export function ComponentView({
             )}
           </label>
         )}
+        {type === "numberInput" && props.commandId && <EquipmentCommand key={JSON.stringify([component.id, props.commandId, publishedAt, queryScope])} component={{ ...component, props }} publishedAt={publishedAt} queryScope={queryScope} communicationLost={communicationLost} interactionLocked={interactionLocked || readOnly || !preview} commit={commandCommit} />}
         {constraintError && <small className="input-validation-error" id={initialStatusId} role="status">{constraintError}</small>}
         {value === null && !props.optionsSource && (
           <small

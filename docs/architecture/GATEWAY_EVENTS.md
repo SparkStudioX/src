@@ -1,6 +1,6 @@
 # Gateway events workshop
 
-Gateway events execute Python on the gateway without an operator browser. Open **Designer → Scripting → Gateway events** to add an event or select one from the resource tree. Every new event starts disabled. Select its trigger, configure its properties, review the code, enable it deliberately, then **Save resources → Publish scripts**. Saving a draft does not replace the active script publication. Publishing screens is a separate operation and does not publish script resources.
+Gateway events execute Python on the gateway without an operator browser. Open **Designer → Scripting → Gateway events** to add an event or select one from the resource tree. Every new event starts disabled. Select its trigger, configure its properties, review the code, enable it deliberately, then **Save resources → Publish application**. Review the complete saved screens, queries, libraries and events before confirming. Saving a draft does not replace the active application; changed executable resources require administrator publication approval.
 
 This feature requires the companion SparkStudio **0.2.0-preview.9** release or a newer compatible gateway; preview.8 and earlier do not contain these additions. Scripts use CPython 3, with no Java or Jython scripting dependency. They run with the gateway account's OS access. Python workers, deadlines and execution lanes are reliability controls, not a sandbox for untrusted code.
 
@@ -82,7 +82,7 @@ Normal queues stop before an old publication's shutdown handlers. Same-project m
 
 ## Import and exercise the workshop
 
-The independently authored `gateway-events.sparkproj` contains a read-only checklist screen and seven **disabled** gateway resources. It contains no accounts, credentials, device connections, gateway tag definitions or databases. Import creates an unpublished draft; neither import nor screen publication starts the scripts. The package is portable. The optional tag-observation exercise needs one separately configured memory tag.
+The independently authored `gateway-events.sparkproj` contains a read-only checklist screen and seven **disabled** gateway resources. It contains no accounts, credentials, device connections, gateway tag definitions or databases. Import creates an unpublished draft. The disabled event resources remain inactive after publication until explicitly enabled, saved and approved in a new application publication. The package is portable. The optional tag-observation exercise needs one separately configured memory tag.
 
 1. Import the package into a disposable gateway. Open **Scripting** and confirm all seven resources are disabled. Publish the screen separately if you want its checklist in the operator application.
 2. Review **Workshop startup**, **Workshop update** and **Workshop timer**. Enable them, save, then publish scripts. Observe the startup result and ten-second timer runs. Make a harmless saved resource change and inspect the published Update handler's actor and changed-resource list.
@@ -93,3 +93,12 @@ The independently authored `gateway-events.sparkproj` contains a read-only check
 7. Disable the example events, save and publish when finished. Remove the optional memory tag separately if it is no longer needed. Archiving the workshop stops its scheduler.
 
 Run `node tools/build-workshops.mjs --version gateway-events-dev` to build from authored sources; choose a fresh version label for each build. The maintained package is `artifacts/sparkproj/gateway-events.sparkproj`. Immutable ZIPs and release metadata stay under `artifacts/workshops/`. The source catalog records feature compatibility and the optional memory-tag prerequisite. See [Scripting](SCRIPTING.md) for reusable libraries, browser events and resource limits.
+
+## Diagnostic journal persistence
+
+The run journal appends JSON lines outside the scheduler lock and batches flushes
+at approximately 250 ms. It retains the newest 100 diagnostic run records and
+compacts bounded storage. Restart marks unfinished records interrupted. An abrupt
+power loss may omit the latest quarter-second of transitions; this history is
+not a durable job queue. A storage fault is reported without holding enqueue,
+message dispatch or cancellation behind a full-history disk rewrite.

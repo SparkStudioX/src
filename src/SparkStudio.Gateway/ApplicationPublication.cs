@@ -25,6 +25,7 @@ public sealed partial class PublicationStore
             snapshot["expectedPublishedAt"] = publication?["publishedAt"]?.DeepClone();
             return new JsonObject {
                 ["reviewToken"] = SnapshotHash(snapshot), ["revision"] = project["revision"]!.DeepClone(),
+                ["requiresScriptApproval"] = ExecutablePublication.Changed(publication, snapshot),
                 ["scriptsRevision"] = resources["revision"]!.DeepClone(), ["name"] = project["name"]!.DeepClone(),
                 ["screens"] = project["screens"]!.AsArray().Count, ["templates"] = (project["templates"] as JsonArray)?.Count ?? 0,
                 ["queries"] = snapshot["queries"]!.AsArray().Count,

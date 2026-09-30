@@ -79,9 +79,8 @@ print("SPARKSTUDIO_PYTHON_READY")
     internal static bool IsLocalPeer(HttpContext context)
     {
         // Missing transport metadata (including unsupported hosts/transports) is never treated as local.
-        var check = new DefaultHttpContext();
-        check.Connection.RemoteIpAddress = context.Features.Get<GatewayReadinessPeer>()?.Address;
-        return GatewaySecurity.IsLoopback(check);
+        var address = context.Features.Get<GatewayReadinessPeer>()?.Address;
+        return address is not null && (IPAddress.IsLoopback(address) || address.IsIPv4MappedToIPv6 && IPAddress.IsLoopback(address.MapToIPv4()));
     }
 
     public static IResult Respond(HttpContext context, GatewayReadiness readiness)

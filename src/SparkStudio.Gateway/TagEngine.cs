@@ -8,8 +8,9 @@ namespace SparkStudio.Gateway;
 
 public record TagValue(string Path, object? Value, string DataType, string Quality, DateTimeOffset Timestamp, string Source);
 
-public sealed class TagEngine(ProjectStore store, ConnectorService connectors, ILogger<TagEngine> logger, RecoveryQuarantine? recovery = null) : BackgroundService
+public sealed class TagEngine(ProjectStore store, ConnectorService connectors, ILogger<TagEngine> logger, RecoveryQuarantine? recovery = null, bool enableDemoTags = false) : BackgroundService
 {
+    public bool DemoMode => enableDemoTags;
     private readonly ConcurrentDictionary<string, TagValue> values = new(StringComparer.Ordinal);
     private readonly DateTimeOffset started = DateTimeOffset.UtcNow;
     private readonly ConcurrentDictionary<string, WatchRegistration> watches = new(StringComparer.Ordinal);
@@ -18,21 +19,59 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     public event Action<TagValue?, TagValue>? ValueChanged;
     private void SetValue(TagValue next)
     {
-        lock (stateGate)
+        using (ChangeState())
         {
             values.TryGetValue(next.Path, out var previous);
             values[next.Path] = next;
             var handlers = ValueChanged;
             if (handlers is null || previous is not null && previous.Quality == next.Quality && previous.Timestamp == next.Timestamp
-                && JsonSerializer.Serialize(previous.Value) == JsonSerializer.Serialize(next.Value)) return;
-            foreach (Action<TagValue?, TagValue> handler in handlers.GetInvocationList())
-                try { handler(previous, next); }
-                catch (Exception error) { logger.LogWarning("Tag event subscriber failed ({ErrorType}).", error.GetType().Name); }
+                && SameValue(previous.Value, next.Value)) return;
+            notifications.Enqueue((previous, next, handlers));
+        }
+    }
+    private readonly object notificationGate = new();
+    private readonly Queue<(TagValue? Previous, TagValue Current, Action<TagValue?, TagValue> Handlers)> notifications = new();
+    private int mutationDepth;
+    private bool drainingNotifications;
+    private IDisposable ChangeState()
+    {
+        Monitor.Enter(stateGate); mutationDepth++;
+        return new Mutation(this);
+    }
+    private sealed class Mutation(TagEngine engine) : IDisposable
+    {
+        public void Dispose()
+        {
+            var outermost = --engine.mutationDepth == 0;
+            Monitor.Exit(engine.stateGate);
+            if (outermost) engine.DrainNotifications();
+        }
+    }
+    private void DrainNotifications()
+    {
+        lock (notificationGate)
+        {
+            if (drainingNotifications) return;
+            drainingNotifications = true;
+            try
+            {
+                while (true)
+                {
+                    (TagValue? Previous, TagValue Current, Action<TagValue?, TagValue> Handlers) notice;
+                    lock (stateGate) { if (!notifications.TryDequeue(out notice)) return; }
+                    // Capture recipients at mutation time so newly subscribing consumers
+                    // cannot receive older queued updates after their atomic snapshot.
+                    foreach (Action<TagValue?, TagValue> handler in notice.Handlers.GetInvocationList())
+                        try { handler(notice.Previous, notice.Current); }
+                        catch (Exception error) { logger.LogWarning("Tag event subscriber failed ({ErrorType}).", error.GetType().Name); }
+                }
+            }
+            finally { drainingNotifications = false; }
         }
     }
     private void RemoveValue(string path)
     {
-        lock (stateGate)
+        using (ChangeState())
         {
             if (!values.TryGetValue(path, out var previous)) return;
             SetValue(previous with { Value = null, Quality = "Bad_NotFound", Timestamp = DateTimeOffset.UtcNow });
@@ -41,9 +80,39 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     }
     private long configurationGeneration;
     private long expressionGeneration = -1;
+    private long definitionGeneration = -1;
+    private JsonObject[] cachedDefinitions = [];
+    private HashSet<string> cachedDisabledConnections = new(StringComparer.Ordinal);
+    private Dictionary<string, WatchPlan> cachedPlans = new(StringComparer.Ordinal);
+    private bool cachedRecovery;
+    private readonly HashSet<string> capacityWarnings = new(StringComparer.Ordinal);
+    public long DefinitionBuildCount { get; private set; }
+    private void RefreshDefinitions()
+    {
+        // Definitions, connections and their generation belong to one committed
+        // configuration. Never label a mixed capture with a newer generation.
+        lock (GatewayConfigurationLock.SyncRoot)
+        {
+            var generation = store.TagConfigurationGeneration;
+            if (generation == definitionGeneration && cachedRecovery == (recovery?.Active == true)) return;
+            cachedDefinitions = store.GetRuntimeTagDefinitions().OfType<JsonObject>().ToArray();
+            cachedDisabledConnections = store.GetConnections().OfType<JsonObject>().Where(item => item["enabled"]?.GetValue<bool>() == false)
+                .Select(item => ProjectStore.Required(item, "id")).ToHashSet(StringComparer.Ordinal);
+            cachedPlans = cachedDefinitions.Where(definition => recovery?.Active != true && TagDefinitionValidator.Kind(definition) == "opcua" && definition["enabled"]?.GetValue<bool>() != false
+                    && !cachedDisabledConnections.Contains(ProjectStore.Required(definition, "connectionId")))
+                .GroupBy(definition => (ConnectionId: ProjectStore.Required(definition, "connectionId"), Interval: definition["publishingIntervalMs"]?.GetValue<int>() ?? 1000, Deadband: TagDefinitionValidator.AbsoluteDeadband(definition), QueueSize: TagDefinitionValidator.MonitorQueueSize(definition)))
+                .Select(group => new WatchPlan($"{group.Key.ConnectionId}\n{group.Key.Interval}\n{group.Key.Deadband:R}\n{group.Key.QueueSize}", store.GetConnection(group.Key.ConnectionId, allowDisabled: true), group.Key.Interval,
+                    group.Select(definition => new Binding(ProjectStore.Required(definition, "path"), ProjectStore.Required(definition, "nodeId"), TagDefinitionValidator.AbsoluteDeadband(definition), TagDefinitionValidator.MonitorQueueSize(definition))).OrderBy(binding => binding.Path, StringComparer.Ordinal).ToArray()))
+                .ToDictionary(plan => plan.Key, StringComparer.Ordinal);
+            capacityWarnings.RemoveWhere(key => !cachedPlans.ContainsKey(key));
+            definitionGeneration = generation; cachedRecovery = recovery?.Active == true; DefinitionBuildCount++;
+        }
+    }
+    public static bool SameValue(object? left, object? right) => ReferenceEquals(left, right) ||
+        (left is JsonElement a && right is JsonElement b ? JsonElement.DeepEquals(a, b) : Equals(left, right));
     private TagExpressions.Plan[] expressionPlans = [];
     private readonly Dictionary<string, DateTimeOffset> expressionDue = new(StringComparer.Ordinal);
-    private sealed record Binding(string Path, string NodeId);
+    private sealed record Binding(string Path, string NodeId, double AbsoluteDeadband, uint QueueSize);
     private sealed record WatchPlan(string Key, ConnectionDefinition Connection, int Interval, Binding[] Bindings)
     {
         public bool Matches(WatchPlan other) => Connection == other.Connection && Interval == other.Interval && Bindings.SequenceEqual(other.Bindings);
@@ -69,7 +138,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     }
     public JsonObject SaveDefinition(JsonObject definition)
     {
-        lock (stateGate)
+        using (ChangeState())
         {
             var saved = store.SaveTag(definition);
             var path = ProjectStore.Required(saved, "path");
@@ -88,7 +157,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     }
     public TagImportPreview ApplyImport(TagImportRequest request)
     {
-        lock (stateGate)
+        using (ChangeState())
         {
             var result = store.ApplyTagImport(request);
             var changed = result.Changes.Where(item => item.Action != "unchanged").Select(item => item.Path).ToHashSet(StringComparer.Ordinal);
@@ -106,7 +175,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     }
     public bool DeleteDefinition(string path)
     {
-        lock (stateGate)
+        using (ChangeState())
         {
             if (!store.DeleteTag(path)) return false;
             InvalidateWatches(watch => watch.Plan.Bindings.Any(binding => binding.Path == path));
@@ -117,7 +186,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     }
     public JsonObject SaveConnection(JsonObject connection)
     {
-        lock (stateGate)
+        using (ChangeState())
         {
             var saved = store.SaveConnection(connection);
             var id = ProjectStore.Required(saved, "id");
@@ -158,7 +227,8 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             var unavailable = definitions.Count(tag => TagDefinitionValidator.Enabled(tag) && (!values.TryGetValue(ProjectStore.Required(tag, "path"), out var value) || !value.Quality.StartsWith("Good", StringComparison.OrdinalIgnoreCase)));
             return new { name = "default", enabled, state = !enabled ? "Disabled" : unavailable > 0 ? "Degraded" : "Running", configuredTags = definitions.Length,
                 goodTags = snapshot.Count(value => value.Quality.StartsWith("Good", StringComparison.OrdinalIgnoreCase)), unavailableTags = unavailable,
-                disabledTags = definitions.Count(tag => !TagDefinitionValidator.Enabled(tag)), scanGroups = store.ExportTags()["scanGroups"], subscriptions = SubscriptionSnapshot() };
+                disabledTags = definitions.Count(tag => !TagDefinitionValidator.Enabled(tag)), scanGroups = store.ExportTags()["scanGroups"],
+                watchGroupLimit = 32, rejectedWatchGroups = capacityWarnings.Count, subscriptions = SubscriptionSnapshot() };
         }
     }
     public static string Resolve(string path, IReadOnlyDictionary<string, JsonElement>? parameters)
@@ -182,10 +252,10 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
         if (paths.Length != input.Length) throw new ArgumentException("Paths and values must have equal lengths.");
         return paths.Select((path, index) =>
         {
-            lock (stateGate)
+            using (ChangeState())
             {
                 if (!store.DefaultTagProviderEnabled()) return "Bad_Disabled";
-                if (path == "[default]Setpoints/TargetSpeed")
+                if (enableDemoTags && path == "[default]Setpoints/TargetSpeed")
                 {
                     if (input[index].ValueKind != JsonValueKind.Number || !input[index].TryGetDouble(out var number) || !double.IsFinite(number) || number < 0 || number > 500) return "Bad_OutOfRange";
                     SetValue(new(path, number, "Double", "Good", DateTimeOffset.UtcNow, "memory")); return "Good";
@@ -204,7 +274,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     /// <summary>Validate a reviewed memory command and dispatch under the normal tag/configuration lock order.</summary>
     public string WriteReviewedMemory(string path, JsonElement value, Action validate)
     {
-        lock (stateGate)
+        using (ChangeState())
         lock (GatewayConfigurationLock.SyncRoot)
         {
             validate();
@@ -213,6 +283,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     }
     private void UpdateSamples()
     {
+        if (!enableDemoTags) return;
         var now = DateTimeOffset.UtcNow;
         if (!store.DefaultTagProviderEnabled())
         {
@@ -221,7 +292,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             return;
         }
         var seconds = (now - started).TotalSeconds;
-        lock (stateGate)
+        using (ChangeState())
         {
             if (!values.TryGetValue("[default]Setpoints/TargetSpeed", out var target)) SetValue(new("[default]Setpoints/TargetSpeed", 85d, "Double", "Good", now, "memory"));
             else if (target.Quality == "Bad_Disabled") SetValue(target with { Quality = "Good" });
@@ -236,17 +307,31 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
         }
     }
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-        => await Task.WhenAll(SampleLoop(stoppingToken), DefinitionLoop(stoppingToken), ExpressionLoop(stoppingToken));
+        {
+        try { await Task.WhenAll(SampleLoop(stoppingToken), DefinitionLoop(stoppingToken), ExpressionLoop(stoppingToken), MemoryPersistenceLoop(stoppingToken)); }
+        finally { store.FlushMemoryValues(); }
+    }
+    private async Task MemoryPersistenceLoop(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            await Task.Delay(1000, stoppingToken);
+            try { store.FlushMemoryValues(); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            { logger.LogError("Memory tag checkpoint failed ({ErrorType}); the in-memory values remain active.", error.GetType().Name); }
+        }
+    }
     private async Task ExpressionLoop(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            lock (stateGate)
+            using (ChangeState())
             {
-                if (expressionGeneration != configurationGeneration)
+                if (expressionGeneration != store.TagConfigurationGeneration)
                 {
-                    expressionPlans = TagExpressions.Order(store.GetRuntimeTagDefinitions().OfType<JsonObject>().ToArray());
-                    expressionGeneration = configurationGeneration;
+                    RefreshDefinitions();
+                    expressionPlans = TagExpressions.Order(cachedDefinitions);
+                    expressionGeneration = definitionGeneration;
                     expressionDue.Clear();
                 }
                 var now = DateTimeOffset.UtcNow;
@@ -279,38 +364,35 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
 
     private async Task DefinitionLoop(CancellationToken stoppingToken)
     {
+        long appliedGeneration = -1;
         try
         {
             while (!stoppingToken.IsCancellationRequested)
             {
                 JsonObject[] definitions;
                 HashSet<string> disabledConnections;
-                long generation;
-                lock (stateGate)
+                Dictionary<string, WatchPlan> plans;
+                long generation, tagGeneration;
+                using (ChangeState())
                 {
                     generation = configurationGeneration;
-                    definitions = store.GetRuntimeTagDefinitions().OfType<JsonObject>().ToArray();
-                    disabledConnections = store.GetConnections().OfType<JsonObject>().Where(item => item["enabled"]?.GetValue<bool>() == false)
-                        .Select(item => ProjectStore.Required(item, "id")).ToHashSet(StringComparer.Ordinal);
-                    foreach (var definition in definitions.Where(definition => ProjectStore.Optional(definition, "kind") == "memory"))
+                    RefreshDefinitions();
+                    tagGeneration = definitionGeneration;
+                    var changed = appliedGeneration != tagGeneration;
+                    appliedGeneration = tagGeneration;
+                    definitions = cachedDefinitions;
+                    disabledConnections = cachedDisabledConnections;
+                    plans = cachedPlans;
+                    foreach (var definition in definitions.Where(definition => ProjectStore.Optional(definition, "kind") == "memory" && (changed || !values.ContainsKey(ProjectStore.Required(definition, "path")))))
                     {
                         var next = MemoryValue(definition, DateTimeOffset.UtcNow);
                         if (values.TryGetValue(next.Path, out var previous) && previous.Source == "memory"
                             && previous.Quality == next.Quality && previous.DataType == next.DataType
-                            && JsonSerializer.Serialize(previous.Value) == JsonSerializer.Serialize(next.Value))
+                            && SameValue(previous.Value, next.Value))
                             next = next with { Timestamp = previous.Timestamp };
                         SetValue(next);
                     }
                 }
-                // Restored credentials may be unreadable on another Windows identity. Do not
-                // materialize connection secrets or start subscriptions while reviewing a restore.
-                var plans = definitions.Where(definition => recovery?.Active != true && TagDefinitionValidator.Kind(definition) == "opcua" && definition["enabled"]?.GetValue<bool>() != false
-                        && !disabledConnections.Contains(ProjectStore.Required(definition, "connectionId")))
-                    .GroupBy(definition => (ConnectionId: ProjectStore.Required(definition, "connectionId"), Interval: definition["publishingIntervalMs"]?.GetValue<int>() ?? 1000))
-                    .Select(group => new WatchPlan($"{group.Key.ConnectionId}\n{group.Key.Interval}", store.GetConnection(group.Key.ConnectionId, allowDisabled: true), group.Key.Interval,
-                        group.Select(definition => new Binding(ProjectStore.Required(definition, "path"), ProjectStore.Required(definition, "nodeId"))).OrderBy(binding => binding.Path, StringComparer.Ordinal).ToArray()))
-                    .ToDictionary(plan => plan.Key, StringComparer.Ordinal);
-
                 // Configuration changes cancel the old generation before installing a new subscription.
                 foreach (var pair in watches.ToArray())
                 {
@@ -318,11 +400,11 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                     await StopWatch(pair.Value);
                     watches.TryRemove(pair.Key, out _);
                 }
-                lock (stateGate)
+                using (ChangeState())
                 {
-                    if (generation != configurationGeneration) continue;
+                    if (generation != configurationGeneration || tagGeneration != store.TagConfigurationGeneration) continue;
                     var definedPaths = definitions.Select(definition => ProjectStore.Required(definition, "path")).ToHashSet(StringComparer.Ordinal);
-                    foreach (var path in values.Keys.Where(path => !path.StartsWith("[default]Line/") && !path.StartsWith("[default]Setpoints/") && !definedPaths.Contains(path)))
+                    foreach (var path in values.Keys.Where(path => !(enableDemoTags && (path.StartsWith("[default]Line/") || path.StartsWith("[default]Setpoints/"))) && !definedPaths.Contains(path)))
                         RemoveValue(path);
                     foreach (var definition in definitions.Where(definition => TagDefinitionValidator.Kind(definition) == "opcua" && (recovery?.Active == true || definition["enabled"]?.GetValue<bool>() == false
                         || disabledConnections.Contains(ProjectStore.Required(definition, "connectionId")))))
@@ -332,9 +414,11 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                         if (watches.ContainsKey(plan.Key)) continue;
                         if (watches.Count >= 32)
                         {
+                            if (capacityWarnings.Add(plan.Key)) logger.LogWarning("OPC UA watch group capacity (32) reached; {TagCount} tags in connection {ConnectionId} cannot subscribe.", plan.Bindings.Length, plan.Connection.Id);
                             foreach (var binding in plan.Bindings) SetUnavailable(binding.Path, "Bad_ResourceUnavailable");
                             continue;
                         }
+                        capacityWarnings.Remove(plan.Key);
                         var watch = new WatchRegistration(plan, CancellationTokenSource.CreateLinkedTokenSource(stoppingToken));
                         foreach (var binding in plan.Bindings) SetUnavailable(binding.Path, "Bad_WaitingForInitialData");
                         watches[plan.Key] = watch;
@@ -364,7 +448,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             await connectors.WatchAsync(watch.Plan.Connection, watch.Plan.Bindings.Select(binding => binding.NodeId).Distinct().ToArray(), watch.Plan.Interval,
                 batch =>
                 {
-                    lock (stateGate)
+                    using (ChangeState())
                     {
                         if (!watch.Active) return;
                         var byNode = batch.ToDictionary(value => value.NodeId, StringComparer.Ordinal);
@@ -376,20 +460,20 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                 },
                 status =>
                 {
-                    lock (stateGate)
+                    using (ChangeState())
                     {
                         if (!watch.Active) return;
                         watch.State = status;
                         if (status != "Connected")
                             foreach (var binding in watch.Plan.Bindings) SetUnavailable(binding.Path, "Bad_CommunicationError");
                     }
-                }, watch.Cancellation.Token);
+                }, watch.Cancellation.Token, watch.Plan.Bindings.DistinctBy(binding => binding.NodeId).ToDictionary(binding => binding.NodeId, binding => new OpcMonitorSettings(binding.AbsoluteDeadband, binding.QueueSize), StringComparer.Ordinal));
         }
         catch (OperationCanceledException) when (watch.Cancellation.IsCancellationRequested) { }
         catch (Exception error)
         {
             logger.LogWarning("OPC UA subscription failed ({ErrorType}); a new subscription will be attempted.", error.GetType().Name);
-            lock (stateGate)
+            using (ChangeState())
             {
                 watch.State = "Error";
                 if (watch.Active)
@@ -402,7 +486,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     private async Task StopWatch(WatchRegistration watch)
     {
         Task cancellation;
-        lock (stateGate)
+        using (ChangeState())
         {
             watch.Active = false;
             cancellation = watch.CancellationRequested ??= watch.Cancellation.CancelAsync();

@@ -23,8 +23,9 @@ function moduleUrl(name) {
   modules.set(name, url); return url;
 }
 const { default: BoundComponent } = await import(moduleUrl('BoundComponent'));
-const { ProjectComponentView, instanceInputKey } = await import(moduleUrl('templates'));
+const { ProjectComponentView, instanceInputKey, projectComponentPropsEqual } = await import(moduleUrl('templates'));
 const { ApplicationStateProvider } = await import(moduleUrl('applicationState'));
+const { AuthProvider } = await import(moduleUrl('Auth'));
 const { ApplicationStateStore } = await import(moduleUrl('applicationStateModel'));
 const component = (id, type, props) => ({ id, type, x: 0, y: 0, width: 240, height: 80, props });
 const binding = (expression, references = {}) => ({ expression, references });
@@ -34,6 +35,22 @@ const button = component('apply', 'button', { text: 'Apply', action: 'script', s
 const render = (c, overrides = {}) => renderToStaticMarkup(React.createElement(BoundComponent, { component: c, components: [c], inputs: { quantity: 3 }, tags: [], parameters: {}, preview: true, onNavigate() {}, ...overrides }));
 let passed = 0;
 function check(name, run) { run(); console.log(`PASS ${name}`); passed++; }
+check('gateway command, alarm and history controls dispatch without a direct tag binding', () => {
+  for (const [type, marker] of [['equipmentCommand', /class="equipment-command/], ['alarmStatusTable', /class="process-data-component/], ['alarmJournalTable', /class="process-data-component/], ['historicalTrend', /class="historical-series/]]) {
+    const c = component('integration', type, { text: type, commandId: 'setpoint', historyPaths: ['[default]Test/Temperature'] });
+    const html = renderToStaticMarkup(React.createElement(AuthProvider, { audience: 'operator', projectId: 'workshop' }, React.createElement(BoundComponent, { component: c, components: [c], parameters: {}, tags: [], preview: true, queryScope: 'runtime', publishedAt: '2026-09-30T10:00:00Z', onNavigate() {} })));
+    assert.match(html, marker); assert.doesNotMatch(html, /No tag binding|Tag not found/);
+  }
+});
+check('tile memoization ignores unrelated tag ticks but honors removed props and relevant changes', () => {
+  const linked = component('reading', 'value', { tagPath: '[default]Used' });
+  const used = {path: '[default]Used', value: 1}, other = {path: '[default]Other', value: 1};
+  const previous = {component: linked, tags: [used, other], parameters: {}, templates: [], onNavigate() {}};
+  assert.equal(projectComponentPropsEqual(previous, {...previous, tags: [used, {...other, value: 2}]}), true);
+  assert.equal(projectComponentPropsEqual(previous, {...previous, tags: [{...used, value: 2}, other]}), false);
+  assert.equal(projectComponentPropsEqual({...previous, communicationLost: true}, previous), false);
+  assert.equal(projectComponentPropsEqual({...previous, readOnly: true}, previous), false);
+});
 check('bound Enabled controls native button state', () => {
   assert.doesNotMatch(render(button), /disabled=""/);
   assert.match(render(button, { inputs: { quantity: 0 } }), /disabled=""/);
@@ -100,7 +117,13 @@ const frame = (wrapper, overrides) => {
   // Inspect the returned frame inside React's renderer so its context hook runs
   // with the same default provider context as the full markup checks above.
   let captured;
-  function Probe() { const element = ProjectComponentView(wrapperProps(wrapper, overrides)); captured = element.type(element.props); return null; }
+  function Probe() {
+    let element = ProjectComponentView(wrapperProps(wrapper, overrides));
+    // Peel the tile error boundary and memoized wrapper while React owns hooks.
+    element = element.props.children;
+    if (typeof element.type === 'object' && element.type.type) element = element.type.type(element.props);
+    captured = element.type(element.props); return null;
+  }
   renderToStaticMarkup(React.createElement(Probe));
   return captured;
 };

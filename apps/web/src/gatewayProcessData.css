@@ -1,0 +1,10 @@
+.gateway-process-data { line-height:1.5; }
+.gateway-process-data > fieldset { border:0; padding:0; min-width:0; }
+.gateway-process-data label { display:flex; flex-direction:column; gap:6px; }
+.gateway-process-data input,.gateway-process-data select { padding:10px; min-width:0; color:var(--ink); background:var(--panel); border:1px solid var(--border); border-radius:5px; }
+.process-data-actions { display:flex; gap:10px; flex-wrap:wrap; margin:20px 0; }
+.gateway-process-data .process-data-card { margin:20px 0; padding:20px; border:1px solid var(--border); border-radius:8px; }
+.process-data-card legend { font-weight:600; padding:0 8px; }
+.process-data-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:16px; margin-bottom:18px; }
+.gateway-process-data .process-data-check { flex-direction:row; align-items:center; align-self:end; min-height:42px; }
+.gateway-process-data input[type=checkbox] { width:20px; height:20px; }

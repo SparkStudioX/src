@@ -55,7 +55,7 @@ internal static class InteractionEventChecks
             var imported = SparkProjectPackage.Import(catalog, SparkProjectPackage.Export(workspace), "Imported interactions");
             Check(!imported.Publication.Metadata()["published"]!.GetValue<bool>() && imported.Store.GetProject()["screens"]![0]!["components"]![0]!["props"]!["componentEvents"]!.AsObject().Count == 7, "portable roundtrip retains all interaction handlers unpublished");
 
-            var python = OperatingSystem.IsWindows() ? Path.GetFullPath("runtimes/python/windows-x64/python.exe") : "/usr/bin/python3";
+            var python = TestEnvironment.PythonExecutable();
             if (!File.Exists(python)) throw new Exception("Actual CPython is required for interaction checks.");
             using var connectors = new ConnectorService(directory);
             using var tags = new TagEngine(catalog.GatewayStore, connectors, NullLogger<TagEngine>.Instance);

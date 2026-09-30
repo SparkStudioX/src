@@ -125,12 +125,11 @@ internal static class PythonUiChecks
             Check(PythonUiContext.ForPreview(workspace.Store, null, null) is null, "generic console has no UI context");
             Reject(() => ui.Dispatch("ui.setState", new JsonObject { ["scope"] = "screen", ["key"] = "title", ["value"] = "x", ["selfId"] = "forged" }), "RPC cannot forge UI identity");
 
-            var pythonPath = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "runtimes", "python", "windows-x64", "python.exe"));
-            if (!OperatingSystem.IsWindows()) pythonPath = "/usr/bin/python3";
+            var pythonPath = TestEnvironment.PythonExecutable();
             if (File.Exists(pythonPath))
             {
                 using var connectors = new ConnectorService(directory);
-                using var tags = new TagEngine(catalog.GatewayStore, connectors, NullLogger<TagEngine>.Instance);
+                using var tags = new TagEngine(catalog.GatewayStore, connectors, NullLogger<TagEngine>.Instance, enableDemoTags: true);
                 var queries = new QueryExecutor(workspace.Store, connectors);
                 var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Python:Executable"] = pythonPath }).Build();
                 var runner = new PythonRunner(tags, queries, workspace.Scripts, configuration);
@@ -241,7 +240,7 @@ internal static class PythonUiChecks
                 catch (ArgumentException) { passed++; }
                 Check(Convert.ToDouble(tags.Read(["[default]Setpoints/TargetSpeed"], null)[0].Value) == 88, "bad UI snapshot is rejected before action Python can change tags");
             }
-            else Console.WriteLine("SKIP CPython UI integration: bundled Python runtime is unavailable.");
+            else throw new InvalidOperationException("CPython UI integration requires SPARKSTUDIO_PYTHON or the bundled runtime.");
         }
         finally
         {

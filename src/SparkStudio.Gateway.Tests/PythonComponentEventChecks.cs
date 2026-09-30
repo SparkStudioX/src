@@ -132,7 +132,7 @@ internal static class PythonComponentEventChecks
             var imported = SparkProjectPackage.Import(catalog, archive, "Imported Python events");
             Check(!imported.Publication.Metadata()["published"]!.GetValue<bool>() && Props(imported.Store.GetProject(), "quantity")["events"]!["change"]!["language"]!.GetValue<string>() == "python", "package preserves Python definitions without publishing");
 
-            var pythonPath = OperatingSystem.IsWindows() ? Path.GetFullPath("runtimes/python/windows-x64/python.exe") : "/usr/bin/python3";
+            var pythonPath = TestEnvironment.PythonExecutable();
             if (!File.Exists(pythonPath)) throw new Exception("Actual CPython is required for Python component event checks.");
             using var connectors = new ConnectorService(directory);
             using var tags = new TagEngine(catalog.GatewayStore, connectors, NullLogger<TagEngine>.Instance);

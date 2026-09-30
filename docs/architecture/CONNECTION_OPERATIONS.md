@@ -48,3 +48,18 @@ For the optional OPC UA lab, use a dedicated read-only test server and a configu
 `node tools/test-gateway-connections.mjs --model` exercises legacy defaults, revision conflicts, credential protection, overlapping/stale tests, restart persistence, disabled subscription behavior and archived published-only dependencies with authored local fixtures.
 
 `node tools/test-gateway-connections.mjs` requires disposable test accounts in the ignored test-auth file and accepts loopback port 5091 only. It verifies administrator boundaries, SQLite test/rename/disable/re-enable behavior, query references and disabled OPC UA quality. Its fixture connections are left disabled and its test project is archived; it never changes port 5090 or writes to equipment.
+
+## Concurrency and recording controls
+
+OPC UA read/write operations can use up to four pooled sessions per connection,
+within 32 total cached sessions. Transport failures retire the affected session;
+ordinary operation errors do not discard an otherwise healthy connection.
+Subscription mappings support an optional nonnegative absolute deadband and a
+queue size from 1 to 1000 (default 16). Browser telemetry still coalesces to the
+latest value, so this is not a guarantee of lossless acquisition; configure tag
+history for the bounded recording contract.
+
+Managed SQLite uses WAL, full synchronous commits and a five-second busy timeout.
+WAL permits readers during an unrelated writer transaction. Connection pooling
+remains disabled because every operation installs its own native authorization
+policy; do not enable pooling without preserving that security boundary.

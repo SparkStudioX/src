@@ -96,6 +96,7 @@ public sealed class RuntimeSessionMessaging(TimeProvider? time = null)
         lock (gate)
         {
             Sweep();
+            foreach (var item in sessions.Values.Where(item => item.ProjectId == projectId).ToArray()) if (!IsValid(item)) Remove(item);
             return new JsonArray(sessions.Values.Where(item => item.ProjectId == projectId && item.Connected).Select(item => (JsonNode)new JsonObject
             { ["sessionId"] = item.Id, ["projectId"] = item.ProjectId, ["publishedAt"] = item.PublishedAt, ["username"] = item.Username }).ToArray());
         }
@@ -114,7 +115,7 @@ public sealed class RuntimeSessionMessaging(TimeProvider? time = null)
             if (gatewayRate.Second == second && gatewayRate.Count >= 512) throw new InvalidOperationException("Session messaging is limited to 512 sends per gateway per second.");
             rates[projectId] = (second, rate.Second == second ? rate.Count + 1 : 1);
             gatewayRate = (second, gatewayRate.Second == second ? gatewayRate.Count + 1 : 1);
-            var recipients = sessions.Values.Where(item => item.ProjectId == projectId && item.Connected && (sessionId is null || item.Id == sessionId)).ToArray();
+            var recipients = sessions.Values.Where(item => item.ProjectId == projectId && item.Connected && (sessionId is null || item.Id == sessionId) && IsValid(item)).ToArray();
             var messageId = Guid.NewGuid().ToString("N"); var queued = 0;
             foreach (var recipient in recipients)
             {
@@ -130,12 +131,14 @@ public sealed class RuntimeSessionMessaging(TimeProvider? time = null)
     private Session Owned(string projectId, string sessionId, string userId, string owner)
     {
         Sweep();
-        if (!sessions.TryGetValue(sessionId, out var session) || session.ProjectId != projectId || session.UserId != userId || session.Owner != owner)
+        if (!sessions.TryGetValue(sessionId, out var session) || session.ProjectId != projectId || session.UserId != userId || session.Owner != owner || !IsValid(session))
             throw new KeyNotFoundException("Operator tab not found or expired. Register a new tab connection.");
         return session;
     }
     private bool IsValid(Session session) => clock.GetUtcNow() - session.Seen < TimeSpan.FromSeconds(30) && session.Valid();
-    private void Sweep() { foreach (var item in sessions.Values.ToArray()) if (!IsValid(item)) Remove(item); }
+    // Sweep only mailbox TTLs. Do not revalidate every gateway account/publication
+    // for every send or registration; validate the actual connection/recipients.
+    private void Sweep() { foreach (var item in sessions.Values.ToArray()) if (clock.GetUtcNow() - item.Seen >= TimeSpan.FromSeconds(30)) Remove(item); }
     private void Remove(Session session)
     {
         if (!sessions.Remove(session.Id)) return;
@@ -178,33 +181,47 @@ public static class RuntimeSessionMessageEndpoints
         ?? throw new UnauthorizedAccessException("An active operator login is required.");
     private static async Task Stream(string sessionId, HttpContext context, RuntimeSessionMessaging messaging, TagEngine tags, SecurityStore security)
     {
+        using var lease = TagEventStream.Acquire(context);
         var session = messaging.Connect(GatewayAccess.ProjectId(context), sessionId, GatewayAccess.Actor(context).Id, Owner(context));
+        using var changes = new TagDeltaSubscription(tags, path => GatewayAccess.CanReadTag(context, security, path));
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, session.Closed.Token);
         var token = cancellation.Token;
         context.Response.ContentType = "text/event-stream";
         context.Response.Headers.CacheControl = "no-store";
         context.Response.Headers["X-Accel-Buffering"] = "no";
         var json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        async Task Write(string name, object value)
+        async Task<bool> Write(string name, object value, long? revision = null)
         {
             token.ThrowIfCancellationRequested();
-            await context.Response.WriteAsync($"event: {name}\ndata: {JsonSerializer.Serialize(value, json)}\n\n", token);
+            var frame = $"event: {name}\ndata: {JsonSerializer.Serialize(value, json)}\n\n";
+            if (!messaging.Refresh(session) || revision is not null && security.SettingsRevision != revision) return false;
+            await context.Response.WriteAsync(frame, token);
             await context.Response.Body.FlushAsync(token);
+            return true;
         }
         try
         {
             await Write("ready", session.Identity());
-            var nextTags = DateTimeOffset.MinValue;
-            while (messaging.Refresh(session) && GatewayAccess.SessionStillAllowed(context, security))
+            var scopeRevision = -1L;
+            var nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(5);
+            while (messaging.Refresh(session))
             {
-                if (DateTimeOffset.UtcNow >= nextTags)
+                var update = TagEventStream.CaptureCurrent(changes, scopeRevision, () => security.SettingsRevision);
+                if (update is not null)
                 {
-                    await Write("tags", GatewayAccess.Tags(context, security, tags.Snapshot()));
-                    nextTags = DateTimeOffset.UtcNow.AddSeconds(1);
+                    if (update.Snapshot is { } snapshot)
+                    { if (await Write("tags", snapshot, update.Revision)) scopeRevision = update.Revision; }
+                    else if (update.Delta.Upserts.Length + update.Delta.Removed.Length > 0)
+                    { if (await Write("tags-delta", update.Delta, update.Revision)) scopeRevision = update.Revision; }
+                }
+                if (DateTimeOffset.UtcNow >= nextHeartbeat)
+                {
+                    await TagEventStream.WriteHeartbeatAsync(context.Response, token);
+                    nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(5);
                 }
                 while (messaging.Take(session) is { } message) await Write("message", message);
                 using var heartbeat = CancellationTokenSource.CreateLinkedTokenSource(token);
-                heartbeat.CancelAfter(TimeSpan.FromMilliseconds(250));
+                heartbeat.CancelAfter(TimeSpan.FromSeconds(1));
                 try { if (!await session.Signal.Reader.WaitToReadAsync(heartbeat.Token)) break; while (session.Signal.Reader.TryRead(out _)) { } }
                 catch (OperationCanceledException) when (!token.IsCancellationRequested) { }
             }

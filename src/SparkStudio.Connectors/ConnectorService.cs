@@ -39,8 +39,11 @@ public sealed partial class ConnectorService : IDisposable
             {
                 using var closing = new CancellationTokenSource(TimeSpan.FromSeconds(2));
                 await session.CloseAsync(2000, true, closing.Token);
-            });
+            }, ReusableOpcRejection, maximumConcurrencyPerConnection: 4);
     }
+    private static bool ReusableOpcRejection(Exception error) => error is ServiceResultException result && result.StatusCode is
+        StatusCodes.BadNodeIdUnknown or StatusCodes.BadAttributeIdInvalid or StatusCodes.BadNotReadable or StatusCodes.BadNotWritable or
+        StatusCodes.BadTypeMismatch or StatusCodes.BadOutOfRange or StatusCodes.BadUserAccessDenied or StatusCodes.BadInvalidArgument or StatusCodes.BadMethodInvalid;
 
     public async Task<ConnectionTestResult> TestAsync(ConnectionDefinition connection, CancellationToken cancellationToken)
     {

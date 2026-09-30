@@ -107,6 +107,7 @@ await test('bootstrap is local, has no HTTP secret, and establishes an HttpOnly 
     await anon.request('/api/auth/setup', { method: 'POST', body: { ...identity, setupCode: 'incorrect' }, status: 403 });
     await anon.request('/api/auth/setup', { method: 'POST', body: { ...identity, setupCode }, headers: { Origin: 'https://untrusted.invalid' }, status: 403 });
     await anon.request('/api/auth/setup', { method: 'POST', body: { ...identity, setupCode }, headers: { 'Sec-Fetch-Site': 'cross-site' }, status: 403 });
+    await anon.request('/api/auth/setup', { method: 'POST', body: { ...identity, setupCode }, headers: { 'X-Forwarded-For': '127.0.0.1', 'X-Forwarded-Proto': 'https' }, status: 403 });
     const response = await fetch(new URL('/api/auth/setup', base), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...identity, setupCode }) });
     assert.equal(response.status, 200); const result = await response.json(); assert.equal(result.user.gatewayAdmin, true);
     const cookies = response.headers.getSetCookie(); assert.equal(cookies.length, 1); assert.match(cookies[0], /^SparkStudio\.Engineering=/);
@@ -120,6 +121,13 @@ await test('bootstrap is local, has no HTTP secret, and establishes an HttpOnly 
   }
   const operator = new Client('operator'); operator.cookies = new Map(admin.cookies); assert.equal((await operator.session()).user, null);
   await operator.request('/api/runtime/project', { status: 401 });
+});
+
+await test('HTTP security headers do not accept forwarded HTTPS as transport security', async () => {
+  const response = await fetch(new URL('/api/auth/session', base), { headers: { 'X-Forwarded-Proto': 'https' }, redirect: 'error' });
+  assert.match(response.headers.get('content-security-policy'), /frame-ancestors 'self'/);
+  assert.match(response.headers.get('content-security-policy'), /object-src 'none'/);
+  assert.equal(response.headers.get('strict-transport-security'), null);
 });
 
 await test('anonymous access fails closed across legacy and project API aliases', async () => {
@@ -226,6 +234,24 @@ await test('runtime assets are limited to published references and never reuse d
 });
 
 const allowedTag = `[default]Access-${run}/Allowed/Value`, hiddenTag = `[default]Access-${run}/Private/Value`;
+await test('Publish cannot introduce executable changes through application, script or restore routes', async () => {
+  const previous = publishedAt;
+  const originalCode = draft.screens[0].components.find(item => item.id === 'apply').props.script;
+  draft.screens[0].components.find(item => item.id === 'apply').props.script = originalCode + '\n# reviewed source change';
+  draft = await designer.request(route('/project'), { method: 'PUT', body: draft });
+  await publisher.request(route('/project/publish'), { method: 'POST', body: { revision: draft.revision }, status: 403 });
+  const scripts = await publisher.request(route('/scripts/resources'));
+  await publisher.request(route('/scripts/publish'), { method: 'POST', body: { revision: scripts.revision }, status: 403 });
+  assert.equal((await viewer.request(route('/runtime/project'))).publishedAt, previous);
+  publishedAt = (await admin.request(route('/project/publish'), { method: 'POST', body: { revision: draft.revision } })).publishedAt;
+  const history = await publisher.request(route('/project/history'));
+  const target = history.entries.find(entry => entry.publishedAt === previous); assert.ok(target);
+  await publisher.request(route(`/project/history/${target.id}/restore`), { method: 'POST', body: { expectedPublishedAt: publishedAt }, status: 403 });
+  publishedAt = (await admin.request(route(`/project/history/${target.id}/restore`), { method: 'POST', body: { expectedPublishedAt: publishedAt } })).publishedAt;
+  draft.screens[0].components.find(item => item.id === 'apply').props.script = originalCode;
+  draft = await designer.request(route('/project'), { method: 'PUT', body: draft });
+});
+
 await test('operator tag scopes filter snapshots, check resolved indirection, and immediately affect SSE', async () => {
   for (const [index, tagPath] of [allowedTag, hiddenTag].entries()) await admin.request('/api/tags', { method: 'POST', body: { path: tagPath, kind: 'memory', dataType: 'Int32', value: index + 1, enabled: true } });
   assert.deepEqual(await viewer.request('/api/tags'), []);

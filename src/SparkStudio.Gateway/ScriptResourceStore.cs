@@ -48,8 +48,7 @@ public sealed class ScriptResourceStore
     private void Persist(string name, JsonObject value)
     {
         var path = Path.Combine(directory, name);
-        File.WriteAllText(path + ".tmp", value.ToJsonString(ProjectStore.Json));
-        File.Move(path + ".tmp", path, true);
+        DurableJsonFile.Write(path, value, ProjectStore.Json);
     }
 
     public JsonObject GetDraft() { lock (gate) return draft.DeepClone().AsObject(); }

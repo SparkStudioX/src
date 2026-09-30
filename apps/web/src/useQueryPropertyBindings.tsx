@@ -62,6 +62,7 @@ export function useQueryPropertyBindings(components: CanvasComponent[], context:
     }
   }, [coordinator, key]);
   useEffect(() => () => { subscriptions.current?.held.forEach(stop => stop()); subscriptions.current = null; }, []);
+  const stable = useRef<{ key: string; values: QueryPropertyValues } | null>(null);
   const values: QueryPropertyValues = Object.create(null);
   for (const descriptor of descriptors) {
     const { component, target, binding, request, error } = descriptor;
@@ -75,5 +76,7 @@ export function useQueryPropertyBindings(components: CanvasComponent[], context:
     try { targets[target] = { status: "ready", value: transformQueryPropertyValue(queryPropertyValue(sample.result, binding.column), binding.transform, target), refreshing: sample.loading }; }
     catch (reason) { targets[target] = { status: "error", error: reason instanceof Error ? reason.message : String(reason) }; }
   }
-  return values;
+  const valueKey = JSON.stringify(values);
+  if (stable.current?.key !== valueKey) stable.current = { key: valueKey, values };
+  return stable.current.values;
 }

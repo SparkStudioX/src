@@ -44,6 +44,7 @@ export default function ApplicationPublishDialog({ projectRevision, scriptsRevis
         <p>{review.screens} screens and popups · {review.templates} templates · {review.queries} named queries · {review.resources.length} script resources</p>
         {review.resources.length > 0 && <table><thead><tr><th>Resource</th><th>Kind</th><th>After publication</th></tr></thead><tbody>{review.resources.map((resource, index) => <tr key={index}><td>{resource.name}</td><td>{resource.type}{resource.event ? ` / ${resource.event}` : ""}</td><td>{resource.enabled ? "Enabled" : "Disabled"}</td></tr>)}</tbody></table>}
         <p>Enabled gateway events activate after the previous event generation stops. Browser scripts load with their matching operator application version. Open operator sessions must load the new version.</p>
+        <p>Executable JavaScript and Python changes require a gateway administrator. Python runs as the service account; browser scripts have application-origin privileges and synchronous loops can freeze a tab. Publish only code you trust.</p>
         <p>Only saved drafts are included. Unsaved work in other tabs remains in those tabs. Tags, connection settings and database data are outside this publication.</p>
         {review.warnings?.map((warning, index) => <p key={index} role="note">{warning}</p>)}
       </>}

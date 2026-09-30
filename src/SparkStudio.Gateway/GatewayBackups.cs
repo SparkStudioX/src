@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.DataProtection;
 
 namespace SparkStudio.Gateway;
 
-public sealed record BackupDestinationSettings(string Kind, string Address, string? Username = null, string? Domain = null, int TimeoutSeconds = 300);
+public sealed record BackupDestinationSettings(string Kind, string Address, string? Username = null, string? Domain = null, int TimeoutSeconds = 300, bool AllowInsecureFtp = false);
 public sealed record BackupScheduleSettings(bool Enabled, string DailyTime, string TimeZoneId, int RetentionDays, BackupDestinationSettings Destination);
 public sealed record BackupSettingsRequest(string Revision, BackupScheduleSettings Settings, string? DestinationPassword = null, string? ArchivePassphrase = null, bool ClearDestinationPassword = false);
 public sealed record BackupRunRequest(bool Deliver);
@@ -31,9 +31,11 @@ public sealed class GatewayBackups : BackgroundService
     private string diskRevision = "unreadable";
     private string? configurationError;
     private Task? activeRun;
+    private readonly ProjectStore? gatewayStore;
 
-    public GatewayBackups(string directory, IDataProtectionProvider protection, RecoveryQuarantine recovery, SecurityStore security, IHostApplicationLifetime lifetime)
+    public GatewayBackups(string directory, IDataProtectionProvider protection, RecoveryQuarantine recovery, SecurityStore security, IHostApplicationLifetime lifetime, ProjectStore? gatewayStore = null)
     {
+        this.gatewayStore = gatewayStore;
         this.directory = Path.GetFullPath(directory); this.recovery = recovery; this.security = security;
         protector = protection.CreateProtector("SparkStudio.BackupSettings.v1");
         settingsPath = Path.Combine(this.directory, "backup-settings.json"); statePath = Path.Combine(this.directory, "backup-state.json");
@@ -128,6 +130,7 @@ public sealed class GatewayBackups : BackgroundService
             if (!Directory.Exists(workDirectory)) RecoveryFileSystem.CreatePrivateDirectory(workDirectory);
             var name = BackupDestinations.CreateArchiveName(settings.OwnerId, run.StartedAt, Guid.ParseExact(run.Id, "N"));
             archive = Path.Combine(workDirectory, name);
+            gatewayStore?.FlushMemoryValues();
             await ConfigurationBackupSnapshot.CreateAsync(directory, archive, passphrase, token);
             await GatewayRecovery.InspectAsync(archive, passphrase, token);
             var bytes = new FileInfo(archive).Length;
@@ -140,7 +143,7 @@ public sealed class GatewayBackups : BackgroundService
             if (deliver)
             {
                 var target = settings.Settings.Destination;
-                var result = await BackupDestinations.DeliverAsync(new(target.Kind, target.Address, target.Username, password, target.Domain, target.TimeoutSeconds), archive, name, settings.OwnerId, settings.Settings.RetentionDays, token);
+                var result = await BackupDestinations.DeliverAsync(new(target.Kind, target.Address, target.Username, password, target.Domain, target.TimeoutSeconds, target.AllowInsecureFtp), archive, name, settings.OwnerId, settings.Settings.RetentionDays, token);
                 removed = result.RemovedCount; warning = result.RetentionWarning;
             }
             CompleteRun(run with { Status = "succeeded", CompletedAt = DateTimeOffset.UtcNow, ArchiveName = name, Bytes = bytes, RemovedCount = removed,
@@ -266,7 +269,7 @@ public sealed class GatewayBackups : BackgroundService
         var destination = settings.Destination;
         if (destination.Kind is not ("smb" or "ftp" or "ftps") || destination.Address is null || destination.Address.Length > 2048 || destination.Username?.Length > 256 || destination.Domain?.Length > 256 || destination.TimeoutSeconds is < 30 or > 3600)
             throw new ArgumentException("Invalid backup destination settings.");
-        if (!string.IsNullOrWhiteSpace(destination.Address)) BackupDestinations.Validate(new(destination.Kind, destination.Address, destination.Username, null, destination.Domain, destination.TimeoutSeconds));
+        if (!string.IsNullOrWhiteSpace(destination.Address)) BackupDestinations.Validate(new(destination.Kind, destination.Address, destination.Username, null, destination.Domain, destination.TimeoutSeconds, destination.AllowInsecureFtp));
         else if (settings.Enabled) throw new ArgumentException("A remote destination is required for scheduled backups.");
     }
     private static bool IsStorageError(Exception error) => error is IOException or InvalidDataException or UnauthorizedAccessException or JsonException or ArgumentException or InvalidOperationException or CryptographicException;

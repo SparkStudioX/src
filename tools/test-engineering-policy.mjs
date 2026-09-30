@@ -1,0 +1,57 @@
+#!/usr/bin/env node
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
+const root = fileURLToPath(new URL('../', import.meta.url));
+const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+const version = spawnSync(process.execPath, [path.join(root, 'tools/version.mjs')], { cwd: path.dirname(root), encoding: 'utf8' });
+assert.equal(version.status, 0, version.stdout + version.stderr);
+const catalog = JSON.parse(read('examples/catalog.json')).workshops;
+const portable = catalog.filter(item => item.distribution === 'portable').length;
+const setup = catalog.filter(item => item.distribution === 'setup-required').length;
+assert.equal(portable + setup, catalog.length);
+assert.match(read('README.md'), new RegExp(`covers ${catalog.length} authored examples\\. ${portable} build[\\s\\S]*?; ${setup} require`));
+assert.match(read('examples/README.md'), new RegExp(`all ${catalog.length} source examples\\. ${portable} are portable project workshops; ${setup} require`));
+const componentCount = [...read('apps/web/src/types.ts').split('// Assets')[0].matchAll(/\| "[^"]+"/g)].length;
+assert.match(read('docs/architecture/PRODUCT.md'), new RegExp(`${componentCount} component types`));
+assert.match(read('docs/architecture/COMPONENTS.md'), new RegExp(`palette has ${componentCount} types`));
+assert.match(read('docs/architecture/COMPONENTS.md'), new RegExp(`All ${componentCount} component types`));
+assert.match(read('.gitattributes'), /^\* text=auto eol=lf/m);
+assert.match(read('LICENSE'), /All rights reserved/);
+assert.doesNotMatch(read('tools/install-service.ps1'), /sc\.exe/);
+assert.match(read('tools/install-service.ps1'), /ServiceHelper\.exe/);
+assert.match(read('tools/publish-windows.ps1'), /Shared Windows service helper build failed/);
+// A synthetic installer payload validates the generated inventory rather than
+// accepting a hand-authored SBOM or using any installed software's data.
+const stage = path.join(root, '.data', `sbom-check-${randomUUID()}`);
+fs.mkdirSync(path.join(stage, 'THIRD-PARTY-NOTICES'), { recursive: true });
+fs.mkdirSync(path.join(stage, 'runtimes/python/windows-x64'), { recursive: true });
+const write = (name, data) => fs.writeFileSync(path.join(stage, name), JSON.stringify(data));
+write('THIRD-PARTY-NOTICES/browser-package-inventory.json', [{ name: '@test/fixture', version: '1.2.3', license: 'MIT', notices: ['fixture/LICENSE'], integrity: 'sha512-' + Buffer.alloc(64, 1).toString('base64') }]);
+write('THIRD-PARTY-NOTICES/package-inventory.json', [{ name: 'Example.Library/2.3.4', license: 'MIT', licenseType: 'expression', requiresLicenseReview: true }]);
+write('SparkStudio.Gateway.deps.json', { libraries: { 'Example.Library/2.3.4': { type: 'package', sha512: 'sha512-' + Buffer.alloc(64, 2).toString('base64') } } });
+write('SparkStudio.Gateway.runtimeconfig.json', { runtimeOptions: { includedFrameworks: [{ name: 'Microsoft.NETCore.App', version: '10.0.9' }] } });
+fs.writeFileSync(path.join(stage, 'runtimes/python/windows-x64/python.exe'), 'synthetic payload bytes only');
+const command = [path.join(root, 'tools/write-sbom.mjs'), stage, 'a'.repeat(40)];
+let generated = spawnSync(process.execPath, command, { encoding: 'utf8' });
+assert.equal(generated.status, 0, generated.stderr);
+const first = fs.readFileSync(path.join(stage, 'sbom.cdx.json'), 'utf8');
+const sbom = JSON.parse(first);
+assert.equal(sbom.bomFormat, 'CycloneDX'); assert.equal(sbom.specVersion, '1.6');
+assert.equal(sbom.components.length, 4); assert.equal(sbom.dependencies[0].dependsOn.length, 4);
+assert.equal(sbom.components.find(item => item.name === 'Example.Library').hashes[0].content, '02'.repeat(64));
+assert.equal(sbom.components.find(item => item.name === 'Example.Library').licenses[0].expression, 'MIT');
+assert.equal(sbom.components.find(item => item.name === 'Example.Library').properties[0].value, 'true', 'Declared license metadata does not conceal a missing-notice review.');
+assert.equal(sbom.components.find(item => item.name === '@test/fixture').purl, 'pkg:npm/%40test/fixture@1.2.3');
+generated = spawnSync(process.execPath, command, { encoding: 'utf8' });
+assert.equal(generated.status, 0, generated.stderr);
+assert.equal(fs.readFileSync(path.join(stage, 'sbom.cdx.json'), 'utf8'), first, 'Inventory is deterministic for identical payload and commit.');
+const escaped = spawnSync(process.execPath, [command[0], root, command[2]], { encoding: 'utf8' });
+assert.notEqual(escaped.status, 0, 'Source directory cannot be used for generated output.');
+// Only our verified synthetic directory can be removed.
+assert.equal(path.dirname(stage), path.join(root, '.data'));
+fs.rmSync(stage, { recursive: true });
+console.log('Engineering version, docs, service path, source attributes and deterministic SBOM checks passed.');

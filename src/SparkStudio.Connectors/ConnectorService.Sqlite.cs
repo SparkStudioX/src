@@ -56,7 +56,9 @@ public sealed partial class ConnectorService
         var client = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = path, Mode = readOnly ? SqliteOpenMode.ReadOnly : SqliteOpenMode.ReadWrite,
-            Pooling = false, DefaultTimeout = 1, ForeignKeys = true
+            // Native authorizers/progress callbacks belong to this operation and
+            // must never leak through a pooled sqlite handle into the next caller.
+            Pooling = false, DefaultTimeout = 5, ForeignKeys = true
         }.ToString());
         try
         {
@@ -65,6 +67,16 @@ public sealed partial class ConnectorService
             using var command = client.CreateCommand();
             command.CommandText = "PRAGMA trusted_schema = OFF";
             command.ExecuteNonQuery();
+            if (!readOnly)
+            {
+                // WAL permits a table transaction and readers to proceed together.
+                // Existing databases are upgraded on the first writable open.
+                command.CommandText = "PRAGMA journal_mode = WAL";
+                if (!string.Equals(Convert.ToString(command.ExecuteScalar()), "wal", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("The managed SQLite database could not enable WAL journaling.");
+                command.CommandText = "PRAGMA synchronous = FULL";
+                command.ExecuteNonQuery();
+            }
             return client;
         }
         catch { client.Dispose(); throw; }

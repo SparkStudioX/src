@@ -38,7 +38,9 @@ public sealed class SecurityStore
     private sealed record StoredUser(SecurityUser User, string PasswordHash);
     private sealed record StoredState(int Version, List<StoredUser> Users, SecuritySettings Settings);
     private sealed record Throttle(int Failures, DateTimeOffset Since, DateTimeOffset? BlockedUntil);
-    private readonly object gate = GatewayConfigurationLock.SyncRoot;
+    private readonly object gate = new();
+    private readonly SemaphoreSlim passwordSlots = new(4, 4);
+    private readonly Queue<DateTimeOffset> loginAdmissions = new();
     private readonly string directory;
     private readonly string statePath;
     private readonly string setupPath;
@@ -104,6 +106,12 @@ public sealed class SecurityStore
 
     public bool SetupRequired { get { lock (gate) return state.Users.Count == 0; } }
     public SecuritySettings Settings { get { lock (gate) return CopySettings(state.Settings); } }
+    public long SettingsRevision { get { lock (gate) return state.Settings.Revision; } }
+    public bool CanReadProjectTag(string projectId, string path)
+    {
+        lock (gate) return state.Settings.ProjectTagPrefixes.TryGetValue(projectId, out var prefixes)
+            && prefixes.Any(prefix => prefix == "*" || (prefix.EndsWith('/') ? path.StartsWith(prefix, StringComparison.Ordinal) : path == prefix));
+    }
     public IReadOnlyList<SecurityUser> Users { get { lock (gate) return state.Users.Select(item => CopyUser(item.User)).ToArray(); } }
     public SecurityUser? GetUser(string id)
     {
@@ -173,18 +181,34 @@ public sealed class SecurityStore
 
     public SecurityUser Login(string? username, string? password, string remoteAddress)
     {
+        var normalized = username is { Length: <= 64 } ? username.ToUpperInvariant() : "invalid";
+        // A hostile remote client must not lock an account out at every other workstation.
+        var accountKey = "account:" + normalized + "@" + remoteAddress;
+        var addressKey = "address:" + remoteAddress;
+        StoredUser? stored;
         lock (gate)
         {
             var now = DateTimeOffset.UtcNow;
-            var normalized = username is { Length: <= 64 } ? username.ToUpperInvariant() : "invalid";
-            var accountKey = "account:" + normalized;
-            var addressKey = "address:" + remoteAddress;
             CheckThrottle(accountKey, now);
             CheckThrottle(addressKey, now);
-            var stored = state.Users.FirstOrDefault(item => string.Equals(item.User.Username, username, StringComparison.OrdinalIgnoreCase));
+            while (loginAdmissions.TryPeek(out var first) && now - first >= TimeSpan.FromSeconds(10)) loginAdmissions.Dequeue();
+            if (loginAdmissions.Count >= 100) throw new BadHttpRequestException("Gateway sign-in rate limit reached. Try again shortly.", 429);
+            loginAdmissions.Enqueue(now);
+            stored = state.Users.FirstOrDefault(item => string.Equals(item.User.Username, username, StringComparison.OrdinalIgnoreCase));
+        }
+        if (!passwordSlots.Wait(0)) throw new BadHttpRequestException("Gateway sign-in is busy. Try again shortly.", 429);
+        try
+        {
             var user = stored?.User ?? dummyUser;
             var candidate = password is { Length: <= 256 } ? password : "";
             var result = hasher.VerifyHashedPassword(user, stored?.PasswordHash ?? dummyHash, candidate);
+            var replacementHash = result == PasswordVerificationResult.SuccessRehashNeeded ? hasher.HashPassword(user, candidate) : null;
+            lock (gate)
+            {
+            var now = DateTimeOffset.UtcNow;
+            // Password work is outside the lock; a concurrent reset/disable invalidates this attempt.
+            if (stored is not null && !ReferenceEquals(state.Users.FirstOrDefault(item => item.User.Id == user.Id), stored))
+                throw new BadHttpRequestException("The account changed. Sign in again.", 401);
             if (stored is null || stored.User.Disabled || password is null || password.Length > 256 || result == PasswordVerificationResult.Failed)
             {
                 FailThrottle(accountKey, now, 5);
@@ -195,45 +219,63 @@ public sealed class SecurityStore
             throttles.Remove(accountKey);
             if (result == PasswordVerificationResult.SuccessRehashNeeded)
             {
-                var replacement = stored with { PasswordHash = hasher.HashPassword(user, candidate) };
+                var replacement = stored with { PasswordHash = replacementHash! };
                 Commit(state with { Users = state.Users.Select(item => item.User.Id == user.Id ? replacement : item).ToList() });
             }
             return CopyUser(user);
+            }
         }
+        finally { passwordSlots.Release(); }
     }
 
     public bool ChangePassword(SecurityUser actor, SecuritySession session, string? currentPassword, string? newPassword, string remoteAddress)
     {
+        StoredUser existing;
+        var accountKey = "account:" + actor.Username.ToUpperInvariant() + "@" + remoteAddress;
+        var addressKey = "address:" + remoteAddress;
         lock (gate)
         {
-            // Recheck the ticket while holding the same lock as the credential update.
-            // A concurrent logout, disable, or password change cannot reuse an old request.
             var authenticated = ResolveSession(session.Id, session.Audience);
             if (authenticated is null || authenticated.Value.User.Id != actor.Id || authenticated.Value.User.Revision != actor.Revision)
                 throw new BadHttpRequestException("Sign in again to continue.", 401);
-            var existing = state.Users.Single(item => item.User.Id == actor.Id);
+            existing = state.Users.Single(item => item.User.Id == actor.Id);
             var now = DateTimeOffset.UtcNow;
-            var accountKey = "account:" + actor.Username.ToUpperInvariant();
-            var addressKey = "address:" + remoteAddress;
             CheckThrottle(accountKey, now);
             CheckThrottle(addressKey, now);
+        }
+        if (!passwordSlots.Wait(0)) throw new BadHttpRequestException("Gateway password verification is busy. Try again shortly.", 429);
+        try
+        {
             var candidate = currentPassword is { Length: <= 256 } ? currentPassword : "";
             var verified = hasher.VerifyHashedPassword(existing.User, existing.PasswordHash, candidate);
             if (currentPassword is null || currentPassword.Length > 256 || verified == PasswordVerificationResult.Failed)
             {
-                FailThrottle(accountKey, now, 5);
-                FailThrottle(addressKey, now, 25);
+                lock (gate)
+                {
+                    var now = DateTimeOffset.UtcNow;
+                    FailThrottle(accountKey, now, 5);
+                    FailThrottle(addressKey, now, 25);
+                }
                 throw new BadHttpRequestException("The current password is incorrect.", 400);
             }
             ValidatePassword(newPassword);
             if (SecretEquals(currentPassword, newPassword)) throw new ArgumentException("Choose a new password different from your current password.");
             var user = existing.User with { Revision = checked(existing.User.Revision + 1), UpdatedAt = Now() };
             var replacement = new StoredUser(user, hasher.HashPassword(user, newPassword!));
+            lock (gate)
+            {
+            // Recheck after hashing: logout, disable and concurrent resets cannot reuse an old request.
+            var authenticated = ResolveSession(session.Id, session.Audience);
+            if (authenticated is null || authenticated.Value.User.Id != actor.Id || authenticated.Value.User.Revision != actor.Revision
+                || !ReferenceEquals(state.Users.FirstOrDefault(item => item.User.Id == actor.Id), existing))
+                throw new BadHttpRequestException("Sign in again to continue.", 401);
             Commit(state with { Users = state.Users.Select(item => item.User.Id == user.Id ? replacement : item).ToList() });
             foreach (var ticket in sessions.Values.Where(item => item.UserId == user.Id).ToArray()) sessions.Remove(ticket.Id);
             throttles.Remove(accountKey);
             return true;
+            }
         }
+        finally { passwordSlots.Release(); }
     }
 
     public SecurityUser CreateUser(SecurityCreateUser request)
@@ -270,7 +312,8 @@ public sealed class SecurityStore
             var replacement = new StoredUser(user, passwordHash);
             Commit(state with { Users = state.Users.Select(item => item.User.Id == id ? replacement : item).ToList() });
             foreach (var session in sessions.Values.Where(item => item.UserId == id).ToArray()) sessions.Remove(session.Id);
-            if (!string.IsNullOrEmpty(request.Password)) throttles.Remove("account:" + user.Username.ToUpperInvariant());
+            if (!string.IsNullOrEmpty(request.Password))
+                foreach (var key in throttles.Keys.Where(key => key.StartsWith("account:" + user.Username.ToUpperInvariant() + "@", StringComparison.Ordinal)).ToArray()) throttles.Remove(key);
             return CopyUser(user);
         }
     }

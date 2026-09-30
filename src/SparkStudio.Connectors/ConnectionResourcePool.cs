@@ -5,7 +5,9 @@ internal sealed class ConnectionResourcePool<T>(
     int capacity,
     Func<ConnectionDefinition, CancellationToken, Task<T>> create,
     Func<T, bool> healthy,
-    Func<T, Task> close) : IDisposable where T : class, IDisposable
+    Func<T, Task> close,
+    Func<Exception, bool>? reusableAfterError = null,
+    int maximumConcurrencyPerConnection = 1) : IDisposable where T : class, IDisposable
 {
     private sealed class Slot
     {
@@ -17,7 +19,7 @@ internal sealed class ConnectionResourcePool<T>(
     }
 
     private readonly object _sync = new();
-    private readonly Dictionary<string, Slot> _slots = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string Id, int Lane), Slot> _slots = new();
     private readonly CancellationTokenSource _shutdown = new();
     private bool _disposed;
     private int _leases;
@@ -33,7 +35,10 @@ internal sealed class ConnectionResourcePool<T>(
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             stopping = _shutdown.Token;
-            if (!_slots.TryGetValue(connection.Id, out slot!))
+            var candidates = _slots.Where(pair => pair.Key.Id == connection.Id).OrderBy(pair => pair.Value.Users).ThenBy(pair => pair.Key.Lane).ToArray();
+            slot = candidates.FirstOrDefault().Value!;
+            if (slot is null || slot.Users > 0 && candidates.Length < Math.Clamp(maximumConcurrencyPerConnection, 1, capacity)
+                && (_slots.Count < capacity || _slots.Values.Any(candidate => candidate.Users == 0)))
             {
                 if (_slots.Count >= capacity)
                 {
@@ -43,7 +48,9 @@ internal sealed class ConnectionResourcePool<T>(
                     evicted = candidate.Value;
                 }
                 slot = new Slot();
-                _slots.Add(connection.Id, slot);
+                var lane = 0;
+                while (_slots.ContainsKey((connection.Id, lane))) lane++;
+                _slots.Add((connection.Id, lane), slot);
             }
             slot.Users++;
             _leases++;
@@ -66,10 +73,12 @@ internal sealed class ConnectionResourcePool<T>(
                 operation.Token.ThrowIfCancellationRequested();
                 return await action(slot.Resource, operation.Token);
             }
-            catch
+            catch (Exception error)
             {
-                // No failed/cancelled operation can leave a reusable resource behind.
-                await CloseSlotAsync(slot);
+                // Cancelled/incomplete transport work is discarded. A known
+                // application-level server rejection need not tear down a healthy session.
+                if (slot.Resource is null || !healthy(slot.Resource) || reusableAfterError?.Invoke(error) != true)
+                    await CloseSlotAsync(slot);
                 throw;
             }
             finally

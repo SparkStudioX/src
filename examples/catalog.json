@@ -10,6 +10,36 @@
   },
   "workshops": [
     {
+      "id": "process-data-workshop",
+      "title": "Alarms and retained history",
+      "summary": "Synthetic temperature alarms, acknowledgement, deadband, persistent journal and historical trend.",
+      "source": "examples/process-data-workshop.json",
+      "distribution": "setup-required",
+      "features": [
+        "High/low alarm conditions",
+        "Acknowledgement and alarm journal",
+        "Absolute deadband history",
+        "Retained local historical trend",
+        "Reviewed synthetic commands"
+      ],
+      "prerequisites": [
+        "Use the companion review-hardening source build; preview.9 does not include alarms or history.",
+        "Run tools/load-process-data-example.mjs against an isolated gateway using administrator credentials; --publish is explicit.",
+        "Operators need View to read, Commands to change the synthetic temperature and Operate to acknowledge; tag scope must include [default]ProcessWorkshop/."
+      ],
+      "gatewayWrites": "memory-tags",
+      "entryScreenId": "process-data",
+      "guide": "docs/architecture/PROCESS_DATA.md",
+      "walkthrough": [
+        "Inspect Gateway Settings > Alarms & history, cancel a staged edit and verify no configuration changes.",
+        "Publish and open the workshop. Review and confirm 90 as the synthetic temperature, then acknowledge the high alarm.",
+        "Set 78 and confirm the alarm remains active; set 74 and confirm it clears.",
+        "Set 10 to activate low, then 23 to clear. Compare journal events and historical values in two operator tabs.",
+        "Restart only the isolated gateway and verify retained alarm occurrence, acknowledgement and history.",
+        "Remove the workshop project and disable its alarm/history rules when finished; no physical equipment was used."
+      ]
+    },
+    {
       "id": "view-containers",
       "title": "Retained view containers",
       "summary": "Reusable forms in embedded, tab, split and dock layouts with independent retained pane state.",

@@ -91,7 +91,7 @@ internal static class UnifiedPublicationChecks
             var reloaded = new ProjectCatalog(directory, new EphemeralDataProtectionProvider()).Get(workspace.Id);
             Check(JsonNode.DeepEquals(reloaded.Publication.Metadata(), restored) && reloaded.Scripts.CaptureLibraries()["release"].Contains("'A'"), "restart recovers same complete restored release");
 
-            var pythonPath = OperatingSystem.IsWindows() ? Path.GetFullPath("runtimes/python/windows-x64/python.exe") : "/usr/bin/python3";
+            var pythonPath = TestEnvironment.PythonExecutable();
             if (!File.Exists(pythonPath)) throw new Exception("Unified publication integration requires the bundled Python runtime.");
             using var connectors = new ConnectorService(directory);
             using var tags = new TagEngine(catalog.GatewayStore, connectors, NullLogger<TagEngine>.Instance);

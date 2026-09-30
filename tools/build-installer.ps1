@@ -3,6 +3,8 @@ param([switch]$SkipHelperBuild, [string]$CompilerPath, [string]$PublishedDirecto
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Split-Path $PSScriptRoot -Parent))
 $gitRoot = $root.Replace('\', '/')
+& node (Join-Path $PSScriptRoot 'version.mjs')
+if ($LASTEXITCODE -ne 0) { throw 'Release versions are inconsistent.' }
 [xml]$project = Get-Content -LiteralPath (Join-Path $root 'src\SparkStudio.Gateway\SparkStudio.Gateway.csproj') -Raw
 $version = [string]$project.Project.PropertyGroup.Version
 $fileVersion = [string]$project.Project.PropertyGroup.FileVersion
@@ -147,21 +149,39 @@ try {
     $deps = Get-Content -LiteralPath (Join-Path $published 'SparkStudio.Gateway.deps.json') -Raw | ConvertFrom-Json
     $packages = @()
     foreach ($property in $deps.libraries.PSObject.Properties) {
-        $packages += [ordered]@{ name = $property.Name; type = $property.Value.type; hash = $property.Value.sha512 }
+        $inventoryEntry = [ordered]@{ name = $property.Name; type = $property.Value.type; hash = $property.Value.sha512; noticeFiles = @(); license = $null; licenseType = $null; copyright = $null; licenseUrl = $null; requiresLicenseReview = $false }
         if ($property.Value.type -eq 'package') {
             $packageDirectory = Join-Path $env:NUGET_PACKAGES $property.Value.path
             if (Test-Path -LiteralPath $packageDirectory) {
+                $nuspec = Get-ChildItem -LiteralPath $packageDirectory -File -Filter '*.nuspec' | Select-Object -First 1
+                if ($nuspec) {
+                    $packageXml = New-Object System.Xml.XmlDocument
+                    $packageXml.XmlResolver = $null
+                    $packageXml.Load($nuspec.FullName)
+                    $metadata = $packageXml.SelectSingleNode('/*[local-name()="package"]/*[local-name()="metadata"]')
+                    $license = $metadata.SelectSingleNode('*[local-name()="license"]')
+                    if ($license) { $inventoryEntry.license = $license.InnerText; $inventoryEntry.licenseType = $license.GetAttribute('type') }
+                    $copyright = $metadata.SelectSingleNode('*[local-name()="copyright"]')
+                    if ($copyright) { $inventoryEntry.copyright = $copyright.InnerText }
+                    $licenseUrl = $metadata.SelectSingleNode('*[local-name()="licenseUrl"]')
+                    if ($licenseUrl) { $inventoryEntry.licenseUrl = $licenseUrl.InnerText }
+                }
                 $packageNotices = @(Get-ChildItem -LiteralPath $packageDirectory -File -Recurse | Where-Object { $_.Name -match '^(LICENSE|LICENCE|NOTICE|ThirdPartyNotices)(\.|$)' })
                 foreach ($notice in $packageNotices) {
                     $relative = $notice.FullName.Substring($packageDirectory.Length + 1)
                     $destination = Join-Path $notices (Join-Path $property.Name.Replace('/', '\') $relative)
                     New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent) | Out-Null
                     Copy-Item -LiteralPath $notice.FullName -Destination $destination
+                    $inventoryEntry.noticeFiles += $destination.Substring($notices.Length + 1).Replace('\', '/')
                 }
             }
+            $inventoryEntry.requiresLicenseReview = $inventoryEntry.noticeFiles.Count -eq 0
         }
+        $packages += $inventoryEntry
     }
     $packages | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $notices 'package-inventory.json') -Encoding utf8
+    & node (Join-Path $PSScriptRoot 'write-sbom.mjs') $stage $sourceCommit
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot inventory the exact installer dependencies.' }
     $manifestFiles = @(Get-ChildItem -LiteralPath $stage -File -Recurse | Sort-Object FullName | ForEach-Object {
         [ordered]@{ path = $_.FullName.Substring($stage.Length + 1).Replace('\', '/'); size = $_.Length; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
     })

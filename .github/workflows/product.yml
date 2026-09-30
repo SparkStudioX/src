@@ -1,0 +1,44 @@
+name: Product validation
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  offline:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.17.1
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: 3.14.7
+      - name: Restore exact dependencies into isolated build output
+        run: |
+          npm ci --prefix apps/web --no-audit --no-fund
+          dotnet restore src/SparkStudio.Gateway.Tests --artifacts-path .data/test-build --locked-mode --configfile NuGet.Config
+          dotnet restore src/SparkStudio.Connectors.Tests --artifacts-path .data/test-build --locked-mode --configfile NuGet.Config
+      - name: Run offline product acceptance
+        env:
+          SPARKSTUDIO_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: node tools/test-all.mjs
+      - name: Retain aggregate results and per-suite diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-tests-${{ matrix.os }}
+          path: .data/test-results/
+          if-no-files-found: error

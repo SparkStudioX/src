@@ -2958,3 +2958,9 @@ button svg {
     padding: 0 13px;
   }
 }
+
+.render-boundary-contents { display: contents; }
+.render-recovery { padding: 1.5rem; background: var(--panel); color: var(--text); border: 1px solid var(--danger, #bd4343); }
+.render-recovery-tile { height: 100%; overflow: auto; padding: .5rem; font-size: 12px; }
+.render-recovery p { margin: .5rem 0; }
+.render-recovery button { min-height: 44px; margin: .25rem; }

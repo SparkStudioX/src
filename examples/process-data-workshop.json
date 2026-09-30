@@ -1,0 +1,193 @@
+{
+  "name": "Alarms and history workshop",
+  "parameters": {},
+  "tags": [
+    {
+      "path": "[default]ProcessWorkshop/Temperature",
+      "kind": "memory",
+      "dataType": "Double",
+      "value": 40,
+      "enabled": true
+    }
+  ],
+  "processData": {
+    "alarms": [
+      {
+        "id": "process-workshop-high",
+        "name": "Workshop high temperature",
+        "tagPath": "[default]ProcessWorkshop/Temperature",
+        "enabled": true,
+        "mode": "high",
+        "setpoint": 80,
+        "deadband": 5,
+        "priority": 3
+      },
+      {
+        "id": "process-workshop-low",
+        "name": "Workshop low temperature",
+        "tagPath": "[default]ProcessWorkshop/Temperature",
+        "enabled": true,
+        "mode": "low",
+        "setpoint": 20,
+        "deadband": 2,
+        "priority": 2
+      }
+    ],
+    "history": [
+      {
+        "tagPath": "[default]ProcessWorkshop/Temperature",
+        "enabled": true,
+        "deadband": 0.5,
+        "maxIntervalMs": 1000,
+        "retentionDays": 7
+      }
+    ]
+  },
+  "commands": [
+    {
+      "id": "temperature",
+      "name": "Synthetic temperature",
+      "tagPath": "[default]ProcessWorkshop/Temperature",
+      "dataType": "Double",
+      "confirmation": "Change this workshop memory tag? No physical equipment is connected.",
+      "timeoutMs": 1000,
+      "min": 0,
+      "max": 150,
+      "tolerance": 0
+    }
+  ],
+  "navigation": {
+    "startupScreenId": "process-data",
+    "mode": "none",
+    "items": []
+  },
+  "screens": [
+    {
+      "id": "process-data",
+      "name": "Alarms and history",
+      "width": 1280,
+      "height": 1360,
+      "components": [
+        {
+          "id": "title",
+          "type": "label",
+          "x": 24,
+          "y": 20,
+          "width": 1232,
+          "height": 58,
+          "props": {
+            "text": "Alarms and retained history",
+            "fontSize": 30
+          }
+        },
+        {
+          "id": "instructions",
+          "type": "label",
+          "x": 24,
+          "y": 84,
+          "width": 1232,
+          "height": 65,
+          "props": {
+            "text": "Synthetic memory tag only. Set 90 to activate High, acknowledge, then set 78 (deadband holds) and 74 (clears). Set 10 for Low.",
+            "fontSize": 18
+          }
+        },
+        {
+          "id": "temperature-command",
+          "type": "equipmentCommand",
+          "x": 24,
+          "y": 172,
+          "width": 365,
+          "height": 230,
+          "props": {
+            "text": "Change workshop temperature",
+            "commandId": "temperature"
+          }
+        },
+        {
+          "id": "temperature-setpoint",
+          "type": "numberInput",
+          "x": 24,
+          "y": 412,
+          "width": 365,
+          "height": 70,
+          "props": {
+            "text": "Setpoint (review on commit)",
+            "fieldKey": "temperature",
+            "commandId": "temperature",
+            "tagPath": "[default]ProcessWorkshop/Temperature",
+            "defaultValue": 40,
+            "min": 0,
+            "max": 150,
+            "step": 1
+          }
+        },
+        {
+          "id": "current-temperature",
+          "type": "value",
+          "x": 24,
+          "y": 494,
+          "width": 365,
+          "height": 186,
+          "props": {
+            "text": "Shared temperature",
+            "tagPath": "[default]ProcessWorkshop/Temperature",
+            "unit": "°C"
+          }
+        },
+        {
+          "id": "alarms",
+          "type": "alarmStatusTable",
+          "x": 412,
+          "y": 172,
+          "width": 844,
+          "height": 408,
+          "props": {
+            "text": "Alarm status",
+            "alarmMinimumPriority": 1
+          }
+        },
+        {
+          "id": "history",
+          "type": "historicalTrend",
+          "x": 24,
+          "y": 700,
+          "width": 1232,
+          "height": 300,
+          "props": {
+            "text": "Temperature history",
+            "historyPaths": [
+              "[default]ProcessWorkshop/Temperature"
+            ],
+            "historyMinutes": 60,
+            "historyMaxPoints": 1000
+          }
+        },
+        {
+          "id": "journal",
+          "type": "alarmJournalTable",
+          "x": 24,
+          "y": 1020,
+          "width": 1232,
+          "height": 283,
+          "props": {
+            "text": "Alarm journal",
+            "alarmMinimumPriority": 1
+          }
+        },
+        {
+          "id": "scope",
+          "type": "label",
+          "x": 24,
+          "y": 1313,
+          "width": 1232,
+          "height": 30,
+          "props": {
+            "text": "Commands changes a memory value; Operate acknowledges alarms. No PLC, database connection or external notifications.",
+            "fontSize": 13
+          }
+        }
+      ]
+    }
+  ]
+}

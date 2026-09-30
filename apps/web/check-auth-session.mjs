@@ -40,7 +40,7 @@ let passed=0;
 async function check(name,run){stored.clear();await run();passed++;console.log(`PASS ${name}`)}
 try {
   await check('authenticated reads and mutations carry audience/project and mutation-only CSRF without storage',async()=>{
-    configure();const calls=[];globalThis.fetch=async(...args)=>{calls.push(args);return response({ok:true})};
+    configure();const calls=[];globalThis.fetch=async(...args)=>{calls.push(args);return response(args[0].includes("/project") ? {id:"plant",name:"Plant",revision:1,parameters:{},screens:[]} : [])};
     await api('/tags');await api('/project','PUT',{name:'Plant'});
     assert.equal(calls[0][1].headers.get('X-SPARK-AUDIENCE'),'engineering');assert.equal(calls[0][1].headers.get('X-SPARK-PROJECT'),'plant');assert.equal(calls[0][1].headers.get('X-SPARK-CSRF'),null);
     assert.equal(calls[1][1].headers.get('X-SPARK-CSRF'),'csrf-a');assert.equal(calls[1][1].credentials,'same-origin');assert.equal(calls[1][1].redirect,'error');assert.equal(calls[1][1].headers.get('content-type'),'application/json');

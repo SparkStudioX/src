@@ -1,0 +1,14 @@
+.opc-certificates { display:grid; gap:16px; padding:16px 0; }
+.opc-certificates p { margin:0; }
+.opc-certificates code { overflow-wrap:anywhere; }
+.opc-certificates label { display:flex; flex-direction:column; gap:6px; }
+.opc-certificates fieldset { display:grid; gap:16px; padding:16px; border:1px solid var(--border); }
+.opc-certificates .opc-certificate-check { flex-direction:row; align-items:center; }
+.opc-certificate-toolbar { display:flex; gap:16px; flex-wrap:wrap; align-items:end; }
+.opc-certificate-toolbar label { flex:1; min-width:180px; }
+.opc-certificate-table { overflow:auto; }
+.opc-certificate-table table { width:100%; border-collapse:collapse; }
+.opc-certificate-table th, .opc-certificate-table td { padding:12px; text-align:left; vertical-align:top; border-bottom:1px solid var(--border); }
+.opc-certificate-table small { display:block; max-width:340px; overflow-wrap:anywhere; margin-top:4px; }
+.opc-certificate-table code { display:block; min-width:150px; max-width:300px; }
+.opc-certificate-table button { display:block; margin-bottom:6px; }

@@ -114,10 +114,16 @@ public static class GatewaySecurity
             throw new BadHttpRequestException("Sign in again to continue.", 401);
     }
 
-    public static bool IsSecureTransport(HttpContext context) => context.Request.IsHttps || IsLoopback(context);
+    public static bool IsSecureTransport(HttpContext context) => IsDirectTls(context) || IsLoopback(context);
+    public static bool IsDirectTls(HttpContext context) => context.Features.Get<Microsoft.AspNetCore.Http.Features.ITlsConnectionFeature>() is not null;
+    public static string PeerAddress(HttpContext context) => context.Features.Get<GatewayReadinessPeer>()?.Address?.ToString() ?? "unknown";
     public static bool IsLoopback(HttpContext context)
     {
-        var address = context.Connection.RemoteIpAddress;
+        // Forwarded headers are not proof that a request originated on this computer.
+        // In particular, a local reverse proxy must not expose local setup to its clients.
+        if (context.Request.Headers.Keys.Any(key => key.StartsWith("X-Forwarded-", StringComparison.OrdinalIgnoreCase)
+            || key.StartsWith("X-Original-", StringComparison.OrdinalIgnoreCase) || key.Equals("Forwarded", StringComparison.OrdinalIgnoreCase))) return false;
+        var address = context.Features.Get<GatewayReadinessPeer>()?.Address;
         return address is not null && (IPAddress.IsLoopback(address) || address.IsIPv4MappedToIPv6 && IPAddress.IsLoopback(address.MapToIPv4()));
     }
     public static string ValidateAudience(string? audience)
@@ -151,7 +157,7 @@ public static class GatewaySecurity
             GuardTransportAndOrigin(context, json: true);
             ValidateAudience(request.Audience);
             if (store.SetupRequired) throw new BadHttpRequestException("Complete local gateway setup first.", 409);
-            var user = store.Login(request.Username, request.Password, context.Connection.RemoteIpAddress?.ToString() ?? "unknown");
+            var user = store.Login(request.Username, request.Password, PeerAddress(context));
             var allowed = user.GatewayAdmin || request.Audience == EngineeringAudience && string.IsNullOrEmpty(request.ProjectId) && store.GetGatewayCapabilities(user).Any || (request.ProjectId is { Length: > 0 }
                 ? store.Can(user, request.ProjectId, request.Audience == EngineeringAudience ? "design" : "view")
                 : user.ProjectGrants.Values.Any(grant => request.Audience == EngineeringAudience ? grant.Design : grant.View));
@@ -185,7 +191,7 @@ public static class GatewaySecurity
             }
             AuditMutation(context, store, user, "auth.password.change", user.Id,
                 () => store.ChangePassword(user, session, request.CurrentPassword, request.NewPassword,
-                    context.Connection.RemoteIpAddress?.ToString() ?? "unknown"));
+                    PeerAddress(context)));
             foreach (var scheme in schemes) await context.SignOutAsync(scheme);
             context.Items.Remove(SessionKey);
             context.Items.Remove(UserKey);

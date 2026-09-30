@@ -23,7 +23,7 @@ export interface DuplicateOptions {
   createId?: (original: CanvasComponent) => string;
 }
 
-export interface ProjectHistory { past: Project[]; future: Project[] }
+export interface ProjectHistory { past: Project[]; future: Project[]; coalescing?: { key: string; at: number } }
 
 /** Revisions identify server writes, not undoable application content. */
 export function projectContent(project: Project): string {
@@ -31,8 +31,10 @@ export function projectContent(project: Project): string {
   return JSON.stringify(content);
 }
 
-export function checkpoint(history: ProjectHistory, project: Project): ProjectHistory {
-  return { past: [...history.past.slice(-29), project], future: [] };
+export function checkpoint(history: ProjectHistory, project: Project, key?: string, at = Date.now()): ProjectHistory {
+  const together = key !== undefined && history.coalescing?.key === key && at >= history.coalescing.at
+    && at - history.coalescing.at <= 750 && history.future.length === 0;
+  return { past: together ? history.past : [...history.past.slice(-29), project], future: [], ...(key ? { coalescing: { key, at } } : {}) };
 }
 
 export function restoreHistory(history: ProjectHistory, current: Project, direction: "undo" | "redo"):

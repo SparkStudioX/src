@@ -34,7 +34,25 @@ await check('registration and ready must match exact project, publication and se
 await check('ready stream delivers validated tags and detached bounded session messages',async()=>{
  const env=environment(),stream=await env.ready();stream.emit('tags',[{path:'x',value:2}]);stream.emit('message',envelope());assert.equal(env.statuses[0].connected,true);assert.deepEqual(env.tags,[[{path:'x',value:2}]]);assert.equal(env.messages[0].messageId,'message-1');assert.ok(Object.isFrozen(env.messages[0].payload));
  for(const patch of [{sessionId:'b'.repeat(32)},{projectId:'other'},{publishedAt:'old'},{scope:'screen'},{messageId:'bad\n'},{messageType:' padded'},{timestamp:'no'},{payload:[]},{payload:{x:'a'.repeat(65537)}}])stream.emit('message',envelope(identity(),patch));
- stream.emit('tags','{',true);stream.emit('tags',{not:'an array'});assert.equal(env.messages.length,1);assert.equal(env.tags.length,1);assert.equal(stream.closed,false);env.connection.stop();
+ assert.equal(env.messages.length,1);assert.equal(env.tags.length,1);assert.equal(stream.closed,false);env.connection.stop();
+});
+await check('malformed full snapshots reconnect rather than keeping an incomplete catalog alive',async()=>{
+ for(const mode of ['json','shape','sample']){const env=environment({tags:()=>{if(mode==='sample')throw new Error('Invalid sample.');}}),stream=await env.ready();
+ stream.emit('tags',mode==='json'?'{':mode==='shape'?{}:[{path:'invalid'}],mode==='json');assert.equal(stream.closed,true);assert.equal(env.retired.length,1);assert.equal(env.statuses.at(-1).connected,false);
+ env.fire(1000);assert.equal(env.registrations.length,2);env.connection.stop();assert.equal(env.timers.size,0);}
+});
+await check('delta and heartbeat frames stay scoped to the current ready session',async()=>{
+ const deltas=[];let beats=0,current=true;const env=environment({tagDelta:value=>deltas.push(value),heartbeat:()=>beats++,isCurrent:()=>current});
+ env.connection.start();env.registrations[0].resolve(identity());await tick();const stream=env.streams[0].stream,delta={upserts:[{path:'x',value:2}],removed:['old']};
+ stream.emit('tags-delta',delta);stream.emit('heartbeat',{});assert.equal(deltas.length,0);assert.equal(beats,0);
+ stream.emit('ready',identity());const timer=[...env.timers.keys()][0];stream.emit('tags-delta',delta);assert.deepEqual(deltas,[delta]);assert.ok(env.canceled.has(timer));
+ stream.emit('heartbeat',{});assert.equal(beats,1);current=false;stream.emit('tags-delta',delta);stream.emit('heartbeat',{});assert.equal(deltas.length,1);assert.equal(beats,1);
+ env.connection.stop();current=true;stream.emit('tags-delta',delta);stream.emit('heartbeat',{});assert.equal(deltas.length,1);assert.equal(beats,1);assert.equal(env.timers.size,0);
+});
+await check('invalid delta payloads retire the stream and obtain a fresh snapshot session',async()=>{
+ for(const invalidJson of [false,true]){const env=environment({tagDelta:()=>{throw new Error('Invalid tag delta.');}}),stream=await env.ready();
+ stream.emit('tags-delta',invalidJson?'{':{upserts:'malformed'},invalidJson);assert.equal(stream.closed,true);assert.equal(env.retired.length,1);assert.equal(env.statuses.at(-1).connected,false);
+ env.fire(1000);assert.equal(env.registrations.length,2);env.connection.stop();assert.equal(env.timers.size,0);}
 });
 await check('stop rejects late registration and all late stream callbacks',async()=>{
  const pending=environment();pending.connection.start();pending.connection.stop();assert.ok(pending.registrations[0].signal.aborted);pending.registrations[0].resolve(identity());await tick();assert.equal(pending.streams.length,0);assert.equal(pending.retired.length,1);
@@ -73,6 +91,6 @@ await check('hook blocks a retired publication on render and uses captured proje
  const render=(project,published)=>{hooks.begin();useRuntimeSessionMessaging(project,published,()=>{},value=>received.push(value),()=>{});};render('line-a',identity().publishedAt);hooks.flush();await tick();sources[0].emit('ready',identity());render('line-b','new-publication');sources[0].emit('message',envelope());assert.equal(received.length,0);hooks.cleanup();assert.equal(api.calls.at(-1).path,'/projects/line-a/runtime/sessions/'+identity().sessionId);assert.equal(api.calls.at(-1).method,'DELETE');delete globalThis.EventSource;
 });
 await check('operator wiring keeps tag polling when session messaging fails and rejects old publications',()=>{
- const source=fs.readFileSync(new URL('src/OperatorRuntime.tsx',import.meta.url),'utf8');assert.match(source,/setInterval\(poll, 4000\)/);assert.match(source,/api<Tag\[\]>\("\/tags"\)/);assert.match(source,/message\.projectId !== currentProject\.current\?\.id/);assert.match(source,/message\.publishedAt !== currentProject\.current\?\.publishedAt/);assert.match(source,/applicationState\.isCurrent\(\)/);
+ const source=fs.readFileSync(new URL('src/OperatorRuntime.tsx',import.meta.url),'utf8');assert.match(source,/Date\.now\(\) - lastReceived\.current > 8000\) poll\(\)/);assert.match(source,/api<Tag\[\]>\("\/tags"\)/);assert.match(source,/message\.projectId !== currentProject\.current\?\.id/);assert.match(source,/message\.publishedAt !== currentProject\.current\?\.publishedAt/);assert.match(source,/applicationState\.isCurrent\(\)/);
 });
 console.log(`${passed}/${passed} runtime session messaging checks passed.`);

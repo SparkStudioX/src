@@ -6,7 +6,7 @@ Resources belong to the project currently open in the Designer. Different projec
 
 ## Save, publish and run
 
-**Save resources** persists the complete script draft using its revision. **Publish scripts** activates the saved library/event snapshot. Saving alone does not replace running events, though an already published Update handler can observe the saved resource changes. Script publication is separate from the screen/project publication; these resources do not yet form one atomic release.
+**Save resources** persists the complete script draft using its revision. **Publish application** opens the shared review of saved screens, queries, libraries and event resources, then activates them as one revision. Saving alone does not replace running events, though an already published Update handler can observe the saved resource changes. Changed executable code requires a gateway administrator to approve publication; a Design/Publish grant alone cannot activate it. See [unified publication](UNIFIED_PUBLICATION.md).
 
 Add a resource under Project library, Gateway events or Browser events. Libraries are enabled initially; new events are disabled until explicitly enabled. Choose an event, edit its code and optional scalar parameter defaults, then save and publish. Deletion is a draft change until saved and published.
 
@@ -34,9 +34,9 @@ result = helpers.title("assembly ready")
 
 `import project.helpers` and `project.helpers` access are also supported. Modules load lazily within a fresh CPython worker. Module globals survive within that invocation only; use explicit persistent tags or a database for state needed across invocations. A draft resource run still imports published libraries.
 
-The initial gateway API includes `system.tag.readBlocking`, `system.tag.writeBlocking`, `system.db.runNamedQuery`, `system.util.getLogger`, JSON helpers, `system.date.now` and a small dataset wrapper. Tag reads return the gateway's current values with quality and timestamps. Writes support configured, enabled memory tags; OPC device writes are not implemented. Query resources return datasets, while explicit update resources return an affected-row count.
+The initial gateway API includes `system.tag.readBlocking`, `system.tag.writeBlocking`, `system.db.runNamedQuery`, `system.util.getLogger`, JSON helpers, `system.date.now` and a small dataset wrapper. Tag reads return the gateway's current values with quality and timestamps. The Python tag-write API supports configured, enabled memory tags. Reviewed Equipment Commands separately support OPC UA scalar device writes; arbitrary Python device writes are unavailable. Query resources return datasets, while explicit update resources return an affected-row count.
 
-Published operator actions resolve named queries from their captured project publication. Console commands, Designer Preview, manual resources and gateway events use that project's current named-query definitions. Libraries come from the independent script publication, including when called from a published operator action. Changing a project query or publishing a library can therefore affect later executions in that project without republishing every screen.
+Published operator actions and gateway events resolve queries and libraries from their captured application revision. Draft Preview, manual draft resources and the Console retain their documented engineering scope. Saving a query or library does not change the active published application; publish the complete saved application to activate that change.
 
 ## Event scopes
 

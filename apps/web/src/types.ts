@@ -1,4 +1,7 @@
 export type ComponentType =
+  | "alarmStatusTable"
+  | "alarmJournalTable"
+  | "historicalTrend"
   | "chart"
   | "sparkline"
   | "equipmentCommand"
@@ -288,6 +291,10 @@ export interface CanvasComponent {
     parameters?: Record<string, string>;
     parameterBindings?: Record<string, PropertyBinding>;
     rows?: TemplateRow[];
+    historyPaths?: string[];
+    historyMinutes?: number;
+    historyMaxPoints?: number;
+    alarmMinimumPriority?: number;
     rowsSource?: QueryRepeaterSource;
     columns?: number;
     gap?: number;
@@ -408,6 +415,8 @@ export interface Tag {
   source?: string;
 }
 export interface TagDefinition {
+  absoluteDeadband?: number;
+  queueSize?: number;
   path: string;
   kind?: "opcua" | "memory" | "expression";
   dataType: string;

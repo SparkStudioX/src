@@ -1,6 +1,6 @@
 import type { RuntimeParameters } from "./types";
 import { validateListTreeOptions } from "./listTreeModel";
-import { resolvePath } from "./api";
+import { resolvePath, tagByPath } from "./api";
 import { inputConstraintError } from "./inputValidation";
 import type {
   CanvasComponent,
@@ -157,10 +157,7 @@ export function initialInput(
     return state![binding.scope]![binding.key];
   }
   const tag = component.props.tagPath
-    ? tags.find(
-        (item) =>
-          item.path === resolvePath(component.props.tagPath || "", parameters),
-      )
+    ? tagByPath(tags, resolvePath(component.props.tagPath || "", parameters))
     : undefined;
   const bound = Boolean(component.props.tagPath);
   if (

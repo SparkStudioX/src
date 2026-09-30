@@ -147,6 +147,7 @@ export interface ComponentEventContext {
 }
 export type ComponentEventExecutor = (script: ComponentEventScript, event: AutomaticComponentEvent, inputs: InputValues,
   parameters: RuntimeParameters, app: ComponentEventApp) => unknown | Promise<unknown>;
+// Trusted author code runs in this origin. Async timeout revokes helpers but cannot preempt synchronous JavaScript.
 export const executeComponentEvent: ComponentEventExecutor = (script, event, inputs, parameters, app) => {
   requirePreviewScriptPermission();
   if (script.language !== "javascript") throw new Error("Python events require the gateway event transport.");

@@ -70,7 +70,7 @@ try {
   await check('requests derive context from the current canonical document', async () => {
     globalThis.window = { location: { pathname: '/designer/line-a', href: 'http://gateway.local/designer/line-a', origin: 'http://gateway.local' } };
     const calls = [];
-    globalThis.fetch = async (...args) => { calls.push(args); return new Response('{"ok":true}', { status: 200 }); };
+    globalThis.fetch = async (...args) => { calls.push(args); return new Response(JSON.stringify(String(args[0]).includes('/project') ? {id:'plant',name:'Plant',revision:1,parameters:{},screens:[]} : []), { status: 200 }); };
     await api('/project', 'PUT', { name: 'Line A' });
     assert.equal(calls[0][0], '/api/projects/line-a/project');
     assert.equal(calls[0][1].body, '{"name":"Line A"}');

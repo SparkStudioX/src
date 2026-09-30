@@ -10,6 +10,9 @@ SparkStudio uses a direct fixed-canvas application workflow: place controls at e
 | `value` | Direct/indirect tag value, units, quality and bound presentation properties | Rich value formatting, value transforms and extension behavior |
 | `gauge` | Bounded tag visualization and bound presentation properties | Additional scales/styles and broader property/events |
 | `button` | Navigation, scoped Python UI/data actions, native local messages, open/close popup and bound caption/state/color | State, momentary, one-shot and broader event semantics |
+| `alarmStatusTable` | Scoped active alarm conditions, occurrence-specific acknowledgement and quality | Notification delivery, shelving and escalation |
+| `alarmJournalTable` | Scoped retained alarm transitions and acknowledgements | Advanced filters/export and external archival |
+| `historicalTrend` | Bounded recorded tag samples with range, quality and truncation disclosure | Interpolation/aggregation and redundant collectors |
 | `equipmentCommand` | Published typed command declarations, single-use confirmation, matching readback and audited receipts | Physical-device acceptance, momentary/pulse protocols and broader command modes |
 | `chart` | Ten supplied-data modes with static/query datasets, quality gaps, axes, series and local range selection | Advanced aggregation, historian sources and additional chart configuration |
 | `sparkline` | Compact supplied-data line display with static/query datasets and quality gaps | Additional compact display modes and historical sources |
@@ -22,7 +25,7 @@ SparkStudio uses a direct fixed-canvas application workflow: place controls at e
 | `viewContainer` | Embedded, tab, split and dock presets with private pane state, retained drafts and inactive event suppression | Flex/breakpoint layout, anchors and pane-specific dynamic sources |
 | `passwordInput` | Masked, initially blank local string field with change/commit events; saved nonempty defaults and tag prefilling are rejected | Authentication workflows and password-management integration |
 | `textArea` | Multiline string form field with optional change/commit events | Rich text and formatting |
-| `numberInput` | Finite numeric form field with limits and optional change/commit events | Precision/units and richer write behavior |
+| `numberInput` | Finite numeric form field with limits and optional change/commit events; an explicit command identity opens reviewed setpoint confirmation on commit | Precision/units and richer write behavior |
 | `spinner` | Numeric form field with bounded step buttons | Richer numeric formatting and write/acknowledgment semantics |
 | `slider` | Numeric form field with explicit minimum/maximum and step | Additional scales/styles and write/acknowledgment semantics |
 | `checkbox` | Boolean form input with two-way typed state binding and input events | Richer validation and command behavior |
@@ -48,7 +51,7 @@ SparkStudio uses a direct fixed-canvas application workflow: place controls at e
 | `image` | Immutable local still image with fit/alt text | Asset deletion/archive management and broader media |
 | `icon` | Bundled named icons with theme/default colors | Full symbol/drawing library |
 
-The current source palette has 41 types, including sixteen inputs. Coverage is partial for each family: a type's presence does not mean every property, event or operating mode is implemented. Reusable components share definitions while form state and action targets remain scoped by instance and saved/query row. Popup screens use these components; a popup is a screen kind, not a separate component type.
+The current source palette has 44 types, including sixteen inputs. Coverage is partial for each family: a type's presence does not mean every property, event or operating mode is implemented. Reusable components share definitions while form state and action targets remain scoped by instance and saved/query row. Popup screens use these components; a popup is a screen kind, not a separate component type.
 
 Inputs update local form state and pass through declared-input validation when a Python button action submits them. A toggle is not a device command. Numeric step sizes guide UI interaction rather than enforcing a divisibility rule. Date/time strings use `YYYY-MM-DDTHH:mm`, carry no timezone or offset and may be empty; there is no implicit conversion to UTC.
 
@@ -183,7 +186,7 @@ The Equipment command component references an explicit published command resourc
 
 ## Consistent property grid
 
-All 41 component types use one continuous Property / Value / Bind inspector. Geometry, appearance, type-specific content, input defaults, style/translation references, commands and actions share aligned rows. The Bind column contains an fx button only for supported scalar, state, parameter or dataset bindings. Structural settings such as template identity and chart series do not imply a new binding API.
+All 44 component types use one continuous Property / Value / Bind inspector. Geometry, appearance, type-specific content, input defaults, style/translation references, commands and actions share aligned rows. The Bind column contains an fx button only for supported scalar, state, parameter or dataset bindings. Structural settings such as template identity and chart series do not imply a new binding API.
 
 Structured options, states, drawing points, table columns and table edit handlers open staged editors from compact summary rows. Apply validates and creates an Undo step; Cancel or Escape retains the saved value. Saved repeater rows and dropdown/radio options now use explicit Apply instead of saving on blur. Chart series and datasets expand from rows; their draft is committed with Apply chart. Parameter and selection mappings expand in place. The duplicate legacy tag-path editor is removed; its resolved address remains visible with the real binding row.
 

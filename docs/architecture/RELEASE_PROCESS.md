@@ -126,3 +126,45 @@ A release is complete only when all of these agree:
 - Source CI and website deployment passed; source/release/website references and verification notes are recorded.
 
 If publication or Pages deployment fails, inspect the failing stage and finish or report the specific blocker. Do not describe the entire release as shipped while website/docs updates are still pending. A website rollback re-pins the last known-good website/docs revision; a bad installer is superseded by a new preview and clearly identified in release notes. Preserve older release assets for recovery and traceability.
+
+## Version and dependency inventory gates
+
+`src/SparkStudio.Gateway/SparkStudio.Gateway.csproj` owns the product and numeric
+Windows file versions. After advancing them, run `node tools/version.mjs --write`
+to synchronize package metadata, Compose and the installer defaults. CI and both
+Windows packaging commands reject drift. The source version is not advanced merely
+by running tests or repairing release tooling.
+
+Run `node tools/test-all.mjs` after the documented locked dependency restore and
+retain its aggregate JSON/JUnit output with release evidence. Both test consoles
+report independent suites even when another fails. The offline job does not replace
+real-device, service, browser or exact-installer acceptance.
+The configuration-backup fixture exercises the current Windows user's DPAPI
+keyring in a synthetic temporary gateway. Run it under the normal test account;
+an isolated security token without that user's DPAPI profile cannot validate this
+round trip. Do not treat such a failure as a successful test or disable production
+key protection to make the fixture pass.
+
+Installer staging includes `sbom.cdx.json` (CycloneDX 1.6), identifying the exact
+payload's NuGet packages, locked browser production dependencies, bundled CPython
+and .NET frameworks. The SBOM and third-party notices enter the hashed package
+manifest. Browser/.NET/CPython notice text is retained; NuGet package notices are
+copied when present. Review dependencies without embedded license text against
+their package metadata before distribution. The NuGet inventory preserves declared
+license expressions, copyright and license URLs and marks packages without copied
+notice files as `requiresLicenseReview`; a successful build does not clear that
+review. Available SPDX license expressions also enter the SBOM. SBOM generation is an inventory, not a
+legal permission grant or a vulnerability audit. SparkStudio's proprietary LICENSE
+does not supersede third-party terms.
+
+The manual published-folder service script delegates to the very same helper used
+by Setup. Both use the ProgramData directory, ownership checks, LocalService ACLs,
+local/HTTPS listener rules and bundled-Python readiness. No second `sc.exe`-only
+installation route remains. Elevated upgrade/rollback acceptance still requires a
+Windows administrator on the target machine.
+
+Builds use locked dependencies and deterministic managed compilation, but do not
+claim byte-identical installer files: signing, timestamps, Inno output and platform
+tooling must be accounted for. Unsigned previews remain visibly labelled unsigned.
+Authenticode signing requires the product owner's certificate/signing service and
+must not be simulated with a locally generated identity.

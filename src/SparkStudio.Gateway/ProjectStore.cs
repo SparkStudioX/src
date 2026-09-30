@@ -26,18 +26,24 @@ public sealed partial class ProjectStore
         this.projectId = projectId;
         Directory.CreateDirectory(directory);
         protector = protection.CreateProtector("SparkStudio.ConnectionSecrets.v1");
-        project = gatewayOnly ? Seed.Project() : Load("project.json") as JsonObject ?? Seed.Project();
+        project = gatewayOnly ? Seed.Project() : Load("project.json") switch
+        { null => Seed.Project(), JsonObject document => document, _ => throw new InvalidOperationException("Stored project draft must be an object.") };
+        if (project["name"] is not JsonValue projectName || !projectName.TryGetValue<string>(out _) ||
+            project["revision"] is not JsonValue projectRevision || !projectRevision.TryGetValue<int>(out _))
+            throw new InvalidOperationException("Stored project metadata is invalid.");
         if (projectId is not null) project["id"] = projectId;
-        connections = gatewayStore is null ? Load("connections.json") as JsonArray ?? [] : [];
-        queries = gatewayOnly ? [] : Load("queries.json") as JsonArray ?? (gatewayStore is null ? Seed.Queries() : []);
+        connections = gatewayStore is null ? Load("connections.json") switch
+        { null => [], JsonArray items => items, _ => throw new InvalidOperationException("Stored connections must be an array.") } : [];
+        queries = gatewayOnly ? [] : Load("queries.json") switch
+        { null => gatewayStore is null ? Seed.Queries() : [], JsonArray items => items, _ => throw new InvalidOperationException("Stored queries must be an array.") };
         if (gatewayStore is null) LoadTagModel(Load("tags.json"));
     }
-    private JsonNode? Load(string name) => File.Exists(Path.Combine(directory, name)) ? JsonNode.Parse(File.ReadAllText(Path.Combine(directory, name))) : null;
-    private void Persist(string name, JsonNode node)
+    private JsonNode? Load(string name) => File.Exists(Path.Combine(directory, name)) ? JsonNode.Parse(File.ReadAllText(Path.Combine(directory, name)))
+        ?? throw new InvalidOperationException($"Stored {name} cannot be empty.") : null;
+    private void Persist(string name, JsonNode node) => DurableJsonFile.Write(Path.Combine(directory, name), node, Json);
+    public JsonObject ProjectMetadata()
     {
-        var path = Path.Combine(directory, name);
-        File.WriteAllText(path + ".tmp", node.ToJsonString(Json));
-        File.Move(path + ".tmp", path, true);
+        lock (gate) return new() { ["name"] = project["name"]?.DeepClone(), ["revision"] = project["revision"]?.DeepClone() };
     }
     public JsonObject GetProject() { lock (gate) return (JsonObject)project.DeepClone(); }
     public JsonObject CapturePublication(int expectedRevision)
@@ -122,6 +128,9 @@ public sealed partial class ProjectStore
             next.Add(node);
             Persist("connections.json", next);
             connections = next;
+            tagConfigurationGeneration++;
+            expandedTagDefinitions = null;
+            expandedTagIndex = null;
             connectionTests.Remove(id);
             return (JsonObject)GetConnections().OfType<JsonObject>().Single(x => Optional(x, "id") == id).DeepClone();
         }
@@ -214,7 +223,10 @@ public sealed partial class ProjectStore
         if (gatewayStore is not null) return gatewayStore.GetTagDefinitions();
         lock (gate)
         {
-            return TagModel.Expand(tagModel, NormalizeTag);
+            expandedTagDefinitions ??= TagModel.Expand(tagModel, NormalizeTag);
+            var result = (JsonArray)expandedTagDefinitions.DeepClone();
+            ApplyMemoryState(result);
+            return result;
         }
     }
     public JsonObject SaveTag(JsonObject value)
@@ -258,20 +270,15 @@ public sealed partial class ProjectStore
         lock (gate)
         {
             TagDefinitionValidator.Path(path);
-            var old = GetTagDefinitions().OfType<JsonObject>().FirstOrDefault(x => Optional(x, "path") == path)
-                ?? throw new KeyNotFoundException("Tag definition not found.");
+            expandedTagDefinitions ??= TagModel.Expand(tagModel, NormalizeTag);
+            expandedTagIndex ??= expandedTagDefinitions.OfType<JsonObject>().ToDictionary(tag => Required(tag, "path"), StringComparer.Ordinal);
+            var old = expandedTagIndex.TryGetValue(path, out var definition) ? (JsonObject)definition.DeepClone()
+                : throw new KeyNotFoundException("Tag definition not found.");
             if (TagDefinitionValidator.Kind(old) != "memory") throw new ArgumentException("Only configured memory tags can be written.");
             if (old["effectiveEnabled"]?.GetValue<bool>() != true) throw new ArgumentException("Disabled memory tags cannot be written.");
             var typed = TagDefinitionValidator.MemoryValue(TagDefinitionValidator.DataType(old), value);
-            var next = (JsonObject)tagModel.DeepClone();
-            if (old["udtInstance"] is not null)
-            {
-                var instance = next["instances"]!.AsArray().OfType<JsonObject>().Single(item => Required(item, "path") == Required(old, "udtInstance"));
-                var overrides = instance["overrides"]!.AsObject(); var member = Required(old, "udtMember");
-                overrides[member] ??= new JsonObject(); overrides[member]!["value"] = typed;
-            }
-            else next["tags"]!.AsArray().OfType<JsonObject>().Single(item => Required(item, "path") == path)["value"] = typed;
-            PersistTagModel(next);
+            memoryTagState[path] = new JsonObject { ["dataType"] = old["dataType"]!.DeepClone(), ["configuration"] = Hash(old.ToJsonString()), ["value"] = typed.DeepClone() };
+            memoryStateGeneration++;
             old["value"] = typed.DeepClone();
             return old;
         }

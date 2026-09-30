@@ -24,7 +24,13 @@ export function useApplicationState(project: Project | null, screen: Screen | un
   }, [store]);
   store.configure(runKey, project?.sessionState);
   const scope = store.activateScreen(screen?.id ?? "", screen?.state);
-  const parent = { ...store.context(scope), store };
+  const nextParent = { ...store.context(scope), store };
+  const stable = useRef<ApplicationStateContext | null>(null);
+  const previous = stable.current;
+  if (!previous || !previous.isCurrent() || previous.key !== nextParent.key || previous.store !== store
+    || previous.values.session !== nextParent.values.session || previous.values.screen !== nextParent.values.screen
+    || previous.propertyOverrides !== nextParent.propertyOverrides) stable.current = nextParent;
+  const parent = stable.current!;
   return useInstanceApplicationState(parent, "template-preview", instanceDefinitions, instanceDefinitions !== undefined) ?? parent;
 }
 

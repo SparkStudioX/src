@@ -26,18 +26,66 @@ public sealed record TagImportPreview(string Revision, string PreviewToken, int 
 public sealed partial class ProjectStore
 {
     private JsonObject tagModel = TagModel.Empty();
+    private JsonArray? expandedTagDefinitions;
+    private Dictionary<string, JsonObject>? expandedTagIndex;
+    private long tagConfigurationGeneration;
+    private JsonObject memoryTagState = new();
+    private long memoryStateGeneration;
+    private long persistedMemoryGeneration;
+    private readonly object memoryFlushGate = new();
+    public long TagConfigurationGeneration => gatewayStore?.TagConfigurationGeneration ?? Interlocked.Read(ref tagConfigurationGeneration);
+    public long MemoryStateWriteCount { get; private set; }
     private void LoadTagModel(JsonNode? saved)
     {
         if (saved is JsonArray legacy) tagModel["tags"] = legacy.DeepClone();
         else if (saved is JsonObject model && model["version"]?.GetValue<int>() == 2) tagModel = (JsonObject)model.DeepClone();
         else if (saved is not null) throw new ArgumentException("Unsupported stored tag configuration format.");
         definitions = tagModel["tags"]!.AsArray();
+        if (Load("tag-values.json") is JsonObject state && state["version"]?.GetValue<int>() == 1 && state["values"] is JsonObject savedValues)
+            memoryTagState = (JsonObject)savedValues.DeepClone();
     }
     private void PersistTagModel(JsonObject next)
     {
+        var expanded = TagModel.Expand(next, NormalizeTag);
+        var prior = expandedTagDefinitions ?? TagModel.Expand(tagModel, NormalizeTag);
+        var previous = prior.OfType<JsonObject>().ToDictionary(tag => Required(tag, "path"), StringComparer.Ordinal);
         Persist("tags.json", next);
         tagModel = next;
         definitions = next["tags"]!.AsArray();
+        expandedTagDefinitions = expanded;
+        expandedTagIndex = null;
+        tagConfigurationGeneration++;
+        var retained = expanded.OfType<JsonObject>().Where(tag => previous.TryGetValue(Required(tag, "path"), out var old) && JsonNode.DeepEquals(old, tag))
+            .Select(tag => Required(tag, "path")).ToHashSet(StringComparer.Ordinal);
+        foreach (var path in memoryTagState.Select(item => item.Key).Where(path => !retained.Contains(path)).ToArray())
+        { memoryTagState.Remove(path); memoryStateGeneration++; }
+    }
+    private void ApplyMemoryState(JsonArray tags)
+    {
+        foreach (var tag in tags.OfType<JsonObject>().Where(tag => Optional(tag, "kind") == "memory"))
+            if (memoryTagState[Required(tag, "path")] is JsonObject saved && Optional(saved, "dataType") == Optional(tag, "dataType") && Optional(saved, "configuration") == Hash(tag.ToJsonString()))
+                tag["value"] = TagDefinitionValidator.MemoryValue(Required(tag, "dataType"), saved["value"]);
+    }
+    /// <summary>Memory state is checkpointed at most once per second; orderly stop flushes it as well.</summary>
+    public void FlushMemoryValues()
+    {
+        if (gatewayStore is not null) { gatewayStore.FlushMemoryValues(); return; }
+        lock (memoryFlushGate)
+        {
+            JsonObject snapshot; long generation;
+            lock (gate)
+            {
+                if (persistedMemoryGeneration == memoryStateGeneration) return;
+                generation = memoryStateGeneration;
+                snapshot = new() { ["version"] = 1, ["values"] = memoryTagState.DeepClone() };
+            }
+            // The slow flush does not own the gateway configuration monitor.
+            // Only the atomic replacement owns the configuration monitor. This
+            // keeps online backup capture coherent without blocking tag writes
+            // on serialization or fsync, or reversing the flush/config order.
+            DurableJsonFile.Write(Path.Combine(directory, "tag-values.json"), snapshot, Json, gate);
+            lock (gate) { persistedMemoryGeneration = generation; MemoryStateWriteCount++; }
+        }
     }
     private JsonObject ModelWithTags(JsonArray tags)
     {
@@ -67,10 +115,12 @@ public sealed partial class ProjectStore
         if (kind == "opcua")
         {
             var id = TagDefinitionValidator.Text(value, "connectionId");
-            var connection = GetConnections().OfType<JsonObject>().FirstOrDefault(item => Optional(item, "id") == id)
+            var connection = connections.OfType<JsonObject>().FirstOrDefault(item => Optional(item, "id") == id)
                 ?? throw new ArgumentException("An existing OPC UA connection is required.");
             if (Optional(connection, "type") != "opcua") throw new ArgumentException("Tag bindings require an OPC UA connection.");
             node["connectionId"] = id; node["nodeId"] = TagDefinitionValidator.NodeIdentifier(value);
+            node["absoluteDeadband"] = TagDefinitionValidator.AbsoluteDeadband(value);
+            node["queueSize"] = TagDefinitionValidator.MonitorQueueSize(value);
             if (value.ContainsKey("dataType")) node["dataType"] = TagDefinitionValidator.DataType(value);
         }
         else

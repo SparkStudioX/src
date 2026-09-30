@@ -1,4 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { runtimeText } from "./runtimeText";
+import { TagSnapshotStore } from "./tagStore";
+import { useTagSnapshot } from "./useTagSnapshot";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { VisualStyleProvider } from "./VisualStyleContext";
 import { LocalizationProvider, useLocaleSelection, LocaleSelector } from "./LocalizationContext";
@@ -97,10 +100,13 @@ export default function OperatorRuntime() {
   const canOperate = permissions.operate;
   const [project, setProject] = useState<PublishedProject | null>(null);
   const projectLocale = useLocaleSelection(project);
+  const t = (key: string, fallback: string) => runtimeText(project?.localization, projectLocale.locale, key, fallback);
   const [screenId, setScreenId] = useState("");
   const [popup, setPopup] = useState<PopupState | null>(null);
   const [parameters, setParameters] = useState<Record<string, string>>({});
-  const [tags, setTags] = useState<Tag[]>([]);
+  const [tagStore] = useState(() => new TagSnapshotStore());
+  const tagDocument = useMemo(() => [project?.screens.find(item => item.id === screenId), project?.screens.find(item => item.id === popup?.screenId), project?.templates], [project, screenId, popup]);
+  const tags = useTagSnapshot(tagStore, tagDocument, parameters);
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [unpublished, setUnpublished] = useState(false);
@@ -128,8 +134,11 @@ export default function OperatorRuntime() {
     if (!Array.isArray(next)) return;
     const received = new Date();
     lastReceived.current = received.getTime();
-    setTags(next); setLastUpdate(received); setConnected(true);
-  }, []);
+    tagStore.replace(next); setLastUpdate(previous => !previous || received.getTime() - previous.getTime() >= 5000 ? received : previous); setConnected(true);
+  }, [tagStore]);
+  const receiveDelta = useCallback((value: unknown) => {
+    tagStore.delta(value); lastReceived.current = Date.now(); setConnected(true);
+  }, [tagStore]);
   useEffect(() => () => { currentProject.current = null; }, []);
   const clearUnavailableProject = useCallback(() => {
     currentProject.current = null;
@@ -185,7 +194,7 @@ export default function OperatorRuntime() {
         });
     };
     poll();
-    const polling = setInterval(poll, 4000);
+    const polling = setInterval(() => { if (Date.now() - lastReceived.current > 8000) poll(); }, 4000);
     const clock = setInterval(() => {
       setNow(new Date());
       if (Date.now() - lastReceived.current > 8000) setConnected(false);
@@ -228,11 +237,9 @@ export default function OperatorRuntime() {
   useRuntimeSessionMessaging(project?.id, project?.publishedAt, receiveTags, message => {
     if (!applicationState.isCurrent() || message.projectId !== currentProject.current?.id || message.publishedAt !== currentProject.current?.publishedAt) return;
     applicationState.store.componentMessages.receiveSessionMessage(message.messageId, message.messageType, message.payload);
-  }, message => applicationState.store.componentEvents.report("Gateway messaging", message, "error"));
+  }, message => applicationState.store.componentEvents.report("Gateway messaging", message, "error"), receiveDelta);
   const menuItems = project ? runtimeMenuItems(project) : [];
-  const activeParameters = screen
-    ? screenParameters(screen, parameters)
-    : parameters;
+  const activeParameters = useMemo(() => screen ? screenParameters(screen, parameters) : parameters, [screen, parameters]);
   useBrowserScripts(project, screen, setNotice, target => {
     if (actionBusyId || popup) return;
     if (project?.screens.some(item => item.id === target && item.kind !== "popup")) {
@@ -368,9 +375,13 @@ export default function OperatorRuntime() {
         0,
         viewport.clientHeight - verticalPadding,
       );
+      const coarse = window.matchMedia("(pointer: coarse)").matches;
+      const controls = screen.components.filter(item => ["button", "equipmentCommand", "textInput", "formattedInput", "barcodeInput", "passwordInput", "numberInput", "spinner", "slider", "checkbox", "toggle", "select", "radioGroup", "dateTimeInput", "multiStateButton"].includes(item.type));
+      // Preserve authored positions and scroll on touch panels instead of shrinking targets.
+      const touchFloor = coarse ? Math.max(1, ...controls.map(item => 44 / Math.min(item.width, item.height))) : 0;
       setScale(
         Math.max(
-          showRuntimeControls ? 0.2 : 0.01,
+          touchFloor, showRuntimeControls ? 0.2 : 0.01,
           Math.min(
             showRuntimeControls ? 1.5 : Number.POSITIVE_INFINITY,
             availableWidth / screen.width,
@@ -393,14 +404,15 @@ export default function OperatorRuntime() {
       setNotice("Fullscreen is unavailable in this browser window.");
     }
   };
-  const { badCount, simulated, unknownCount } = runtimeBindingHealth(
+  const { badCount, simulated, unknownCount } = useMemo(() => runtimeBindingHealth(
     screen, project?.templates || [], tags, activeParameters, inputsByScreen, !connected, applicationState.values, queryProperties,
-  );
+  ), [screen, project?.templates, tags, activeParameters, inputsByScreen, connected, applicationState.values, queryProperties]);
+  const contextOptions = useMemo(() => Object.fromEntries(Object.keys(parameters).map(key => [key, project ? contextChoices(project, tags, parameters, key) : []])), [project, tagStore.paths(), parameters]);
 
   return (
     <ApplicationStateProvider value={applicationState}>
     <LocalizationProvider catalog={project?.localization} locale={projectLocale.locale}><VisualStyleProvider styles={project?.styles}><QueryPropertyProvider value={queryProperties}>
-    <div className={`operator-app${showRuntimeControls ? "" : " operator-application-only"}`}>
+    <div lang={projectLocale.locale} className={`operator-app${showRuntimeControls ? "" : " operator-application-only"}`}>
       {showRuntimeControls && <header className="operator-header">
         <div className="operator-brand">
           <span className="brand-mark">
@@ -418,7 +430,7 @@ export default function OperatorRuntime() {
             className={`operator-status ${connected ? "" : "disconnected"}`}
           >
             <span className={`status-dot ${connected ? "" : "offline"}`} />
-            {connected ? "Gateway connected" : "Communication lost"}
+            {connected ? t("connected", "Gateway connected") : t("communicationLost", "Communication lost")}
           </span>
           <span className="operator-clock">
             {now.toLocaleDateString(undefined, {
@@ -432,7 +444,7 @@ export default function OperatorRuntime() {
         <button
           className="operator-fullscreen"
           onClick={() => void toggleFullscreen()}
-          aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          aria-label={fullscreen ? t("exitFullscreen", "Exit fullscreen") : t("fullscreen", "Enter fullscreen")}
         >
           <Icon name={fullscreen ? "close" : "external"} size={17} />
           <span>{fullscreen ? "Exit fullscreen" : "Fullscreen"}</span>
@@ -447,8 +459,8 @@ export default function OperatorRuntime() {
           </div>
           <div className="operator-context-controls">
             {menuItems.length > 0 && <label className="operator-navigation-menu">
-              <span>Go to screen</span>
-              <select aria-label="Go to screen" value={menuItems.some(item => item.screenId === screen?.id) ? screen?.id : ""}
+              <span>{t("goToScreen", "Go to screen")}</span>
+              <select aria-label={t("goToScreen", "Go to screen")} value={menuItems.some(item => item.screenId === screen?.id) ? screen?.id : ""}
                 disabled={Boolean(actionBusyId) || Boolean(popup)} onChange={event => {
                   setScreenId(event.target.value);
                   setActionStatus(null);
@@ -458,7 +470,7 @@ export default function OperatorRuntime() {
               </select>
             </label>}
             {Object.entries(parameters).map(([key, value]) => {
-              const choices = contextChoices(project, tags, parameters, key);
+              const choices = contextOptions[key] ?? [];
               return (
                 <label key={key}>
                   <span>{key.replace(/([A-Z])/g, " $1")}</span>
@@ -494,12 +506,12 @@ export default function OperatorRuntime() {
               className={`quality-dot ${badCount || !connected ? "bad" : unknownCount ? "neutral" : ""}`}
             />
             {!connected
-              ? "Values may be stale"
+              ? t("staleValues", "Values may be stale")
               : badCount
                 ? `${badCount} binding${badCount > 1 ? "s need" : " needs"} attention`
                 : unknownCount
                   ? "Check live values inside reusable panels"
-                  : "Live data healthy"}
+                  : t("healthy", "Live data healthy")}
           </div>
         </div>
       )}
@@ -516,7 +528,7 @@ export default function OperatorRuntime() {
             onClick={() => void load()}
             disabled={loading || Boolean(actionBusyId)}
           >
-            Load new version <Icon name="refresh" size={14} />
+            {t("loadVersion", "Load new version")} <Icon name="refresh" size={14} />
           </button>
         </div>
       )}
@@ -524,8 +536,7 @@ export default function OperatorRuntime() {
         <div className="operator-notification connection" role="alert">
           <Icon name="info" size={18} />
           <span>
-            <strong>Communication lost.</strong> Displayed values are the last
-            received values and may be stale. Reconnecting automatically.
+            <strong>{t("communicationLost", "Communication lost")}.</strong>{" "}{t("communicationDetail", "Displayed values are the last received values and may be stale. Reconnecting automatically.")}
           </span>
         </div>
       )}
@@ -534,7 +545,7 @@ export default function OperatorRuntime() {
         <div className="operator-notification">
           <Icon name="info" size={16} />
           <span>{notice}</span>
-          <button aria-label="Dismiss notice" onClick={() => setNotice("")}>
+          <button aria-label={t("dismiss", "Dismiss notice")} onClick={() => setNotice("")}>
             <Icon name="close" size={14} />
           </button>
         </div>
@@ -548,12 +559,12 @@ export default function OperatorRuntime() {
           <Icon name={actionStatus.success ? "check" : "info"} size={18} />
           <span>
             <strong>
-              {actionStatus.success ? "Action completed. " : "Action failed. "}
+              {actionStatus.success ? t("actionCompleted", "Action completed.") + " " : t("actionFailed", "Action failed.") + " "}
             </strong>
             {!(actionStatus.success && actionStatus.message === "Action completed.") && actionStatus.message}
           </span>
           <button
-            aria-label="Dismiss action result"
+            aria-label={t("dismiss", "Dismiss action result")}
             onClick={() => setActionStatus(null)}
           >
             <Icon name="close" size={14} />
@@ -569,7 +580,7 @@ export default function OperatorRuntime() {
           {loading ? (
             <>
               <span className="loading-ring" />
-              <h1>Opening your application</h1>
+              <h1>{t("loading", "Opening your application")}</h1>
               <p>Loading the published screen from this gateway.</p>
             </>
           ) : unpublished ? (
@@ -577,14 +588,14 @@ export default function OperatorRuntime() {
               <span className="operator-empty-icon">
                 <Icon name="monitor" size={36} />
               </span>
-              <h1>Project unavailable</h1>
+              <h1>{t("projectUnavailable", "Project unavailable")}</h1>
               <p>
                 This project is not published, has been archived, or is no longer available.
                 Ask a gateway administrator to check the project's publication and your access.
               </p>
               <button className="button" onClick={() => void load()}>
                 <Icon name="refresh" size={15} />
-                Check again
+                {t("retry", "Check again")}
               </button>
             </>
           ) : (
@@ -592,11 +603,11 @@ export default function OperatorRuntime() {
               <span className="operator-empty-icon">
                 <Icon name="info" size={36} />
               </span>
-              <h1>Application unavailable</h1>
+              <h1>{t("applicationUnavailable", "Application unavailable")}</h1>
               <p>{error || "The published application could not be loaded."}</p>
               <button className="button" onClick={() => void load()}>
                 <Icon name="refresh" size={15} />
-                Try again
+                {t("retry", "Try again")}
               </button>
             </>
           )}

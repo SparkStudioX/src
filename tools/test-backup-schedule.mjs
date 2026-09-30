@@ -4,7 +4,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-const root = process.cwd(), fixture = path.resolve('.data/test-evidence', `backup-schedule-${randomUUID()}`);
+import { root, dotnet, testEnv } from './test-environment.mjs';
+const fixture = path.join(root, '.data/test-evidence', `backup-schedule-${randomUUID()}`);
 await mkdir(fixture, { recursive: true });
 const xml = value => value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
 await writeFile(path.join(fixture, 'Check.csproj'), `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup><ItemGroup><FrameworkReference Include="Microsoft.AspNetCore.App"/><ProjectReference Include="${xml(path.join(root, 'src/SparkStudio.Gateway/SparkStudio.Gateway.csproj'))}"/></ItemGroup></Project>`);
@@ -74,7 +75,7 @@ Console.WriteLine("PASS manual encrypted download, one-run exclusion, inspect an
 var modified=Snapshot(backups); backups.Save(new(modified["revision"]!.GetValue<string>(),settings,ClearDestinationPassword:true));
 Assert(!Snapshot(backups)["hasDestinationPassword"]!.GetValue<bool>(),"Clear destination password failed.");
 var clock=DateTimeOffset.UtcNow;
-var schedule=settings with { Enabled=true, TimeZoneId="UTC", DailyTime=clock.ToString("HH:mm"), Destination=new("ftp","ftp://127.0.0.1:1/test/","synthetic",TimeoutSeconds:30) };
+var schedule=settings with { Enabled=true, TimeZoneId="UTC", DailyTime=clock.ToString("HH:mm"), Destination=new("ftp","ftp://127.0.0.1:1/test/","synthetic",TimeoutSeconds:30,AllowInsecureFtp:true) };
 backups.Save(new(Snapshot(backups)["revision"]!.GetValue<string>(),schedule));
 await backups.StartAsync(CancellationToken.None);
 await Wait(async()=> { await Task.Yield(); return Snapshot(backups)["lastRun"]?["status"]?.GetValue<string>()=="failed" && !Snapshot(backups)["running"]!.GetValue<bool>(); });
@@ -127,8 +128,20 @@ var statusFile=Path.Combine(faultRoot,"backup-state.json"); var beforeFailure=Fi
 // The private completion boundary accepts a known completed delivery result. A
 // real file handle denies atomic replacement, reproducing the post-delivery disk
 // failure without introducing a test-only transport API into production code.
-using(var lockedStatus=new FileStream(statusFile,FileMode.Open,FileAccess.Read,FileShare.Read))
-    typeof(GatewayBackups).GetMethod("CompleteRun",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.Invoke(completedBackup,[completion]);
+void CompleteFaultedRun() => typeof(GatewayBackups).GetMethod("CompleteRun",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.Invoke(completedBackup,[completion]);
+if (OperatingSystem.IsWindows())
+{
+    using var lockedStatus = new FileStream(statusFile,FileMode.Open,FileAccess.Read,FileShare.Read);
+    CompleteFaultedRun();
+}
+else
+{
+    // POSIX permits rename over open files. A directory collision forces the
+    // same final replacement failure while preserving this fixture's old bytes.
+    var held = statusFile + ".fixture-held"; File.Move(statusFile, held); Directory.CreateDirectory(statusFile);
+    try { CompleteFaultedRun(); }
+    finally { Directory.Delete(statusFile); File.Move(held, statusFile); }
+}
 var afterFailure=Snapshot(completedBackup);
 Assert(afterFailure["lastRun"]!["status"]!.GetValue<string>()=="succeeded" && afterFailure["lastRun"]!["removedCount"]!.GetValue<int>()==2
     && afterFailure["lastRun"]!["bytes"]!.GetValue<long>()==completion.Bytes,"Persistence failure erased completed delivery metadata.");
@@ -159,6 +172,5 @@ static void Throws(Action action){try{action();}catch(Exception e)when(e is Argu
 static async Task Wait(Func<Task<bool>> predicate){for(var i=0;i<200;i++){if(await predicate())return;await Task.Delay(50);}throw new Exception("Timed out.");}
 sealed class Lifetime:IHostApplicationLifetime,IDisposable{readonly CancellationTokenSource source=new(); public CancellationToken ApplicationStarted=>CancellationToken.None;public CancellationToken ApplicationStopping=>source.Token;public CancellationToken ApplicationStopped=>CancellationToken.None;public void StopApplication()=>source.Cancel();public void Dispose()=>source.Dispose();}
 `);
-const dotnet = path.resolve('.tools/dotnet/dotnet.exe');
-const check = spawnSync(dotnet, ['run','--project',path.join(fixture,'Check.csproj'),'-c','BackupScheduleModel','--verbosity','quiet',`-p:RestoreConfigFile=${path.join(fixture,'NuGet.Config')}`],{cwd:root,encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,env:{...process.env,DOTNET_ROOT:path.dirname(dotnet),DOTNET_CLI_HOME:path.resolve('.tools/dotnet-home'),NUGET_PACKAGES:path.resolve('.tools/nuget')}});
+const check = spawnSync(dotnet, ['run','--project',path.join(fixture,'Check.csproj'),'-c','BackupScheduleModel','--verbosity','quiet',`-p:RestoreConfigFile=${path.join(fixture,'NuGet.Config')}`],{cwd:root,encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,env:testEnv});
 process.stdout.write(check.stdout ?? ''); process.stderr.write(check.stderr ?? ''); assert.equal(check.status,0,check.error?.message ?? 'Backup schedule checks failed.');

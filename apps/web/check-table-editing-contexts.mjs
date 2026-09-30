@@ -20,7 +20,7 @@ export function useRef(initial){const at=index++;return values[at]??={current:in
 // declared default; state propagation itself is covered by application-state checks.
 export const createContext=value=>({defaultValue:value,Provider:({children})=>children});
 export const useContext=context=>context.defaultValue;
-export const useEffect=()=>{};
+export const useEffect=()=>{}; export const useMemo=fn=>fn(); export const memo=component=>component;
 export const useId=()=>':test-control:';
 `);
 const queryHookUrl = moduleSource(`
@@ -37,7 +37,7 @@ function moduleUrl(name) {
     module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX,
   } }).outputText.replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
     .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, dependency) =>
-      `${prefix}${JSON.stringify(dependency === 'react' ? hooksUrl : dependency === './useQueryRepeater' ? queryHookUrl
+      `${prefix}${JSON.stringify(dependency === 'react' ? hooksUrl : dependency === './RenderBoundary' ? moduleSource('export default ({children})=>children;') : dependency === './useQueryRepeater' ? queryHookUrl
         : dependency.startsWith('./') ? moduleUrl(dependency.slice(2)) : pathToFileURL(require.resolve(dependency)).href)}`);
   const url = moduleSource(code); modules.set(name, url); return url;
 }
@@ -66,7 +66,8 @@ function tableView(props, scope = 'leaf') {
 }
 function wrapperTables(wrapper, overrides = {}) {
   const props = { ...common, screenId: 'main', templates: [template], component: wrapper, ...overrides };
-  const wrapperElement = ProjectComponentView(props);
+  let wrapperElement = call(ProjectComponentView, props, `wrapper-entry:${wrapper.id}`);
+  for (let depth = 0; wrapperElement.type.name !== 'BoundTemplateInstance' && depth < 5; depth++) wrapperElement = call(wrapperElement.type, wrapperElement.props, `wrapper-shell:${wrapper.id}:${depth}`);
   const frame = call(wrapperElement.type, wrapperElement.props, `wrapper:${wrapper.id}`);
   const host = ofType(frame, 'TemplateInstances')[0];
   const cells = ofType(call(host.type, host.props, `host:${wrapper.id}`), 'TemplateInstanceCell');
@@ -103,7 +104,8 @@ await check('disabled, hidden and failed-binding tables cannot forward edits', (
 });
 await check('a direct table forwards its authored identity and the cell request unchanged after binding evaluation', async () => {
   const authored = { ...table, props: { ...table.props, text: 'Saved caption', bindings: { text: binding('"Live caption"') } } };
-  const calls = [], wrapped = ProjectComponentView({ ...common, component: authored, screenId: 'main', onTableEdit: async (...args) => { calls.push(args); return result; } });
+  const calls = []; let wrapped = call(ProjectComponentView, { ...common, component: authored, screenId: 'main', onTableEdit: async (...args) => { calls.push(args); return result; } }, 'direct-root');
+  for (let depth = 0; wrapped.type.name !== 'BoundComponent' && depth < 5; depth++) wrapped = call(wrapped.type, wrapped.props, `direct-shell:${depth}`);
   const view = tableView(wrapped.props); assert.equal(view.props.title, 'Live caption');
   await view.props.onTableEdit(edit); assert.equal(calls[0][0], authored); assert.equal(calls[0][1], edit); assert.equal(calls[0].length, 2);
   assert.equal(authored.props.text, 'Saved caption');

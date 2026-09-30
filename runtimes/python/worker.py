@@ -7,12 +7,17 @@ import importlib.abc
 import importlib.util
 import json
 import math
+import os
 import sys
 import traceback
 import types
 import threading
 
-protocol = sys.stdout
+# Preserve a private protocol descriptor. Native extensions and subprocesses that
+# write directly to fd 1 must not corrupt the gateway's JSON channel.
+protocol = os.fdopen(os.dup(sys.stdout.fileno()), "w", encoding="utf-8", buffering=1)
+os.set_inheritable(protocol.fileno(), False)
+os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
 protocol_lock = threading.Lock()
 
 
