@@ -6,6 +6,65 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Docker edition publication verification, 2026-10-01
+
+The [Docker prerelease](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.11-docker.1)
+and [Docker Hub repository](https://hub.docker.com/r/ladder99/sparkstudio) distribute
+**0.2.0-preview.11-docker.1** for **Linux x86-64 and ARM64**, with product version
+**0.2.0-preview.11**. Both its version tag and `preview` alias resolve to index
+`sha256:054b36a79bbe70e1617996926b8768b750d650f1b10d8ad22d83911b4dea47a1`.
+The actual clean image-build source is
+[`2dd4173c12a91b908d83ce8a74755c129e48fc5a`](https://github.com/SparkStudioX/src/commit/2dd4173c12a91b908d83ce8a74755c129e48fc5a);
+later documentation commits do not rebuild or change that image. The frozen
+[Compose example](https://github.com/SparkStudioX/src/blob/2dd4173c12a91b908d83ce8a74755c129e48fc5a/compose.yaml)
+maps loopback **8090** for the HTTPS redirect and **8443** for authenticated TLS.
+
+The image's [Product validation](https://github.com/SparkStudioX/src/actions/runs/36841461165)
+and [source boundary](https://github.com/SparkStudioX/src/actions/runs/36841460915)
+passed. Windows and Ubuntu each passed **109 aggregate suites**, including
+**1,289 Gateway checks**, **163 Connector checks**, eight container-administration
+tests and **15 TLS entrypoint tests**. The latter include six actual OpenSSL
+certificate fixtures, with no skips in either final CI job.
+
+Both final local images and fresh deployments of the **published digest** passed
+all seven deployment groups on this laptop's Docker Desktop **4.85.0 / Engine
+29.6.2**. X86-64 ran natively; ARM64 ran under emulation. Each platform exercised
+certificate-validated TLS, fixed-origin redirects, an unpublished management
+listener, local administrator bootstrap, secure isolated cookies/CSRF, native
+SQLite, memory tags, Python actions, separate operator login/query/button actions,
+all **37 portable workshops** through import/publication/export, and graceful
+restart retaining accounts, projects, tags, databases, keys and certificate
+identity. Disposable test containers and volumes were removed without touching
+other applications. This verifies a same-edition restart, not a version migration.
+
+Independent payload review verified **292 application hashes** and **205 original
+notice hashes** per architecture. Each SBOM identifies **157 components**; all
+**17 distributed layers** per platform were inspected to exclude unused
+pip/site-packages/ensurepip bytes. Anonymous registry checks verified the index,
+both platform/configuration digests, architecture/source labels and committed
+Compose pin. The public repository initially inherited private visibility; it
+was made public, and anonymous pull authorization passed before website delivery.
+
+All **11 GitHub release assets** were downloaded and SHA-256 checked, including
+the complete **381,453,238-byte** corresponding-source archive for **73 exact Ubuntu
+source versions** and CPython 3.14.7. The archive SHA-256 is
+`c013b0cbca5235f846de9c7a7ab772b3c94cc030cee928defc4504ac8efaf3cc`;
+its source-manifest SHA-256 is
+`31aa2144b1a0a77cd39779acf343f2eabc11b24e86b87391321fdda16486fb45`.
+Original archives, patches, licenses and build directions cover runtime packages
+and retained ancestor-layer versions. No downloaded dependency sources, runtime
+data, credentials, keys or layer-inspection archives were committed or included
+as unrelated public assets.
+
+The independently versioned Docker metadata and hosted guide follow this frozen
+build; the existing Windows preview.11 installer/workshop bytes stay unchanged.
+Website tests, public Windows/Docker link gates, a reviewed documentation pin,
+successful Pages deployment and live verification remain the website delivery
+contract. Physical ARM hardware, remote client trust, factory-network connectors,
+actual remote SMB/FTPS/S3 destinations, trusted proxies, cross-version migration
+and elevated Windows service acceptance remain separate gates. See
+[Docker deployment](DOCKER_RELEASE.md) for operation and recovery scope.
+
 ## Docker edition implementation, 2026-10-01
 
 The container edition candidate is **0.2.0-preview.11-docker.1**, retaining
@@ -33,7 +92,8 @@ the separate operator audience and its published Python action at that stage.
 
 The final clean-source image build, both final platform checks, registry
 publication/digest verification, public-image rechecks and website deployment
-remain release gates until recorded below. Physical ARM hardware, real SQL Server,
+were release gates at this candidate stage; the publication entry above records
+subsequent verification. Physical ARM hardware, real SQL Server,
 factory-network connectors, remote certificate trust, cross-version migration and
 external backup destinations are not established by the container fixtures. See
 [Docker deployment](DOCKER_RELEASE.md) for startup, certificates, data scope,
@@ -1363,7 +1423,7 @@ P0 is required for a recoverable connected pilot; P1 broadens that baseline. Des
 | G01 / P0 | **Gateway administration baseline implemented.** Administrator-only overview includes identity/version/uptime, searchable projects/connections, counts and application entry points. Timestamped snapshots become explicitly stale. Session inventory separates engineering/operator audiences and exposes opaque management handles for reviewed audited revocation. Per-project session attribution and deeper managed-resource configuration remain open. | Reload and deep links preserve context; permissions hold at API and UI; changes use revisions and staged Save/Cancel; session disconnect/revocation is explicit and audited; stale status never appears healthy. |
 | G02 / P0 | **Process/API diagnostic baseline implemented.** CPU, process/managed memory, data-volume free space, active/lifetime counters and 128 completed route-template observations accompany a redacted local support JSON. Identities, request values, configuration and authored bodies are excluded from that export. Structured durable logs, script/subscription correlation, queue/worker metrics and saved dashboards remain open. | A controlled connection failure, slow query, script timeout and low-disk condition each produce attributable status/logs. Retention is bounded; collection overhead is measured; bundles exclude credentials, tokens and private keys; diagnostics remain usable during service faults. |
 | G03 / P0 | **Publication history, offline full-data recovery and online scheduled configuration backups implemented.** Encrypted new-location restore starts in enforced recovery mode and requires reviewed restart. Running-host snapshots exclude live databases/history/audit; multiple daily/weekday schedules deliver to named SMB/FTP/FTPS/S3 targets and verify bytes before schedule-specific age retention. Same-identity DPAPI policy and separate database backups are explicit. Atomic whole-application publish/rollback now captures screens, queries, Python libraries and gateway/browser events together. Service switching and cross-version migration remain open. | Extend the measured isolated recovery and retention tests to intended service identities, real domain SMB/trusted remote FTPS, intended AWS/S3-compatible policies, production-scale data and supported application-version migration. Cover accounts/grants, connections, tags, projects, assets, publications and managed data; test corrupt/incompatible archives, interruption and rollback. |
-| G04 / P0 | **Deployment observations, saved listeners and installer Local/Network HTTPS configuration implemented; hosting acceptance remains open.** Local management plus optional all-interface TLS uses a separate public hostname, protected PEM import, strict certificate checks and fail-closed installer override rules. Source/model/Inno checks passed; elevated acceptance of the new network wizard, client trust, renewal, trusted proxies, container persistence/upgrade and offline dependency inventory remain open. | Test remote HTTPS and proxy behavior without weakening loopback restrictions; renew an expiring certificate; install/upgrade/uninstall as the intended service account; recover failed upgrades and container volumes. Define restart requirements and preserve a recovery route after invalid configuration. |
+| G04 / P0 | **Deployment observations, installer Local/Network HTTPS and a published Docker restart baseline implemented; broader hosting acceptance remains open.** Local management plus optional all-interface TLS uses protected PEM references, strict certificate checks and fail-closed override rules. Docker x86-64/emulated ARM64 verifies guarded setup, persistent configuration/databases/keys/TLS, native dependencies and offline notice/source inventories on 8090/8443. Elevated Windows service acceptance, remote client trust, renewal, trusted proxies, physical ARM and cross-version container upgrade/recovery remain open. | Test remote HTTPS and proxy behavior without weakening loopback restrictions; renew an expiring certificate; install/upgrade/uninstall as the intended service account; recover failed upgrades and container volumes. Define restart requirements and preserve a recovery route after invalid configuration. |
 | G05 / P0 | **Connection lifecycle and OPC UA client security — partial.** Revisioned rename/enable/disable, durable timestamped tests with stale-result rejection, draft/published dependencies and bounded tag quick watch are implemented. Safe deletion, continuous reconnect fault acceptance, certificate trust/quarantine/fingerprint lifecycle and credential-reference administration remain open. | Exercise endpoint downtime, server restart, certificate replacement/rejection, bad credentials, disabled connections and stale samples. Verify subscriptions recover without duplicate monitored items or cached configuration leakage. Deletion reports affected tags/queries. |
 | G06 / P0 then P1 | **Database operations — partial.** Designer read cancellation/deadlines and typed preflight are implemented and exercised against SQLite; connection diagnostics expose named-query dependencies. Atomic optimistic table batches are implemented with one transaction, version-per-row updates and real SQLite rollback/concurrency verification. Complete live SQL Server acceptance and pool health. Add a supported .NET provider catalog and dialect/capability contracts; evaluate PostgreSQL and MariaDB/MySQL after the existing providers pass. | Run reads and guarded writes against actual supported servers, including TLS failure, restart, pool exhaustion, concurrent conflicts and uncertain write outcomes. Prove transaction behavior per provider; do not retry an ambiguous write automatically. Driver availability must be distinct from connection health. |
 | G07 / P0 | **Operation permissions implemented.** Local accounts retain separate engineering/operator sessions and project View/Operate/Design/Publish grants. Explicit Commands permission does not follow from Operate. Five delegated gateway capabilities cover diagnostics, configuration, backups, audit and session administration; account administration and recovery approval remain administrator-only. See [access boundaries](FINE_GRAINED_ACCESS.md). | Negative API tests cover each privilege and audience; revoked/disabled accounts lose access; concurrent changes reject stale revisions; last-administrator recovery works; history identifies actor, target and outcome without secret values. |
