@@ -10,7 +10,7 @@ The [Designer implementation track](#designer-implementation-track-2026-09-29) a
 
 The final offline acceptance run passed **110 aggregate suites with zero failures**,
 including **83 browser suites**, **24 gateway suites / 1,341 checks**, and
-**5 connector suites / 505 checks**. TypeScript, the production browser build,
+**5 connector suites / 516 checks**. TypeScript, the production browser build,
 Python, normal-account Windows DPAPI backup round trips, workshop generation,
 source-boundary and dependency-inventory policy checks passed. The inventory
 fixtures now cover missing and corrupt native runtime dependencies without
@@ -30,13 +30,22 @@ and hashes; the installer smoke check also exercises an owned rejected loopback
 endpoint and verifies loaded module provenance. This does not establish physical
 controller acceptance. Linux publishes omit the Windows dependency.
 
-ControlLogix and CompactLogix String maps are rejected before native tag creation,
+Exact-installer review of the first unpublished candidate found that the native
+cache used an environment/default directory instead of the gateway's resolved
+`--DataDirectory`. The corrected session factory passes the configured absolute
+directory explicitly to every native entry point. Equivalent normalized paths
+share initialization; a different process-wide root is rejected before cache or
+protocol I/O. Fixtures cover missing and misleading environment overrides and
+read/write rejection without dispatch. The failed installer remains local and
+was not published; final release verification uses a fresh clean-source build.
+
+ControlLogix, CompactLogix and Micro800 String maps are rejected before native tag creation,
 reads, setters or writes. The pinned SDK's 82-character capacity is a default
 layout, and an 88-byte STRUCT or observed `0x0FCE` handle does not establish the
 remote controller's LEN/DATA schema. The earlier positive Logix String fixture
 results below describe synthetic layout exercises, not accepted schema identity.
 PCCC ST strings remain supported, as do the six families' reviewed numeric and
-Boolean profiles. The final native suite passed **249 checks**, including rejection
+Boolean profiles. The final native suite passed **260 checks**, including rejection
 of both the synthetic standard-looking handle and an unrelated same-size UDT.
 Physical-device, firmware and Linux execution acceptance remain pending.
 

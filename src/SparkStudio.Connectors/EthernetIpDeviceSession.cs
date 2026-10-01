@@ -8,11 +8,13 @@ namespace SparkStudio.Connectors;
 public sealed class EthernetIpDeviceSession : IDeviceSession
 {
     private readonly DeviceSettings settings;
+    private readonly string dataDirectory;
     private readonly PlcType plcType;
     private bool disposed;
 
-    public EthernetIpDeviceSession(ConnectionDefinition connection)
+    public EthernetIpDeviceSession(ConnectionDefinition connection, string dataDirectory)
     {
+        this.dataDirectory = EmbeddedPlcRuntime.NormalizeDataDirectory(dataDirectory);
         settings = connection.Device ?? throw new ArgumentException("EtherNet/IP device settings are required.");
         ValidateSettings(settings);
         plcType = settings.ControllerFamily is "ControlLogix" or "CompactLogix" ? PlcType.ControlLogix : Enum.Parse<PlcType>(settings.ControllerFamily);
@@ -100,7 +102,7 @@ public sealed class EthernetIpDeviceSession : IDeviceSession
         if (HasNativeBrowse(settings.ControllerFamily)) { _ = await BrowseNativeAsync(null, cancellation); return; }
         var point = settings.Points.FirstOrDefault() ?? throw new ArgumentException("Add a saved point before testing this family; the connection test reads that point.");
         using var deadline = DeviceScalarCodec.Deadline(cancellation, settings.TimeoutMs);
-        deadline.Token.ThrowIfCancellationRequested(); EmbeddedPlcRuntime.EnsureAvailable();
+        deadline.Token.ThrowIfCancellationRequested(); EmbeddedPlcRuntime.EnsureAvailable(dataDirectory);
         using var tag = CreateTag(point);
         await tag.ReadAsync(deadline.Token);
         ValidateNativeType(tag, point);
@@ -128,7 +130,7 @@ public sealed class EthernetIpDeviceSession : IDeviceSession
         ObjectDisposedException.ThrowIf(disposed, this);
         if (!string.IsNullOrEmpty(parent) && !Regex.IsMatch(parent, @"^Program:[A-Za-z_][A-Za-z0-9_]*$"))
             throw new ArgumentException("Choose a controller or program symbol catalog.");
-        cancellation.ThrowIfCancellationRequested(); EmbeddedPlcRuntime.EnsureAvailable();
+        cancellation.ThrowIfCancellationRequested(); EmbeddedPlcRuntime.EnsureAvailable(dataDirectory);
         using var deadline = DeviceScalarCodec.Deadline(cancellation, settings.TimeoutMs);
         using var listing = new Tag<TagInfoPlcMapper, TagInfo[]>
         {
@@ -217,7 +219,7 @@ public sealed class EthernetIpDeviceSession : IDeviceSession
             deadline.Token.ThrowIfCancellationRequested();
             try
             {
-                EmbeddedPlcRuntime.EnsureAvailable();
+                EmbeddedPlcRuntime.EnsureAvailable(dataDirectory);
                 using var tag = CreateTag(point);
                 await tag.ReadAsync(deadline.Token);
                 ValidateNativeType(tag, point);
@@ -246,7 +248,7 @@ public sealed class EthernetIpDeviceSession : IDeviceSession
         if (!point.Writable) throw new ArgumentException("This point does not permit writes.");
         var raw = DeviceScalarCodec.Encode(point, value);
         using var deadline = DeviceScalarCodec.Deadline(cancellation, settings.TimeoutMs);
-        deadline.Token.ThrowIfCancellationRequested(); EmbeddedPlcRuntime.EnsureAvailable();
+        deadline.Token.ThrowIfCancellationRequested(); EmbeddedPlcRuntime.EnsureAvailable(dataDirectory);
         using var tag = CreateTag(point);
         await tag.ReadAsync(deadline.Token);
         ValidateNativeType(tag, point);

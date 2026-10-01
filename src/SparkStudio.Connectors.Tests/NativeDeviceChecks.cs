@@ -70,15 +70,29 @@ public static class NativeDeviceChecks
         try { EmbeddedPlcRuntime.RetainVerifiedBundle(new Dictionary<string, byte[]> { ["first.bin"] = payload, ["dependency.bin"] = [1, 2] }, Path.Combine(runtimeCache, "bundle")); throw new Exception("Unverified dependency accepted"); }
         catch (InvalidOperationException) { passed++; }
         var previousData = Environment.GetEnvironmentVariable("SPARKSTUDIO_DATA_DIR");
+        var poisonedData = Path.Combine(runtimeCache, "ignored-environment-root");
         var packagedNative = Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "plctag.dll" : "libplctag.so");
         Check(File.Exists(packagedNative), "Build packages the platform native binary before application startup");
+        Reject(() => EmbeddedPlcRuntime.EnsureAvailable(""), "Native loading requires an explicit data directory");
+        Reject(() => EmbeddedPlcRuntime.EnsureAvailable("relative-native-cache"), "Native loading rejects a relative data directory before initialization");
         var attributes = File.GetAttributes(packagedNative);
         try
         {
-            Environment.SetEnvironmentVariable("SPARKSTUDIO_DATA_DIR", runtimeCache);
+            // Poison this legacy variable to prove application configuration owns
+            // the cache. No fixture uses it to choose a correct native root.
+            Environment.SetEnvironmentVariable("SPARKSTUDIO_DATA_DIR", poisonedData);
             File.SetAttributes(packagedNative, attributes | FileAttributes.ReadOnly);
-            EmbeddedPlcRuntime.EnsureAvailable();
+            EmbeddedPlcRuntime.EnsureAvailable(runtimeCache);
             Check(libplctag.NativeImport.plctag.plc_tag_check_lib_version(2, 0, 0) == 0, "Actual libplctag native API loads with its packaged binary read-only");
+            Check(Directory.Exists(Path.Combine(runtimeCache, "native-libraries")) && !Directory.Exists(poisonedData),
+                "Explicit gateway data directory owns the native cache despite a poisoned environment root");
+            Environment.SetEnvironmentVariable("SPARKSTUDIO_DATA_DIR", null);
+            EmbeddedPlcRuntime.EnsureAvailable(Path.Combine(runtimeCache, ".") + Path.DirectorySeparatorChar);
+            Check(libplctag.NativeImport.plctag.plc_tag_check_lib_version(2, 0, 0) == 0 && !Directory.Exists(poisonedData),
+                "A missing environment variable and equivalent normalized root preserve native cache ownership");
+            try { EmbeddedPlcRuntime.EnsureAvailable(Path.Combine(runtimeCache, "another-gateway")); throw new Exception("A second native cache root was accepted"); }
+            catch (InvalidOperationException) { passed++; }
+            Check(!Directory.Exists(Path.Combine(runtimeCache, "another-gateway")), "A different process-wide native root is rejected before cache I/O");
             if (OperatingSystem.IsWindows())
             {
                 Check(EmbeddedPlcRuntime.WindowsRuntimeLoaded, "Windows explicitly loads the bundled VC runtime dependency");
@@ -92,7 +106,7 @@ public static class NativeDeviceChecks
             }
             using var silentEndpoint = new TcpListener(IPAddress.Loopback, 0); silentEndpoint.Start();
             using var eip = new EthernetIpDeviceSession(new ConnectionDefinition("eip-test", "Native fixture", "ab-eip", Device: new DeviceSettings
-            { Host = "127.0.0.1", Port = ((IPEndPoint)silentEndpoint.LocalEndpoint).Port, TimeoutMs = 250 }));
+            { Host = "127.0.0.1", Port = ((IPEndPoint)silentEndpoint.LocalEndpoint).Port, TimeoutMs = 250 }), runtimeCache);
             var elapsed = System.Diagnostics.Stopwatch.StartNew();
             try { await eip.TestAsync(default); throw new Exception("Expected native protocol timeout"); }
             catch (Exception error) when (error is OperationCanceledException or InvalidOperationException) { passed++; }
@@ -100,7 +114,7 @@ public static class NativeDeviceChecks
         }
         finally { Environment.SetEnvironmentVariable("SPARKSTUDIO_DATA_DIR", previousData); File.SetAttributes(packagedNative, attributes); }
 
-        passed += await CheckAllenBradleyFamiliesAsync();
+        passed += await CheckAllenBradleyFamiliesAsync(runtimeCache);
 
         await using var fixture = new S7Fixture();
         var settings = new DeviceSettings { Host = "127.0.0.1", Port = fixture.Port, ControllerFamily = "S71200", TimeoutMs = 1500, Points = [scalar] };
@@ -128,7 +142,7 @@ public static class NativeDeviceChecks
         return passed;
     }
 
-    private static async Task<int> CheckAllenBradleyFamiliesAsync()
+    private static async Task<int> CheckAllenBradleyFamiliesAsync(string runtimeCache)
     {
         var passed = 0;
         void Check(bool value, string message) { if (!value) throw new Exception(message); passed++; }
@@ -146,7 +160,7 @@ public static class NativeDeviceChecks
             var point = pccc ? integer : symbolic;
             var settings = new DeviceSettings { Host = "127.0.0.1", Port = 44818, ControllerFamily = family, Route = logix ? "1,0" : "", Points = [point] };
             DeviceConfiguration.Validate(settings, "ab-eip"); passed++;
-            using var session = new EthernetIpDeviceSession(new ConnectionDefinition(family, family, "ab-eip", Device: settings));
+            using var session = new EthernetIpDeviceSession(new ConnectionDefinition(family, family, "ab-eip", Device: settings), runtimeCache);
             using var tag = session.CreateTag(point);
             Check(tag.PlcType == (logix ? libplctag.PlcType.ControlLogix : Enum.Parse<libplctag.PlcType>(family)), family + " selects the pinned SDK PLC type");
             Check(tag.Path == (logix ? "1,0" : null), family + " emits the correct required/omitted route attribute");
@@ -158,7 +172,7 @@ public static class NativeDeviceChecks
                 var map = await session.BrowseAsync(null, default);
                 Check(map.Count == 1 && map[0].PointId == point.Id && map[0].BrowseMode == "configured", family + " browse is an offline saved map");
                 Reject(() => DeviceConfiguration.Validate(settings with { Route = "1,0" }, "ab-eip"), family + " rejects ignored/unsupported routes");
-                using var empty = new EthernetIpDeviceSession(new ConnectionDefinition(family, family, "ab-eip", Device: settings with { Points = [] }));
+                using var empty = new EthernetIpDeviceSession(new ConnectionDefinition(family, family, "ab-eip", Device: settings with { Points = [] }), runtimeCache);
                 try { await empty.TestAsync(default); throw new Exception("Empty family test accepted"); }
                 catch (ArgumentException) { passed++; }
             }
@@ -174,7 +188,7 @@ public static class NativeDeviceChecks
             var unsupportedSettings = new DeviceSettings { Host = "127.0.0.1", ControllerFamily = family, Route = "1,0", Points = [unsupportedString] };
             Reject(() => EthernetIpDeviceSession.ValidatePoint(unsupportedString, family), family + " requires qualified structure schema before accepting String");
             Reject(() => DeviceConfiguration.Validate(unsupportedSettings, "ab-eip"), family + " rejects unsupported String during map save validation");
-            Reject(() => { using var invalid = new EthernetIpDeviceSession(new ConnectionDefinition("unsupported-string", family, "ab-eip", Device: unsupportedSettings)); },
+            Reject(() => { using var invalid = new EthernetIpDeviceSession(new ConnectionDefinition("unsupported-string", family, "ab-eip", Device: unsupportedSettings), runtimeCache); },
                 family + " cannot load a usable session with an unsupported String map");
         }
         Check(EthernetIpDeviceSession.TypeName(0xD2) == "UInt16" && EthernetIpDeviceSession.TypeName(0xD3) == "UInt32", "Micro800 WORD/DWORD use exact unsigned native widths");
@@ -205,7 +219,7 @@ public static class NativeDeviceChecks
         {
             await using var wire = new PcccFixture(family == "Plc5");
             using var session = new EthernetIpDeviceSession(new ConnectionDefinition("pccc-wire", "PCCC fixture", "ab-eip", Device: new DeviceSettings
-            { Host = "127.0.0.1", Port = wire.Port, ControllerFamily = family, Route = "", TimeoutMs = 1500, Points = [integer] }));
+            { Host = "127.0.0.1", Port = wire.Port, ControllerFamily = family, Route = "", TimeoutMs = 1500, Points = [integer] }), runtimeCache);
             var read = await session.ReadAsync([integer], default);
             Check(read.Single().Quality == "Good" && (short)read.Single().Value! == 1234, family + " actual SDK reads PCCC data after EIP registration");
             Check(wire.Writes == 0, family + " read sends no write");
@@ -269,7 +283,7 @@ public static class NativeDeviceChecks
         await using (var wire = new CipSymbolFixture())
         {
             using var session = new EthernetIpDeviceSession(new ConnectionDefinition("micro-wire", "Micro800 fixture", "ab-eip", Device: new DeviceSettings
-            { Host = "127.0.0.1", Port = wire.Port, ControllerFamily = "Micro800", Route = "", TimeoutMs = 1500, Points = [symbolic] }));
+            { Host = "127.0.0.1", Port = wire.Port, ControllerFamily = "Micro800", Route = "", TimeoutMs = 1500, Points = [symbolic] }), runtimeCache);
             var read = await session.ReadAsync([symbolic], default);
             Check(read.Single().Quality == "Good" && (ushort)read.Single().Value! == 1234 && wire.ForwardOpens > 0,
                 "Actual Micro800 SDK establishes a CIP connection and reads WORD native metadata: " + JsonSerializer.Serialize(read) + " opens=" + wire.ForwardOpens);
@@ -299,11 +313,28 @@ public static class NativeDeviceChecks
         foreach (var family in new[] { "ControlLogix", "CompactLogix" })
         {
             await using var wire = new CipSymbolFixture { NativeType = 0xC7 };
-            using var session = new EthernetIpDeviceSession(new ConnectionDefinition("logix-wire", "Logix fixture", "ab-eip", Device: new DeviceSettings
-            { Host = "127.0.0.1", Port = wire.Port, ControllerFamily = family, Route = "1,0", TimeoutMs = 1500, Points = [symbolic] }));
+            var connection = new ConnectionDefinition("logix-wire", "Logix fixture", "ab-eip", Device: new DeviceSettings
+            { Host = "127.0.0.1", Port = wire.Port, ControllerFamily = family, Route = "1,0", TimeoutMs = 1500, Points = [symbolic] });
+            using var session = new EthernetIpDeviceSession(connection, runtimeCache);
             var read = await session.ReadAsync([symbolic], default);
             Check(read.Single().Quality == "Good" && (ushort)read.Single().Value! == 1234 && wire.ForwardOpens > 0,
                 family + " connected scalar read validates metadata through the pinned SDK bridge");
+            if (family == "ControlLogix")
+            {
+                Reject(() => { using var invalidRoot = new EthernetIpDeviceSession(connection, "relative-native-root"); }, "EIP sessions require an explicit absolute data directory");
+                using var connector = new ConnectorService(Path.Combine(runtimeCache, "."));
+                var facadeRead = await connector.ReadAsync(connection, [symbolic.Id], default);
+                Check(facadeRead.Single().Quality == "Good" && (ushort)facadeRead.Single().Value! == 1234,
+                    "ConnectorService passes its configured data directory into native EIP sessions");
+                using var wrongRoot = new ConnectorService(Path.Combine(runtimeCache, "wrong-service-root"));
+                var readsBefore = wire.Reads; var opensBefore = wire.ForwardOpens; var rejectedDispatches = 0;
+                var rejectedRead = await wrongRoot.ReadAsync(connection, [symbolic.Id], default);
+                Check(rejectedRead.Single().Quality == "Bad_CommunicationError", "A service with a different native root reports unavailable data");
+                try { await wrongRoot.WriteValueAsync(connection, symbolic.Id, symbolic.DataType, JsonSerializer.SerializeToElement(100), default, () => rejectedDispatches++); throw new Exception("Different-root service write accepted"); }
+                catch (InvalidOperationException) { passed++; }
+                Check(wire.Reads == readsBefore && wire.ForwardOpens == opensBefore && wire.Writes == 0 && rejectedDispatches == 0,
+                    "Wrong-root service reads/writes reject before native protocol I/O or dispatch");
+            }
             var dispatched = 0;
             await session.WriteAsync(symbolic, JsonSerializer.SerializeToElement(50000), () => dispatched++, default);
             Check(dispatched == 1 && wire.Writes == 1 && wire.LastType == 0xC7 && wire.LastData.SequenceEqual(new byte[] { 0x50, 0xC3 }), family + " connected scalar write retains native type and value");

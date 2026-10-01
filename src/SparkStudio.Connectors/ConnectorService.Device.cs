@@ -2,14 +2,14 @@ namespace SparkStudio.Connectors;
 
 public sealed partial class ConnectorService
 {
-    private static Task<IDeviceSession> CreateDeviceSessionAsync(ConnectionDefinition connection, CancellationToken cancellation)
+    private Task<IDeviceSession> CreateDeviceSessionAsync(ConnectionDefinition connection, CancellationToken cancellation)
     {
         cancellation.ThrowIfCancellationRequested();
         DeviceConfiguration.Validate(connection.Device ?? throw new ArgumentException("Industrial device settings are required."), connection.Type);
         return Task.FromResult<IDeviceSession>(connection.Type switch
         {
             "modbus-tcp" => new ModbusDeviceSession(connection),
-            "ab-eip" => new EthernetIpDeviceSession(connection),
+            "ab-eip" => new EthernetIpDeviceSession(connection, _dataDirectory),
             "siemens-s7" => new SiemensS7DeviceSession(connection),
             "beckhoff-ads" => new BeckhoffAdsDeviceSession(connection),
             _ => throw new ArgumentException("Unsupported industrial driver.")

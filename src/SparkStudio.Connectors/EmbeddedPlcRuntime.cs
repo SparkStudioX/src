@@ -12,18 +12,39 @@ namespace SparkStudio.Connectors;
 // services and containers. Resolve only a verified embedded binary from our private cache.
 internal static class EmbeddedPlcRuntime
 {
-    private static readonly Lazy<nint> loaded = new(Load, LazyThreadSafetyMode.ExecutionAndPublication);
+    private static readonly object initializationLock = new();
+    private static Lazy<nint>? loaded;
+    private static string? initializedDataDirectory;
     internal const string WindowsRuntimeSha256 = "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7";
     private static nint windowsRuntime; // Kept loaded with libplctag for the process lifetime.
     internal static bool WindowsRuntimeLoaded => windowsRuntime != 0;
-    internal static void EnsureAvailable()
+    internal static string NormalizeDataDirectory(string dataDirectory)
     {
-        try { _ = loaded.Value; }
+        if (string.IsNullOrWhiteSpace(dataDirectory) || !Path.IsPathFullyQualified(dataDirectory))
+            throw new ArgumentException("A fully qualified gateway data directory is required for the EtherNet/IP native cache.", nameof(dataDirectory));
+        return Path.TrimEndingDirectorySeparator(Path.GetFullPath(dataDirectory));
+    }
+    internal static void EnsureAvailable(string dataDirectory)
+    {
+        var root = NormalizeDataDirectory(dataDirectory);
+        Lazy<nint> runtime;
+        lock (initializationLock)
+        {
+            if (loaded is null)
+            {
+                initializedDataDirectory = root;
+                loaded = new(() => Load(root), LazyThreadSafetyMode.ExecutionAndPublication);
+            }
+            else if (!string.Equals(initializedDataDirectory, root, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                throw new InvalidOperationException("The EtherNet/IP native runtime is already assigned to a different gateway data directory in this process.");
+            runtime = loaded;
+        }
+        try { _ = runtime.Value; }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.SecurityException)
         { throw new InvalidOperationException("The EtherNet/IP native cache could not be initialized. Check the gateway account's data-directory access.", error); }
     }
 
-    private static nint Load()
+    private static nint Load(string dataRoot)
     {
         var assembly = typeof(plctag).Assembly;
         var platform = (OperatingSystem.IsWindows(), OperatingSystem.IsLinux(), RuntimeInformation.ProcessArchitecture) switch
@@ -36,9 +57,6 @@ internal static class EmbeddedPlcRuntime
         using var resource = assembly.GetManifestResourceStream($"libplctag.NativeImport.runtime.{platform.Item1}.{platform.Item2}")
             ?? throw new InvalidOperationException("The pinned EtherNet/IP package has no native binary for this platform.");
         using var content = new MemoryStream(); resource.CopyTo(content);
-        var dataRoot = Environment.GetEnvironmentVariable("SPARKSTUDIO_DATA_DIR");
-        if (string.IsNullOrWhiteSpace(dataRoot)) dataRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SparkStudio");
-        if (!Path.IsPathFullyQualified(dataRoot)) throw new InvalidOperationException("A fully qualified gateway data directory is required for the EtherNet/IP native cache.");
         var binaries = new Dictionary<string, byte[]> { [platform.Item2] = content.ToArray() };
         if (OperatingSystem.IsWindows())
         {
