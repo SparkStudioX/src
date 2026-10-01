@@ -30,6 +30,10 @@ RUN case "$TARGETARCH" in amd64) rid=linux-x64 ;; arm64) rid=linux-arm64 ;; *) e
        -o /out /p:UseAppHost=false /p:SourceRevisionId="$SOURCE_REVISION" /p:InformationalVersion="$VERSION+$SOURCE_REVISION"
 
 FROM python:3.14.7-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS python
+# Strip installers before copying the interpreter snapshot. Removing them in a
+# later runtime layer would still distribute their original lower-layer bytes.
+RUN rm -rf /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/ensurepip \
+    /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.12-noble@sha256:2d584d8147faddb0d678c5748d47953e5b8e18621ed4fb7049a91381d9d7746f AS runtime-prep
 USER root
@@ -39,9 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libbz2-1.0 libexpat1 libffi8 liblzma5 libncursesw6 libreadline8t64 libsqlite3-0 libssl3t64 zlib1g openssl \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=python /usr/local/ /usr/local/
-RUN rm -rf /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/ensurepip \
-    /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14 \
-    && ldconfig \
+RUN ldconfig \
     && /usr/local/bin/python3 -I -c "import sys, sqlite3, ssl, bz2, lzma, ctypes, urllib.request; assert sys.version_info[:3] == (3, 14, 7)"
 COPY tools/collect-docker-runtime.py /tmp/collect-docker-runtime.py
 RUN /usr/local/bin/python3 -I /tmp/collect-docker-runtime.py /base-notices && rm /tmp/collect-docker-runtime.py
