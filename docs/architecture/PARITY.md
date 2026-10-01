@@ -6,6 +6,34 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Preview.12 exact release verification, 2026-10-01
+
+The unsigned Windows x64 [`v0.2.0-preview.12` prerelease](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.12) was built from clean application source [`f094906712abe07c663f5d841886b76bf13559e3`](https://github.com/SparkStudioX/src/commit/f094906712abe07c663f5d841886b76bf13559e3), Windows file version `0.2.0.12`. This build revision identifies the installer and workshop bundle. Any later commit containing this evidence is a documentation-only follow-up and does not identify rebuilt installer bytes; the releases-repository tag identifies the assets repository separately.
+
+All **110 aggregate suites** passed with zero failures, including **83 browser suites**, **24 gateway suites / 1,341 checks** and **5 connector suites / 516 checks**. The latter includes **260 native-driver checks**. [Source-boundary CI](https://github.com/SparkStudioX/src/actions/runs/36936087575) and [Windows/Linux product CI](https://github.com/SparkStudioX/src/actions/runs/36936087539) passed for the exact build commit. Local offline reports supplement that commit-bound CI evidence; their files do not independently embed a source revision.
+
+The exact installer passed **9 integration groups**, all **566 payload hashes**, bundled .NET/Python readiness and **all 37 portable workshop import, explicit publication and re-export round trips**. Workshop verification archived its synthetic projects and left gateway connections/tags unchanged. Production-default checks confirmed demo simulation disabled and bundled Python available in the owned extracted process; the packaged browser review passed for this same source build.
+
+EtherNet/IP native-module checks confirmed both `plctag.dll` and the pinned CPython-bundled `vcruntime140.dll` came from the verified private cache under the gateway's explicitly resolved data directory, including `--DataDirectory` selection. Native loading has no environment/LocalAppData fallback; a different later root is rejected before native I/O. The runtime remains process-lived. ControlLogix/CompactLogix String points remain rejected before device access until controller structure-schema qualification is implemented; Micro800's distinct String layout also remains unsupported. Six-family numeric/Boolean profiles and PCCC ST strings retain their supported software boundaries.
+
+All **11 public release assets** were downloaded separately and matched the reviewed byte sizes and SHA-256 hashes. The portable ZIP contains **37 projects**; the catalog's **19 setup-required examples** remain outside that ZIP. Downloaded Markdown guides use build-commit-pinned links for their source-relative document references.
+
+| Public asset | Bytes | SHA-256 |
+| --- | ---: | --- |
+| [SparkStudio-Setup-0.2.0-preview.12-windows-x64-unsigned.exe](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.12/SparkStudio-Setup-0.2.0-preview.12-windows-x64-unsigned.exe) | 87,669,716 | `98639212a9902af74c60e235caa4d3fbdd94d39629689684d05bfbc7be624b61` |
+| [SparkStudio-Setup-0.2.0-preview.12-windows-x64-unsigned.exe.sha256](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.12/SparkStudio-Setup-0.2.0-preview.12-windows-x64-unsigned.exe.sha256) | 127 | `52728fec11fda3e3a9836e7f9526755b16c73620da7231631bd331e2f98b59e4` |
+| [SparkStudio-Windows-Installation-Guide.md](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.12/SparkStudio-Windows-Installation-Guide.md) | 24,372 | `e032abfbb84d10abc80418326beca3e5a1467754f556ab77a36f293947018b52` |
+| [SparkStudio-Workshops-0.2.0-preview.12.zip](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.12/SparkStudio-Workshops-0.2.0-preview.12.zip) | 409,638 | `ee0f50dfee6390cc29a0328dd48099a8596b66668b28fb15690d34f266539661` |
+| [SparkStudio-Workshops-0.2.0-preview.12.zip.sha256](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.12/SparkStudio-Workshops-0.2.0-preview.12.zip.sha256) | 109 | `e376f42e7f7a0809088bf82f11a8e0205e2435e0c28fd85a0f3585d45f03c768` |
+| [SparkStudio-Package-Manifest-0.2.0-preview.12.json](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.12/SparkStudio-Package-Manifest-0.2.0-preview.12.json) | 102,625 | `84952b9cdffa3e5ce85f8e0c6435b0ce4d1a8f1012dcb677e3e2430e71f46c02` |
+| [NETWORK_ACCESS.md](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.12/NETWORK_ACCESS.md) | 12,020 | `9774467167741d4606f8594d4e359a06541154c24f1f402e6532fdd9df428521` |
+| [SCHEDULED_BACKUPS.md](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.12/SCHEDULED_BACKUPS.md) | 13,127 | `cc3d1a9b3ce61ad81f6c77fc3a3c78ad81b659228f50dc51d81c599ea4a6a611` |
+| [GATEWAY_RECOVERY.md](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.12/GATEWAY_RECOVERY.md) | 11,453 | `700badfabe116f419faadc89051a2bdf75b9281c418a1781502ebe045d68f5fb` |
+| [INDUSTRIAL_DEVICE_CONNECTIONS.md](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.12/INDUSTRIAL_DEVICE_CONNECTIONS.md) | 17,586 | `c433e7b6c2d29b1a55aaa66ec468ad9eb1ae824eb8b6627ddfb53f40dbc6c8bb` |
+| [SHA256SUMS](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.12/SHA256SUMS) | 1,065 | `50b45bd55fa59047cfd8b0e3641b9452b54336c011fa9e28b1a227426d256cdc` |
+
+These checks establish software/artifact provenance, not physical controller/model/firmware acceptance or deployment acceptance of the new Linux driver payloads. Elevated preview.12 service installation/upgrade/uninstall, LocalService secret/ACL lifecycle, rollback, complete real-data preservation and remote listener/TLS acceptance remain separate gates. Current-user extraction does not establish those results. The installer remains unsigned; no new Docker image or macOS package is claimed. Website/docs publication is recorded separately after its own deployment and live checks.
+
 ## Preview.12 release-candidate review, 2026-10-01
 
 The final offline acceptance run passed **110 aggregate suites with zero failures**,
