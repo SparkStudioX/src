@@ -10,6 +10,7 @@ Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md).
 - [Projects and portable packages](PROJECTS.md)
 - [Alarms, retained history and synthetic workshop](PROCESS_DATA.md)
 - [Windows installer](WINDOWS_INSTALLER.md)
+- [Docker deployment](DOCKER_RELEASE.md)
 - [Preview release cycle](RELEASE_PROCESS.md)
 - [Security and accounts](SECURITY.md)
 - [Verification and roadmap](PARITY.md)

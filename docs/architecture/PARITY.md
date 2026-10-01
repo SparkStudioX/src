@@ -6,6 +6,39 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Docker edition implementation, 2026-10-01
+
+The container edition candidate is **0.2.0-preview.11-docker.1**, retaining
+application version **0.2.0-preview.11**. The Dockerfile builds Linux x86-64 and
+ARM64 using four immutable base-image indexes and target-specific NuGet locks.
+Compose maps loopback host **8090** to an HTTP landing redirect and **8443** to
+direct HTTPS; management remains inside the container on loopback 5090. It runs
+nonroot with a read-only root filesystem, a temporary `/tmp` and a persistent
+private gateway volume. Local terminal setup uses the existing guarded bootstrap
+API. Persisted certificate identities, distinct cookie names and loopback-only
+HSTS suppression support parallel Windows/Docker use without changing Windows
+installer bytes or its default authentication behavior.
+
+Local source validation passed **109 aggregate suites** (including **1,279 Gateway**
+and **163 Connector** checks at that build). Subsequent focused redirect/cookie/HSTS
+verification passed **72 checks**. The first aggregate's Windows OpenSSL absence
+skipped five TLS fixtures; a separate run with Git's OpenSSL executed all **15**
+final entrypoint checks without skips. The container administration CLI passed
+eight checks. Native x86-64 and emulated ARM64 provisional images ran on Docker
+Desktop 4.85.0 / Engine 29.6.2 on this x86-64 Windows laptop. Checks exercised
+validated HTTPS, guarded bootstrap, memory tags, native SQLite, Python, all 37
+portable workshop imports/publications/exports, graceful shutdown and retained
+accounts, projects, databases, keys and certificates. ARM64 additionally exercised
+the separate operator audience and its published Python action at that stage.
+
+The final clean-source image build, both final platform checks, registry
+publication/digest verification, public-image rechecks and website deployment
+remain release gates until recorded below. Physical ARM hardware, real SQL Server,
+factory-network connectors, remote certificate trust, cross-version migration and
+external backup destinations are not established by the container fixtures. See
+[Docker deployment](DOCKER_RELEASE.md) for startup, certificates, data scope,
+recovery and the separate container release cycle.
+
 ## Preview.11 package verification, 2026-09-30
 
 The published prerelease version is **0.2.0-preview.11**, with Windows file version

@@ -10,6 +10,7 @@ if (GatewayRecoveryCli.IsRequested(args))
     return;
 }
 var builder = WebApplication.CreateBuilder(args);
+var containerHttpsRedirect = ContainerHttpsRedirect.FromConfiguration(builder.Configuration);
 builder.Services.AddWindowsService(options => options.ServiceName = "SparkStudio");
 builder.Logging.ClearProviders().AddConsole();
 builder.WebHost.ConfigureKestrel(options =>
@@ -28,7 +29,7 @@ DeploymentSettings.Configure(builder, dataDir, recovery.Active ? "Gateway recove
 recovery.ConfigureIsolation(builder);
 var protection = builder.Services.AddDataProtection().SetApplicationName("SparkStudio").PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir, "keys")));
 if (OperatingSystem.IsWindows()) protection.ProtectKeysWithDpapi();
-builder.Services.AddGatewaySecurity(dataDir);
+builder.Services.AddGatewaySecurity(dataDir, builder.Configuration["SPARKSTUDIO_COOKIE_NAMESPACE"]);
 builder.Services.AddSingleton<GatewayReadiness>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayReadiness>());
 builder.Services.AddSingleton(new GatewayDeployment(builder.Configuration, builder.Environment, dataDir));
@@ -62,12 +63,15 @@ builder.Services.AddScoped(sp => sp.GetRequiredService<ProjectRuntime>().Python)
 builder.Services.AddScoped(sp => sp.GetRequiredService<ProjectRuntime>().Actions);
 var app = builder.Build();
 
+if (containerHttpsRedirect is not null) app.Use(containerHttpsRedirect.InvokeAsync);
+
 app.Use(async (context, next) =>
 {
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     context.Response.Headers["Referrer-Policy"] = "same-origin";
     context.Response.Headers["Content-Security-Policy"] = "frame-ancestors 'self'; object-src 'none'; base-uri 'self'";
-    if (GatewaySecurity.IsDirectTls(context)) context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000";
+    if (GatewaySecurity.IsDirectTls(context) && (containerHttpsRedirect?.AllowsHstsForHost(context.Request.Host) ?? true))
+        context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000";
     if (context.Request.Path.StartsWithSegments("/api") && context.Request.Headers.Origin.FirstOrDefault() is { } origin)
     {
         var expected = $"{context.Request.Scheme}://{context.Request.Host}";

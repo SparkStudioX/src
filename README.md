@@ -194,15 +194,15 @@ See the [component roadmap](docs/architecture/COMPONENTS.md) for current control
 
 The self-contained folder is generated under `artifacts/windows-x64`; the installer and checksum under `artifacts/installer`. These outputs and runtime data are not source files and should not be committed.
 
-For the Linux baseline:
+For Linux x86-64 and ARM64, use the [Docker deployment guide](docs/architecture/DOCKER_RELEASE.md) and [example Compose file](compose.yaml):
 
 ```powershell
-docker compose up --build -d
-docker compose logs -f gateway
-docker compose down
+docker compose pull
+docker compose up -d --wait
+docker compose exec gateway sparkstudio-admin setup
 ```
 
-Compose publishes host loopback only and retains a named data volume. Stop any other gateway using the configured host port first. Building requires dependency access; a prepared image can run without Internet access. Real connectors still need their configured local servers. Third-party Python packages, an offline wheelhouse and complete update/rollback procedures are future work.
+Open `https://localhost:8443`; HTTP on 8090 redirects there. The Windows gateway can continue using 5090. Compose defaults to host loopback, creates a persistent self-signed certificate and retains a named data volume. Create your own administrator through the container-local command above and deliberately trust the public certificate, or supply a trusted PEM pair. Read the guide before enabling LAN access or upgrading. Real connectors still need their configured servers. Third-party Python packages, automatic certificate renewal and cross-version recovery acceptance remain future work.
 
 ## Feature workshops
 

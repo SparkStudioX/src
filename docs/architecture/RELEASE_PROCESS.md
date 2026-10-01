@@ -1,6 +1,6 @@
 # Preview release cycle
 
-This is the standard end-to-end process for a SparkStudio preview release. A request to ship or publish an application release includes a **new Windows preview installer**, matching workshops, release documentation, website download links and hosted documentation. A source push or successful installer build alone does not complete a release. A request specifically limited to documentation or website maintenance can publish those changes independently without inventing a new binary version.
+This is the standard end-to-end process for a SparkStudio preview release. A request to ship or publish an application release includes a **new Windows preview installer**, matching workshops, release documentation, website download links and hosted documentation. A source push or successful installer build alone does not complete a release. An explicitly Docker-only request follows the [container edition cycle](DOCKER_RELEASE.md#build-and-verify-a-container-edition), with independently versioned multi-platform images and Compose/website publication; it retains existing Windows assets. A request specifically limited to documentation or website maintenance can publish those changes independently without inventing a new binary version.
 
 The release operator follows this checklist and records the resulting version, source commit, asset hashes, verification and website deployment. Installer building and GitHub release publication are currently operator-run steps. The website build, link validation and Pages deployment are automated after the website commit is pushed. There is no unattended end-to-end installer release job.
 
@@ -111,7 +111,7 @@ npm run release:update
 npm run release:check
 ```
 
-Review `release.json` and the homepage: visible version, installer, notes, guide, workshop ZIP and checksum must all identify the intended release. The updater selects the most recently published preview; if another release was published concurrently, reconcile the candidate instead of assuming the selection is yours. Docker remains “Coming soon” until a separate tested Docker release is actually available.
+Review `release.json` and the Windows homepage card: visible version, installer, notes, guide, workshop ZIP and checksum must all identify the intended release. The updater selects the most recently published Windows preview; if another release was published concurrently, reconcile the candidate instead of assuming the selection is yours. Docker uses its own verified edition metadata and publication gate; a Windows release must not change its image pin to an unpublished Docker version.
 
 Update `docs-source.json` to the full reviewed source/docs commit containing the release's guides and navigation. Prefer the build source revision or a documentation-only follow-up containing its verification evidence. If development docs intentionally describe newer work, keep the Development docs label and explicit release compatibility; do not present those features as part of the released installer. Remove unpublished-source exceptions as their files become available. Fetch the pinned commit into the local source checkout, then run:
 

@@ -85,6 +85,10 @@ const webFiles = new Set([
   'apps/web/check-input-state-bindings.mjs', 'apps/web/check-input-state-authoring.mjs',
 ]);
 const toolFiles = new Set([
+  // Authored Linux container packaging, local administration and release checks.
+  'docker-entrypoint.py', 'test-docker-entrypoint.py', 'container-admin.py', 'test-container-admin.py',
+  'package-notice-supplements.mjs', 'collect-docker-runtime.py', 'write-docker-notices.mjs', 'test-docker-notices.mjs',
+  'test-docker-deployment.mjs',
   'analyze-web-complexity.mjs', 'test-web-complexity.mjs',
   'test-computer-camera.mjs',
   'web-model-module.mjs',
@@ -149,6 +153,7 @@ const toolFiles = new Set([
   'test-input-state-bindings.mjs',
 ]);
 const architectureDocs = new Set([
+  'DOCKER_RELEASE.md',
   'VISITOR_CHECKIN.md',
   'RUNTIME_PROPERTY_BINDINGS.md',
   'PROCESS_DATA.md', 'LOAD_TESTING.md',
@@ -187,6 +192,9 @@ const architectureDocs = new Set([
   'TAG_ENGINEERING.md', 'NETWORK_ACCESS.md',
 ]);
 const explicitFiles = new Set([
+  'src/SparkStudio.Gateway.Tests/ContainerHttpsRedirectChecks.cs',
+  'src/SparkStudio.Gateway/packages.linux-x64.lock.json', 'src/SparkStudio.Gateway/packages.linux-arm64.lock.json',
+  'src/SparkStudio.Connectors/packages.linux-x64.lock.json', 'src/SparkStudio.Connectors/packages.linux-arm64.lock.json',
   'src/SparkStudio.Gateway.Tests/NativeTagActionChecks.cs',
   'examples/runtime-property-bindings.json', 'examples/visitor-checkin.json',
   'src/SparkStudio.Gateway.Tests/RuntimePropertyBindingChecks.cs',

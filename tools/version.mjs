@@ -15,7 +15,11 @@ for (const name of ['apps/web/package.json', 'apps/web/package-lock.json']) {
   if (data.packages?.['']) data.packages[''].version = version;
   updates.set(name, JSON.stringify(data, null, 2) + '\n');
 }
-updates.set('compose.yaml', read('compose.yaml').replace(/image: sparkstudio:[^\s]+/, `image: sparkstudio:${version}`));
+// The published Docker edition is maintained by a separate Docker release.
+// A Windows version bump must not point Compose at an image that does not exist.
+const dockerEdition = read('compose.yaml').match(/image: \$\{SPARKSTUDIO_IMAGE:-ladder99\/sparkstudio:([^}]+)\}/)?.[1];
+if (!/^\d+\.\d+\.\d+-preview\.\d+-docker\.\d+$/.test(dockerEdition ?? '')) throw new Error('Compose must pin a deliberate published Docker preview edition.');
+if (read('Dockerfile').match(/^ARG CONTAINER_EDITION=([^\s]+)$/m)?.[1] !== dockerEdition) throw new Error('Dockerfile and Compose Docker edition defaults differ.');
 updates.set('installer/SparkStudio.iss', read('installer/SparkStudio.iss').replace(/#define AppVersion "[^"]+"/, `#define AppVersion "${version}"`).replace(/#define NumericVersion "[^"]+"/, `#define NumericVersion "${numeric}"`));
 let mismatches = 0;
 for (const [name, expected] of updates) {

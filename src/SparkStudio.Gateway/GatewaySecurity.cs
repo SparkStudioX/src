@@ -25,22 +25,31 @@ public static class GatewaySecurity
     private static readonly object UserKey = new();
     private static object? Item(HttpContext context, object key) => context.Items.TryGetValue(key, out var value) ? value : null;
 
-    public static IServiceCollection AddGatewaySecurity(this IServiceCollection services, string dataDirectory)
+    public static IServiceCollection AddGatewaySecurity(this IServiceCollection services, string dataDirectory, string? cookieNamespace = null)
     {
         services.AddSingleton(provider => new SecurityStore(dataDirectory,
             Environment.GetEnvironmentVariable("SPARKSTUDIO_PUBLIC_BASE_URL")
                 ?? provider.GetRequiredService<IConfiguration>()["Security:PublicBaseUrl"]));
         var auth = services.AddAuthentication();
-        AddCookie(auth, EngineeringScheme, EngineeringAudience);
-        AddCookie(auth, OperatorScheme, OperatorAudience);
+        AddCookie(auth, EngineeringScheme, EngineeringAudience, CookieName(EngineeringScheme, cookieNamespace));
+        AddCookie(auth, OperatorScheme, OperatorAudience, CookieName(OperatorScheme, cookieNamespace));
         return services;
     }
 
-    private static void AddCookie(AuthenticationBuilder authentication, string scheme, string audience)
+    public static string CookieName(string scheme, string? cookieNamespace = null)
+    {
+        if (scheme is not EngineeringScheme and not OperatorScheme) throw new ArgumentException("Choose an engineering or operator cookie scheme.");
+        if (cookieNamespace is null) return scheme;
+        if (cookieNamespace.Length is < 1 or > 48 || cookieNamespace.Any(character => !char.IsAsciiLetterOrDigit(character) && character is not '_' and not '-'))
+            throw new ArgumentException("Cookie namespace must contain 1–48 ASCII letters, digits, underscores or hyphens.");
+        return cookieNamespace + "." + scheme;
+    }
+
+    private static void AddCookie(AuthenticationBuilder authentication, string scheme, string audience, string cookieName)
     {
         authentication.AddCookie(scheme, options =>
         {
-            options.Cookie.Name = scheme;
+            options.Cookie.Name = cookieName;
             options.Cookie.HttpOnly = true;
             options.Cookie.SameSite = SameSiteMode.Strict;
             options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;

@@ -30,6 +30,7 @@ function run(name, command, args, cwd = root) {
 }
 const web = path.join(root, 'apps/web');
 const toolSuites = [
+  'test-docker-notices',
   'test-web-complexity',
   'test-computer-camera',
   'test-source-boundary', 'test-workshop-build', 'test-project-search', 'test-resource-changes',
@@ -45,6 +46,8 @@ if (!process.argv.includes('--node-only')) {
     }
   }
   run('Python worker compilation', python, ['-m', 'py_compile', path.join(root, 'runtimes/python/worker.py')]);
+  run('Container administration CLI', python, [path.join(root, 'tools/test-container-admin.py')]);
+  run('Container entrypoint', python, [path.join(root, 'tools/test-docker-entrypoint.py')]);
   run('TypeScript', process.execPath, [path.join(web, 'node_modules/typescript/bin/tsc'), '-b', '--pretty', 'false'], web);
   run('Browser build', process.execPath, [path.join(web, 'node_modules/vite/bin/vite.js'), 'build'], web);
   for (const script of ['test-backup-destinations', 'test-backup-schedule', 'test-configuration-backup'])

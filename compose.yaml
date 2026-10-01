@@ -1,11 +1,28 @@
+# Docker release: Linux x86-64 (amd64) and ARM64 share this published image tag.
+# Create the first administrator with: docker compose exec gateway sparkstudio-admin setup
+# Visit https://localhost:8443. HTTP 8090 redirects there; management 5090 stays unexposed.
 services:
   gateway:
-    build: .
-    image: sparkstudio:0.2.0-preview.11
+    image: ${SPARKSTUDIO_IMAGE:-ladder99/sparkstudio:0.2.0-preview.11-docker.1}
+    init: true
     ports:
-      - "127.0.0.1:5090:8080"
+      - "${SPARKSTUDIO_BIND_ADDRESS:-127.0.0.1}:${SPARKSTUDIO_HTTP_PORT:-8090}:8090"
+      - "${SPARKSTUDIO_BIND_ADDRESS:-127.0.0.1}:${SPARKSTUDIO_HTTPS_PORT:-8443}:8443"
+    environment:
+      SPARKSTUDIO_PUBLIC_HOST: ${SPARKSTUDIO_PUBLIC_HOST:-localhost}
+      SPARKSTUDIO_HTTPS_PORT: ${SPARKSTUDIO_HTTPS_PORT:-8443}
+      SPARKSTUDIO_TLS_NAMES: ${SPARKSTUDIO_TLS_NAMES:-localhost,127.0.0.1,::1}
+      SPARKSTUDIO_COOKIE_NAMESPACE: ${SPARKSTUDIO_COOKIE_NAMESPACE:-SparkStudioDocker}
     volumes:
       - sparkstudio-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
+    stop_grace_period: 45s
 volumes:
   sparkstudio-data:
