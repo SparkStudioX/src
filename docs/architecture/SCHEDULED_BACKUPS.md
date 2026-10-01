@@ -69,7 +69,7 @@ Recovery mode blocks capture and remote transfers until the restored copy has be
 
 ## Workshop
 
-`examples/scheduled-backups.json` is an independently authored read-only checkpoint project. It contains no credentials, connectors, tag writes or executable actions. This exercise is **setup-required** because destinations and schedules are gateway resources outside a `.sparkproj` package. Use the companion multi-schedule source build; the preview.10 installer contains the earlier single-target implementation.
+`examples/scheduled-backups.json` is an independently authored read-only checkpoint project. It contains no credentials, connectors, tag writes or executable actions. This exercise is **setup-required** because destinations and schedules are gateway resources outside a `.sparkproj` package. Use preview.11 or a later compatible build for multiple schedules and S3; preview.10 contains the earlier single-target implementation.
 
 Use a disposable gateway and dedicated writable test destinations. Keep production credentials and configuration out of source. The loader creates only a new checkpoint project and does not change gateway backup settings. Point `SPARKSTUDIO_ADMIN_AUTH_FILE` at a protected local-only credential file, then run:
 

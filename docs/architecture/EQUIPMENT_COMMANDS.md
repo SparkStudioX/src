@@ -25,7 +25,7 @@ Property references use the current instance of the calling form. Select **This 
 
 **Require confirmation** is optional. Without it, one operator activation reviews and executes the saved action; with it, the dialog shows the current tag and resolved requested value before dispatch. The gateway reconstructs the saved value source from validated form/UI context and current gateway data. It owns the target and the one-use ticket, and rechecks access, publication, tag configuration and source dependencies before dispatch. It never accepts an arbitrary requested tag/value from the browser and never retries an uncertain write.
 
-If a project equipment command already targets this tag, its bounds, confirmation and readback settings apply. A native button cannot relax them. Duplicate declarations or incompatible types are rejected. The new action is in the current source build; preview.10 does not include it.
+If a project equipment command already targets this tag, its bounds, confirmation and readback settings apply. A native button cannot relax them. Duplicate declarations or incompatible types are rejected. Native tag actions require preview.11 or a later compatible build; preview.10 does not include them.
 
 ## API
 

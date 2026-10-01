@@ -3,9 +3,9 @@
 The maintained package is `artifacts/sparkproj/visitor-checkin.sparkproj`. Its
 independently authored source is `examples/visitor-checkin.json`; build it with
 the normal workshop builder. Import creates a separate, unpublished project.
-This workshop needs the source build containing **Computer camera** and the
-Image component's transient `imageUrl` binding, or a later compatible release.
-These additions are not in earlier preview.10 installers.
+This workshop requires preview.11 or a later compatible build, including
+**Computer camera** and the Image component's transient `imageUrl` binding.
+These additions are not in preview.10 installers.
 
 ## Try the application
 

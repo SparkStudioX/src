@@ -6,6 +6,33 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Preview.11 release candidate, 2026-09-30
+
+The candidate version is **0.2.0-preview.11**, with Windows file version
+**0.2.0.11**. Its scope includes component-specific/custom runtime bindings,
+native fixed/property-sourced tag buttons, camera capture and visitor photo
+badges, receiver discovery, multiple backup schedules/destinations with S3, and
+the revised Designer/Gateway Settings presentation and preview footer. The
+companion catalog contains **37 portable workshops** and **18 setup-required
+examples**; the visitor exercise additionally needs a webcam and Labelary access.
+
+This entry records candidate preparation only. Clean-source installer creation,
+exact-package/runtime checks, frozen workshop round trips, source CI, release
+publication and website/docs deployment remain pending. Earlier dated entries
+retain their original source/build evidence and do not establish acceptance of
+these new installer bytes.
+
+Packaging must also retain the official AWS SDK license and notice texts with
+the new S3 dependency in the hashed payload. Their inclusion and manifest/SBOM
+inventory are package-verification gates, not a legal or vulnerability guarantee.
+
+Elevated service install/upgrade/uninstall, rollback and complete real-data
+preservation, broader service-account/ACL behavior, remote HTTPS trust/renewal,
+real SQL Server and device/site workloads, actual domain SMB, trusted external
+FTPS and real AWS/S3-compatible account-policy/delivery remain separate
+acceptance gates. No production credential, gateway data or private reference
+material belongs in the candidate or companion workshops.
+
 ## Visitor check-in, camera capture and hidden-component hit testing, 2026-09-30
 
 The portable Visitor check-in workshop accepts name/email and a static host,

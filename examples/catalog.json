@@ -6,7 +6,7 @@
       "kind": "source-commit",
       "value": "4e58e436ef3817458427e23a81d14a65ff1d190a"
     },
-    "note": "Use the matching preview.10 installer or a later compatible release. Preview.10 includes unified publication, datasets, charts, UDTs, equipment commands and local alarms/history. The bundle source revision and each workshop prerequisites identify its actual requirements."
+    "note": "Use the matching preview.11 installer or a later compatible release for the complete collection, including runtime property bindings, camera capture and photo badges. Native tag buttons and multi-schedule/S3 backups also require preview.11. The bundle source revision and each workshop prerequisites identify its actual requirements; exact release verification is recorded separately."
   },
   "workshops": [
     {
@@ -24,7 +24,7 @@
         "component message handlers"
       ],
       "prerequisites": [
-        "Use the source build containing Computer camera and transient Image URL support, or its later compatible release. Older preview.10 installers do not include these components.",
+        "Use preview.11 or a later compatible build containing Computer camera and transient Image URL support. Preview.10 installers do not include these components.",
         "A browser with camera access on HTTPS or localhost, a webcam, and internet access to https://api.labelary.com.",
         "Publish as a gateway administrator and open the operator application with Operate permission, or explicitly enable live actions in Designer Preview.",
         "Use synthetic visitor details while learning: name, email, host and photo are sent to the external Labelary service. No database or tags are required."
@@ -54,7 +54,7 @@
         "Bound split and repeater layout"
       ],
       "prerequisites": [
-        "Requires the source build containing runtime property bindings; preview.10 does not include this feature.",
+        "Requires preview.11 or a later compatible build with runtime property bindings; preview.10 does not include this feature.",
         "Import, review and explicitly publish. No tags, connections, Python scripts or equipment writes are required."
       ],
       "gatewayWrites": "none",
@@ -85,7 +85,7 @@
         "Reviewed synthetic commands"
       ],
       "prerequisites": [
-        "Use preview.10 or later for local alarms and history.",
+        "Use preview.11 or a later compatible build for the selected-rule Alarms/History editors and browsable tag paths. Preview.10 includes the earlier local alarms/history implementation.",
         "Run tools/load-process-data-example.mjs against an isolated gateway using administrator credentials; --publish is explicit.",
         "Operators need View to read, Commands to change the synthetic temperature and Operate to acknowledge; tag scope must include [default]ProcessWorkshop/."
       ],
@@ -253,7 +253,7 @@
         "Current input and parent-property value sources"
       ],
       "prerequisites": [
-        "Native buttons require the source build containing Set tag value actions; preview.10 does not include them.",
+        "Native buttons require preview.11 or a later compatible build containing Set tag value actions; preview.10 does not include them.",
         "Run tools/load-equipment-commands-example.mjs on an isolated gateway; --publish explicitly publishes.",
         "No equipment connection is configured. Non-admin operators need explicit Commands and tag-read access."
       ],
@@ -568,7 +568,7 @@
         "quarantined restore"
       ],
       "prerequisites": [
-        "Use the companion multi-schedule source build and an engineering administrator on a disposable gateway. The preview.10 installer has the earlier single-destination model.",
+        "Use preview.11 or a later compatible build and an engineering administrator on a disposable gateway for multiple schedules and S3. Preview.10 has the earlier single-destination model.",
         "Run tools/load-backup-example.mjs with SPARKSTUDIO_ADMIN_AUTH_FILE to create a new unpublished checkpoint project; --publish is an explicit option. The loader does not change gateway backup settings.",
         "Choose an archive passphrase and dedicated writable test targets: SMB share, FTP/FTPS directory or S3 bucket/prefix. No credentials, remote folders or certificate material are included.",
         "New schedules default to disabled, 02:00 in the gateway time zone and seven-day retention; destinations default to a 300-second transfer deadline. Save and verify each manual delivery before enabling its schedule.",
@@ -888,7 +888,7 @@
         "listener validation preview without saving"
       ],
       "prerequisites": [
-        "Use the companion build and a gateway administrator for Gateway Settings in Designer or Settings in Projects.",
+        "Use preview.11 or a later compatible build and a gateway administrator for the current Gateway Settings panels and automatic observations.",
         "The project itself needs no tags, assets, database, scripts or external network.",
         "Use only a disposable sign-in for the optional session revocation exercise; it changes that session’s authentication state."
       ],

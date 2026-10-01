@@ -1,7 +1,7 @@
 services:
   gateway:
     build: .
-    image: sparkstudio:0.2.0-preview.10
+    image: sparkstudio:0.2.0-preview.11
     ports:
       - "127.0.0.1:5090:8080"
     volumes:

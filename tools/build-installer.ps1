@@ -25,6 +25,40 @@ function Get-CleanSourceCommit {
     if ($LASTEXITCODE -ne 0 -or $changes) { throw 'Installer releases require a clean, reviewed source checkout.' }
     return $commit
 }
+
+function Get-ReviewedAwsNotices {
+    # This immutable AWS revision declares S3 4.0.104.0 and Core 4.0.102.8.
+    # The matching NuGet packages declare Apache-2.0 but omit distributable text.
+    # Keep vendor license/attribution text in the ignored cache and release only.
+    $revision = 'f5257515bbd26d04376ee826d07ec80ea267c9b9'
+    $reviewed = @(
+        @{ name = 'License.txt'; sha256 = '192898453336a3f666e8138988cdda21ee7b858b1184e00c882c531df174d0d1' },
+        @{ name = 'Notice.txt'; sha256 = 'ebc5492b4c77f9c52a8d33d27588e69717a33440bcb9e2cc5a2652309a4ed20f' }
+    )
+    $cache = Join-Path $root ".tools\third-party-notices\aws-sdk-net\$revision"
+    New-Item -ItemType Directory -Force -Path $cache | Out-Null
+    $result = @()
+    foreach ($entry in $reviewed) {
+        $file = Join-Path $cache $entry.name
+        $url = "https://raw.githubusercontent.com/aws/aws-sdk-net/$revision/$($entry.name)"
+        if (!(Test-Path -LiteralPath $file)) {
+            $temporary = "$file.$([guid]::NewGuid().ToString('N')).tmp"
+            try {
+                Invoke-WebRequest -Uri $url -OutFile $temporary -TimeoutSec 60
+                if ((Get-Item -LiteralPath $temporary).Length -gt 131072 -or (Get-FileHash -LiteralPath $temporary -Algorithm SHA256).Hash -ne $entry.sha256) {
+                    throw "Official AWS notice checksum mismatch: $($entry.name)"
+                }
+                Move-Item -LiteralPath $temporary -Destination $file
+            } finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary } }
+        }
+        $item = Get-Item -LiteralPath $file
+        if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -gt 131072 -or (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $entry.sha256) {
+            throw "Cached AWS notice differs from its reviewed checksum: $($entry.name)"
+        }
+        $result += [ordered]@{ name = $entry.name; path = $file; url = $url; sha256 = $entry.sha256; sourceRevision = $revision }
+    }
+    return $result
+}
 $sourceCommit = Get-CleanSourceCommit
 if ($SkipHelperBuild) { throw 'Release installers always build the service helper from the current source; -SkipHelperBuild is not supported.' }
 if (@(Get-ChildItem -LiteralPath $published -Force -Recurse | Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 }).Count) { throw 'Published payload cannot contain reparse points.' }
@@ -148,6 +182,7 @@ try {
     # Preserve available NuGet package licenses and identify every published dependency.
     $deps = Get-Content -LiteralPath (Join-Path $published 'SparkStudio.Gateway.deps.json') -Raw | ConvertFrom-Json
     $packages = @()
+    $awsNotices = $null
     foreach ($property in $deps.libraries.PSObject.Properties) {
         $inventoryEntry = [ordered]@{ name = $property.Name; type = $property.Value.type; hash = $property.Value.sha512; noticeFiles = @(); license = $null; licenseType = $null; copyright = $null; licenseUrl = $null; requiresLicenseReview = $false }
         if ($property.Value.type -eq 'package') {
@@ -173,6 +208,19 @@ try {
                     New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent) | Out-Null
                     Copy-Item -LiteralPath $notice.FullName -Destination $destination
                     $inventoryEntry.noticeFiles += $destination.Substring($notices.Length + 1).Replace('\', '/')
+                }
+            }
+            if ($property.Name -in @('AWSSDK.S3/4.0.104', 'AWSSDK.Core/4.0.102.8')) {
+                if ($inventoryEntry.licenseType -ne 'expression' -or $inventoryEntry.license -ne 'Apache-2.0') { throw 'AWS package license metadata differs from its reviewed distribution supplement.' }
+                if (!$awsNotices) { $awsNotices = @(Get-ReviewedAwsNotices) }
+                $inventoryEntry.reviewedNoticeSources = @()
+                foreach ($notice in $awsNotices) {
+                    $relative = Join-Path $property.Name.Replace('/', '\') (Join-Path 'upstream' $notice.name)
+                    $destination = Join-Path $notices $relative
+                    New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent) | Out-Null
+                    Copy-Item -LiteralPath $notice.path -Destination $destination
+                    $inventoryEntry.noticeFiles += $relative.Replace('\', '/')
+                    $inventoryEntry.reviewedNoticeSources += [ordered]@{ url = $notice.url; sha256 = $notice.sha256; sourceRevision = $notice.sourceRevision }
                 }
             }
             $inventoryEntry.requiresLicenseReview = $inventoryEntry.noticeFiles.Count -eq 0

@@ -6,7 +6,7 @@ settings, shared configuration, and finally Custom properties. Bound rows show
 their expression or query and disable the saved literal editor. Remove the
 binding to restore the authored literal. Apply and Undo use Designer history.
 
-This feature requires the updated source build. Preview.10 predates it.
+This feature requires preview.11 or a later compatible build. Preview.10 predates it.
 
 ## Supported values
 

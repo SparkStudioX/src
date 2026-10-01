@@ -26,8 +26,8 @@ The [Visitor check-in workshop](../docs/architecture/VISITOR_CHECKIN.md) combine
 name/email inputs, static host choices, Computer camera capture and a returned
 Labelary badge image. Its maintained package is
 `artifacts/sparkproj/visitor-checkin.sparkproj`. Dismiss clears local visitor data
-and returns to the welcome form. It requires the current source additions or a
-later compatible release; earlier preview.10 installers do not support it.
+and returns to the welcome form. It requires preview.11 or a later compatible
+build; preview.10 installers do not support it.
 
 | Workshop | What to try | Python actions |
 | --- | --- | --- |
@@ -61,7 +61,7 @@ later compatible release; earlier preview.10 installers do not support it.
 | [Component lifecycle and property events](component-events.json) | Compare user/property events, popup cleanup and deliberate bounded failures. | None |
 | [Named-query property bindings](query-properties.json) | Drive values, layout and visibility from synthetic query results. | Read-only refresh button |
 
-Use the companion **0.2.0-preview.9** release or a newer compatible gateway for this collection. The catalog's source-commit baseline identifies the original collection's lower feature boundary; newer examples also require their listed features. Each generated bundle records its actual source revision and release label. A workshop may be distributed as an individual `.sparkproj` with its guide or as part of the collection accompanying a release.
+Use the companion **0.2.0-preview.11** release or a newer compatible gateway for the complete 37-project collection. The catalog retains older minimum versions for individual exercises; runtime property bindings and visitor check-in require preview.11. Each generated bundle records its actual source revision and release label. A workshop may be distributed as an individual `.sparkproj` with its guide or as part of the collection accompanying a release. Exact frozen-bundle verification is recorded in the [release ledger](../docs/architecture/PARITY.md).
 
 ## Examples that require gateway setup
 
