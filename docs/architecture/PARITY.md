@@ -6,9 +6,9 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
-## Preview.11 release candidate, 2026-09-30
+## Preview.11 package verification, 2026-09-30
 
-The candidate version is **0.2.0-preview.11**, with Windows file version
+The published prerelease version is **0.2.0-preview.11**, with Windows file version
 **0.2.0.11**. Its scope includes component-specific/custom runtime bindings,
 native fixed/property-sourced tag buttons, camera capture and visitor photo
 badges, receiver discovery, multiple backup schedules/destinations with S3, and
@@ -16,32 +16,75 @@ the revised Designer/Gateway Settings presentation and preview footer. The
 companion catalog contains **37 portable workshops** and **18 setup-required
 examples**; the visitor exercise additionally needs a webcam and Labelary access.
 
-This entry records candidate preparation only. Clean-source installer creation,
-exact-package/runtime checks, frozen workshop round trips, source CI, release
-publication and website/docs deployment remain pending. Earlier dated entries
-retain their original source/build evidence and do not establish acceptance of
-these new installer bytes.
+The corrected installer and frozen workshop bundle were built from clean source
+commit **`fcd26034153d4192bd6e11b352b1d57ba3324aeb`**. This is their actual build
+revision; a later documentation commit does not change their provenance.
 
-Packaging must also retain reviewed upstream dependency licenses and notices,
-including the AWS SDK and SQLite attribution texts, in the hashed payload.
-Their inclusion and manifest/SBOM inventory are package-verification gates,
-not a legal or vulnerability guarantee.
+- Installer: `SparkStudio-Setup-0.2.0-preview.11-windows-x64-unsigned.exe`,
+  **85,806,613 bytes**, SHA-256
+  `665ee1a637077e3d2fd8631ca2451639cbf9c224644d86975c658edd4b495b93`.
+- Workshop bundle: `SparkStudio-Workshops-0.2.0-preview.11.zip`, SHA-256
+  `cfa46e73ce737e4e76145ae8dcdd7a2d4799a24005f19feb7f1e215367c50d20`.
+  All **37 portable projects** passed import, explicit publication, operator
+  snapshot and re-export against the extracted installer. The **18 setup-required
+  examples** remain documented separately.
+- Local validation passed **106 suites**, including **1,217 Gateway checks** and
+  **163 Connector checks**. Exact extraction verified **540 payload file hashes**
+  and bundled .NET module loading. Authenticated execution used the packaged
+  **CPython 3.14.7**; the production-default readiness probe reported `demoMode: false`.
+- The exact-package verifier passed **19 gateway smoke**, **12 assets/popup**,
+  **three deployment**, **four connection** and **three query-cancellation**
+  groups, plus all workshop round trips. Nine equipment-command API groups also
+  passed against that extracted package. Local evidence is recorded in ignored
+  `artifacts/installer/verification-result.json` and accompanying test logs.
+- The manifest/SBOM and notice audit found **57 SBOM components**, including
+  **32 NuGet** and **22 browser dependencies**, with **21 reviewed supplements**
+  and **47 original notice/license copies**. Reviewed AWS SDK and SQLite notices
+  are included in the hashed payload; no unresolved notice flags or optional
+  authentication-broker files remained. This is an inventory check, not a legal
+  or vulnerability guarantee.
+
+Browser checks on the extracted package confirmed chart legend/axis bindings
+(120→240), table filtering (two rows→one), the footer Live actions toggle and
+screen dimensions, and the separated live-actions confirmation. Visitor checks
+confirmed the application-only form, field entry, hidden images no longer
+blocking clicks and missing-photo validation. These checks did not capture a
+real camera photo or call Labelary.
+
+Gateway Settings browser checks on the same package confirmed the summary tiles
+without project/connection inventories; Configuration's Tags, Connections and
+Public OPC certificates tabs; the New Tag menu and corrected path-example
+punctuation; and Backups' Schedules, Destinations and Restore tabs. The default
+schedule was disabled at **02:00, Central Standard Time, with seven-day
+retention**. S3 destination fields were inspected and the draft was canceled.
+Gateway warning/error logs were empty during these checks. No remote backup
+delivery was attempted.
 
 Exact-package testing exposed a stale memory-definition cache that could reset a
 recent write while applying a pending configuration generation. The fix reads
 authoritative memory state during that application without rebuilding plans for
 ordinary writes. A deterministic regression failed before the fix and passed
-after it; the isolated Gateway suite passed 1,217 checks. The installer must be
-rebuilt and reverified with this correction. The candidate also moves to core
+after it; the isolated Gateway suite passed 1,217 checks. The rebuilt package
+above passed the assets/popup checks that exposed the defect. It also uses core
 SqlClient 7.0.3, omitting optional Azure/WAM authentication dependencies that are
 outside SparkStudio's supported SQL password/Windows integrated connection model.
+
+Source CI's Windows and Linux jobs passed in
+[Product validation run 36815605947](https://github.com/SparkStudioX/src/actions/runs/36815605947),
+and [source-boundary run 36815605853](https://github.com/SparkStudioX/src/actions/runs/36815605853)
+passed. The [preview.11 prerelease](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.11)
+is public. All **nine release assets** were uploaded, downloaded again and matched
+their expected hashes and sizes. The website pins its reviewed documentation
+source through `www/docs-source.json`; that reference can differ from the binary
+build revision above. Earlier dated entries retain their original source/build
+evidence and do not establish acceptance of these installer bytes.
 
 Elevated service install/upgrade/uninstall, rollback and complete real-data
 preservation, broader service-account/ACL behavior, remote HTTPS trust/renewal,
 real SQL Server and device/site workloads, actual domain SMB, trusted external
 FTPS and real AWS/S3-compatible account-policy/delivery remain separate
 acceptance gates. No production credential, gateway data or private reference
-material belongs in the candidate or companion workshops.
+material belongs in the release package or companion workshops.
 
 ## Visitor check-in, camera capture and hidden-component hit testing, 2026-09-30
 
