@@ -24,6 +24,7 @@ public sealed partial class ConnectorService : IDisposable
     private readonly ITelemetryContext _telemetry = DefaultTelemetry.Create(_ => { });
     private ApplicationConfiguration? _configuration;
     private readonly ConnectionResourcePool<ISession> _sessions;
+    private readonly ConnectionResourcePool<IDeviceSession> _deviceSessions;
     private readonly CancellationTokenSource _watchShutdown = new();
     private readonly CancellationToken _watchStopping;
     private int _disposed;
@@ -34,6 +35,8 @@ public sealed partial class ConnectorService : IDisposable
         _dataDirectory = Path.GetFullPath(dataDirectory);
         _ensureOperationsAllowed = ensureOperationsAllowed;
         _watchStopping = _watchShutdown.Token;
+        _deviceSessions = new ConnectionResourcePool<IDeviceSession>(32, CreateDeviceSessionAsync, _ => true, _ => Task.CompletedTask,
+            error => error is ArgumentException, sameConfiguration: (left, right) => left.Type == right.Type && JsonSerializer.Serialize(left.Device) == JsonSerializer.Serialize(right.Device));
         _sessions = new ConnectionResourcePool<ISession>(32, CreateSessionAsync, session => session.Connected,
             async session =>
             {
@@ -50,6 +53,11 @@ public sealed partial class ConnectorService : IDisposable
         _ensureOperationsAllowed?.Invoke();
         try
         {
+            if (DeviceConfiguration.IsDevice(connection))
+            {
+                await WithDeviceAsync(connection, async (session, ct) => { await session.TestAsync(ct); return true; }, cancellationToken);
+                return new(true, "Industrial device connection and read-only protocol probe succeeded.");
+            }
             if (IsOpc(connection))
             {
                 await WithSessionAsync(connection, async (session, ct) =>
@@ -75,7 +83,7 @@ public sealed partial class ConnectorService : IDisposable
             return new(true, "SQL Server connection and read query succeeded.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception error) when (error is SqlException or ServiceResultException or ArgumentException or InvalidOperationException or TimeoutException or OperationCanceledException)
+        catch (Exception error) when (error is SqlException or ServiceResultException or ArgumentException or InvalidOperationException or TimeoutException or OperationCanceledException or IOException or System.Net.Sockets.SocketException)
         {
             return new(false, SafeError(error));
         }
@@ -103,6 +111,16 @@ public sealed partial class ConnectorService : IDisposable
     public Task<IReadOnlyList<BrowseNode>> BrowseAsync(ConnectionDefinition connection, string? nodeId, CancellationToken cancellationToken)
     {
         _ensureOperationsAllowed?.Invoke();
+        if (DeviceConfiguration.IsDevice(connection))
+        {
+            DeviceConfiguration.Validate(connection.Device ?? throw new ArgumentException("Device settings are required."), connection.Type);
+            if (nodeId == "@configured")
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return Task.FromResult(DeviceConfiguration.Map(connection.Device!));
+            }
+            return WithDeviceAsync(connection, (session, ct) => session.BrowseAsync(nodeId, ct), cancellationToken);
+        }
         var root = string.IsNullOrWhiteSpace(nodeId) ? ObjectIds.ObjectsFolder : NodeId.Parse(nodeId);
         return WithSessionAsync<IReadOnlyList<BrowseNode>>(connection, async (session, ct) =>
         {
@@ -143,6 +161,11 @@ public sealed partial class ConnectorService : IDisposable
         ArgumentNullException.ThrowIfNull(nodeIds);
         if (nodeIds.Count > MaximumReadNodes) throw new ArgumentException($"Read at most {MaximumReadNodes} nodes at a time.");
         if (nodeIds.Count == 0) return Task.FromResult<IReadOnlyList<ConnectorValue>>([]);
+        if (DeviceConfiguration.IsDevice(connection))
+        {
+            var points = nodeIds.Select(id => DeviceConfiguration.Point(connection, id)).ToArray();
+            return WithDeviceAsync(connection, (session, ct) => session.ReadAsync(points, ct), cancellationToken);
+        }
         var requests = new ReadValueIdCollection(nodeIds.Select(id => new ReadValueId { NodeId = NodeId.Parse(id), AttributeId = Attributes.Value }));
         return WithSessionAsync<IReadOnlyList<ConnectorValue>>(connection, async (session, ct) =>
         {
@@ -307,12 +330,7 @@ public sealed partial class ConnectorService : IDisposable
             using var discovery = await DiscoveryClient.CreateAsync(configuration, uri, endpointConfiguration, ct: cancellationToken);
             var endpoints = await discovery.GetEndpointsAsync(null, cancellationToken);
             var tokenType = string.IsNullOrEmpty(connection.Username) ? UserTokenType.Anonymous : UserTokenType.UserName;
-            var endpoint = endpoints.Where(e => e.SecurityMode == securityMode &&
-                    Uri.TryCreate(e.EndpointUrl, UriKind.Absolute, out var advertised) && advertised.Scheme == "opc.tcp" &&
-                    e.UserIdentityTokens.Any(token => token.TokenType == tokenType) &&
-                    (securityMode == MessageSecurityMode.None ? e.SecurityPolicyUri == SecurityPolicies.None : IsModernPolicy(e.SecurityPolicyUri)))
-                .OrderByDescending(e => PolicyRank(e.SecurityPolicyUri)).ThenByDescending(e => e.SecurityLevel).FirstOrDefault()
-                ?? throw new InvalidOperationException($"Server offers no supported {securityMode} endpoint for {tokenType} authentication. No weaker security fallback was attempted.");
+            var endpoint = SelectEndpoint(endpoints, securityMode, tokenType);
             // Discovery URLs often advertise server-local names; preserve the operator's reachable host and port.
             var endpointUri = new UriBuilder(endpoint.EndpointUrl) { Host = uri.Host, Port = uri.Port };
             endpoint.EndpointUrl = endpointUri.Uri.ToString();
@@ -336,6 +354,7 @@ public sealed partial class ConnectorService : IDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         _watchShutdown.Cancel();
         _sessions.Dispose();
+        _deviceSessions.Dispose();
         _watchShutdown.Dispose();
     }
 
@@ -352,6 +371,24 @@ public sealed partial class ConnectorService : IDisposable
         "sign" => MessageSecurityMode.Sign, "none" => MessageSecurityMode.None,
         _ => throw new ArgumentException("OPC UA securityMode must be SignAndEncrypt, Sign, or None.")
     };
+
+    internal static EndpointDescription SelectEndpoint(IEnumerable<EndpointDescription> endpoints,
+        MessageSecurityMode mode, UserTokenType tokenType)
+    {
+        var supported = endpoints.Where(endpoint => endpoint.SecurityMode == mode &&
+            Uri.TryCreate(endpoint.EndpointUrl, UriKind.Absolute, out var advertised) && advertised.Scheme == "opc.tcp" &&
+            (mode == MessageSecurityMode.None ? endpoint.SecurityPolicyUri == SecurityPolicies.None : IsModernPolicy(endpoint.SecurityPolicyUri)))
+            .OrderByDescending(endpoint => PolicyRank(endpoint.SecurityPolicyUri)).ThenByDescending(endpoint => endpoint.SecurityLevel).ToArray();
+        if (supported.Length == 0)
+            throw new InvalidOperationException($"The server has no supported {mode} endpoint. Discover endpoints and choose a supported security mode; no weaker fallback was attempted.");
+        var selected = supported.FirstOrDefault(endpoint => endpoint.UserIdentityTokens.Any(token => token.TokenType == tokenType));
+        if (selected is not null) return selected;
+        if (tokenType == UserTokenType.Anonymous && supported.Any(endpoint => endpoint.UserIdentityTokens.Any(token => token.TokenType == UserTokenType.UserName)))
+            throw new InvalidOperationException($"The server requires a username and password for the selected {mode} endpoint. Enter credentials before testing.");
+        if (tokenType == UserTokenType.UserName)
+            throw new InvalidOperationException($"The selected {mode} endpoint does not support username/password authentication. Discover endpoints and check the server authentication settings.");
+        throw new InvalidOperationException($"Server offers no supported {mode} endpoint for {tokenType} authentication. No weaker security fallback was attempted.");
+    }
 
     private async Task<ApplicationConfiguration> WithPinnedCertificateAsync(ApplicationConfiguration source, string pin, CancellationToken cancellationToken)
     {

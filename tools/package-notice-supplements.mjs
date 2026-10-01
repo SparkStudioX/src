@@ -2,6 +2,21 @@
 // cache and distribution, never in this source repository.
 const family = (names, repository, revision, license, files) => names.map(name => [name, { repository, revision, license, files }]);
 export const reviewedSupplements = new Map([
+  ['libplctag/1.5.2', { repository: 'libplctag/libplctag.NET', revision: '343d1b0edeb7fcbae5d56e81477af7b3dc5b05fa', license: 'MPL-2.0',
+    files: [['LICENSE', '1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5']],
+    sourceAvailability: ['https://github.com/libplctag/libplctag.NET/tree/343d1b0edeb7fcbae5d56e81477af7b3dc5b05fa'] }],
+  ['libplctag.NativeImport/1.0.41', { repository: 'libplctag/libplctag.NET', revision: '6ba1b192553372e65fb10eb6a0f1fb577890bdb9', license: 'MPL-2.0',
+    files: [['LICENSE', '1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5']],
+    sourceAvailability: ['https://github.com/libplctag/libplctag.NET/tree/6ba1b192553372e65fb10eb6a0f1fb577890bdb9', 'https://github.com/libplctag/libplctag/tree/b3dd0551b6d98fa6dc92e57a6ad0a76e3035b258'] }],
+  ['S7netplus/0.20.0', { repository: 'killnine/s7netplus', revision: 'f1ae0ea084e712b59e414de6aaee7d196244a239', license: 'MIT', licenseDeclarationAbsent: true,
+    files: [['License.txt', '8b41113cbe0e258b882c1f2eccb36174ca96e02a7bf8f23ea0260b14b769ea8e']] }],
+  ...family(['System.Reactive/6.1.0'], 'dotnet/reactive', 'f4da16f15a3cde97f178396ea6e3489cc893651f', 'MIT', [
+    ['LICENSE', 'cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310'],
+  ]),
+  ...family(['System.ComponentModel.Composition/10.0.11', 'System.ServiceProcess.ServiceController/10.0.11'], 'dotnet/dotnet', 'e2f47b0110ed922f21a1522da67279133ce28f32', 'MIT', [
+    ['src/runtime/LICENSE.TXT', 'cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310'],
+    ['src/runtime/THIRD-PARTY-NOTICES.TXT', '66f1d4e44973185519bb4aa8a9718eb22fc7af2cc532e3ae9cfc4c127ee7fc54'],
+  ]),
   ...family(['AWSSDK.S3/4.0.104', 'AWSSDK.Core/4.0.102.8'], 'aws/aws-sdk-net', 'f5257515bbd26d04376ee826d07ec80ea267c9b9', 'Apache-2.0', [
     ['License.txt', '192898453336a3f666e8138988cdda21ee7b858b1184e00c882c531df174d0d1'],
     ['Notice.txt', 'ebc5492b4c77f9c52a8d33d27588e69717a33440bcb9e2cc5a2652309a4ed20f'],
@@ -32,6 +47,7 @@ export const reviewedSupplements = new Map([
 // package/version or changed license text requires a new explicit review.
 const netLicense = ['LICENSE.TXT', 'd7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b'];
 export const reviewedBundledLicenses = new Map([
+  ...['Beckhoff.TwinCAT.Ads', 'Beckhoff.TwinCAT.Ads.Abstractions', 'Beckhoff.TwinCAT.Ads.ConfigurationProviders', 'Beckhoff.TwinCAT.Ads.Server', 'Beckhoff.TwinCAT.Ads.TcpRouter'].map(name => [`${name}/7.0.317`, { license: 'MIT', file: 'License.md', sha256: '2c054dee8bb260c9dd57d4728041f96f182eb474f254a6f16c75e6aa02b05d6e' }]),
   ['BitFaster.Caching/2.6.0', { license: 'MIT', file: 'LICENSE', sha256: 'f3bf474c62109fbe7b81345419eff56bfd6e5b539accc877a9b840e2e7a5176b' }],
   ['Newtonsoft.Json/13.0.4', { license: 'MIT', file: 'LICENSE.md', sha256: 'b98a397897ff55f76cddc380041507a95a896b2946e0188703bf0496793d6516' }],
   ['Microsoft.Data.SqlClient.SNI.runtime/6.0.3', { license: 'LicenseRef-Microsoft-SqlClient-SNI', file: 'LICENSE.txt', sha256: '9335e8bad875dd7be4eebd55d2335eb6433d1cea61aadb3817af7807bef8932a' }],

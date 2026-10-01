@@ -31,6 +31,18 @@ function Get-ReviewedPackageNoticeSpec([string]$Package) {
     # Microsoft revisions come from each matching nuspec. SQLite's commit is the
     # resolved v2.1.12 tag; AWS's revision declares the exact assembly versions.
     $revision = $null; $family = $null
+    if ($Package -in @('libplctag/1.5.2', 'libplctag.NativeImport/1.0.41')) {
+        $revision = if ($Package -eq 'libplctag/1.5.2') { '343d1b0edeb7fcbae5d56e81477af7b3dc5b05fa' } else { '6ba1b192553372e65fb10eb6a0f1fb577890bdb9' }
+        $sources = @("https://github.com/libplctag/libplctag.NET/tree/$revision")
+        if ($Package -eq 'libplctag.NativeImport/1.0.41') { $sources += 'https://github.com/libplctag/libplctag/tree/b3dd0551b6d98fa6dc92e57a6ad0a76e3035b258' }
+        return @{ repository = 'libplctag/libplctag.NET'; revision = $revision; license = 'MPL-2.0'; sourceAvailability = $sources; files = @(@{ name = 'LICENSE'; sha256 = '1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5' }) }
+    }
+    if ($Package -eq 'S7netplus/0.20.0') {
+        return @{ repository = 'killnine/s7netplus'; revision = 'f1ae0ea084e712b59e414de6aaee7d196244a239'; license = 'MIT'; licenseDeclarationAbsent = $true; files = @(@{ name = 'License.txt'; sha256 = '8b41113cbe0e258b882c1f2eccb36174ca96e02a7bf8f23ea0260b14b769ea8e' }) }
+    }
+    if ($Package -eq 'System.Reactive/6.1.0') {
+        return @{ repository = 'dotnet/reactive'; revision = 'f4da16f15a3cde97f178396ea6e3489cc893651f'; license = 'MIT'; files = @(@{ name = 'LICENSE'; sha256 = 'cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310' }) }
+    }
     if ($Package -in @('AWSSDK.S3/4.0.104', 'AWSSDK.Core/4.0.102.8')) { $family = 'aws'; $revision = 'f5257515bbd26d04376ee826d07ec80ea267c9b9' }
     elseif ($Package -in @('SQLitePCLRaw.bundle_e_sqlite3/2.1.12', 'SQLitePCLRaw.core/2.1.12', 'SQLitePCLRaw.lib.e_sqlite3/2.1.12', 'SQLitePCLRaw.provider.e_sqlite3/2.1.12')) { $family = 'sqlite'; $revision = 'ca835d21508bff43121c65081035840ac5006c4c' }
     elseif ($Package -in @('Microsoft.Data.SqlClient/7.0.3', 'Microsoft.Data.SqlClient.Extensions.Abstractions/7.0.3', 'Microsoft.Data.SqlClient.Internal.Logging/7.0.3', 'Microsoft.SqlServer.Server/1.0.0')) {
@@ -40,6 +52,7 @@ function Get-ReviewedPackageNoticeSpec([string]$Package) {
     }
     elseif ($Package -in @('Microsoft.Data.Sqlite/10.0.12', 'Microsoft.Data.Sqlite.Core/10.0.12')) { $family = 'efcore'; $revision = '95017c711e6afc1085133d440e42b4bd78155701' }
     elseif ($Package -in @('Microsoft.Extensions.Hosting.WindowsServices/10.0.9', 'System.ServiceProcess.ServiceController/10.0.9')) { $family = 'runtime'; $revision = '901ca941248413c79832d2fdbd709da0c4386353' }
+    elseif ($Package -in @('System.ComponentModel.Composition/10.0.11', 'System.ServiceProcess.ServiceController/10.0.11')) { $family = 'runtime'; $revision = 'e2f47b0110ed922f21a1522da67279133ce28f32' }
     elseif ($Package -in @('Microsoft.IdentityModel.Abstractions/8.16.0', 'Microsoft.IdentityModel.JsonWebTokens/8.16.0', 'Microsoft.IdentityModel.Logging/8.16.0', 'Microsoft.IdentityModel.Protocols/8.16.0', 'Microsoft.IdentityModel.Protocols.OpenIdConnect/8.16.0', 'Microsoft.IdentityModel.Tokens/8.16.0', 'System.IdentityModel.Tokens.Jwt/8.16.0')) { $family = 'identity'; $revision = 'f8172402e711c043a59bef81bba2609cf1fb9f46' }
     if (!$family) { return $null }
     $license = 'MIT'
@@ -269,12 +282,22 @@ try {
             }
             $noticeSpec = Get-ReviewedPackageNoticeSpec $property.Name
             if ($noticeSpec) {
-                if ($inventoryEntry.licenseType -ne 'expression' -or $inventoryEntry.license -ne $noticeSpec.license -or
+                $licenseMatches = if ($noticeSpec.licenseDeclarationAbsent) { !$inventoryEntry.licenseType -and !$inventoryEntry.license } else { $inventoryEntry.licenseType -eq 'expression' -and $inventoryEntry.license -eq $noticeSpec.license }
+                if (!$licenseMatches -or
                     ($inventoryEntry.repository -and $inventoryEntry.repository -ne "https://github.com/$($noticeSpec.repository)") -or
                     ($inventoryEntry.repositoryCommit -and $inventoryEntry.repositoryCommit -ne $noticeSpec.revision)) {
                     throw "Package metadata differs from its reviewed notice supplement: $($property.Name)"
                 }
                 $cacheKey = "$($noticeSpec.repository)/$($noticeSpec.revision)"
+                $inventoryEntry.reviewedLicense = $noticeSpec.license
+                if ($noticeSpec.sourceAvailability) {
+                    $relative = Join-Path $property.Name.Replace('/', '\') 'SOURCE-AVAILABILITY.txt'
+                    $destination = Join-Path $notices $relative
+                    New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent) | Out-Null
+                    @("Source code for the unmodified libraries distributed in $($property.Name) is available under $($noticeSpec.license) at:") + $noticeSpec.sourceAvailability | Set-Content -LiteralPath $destination -Encoding utf8
+                    $inventoryEntry.sourceAvailability = $noticeSpec.sourceAvailability
+                    $inventoryEntry.noticeFiles += $relative.Replace('\', '/')
+                }
                 if (!$reviewedNotices.ContainsKey($cacheKey)) { $reviewedNotices[$cacheKey] = @(Get-ReviewedNoticeFiles $noticeSpec) }
                 $inventoryEntry.reviewedNoticeSources = @()
                 foreach ($notice in $reviewedNotices[$cacheKey]) {

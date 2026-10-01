@@ -3,10 +3,12 @@ namespace SparkStudio.Connectors;
 public sealed record ConnectionDefinition(string Id, string Name, string Type,
     string? Endpoint = null, string? Server = null, string? Database = null,
     string? Username = null, string? Password = null, string? SecurityMode = null,
-    bool TrustServerCertificate = false, string? ServerCertificateSha256 = null);
+    bool TrustServerCertificate = false, string? ServerCertificateSha256 = null, DeviceSettings? Device = null);
 
 public sealed record ConnectionTestResult(bool Success, string Message);
-public sealed record BrowseNode(string NodeId, string DisplayName, bool IsVariable);
+public sealed record BrowseNode(string NodeId, string DisplayName, bool IsVariable,
+    string? DataType = null, bool? Writable = null, string? BrowseMode = null,
+    string? PointId = null, string? Address = null, int? StringLength = null);
 public sealed record ConnectorValue(string NodeId, object? Value, string DataType,
     string Quality, DateTimeOffset Timestamp);
 public sealed record QueryParameter(string Name, string Type, object? Value);

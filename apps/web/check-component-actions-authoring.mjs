@@ -37,12 +37,17 @@ const handler = (patch = {}) => ({ id: 'handler-a', messageType: 'refresh', scop
 const text = node => typeof node === 'string' || typeof node === 'number' ? String(node) : !node ? '' : React.Children.toArray(node.props?.children).map(text).join('');
 const nodes = node => !node || typeof node !== 'object' ? [] : [node, ...React.Children.toArray(node.props?.children).flatMap(nodes)];
 function drive(component = base, extra = {}) {
-  hooks.clear(); let tree; const applied = [], closed = [];
+  hooks.clear(); let tree, focused; const applied = [], closed = [], hosts = new Map();
   const props = { component, components: [base, input, secret], inputs: { amount: 12, password: 'must-not-leak' }, parameters: { station: 'A' }, screens: [{id:'home',name:'Home'},{id:'popup',name:'Popup',kind:'popup',parameters:{station:''}}], ...extra, onApply: value => applied.push(value), onClose: () => closed.push(true) };
   function expand(node, path = 'root') {
     if (!node || typeof node !== 'object') return node;
     if (typeof node.type === 'function') { hooks.begin(`${path}:${node.type.name}:${node.key || ''}`); return expand(node.type(node.props), `${path}:${node.type.name}`); }
-    return { ...node, props: { ...node.props, children: React.Children.toArray(node.props?.children).map((child, index) => expand(child, `${path}:${child?.key || index}`)) } };
+    let host = hosts.get(path);
+    if (!host) { host = { focus: () => { focused = host; } }; hosts.set(path, host); }
+    const result = { ...node, props: { ...node.props, testHost: host, children: React.Children.toArray(node.props?.children).map((child, index) => expand(child, `${path}:${child?.key || index}`)) } };
+    host.node = result;
+    if (typeof node.props.ref === 'function') node.props.ref(host); else if (node.props.ref) node.props.ref.current = host;
+    return result;
   }
   const refresh = () => { tree = expand(React.createElement(Editor, props)); };
   const all = () => nodes(tree), find = predicate => { const node = all().find(predicate); assert.ok(node, 'Expected message editor control'); return node; };
@@ -52,7 +57,7 @@ function drive(component = base, extra = {}) {
   const nav = name => { find(node => node.type === 'button' && node.props['aria-pressed'] !== undefined && text(node).startsWith(name)).props.onClick(); refresh(); };
   const watch = (name, checked = true) => { field('Watch '+name).props.onChange({target:{checked}}); refresh(); };
   const code = value => { find(node => node.type === 'script-editor').props.onChange(value); refresh(); };
-  refresh(); return { refresh, all, find, field, click, edit, code, nav, watch, applied, closed, props, content: () => text(tree) };
+  refresh(); return { refresh, all, find, field, click, edit, code, nav, watch, applied, closed, props, focus: node => node.props.testHost.focus(), focused: () => focused?.node, content: () => text(tree) };
 }
 let passed = 0;
 const check = (name, run) => { run(); passed++; console.log(`PASS ${name}`); };
@@ -148,12 +153,31 @@ const writableTag = (path, dataType = 'Double', source = 'memory') => ({path,dat
 check('native tag action browses writable targets and stages a typed value without scripts or JSON', () => {
   const tags=[writableTag('[default]Workshop/Enabled','Boolean'),writableTag('[default]Workshop/Count','UInt16','opcua'),writableTag('[default]Workshop/Caption','String'),writableTag('[default]Workshop/Calculated','Double','expression')];
   const ui=drive(button,{tags});ui.edit('Click action','setTagValue');assert.ok(!ui.all().some(node=>node.type==='script-editor'));
-  ui.click('Browse');assert.ok(!ui.all().some(node=>node.props?.['aria-label']==='Select tag [default]Workshop/Calculated'));ui.field('Select tag [default]Workshop/Enabled').props.onClick();ui.refresh();
+  ui.click('Browse');assert.ok(!ui.all().some(node=>node.props?.['aria-label']==='Select tag [default]Workshop/Calculated'));const result=ui.field('Select tag [default]Workshop/Enabled');ui.focus(result);result.props.onClick();ui.refresh();
+  assert.equal(ui.focused().props['aria-label'],'Set tag path');assert.ok(!ui.all().some(node=>node.props?.['aria-label']==='Writable tag browser'));assert.deepEqual(ui.closed,[]);
   assert.equal(ui.field('Set tag path').props.value,'[default]Workshop/Enabled');assert.equal(ui.field('Set tag data type').props.value,'Boolean');assert.equal(ui.field('Set tag data type').props.readOnly,true);
   ui.edit('Set tag Boolean value','true');ui.field('Require tag write confirmation').props.onChange({target:{checked:true}});ui.refresh();ui.edit('Tag write confirmation message','  Start this line?  ');
   ui.nav('Mounted');ui.code('print("ready")');assert.deepEqual(ui.applied,[]);apply(ui);
   assert.deepEqual(ui.applied[0].tagWrite,{tagPath:'[default]Workshop/Enabled',dataType:'Boolean',value:true,confirmation:'Start this line?'});assert.equal(ui.applied[0].script,button.props.script);assert.equal(ui.applied[0].componentEvents.mount.code,'print("ready")');
   assert.match(ui.content(),/Save and publish/);ui.nav('On click');assert.match(ui.content(),/Designer Preview does not write tags/);
+});
+check('tag-browser Escape restores focus and retains action and event drafts from search or a result', () => {
+  const path='[default]Workshop/Count',tags=[writableTag(path,'UInt16')],ui=drive(button,{tags});
+  ui.nav('Mounted');ui.code('print("retained event")');ui.nav('On click');ui.edit('Click action','setTagValue');
+  ui.edit('Set tag path',path);ui.edit('Set tag value','42');
+  for(const target of ['Find writable tag',`Select tag ${path}`]){
+    ui.click('Browse');ui.edit('Find writable tag','Count');ui.focus(ui.field(target));
+    const browser=ui.find(node=>node.props?.['aria-label']==='Writable tag browser');
+    browser.props.onKeyDown({key:'ArrowDown',preventDefault(){assert.fail('Ordinary browser keys keep their native behavior');},stopPropagation(){assert.fail('Ordinary browser keys keep their native behavior');}});
+    let prevented=false,stopped=false;
+    browser.props.onKeyDown({key:'Escape',preventDefault(){prevented=true;},stopPropagation(){stopped=true;}});ui.refresh();
+    assert.ok(prevented&&stopped);assert.equal(ui.focused().props['aria-label'],'Set tag path');
+    assert.ok(!ui.all().some(node=>node.props?.['aria-label']==='Writable tag browser'));
+    assert.deepEqual(ui.closed,[]);assert.deepEqual(ui.applied,[]);assert.equal(ui.field('Set tag value').props.value,'42');
+    assert.equal(ui.field('Set tag path').props.value,path);
+  }
+  apply(ui);assert.deepEqual(ui.applied[0].tagWrite,{tagPath:path,dataType:'UInt16',value:42});
+  assert.equal(ui.applied[0].componentEvents.mount.code,'print("retained event")');assert.deepEqual(ui.closed,[]);
 });
 check('manual tag entry has typed numeric and plain text editors and preserves independent action drafts', () => {
   const ui=drive(button);ui.edit('Click action','setTagValue');ui.edit('Set tag path','[default]Workshop/Setpoint');ui.edit('Set tag data type','Int16');ui.edit('Set tag value','-12');
@@ -163,7 +187,7 @@ check('manual tag entry has typed numeric and plain text editors and preserves i
   ui.edit('Set tag data type','Boolean');assert.equal(ui.field('Set tag Boolean value').props.value,'false');apply(ui);assert.equal(ui.applied[2].tagWrite.value,false);
 });
 check('tag action validation rejects unavailable source kinds, invalid paths, type ranges and confirmation before Apply', () => {
-  const tags=[writableTag('[default]Workshop/Calculated','Double','expression'),writableTag('[default]Workshop/Count','UInt16')],ui=drive(button,{tags});ui.edit('Click action','setTagValue');ui.edit('Set tag path','[default]Workshop/Calculated');apply(ui);assert.match(ui.content(),/writable memory or OPC UA tag/);
+  const tags=[writableTag('[default]Workshop/Calculated','Double','expression'),writableTag('[default]Workshop/Count','UInt16')],ui=drive(button,{tags});ui.edit('Click action','setTagValue');ui.edit('Set tag path','[default]Workshop/Calculated');apply(ui);assert.match(ui.content(),/writable memory, OPC UA or device tag/);
   ui.edit('Set tag path','[default]Workshop/Count');ui.edit('Set tag value','65536');apply(ui);assert.match(ui.content(),/65,535/);ui.edit('Set tag value','1.2');apply(ui);assert.match(ui.content(),/exact whole numbers/);
   ui.edit('Set tag value','42');ui.field('Require tag write confirmation').props.onChange({target:{checked:true}});ui.refresh();ui.edit('Tag write confirmation message','  ');apply(ui);assert.match(ui.content(),/1 to 512/);assert.deepEqual(ui.applied,[]);
   ui.edit('Tag write confirmation message','Continue?');apply(ui);assert.equal(ui.applied[0].tagWrite.dataType,'UInt16');

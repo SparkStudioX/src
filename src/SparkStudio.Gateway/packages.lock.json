@@ -25,10 +25,71 @@
         "resolved": "4.0.102.8",
         "contentHash": "90B9Skhl+ORbtWNXrrmGdGhGvAfZiPmZafRYrB/xHelZjePIwPvXioqz9UiiF1vo21eDLzTnXh5EC4RjbNWsFQ=="
       },
+      "Beckhoff.TwinCAT.Ads": {
+        "type": "Transitive",
+        "resolved": "7.0.317",
+        "contentHash": "hlN5X2Kgq++zDle8aWBc72lv15BF2VnCclfd+I1/0LBSox0Q4Lk0VFIYv5FOZeLfQlqOPoD7AAb40mRGRd3uJw==",
+        "dependencies": {
+          "Beckhoff.TwinCAT.Ads.Server": "7.0.317",
+          "System.ComponentModel.Composition": "10.0.11",
+          "System.Reactive": "6.1.0"
+        }
+      },
+      "Beckhoff.TwinCAT.Ads.Abstractions": {
+        "type": "Transitive",
+        "resolved": "7.0.317",
+        "contentHash": "IO9PN4+3u4ElyJ2jmFuAWIm1Ues9ruhxmMpQcfr3ujM4R7jW+4CdA0FCWmNnjg2RzUkW/BkGmlC+JlYH0nrjyw==",
+        "dependencies": {
+          "System.ServiceProcess.ServiceController": "10.0.11"
+        }
+      },
+      "Beckhoff.TwinCAT.Ads.ConfigurationProviders": {
+        "type": "Transitive",
+        "resolved": "7.0.317",
+        "contentHash": "LIFAG4av/wY3zF42toOB7tsgtEld+sobMznxU7izGp/guHIaS4MBvTN7PGaJobdShIG+5/yb1oeV2fYbmzj91Q==",
+        "dependencies": {
+          "Beckhoff.TwinCAT.Ads.Abstractions": "7.0.317",
+          "System.ComponentModel.Composition": "10.0.11"
+        }
+      },
+      "Beckhoff.TwinCAT.Ads.Server": {
+        "type": "Transitive",
+        "resolved": "7.0.317",
+        "contentHash": "E4UQYYtRIeJ+PgSN8JUBHt6m7wocuKbys+MkV0Q50vp1MpkdeaCWbM6HXAl/JmiC01HFci6Oy74uXzgeOxVtGw==",
+        "dependencies": {
+          "Beckhoff.TwinCAT.Ads.Abstractions": "7.0.317",
+          "Beckhoff.TwinCAT.Ads.ConfigurationProviders": "7.0.317",
+          "System.ComponentModel.Composition": "10.0.11",
+          "System.Reactive": "6.1.0"
+        }
+      },
+      "Beckhoff.TwinCAT.Ads.TcpRouter": {
+        "type": "Transitive",
+        "resolved": "7.0.317",
+        "contentHash": "9Nsp/58F8/0ZdyYFgTSKC+ubq6eBLsXYAVyedzARaELbr4e7SQdUo1JQYlT9v04JQQ9uyq6cc/3UoPPd/l5YoA==",
+        "dependencies": {
+          "Beckhoff.TwinCAT.Ads.Abstractions": "7.0.317",
+          "Beckhoff.TwinCAT.Ads.ConfigurationProviders": "7.0.317",
+          "System.Reactive": "6.1.0"
+        }
+      },
       "BitFaster.Caching": {
         "type": "Transitive",
         "resolved": "2.6.0",
         "contentHash": "iF2dMiGpaya8Umwi0OfsGKtq3aMVgHVsBChwQL+NhShEsRorcoTinGf9FFNBnBMwJW2Vm0FqhtOaEBY0+74p6g=="
+      },
+      "libplctag": {
+        "type": "Transitive",
+        "resolved": "1.5.2",
+        "contentHash": "v16WtxKMr6YiPc/ws5C/MdhOvZgLrlDwJ1FQPB4PLrWNpBQXr8fUXaHI12rl3sNyJZ2ocB+zeSPUDFT8zK4pDA==",
+        "dependencies": {
+          "libplctag.NativeImport": "1.0.41"
+        }
+      },
+      "libplctag.NativeImport": {
+        "type": "Transitive",
+        "resolved": "1.0.41",
+        "contentHash": "cm7TXwCMg4lALRtP/XJzxI4db9qYcRPB7kglPfDOqiNE1PQ4O/gOC5KPCwoGhIw07FBKvVDnl5sjbXS3iK2tEw=="
       },
       "Microsoft.Bcl.Cryptography": {
         "type": "Transitive",
@@ -184,6 +245,11 @@
         "resolved": "1.5.378.176",
         "contentHash": "kATDAUMKIQ42VJluTmI6+PSQpIukLp/L7sYrdlMddZ5a8tNcEgXumpkEvz6ozKFGc/fUcww57fYb0740aY453g=="
       },
+      "S7netplus": {
+        "type": "Transitive",
+        "resolved": "0.20.0",
+        "contentHash": "XAubZ076bhWHQZlnBkzwQO4WxqF5ofwhrkDxfBhGbeD1JC1jBDn3EbWIqMLW6+G0RsxzxirSjLERCQZPfjwGdw=="
+      },
       "SQLitePCLRaw.bundle_e_sqlite3": {
         "type": "Transitive",
         "resolved": "2.1.12",
@@ -211,6 +277,11 @@
           "SQLitePCLRaw.core": "2.1.12"
         }
       },
+      "System.ComponentModel.Composition": {
+        "type": "Transitive",
+        "resolved": "10.0.11",
+        "contentHash": "fzO1adhxkoQxrF21SspLAlHf8GOu3BOjq1yMJs+Gn8nxIvNv8k59feK0zFYuX0yBb3Ns50+lBQA2btDOeX9zoA=="
+      },
       "System.Configuration.ConfigurationManager": {
         "type": "Transitive",
         "resolved": "9.0.13",
@@ -228,6 +299,11 @@
           "Microsoft.IdentityModel.Tokens": "8.16.0"
         }
       },
+      "System.Reactive": {
+        "type": "Transitive",
+        "resolved": "6.1.0",
+        "contentHash": "M5cCC1ZMkZr9jbSQGTHnVkb5TDN67qWCV7AP8TAHdGkvDlu0puT5NzemESNn9+HkYIDpWpocP68/i+/ame2/2w=="
+      },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
         "resolved": "9.0.13",
@@ -240,16 +316,20 @@
       },
       "System.ServiceProcess.ServiceController": {
         "type": "Transitive",
-        "resolved": "10.0.9",
-        "contentHash": "VaYklIT689DthcRzbqt3S8z3GkymiD+US+RLzMFfoPxNIyUxMpXT116cO6rVrKHSuwgdvb35HRKN/PmDmbL+3g=="
+        "resolved": "10.0.11",
+        "contentHash": "khROyIQ3GAZy5MbCabfmlbvxf9nuvdveFP2XbRCteZ9Lq8OFEvImmrjV6acl1LegRu/9T6VMxi9Lr+KZu29VHg=="
       },
       "sparkstudio.connectors": {
         "type": "Project",
         "dependencies": {
+          "Beckhoff.TwinCAT.Ads": "[7.0.317, )",
+          "Beckhoff.TwinCAT.Ads.TcpRouter": "[7.0.317, )",
           "Microsoft.Data.SqlClient": "[7.0.3, )",
           "Microsoft.Data.Sqlite": "[10.0.12, )",
           "OPCFoundation.NetStandard.Opc.Ua.Client": "[1.5.378.176, )",
-          "OPCFoundation.NetStandard.Opc.Ua.Configuration": "[1.5.378.176, )"
+          "OPCFoundation.NetStandard.Opc.Ua.Configuration": "[1.5.378.176, )",
+          "S7netplus": "[0.20.0, )",
+          "libplctag": "[1.5.2, )"
         }
       }
     }

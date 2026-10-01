@@ -2054,6 +2054,40 @@ button svg {
 .connection-diagnostics-status.is-stale { color: var(--warning); }
 .connection-diagnostics-error p { margin: 0; color: inherit; }
 .connection-diagnostics-error > .button { margin-top: 12px; }
+.connection-editor .editor-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.connection-editor .resource-editor-heading > .editor-actions { justify-content: flex-end; }
+.connection-editor .editor-actions .button { white-space: nowrap; }
+.connection-delete-confirm {
+  padding: 20px 25px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-subtle);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.connection-delete-confirm > div:first-child { flex: 1; min-width: 200px; }
+.connection-delete-confirm strong { color: var(--ink); }
+.connection-delete-confirm p { margin: 8px 0 0; line-height: 1.6; color: var(--text-secondary); }
+.connection-delete-confirm > .inline-error { flex-basis: 100%; margin: 0; color: var(--danger); }
+.connection-delete-confirm .editor-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.connection-diagnostics { border-top: 1px solid var(--border); }
+.connection-diagnostics > summary { padding: 20px 25px; cursor: pointer; color: var(--text-secondary); }
+.connection-diagnostics > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.connection-diagnostics-summary { margin-left: 14px; color: var(--muted); font-size: 11px; }
+.connection-diagnostics-body { padding: 0 25px 23px; }
+.connection-diagnostics-body h4 { margin: 20px 0 10px; color: var(--text-secondary); font-weight: 550; }
+.connection-diagnostics-status { margin: 0 0 15px; color: var(--muted); font-size: 10px; }
+.connection-subscription-list { display: grid; gap: 8px; }
+.connection-subscription-list > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; padding: 10px 12px; border-radius: 5px; background: var(--surface-subtle); }
+.connection-subscription-list strong { color: var(--text-secondary); }
+.connection-subscription-list small { color: var(--muted); }
+.discovered-endpoint small { display: block; color: var(--muted); font-size: 10px; line-height: 1.6; }
 
 .browse-section {
   padding: 23px 25px;
@@ -2066,6 +2100,9 @@ button svg {
   align-items: center;
   margin-bottom: 18px;
 }
+.connection-editor .browse-section-heading { flex-wrap: wrap; }
+.connection-editor .browse-section-heading > div:first-child { flex: 1 1 240px; min-width: 0; }
+.connection-editor .browse-section-heading > .editor-actions { justify-content: flex-end; margin-left: auto; max-width: 100%; }
 .browse-section-heading h3 {
   font-size: 12px;
   font-weight: 550;
@@ -2128,6 +2165,12 @@ button svg {
   margin-top: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.browse-node-name small {
+  display: block;
+  margin-top: 5px;
+  font-size: 10px;
+  overflow-wrap: anywhere;
 }
 .tag-mapping-form {
   background: var(--surface-subtle);

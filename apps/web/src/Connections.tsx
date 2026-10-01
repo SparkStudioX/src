@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { api, id } from "./api";
+import { api, ApiError, displayValue, id } from "./api";
 import { Field } from "./App";
 import Icon from "./Icon";
 import type { BrowseNode, Connection } from "./types";
 import ConnectionDiagnostics from "./ConnectionDiagnostics";
 import CreationMenu, { type CreationChoice } from "./CreationMenu";
+import { connectionTypeName, defaultDeviceSettings, engineeringPointTypes, isDeviceType, isEquipmentType, mappedDevicePoint, nativeDevicePoint, supportsNativeDeviceBrowse, validateAllenBradleySettings, validateDevicePoints } from "./deviceConnections";
+import { DeviceConnectionFields, DeviceRegisterMap } from "./DeviceConnectionEditor";
 
 const newConnectionChoices: CreationChoice<Connection["type"]>[] = [
   { value: "sqlite", label: "SQLite", description: "Use a local gateway database", icon: "database" },
   { value: "sqlserver", label: "SQL Server", description: "Connect to Microsoft SQL Server", icon: "database" },
   { value: "opcua", label: "OPC UA client", description: "Connect to an industrial data server", icon: "plug" },
+  { value: "modbus-tcp", label: "Modbus TCP", description: "Read mapped coils and registers", icon: "plug" },
+  { value: "ab-eip", label: "Allen Bradley EtherNet/IP", description: "Read controller symbols or legacy file elements", icon: "plug" },
+  { value: "siemens-s7", label: "Siemens S7", description: "Read mapped DB and memory addresses", icon: "plug" },
+  { value: "beckhoff-ads", label: "Beckhoff ADS", description: "Connect to TwinCAT PLC symbols", icon: "plug" },
 ];
 
 interface DiscoveredEndpoint {
@@ -38,8 +44,17 @@ export default function Connections({
       "",
   );
   const [draft, setDraft] = useState<Connection | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const generation = useRef(0);
-  useEffect(() => () => { generation.current++; }, []);
+  const browseRequest = useRef(0);
+  const watchRequest = useRef(0);
+  const mounted = useRef(false);
+  const latestConnections = useRef(connections);
+  latestConnections.current = connections;
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; generation.current++; }; }, []);
   const [busy, setBusy] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
@@ -57,6 +72,9 @@ export default function Connections({
   const [mappingNode, setMappingNode] = useState<BrowseNode | null>(null);
   const [mappingPath, setMappingPath] = useState("");
   const [mapBusy, setMapBusy] = useState(false);
+  const [watchValues, setWatchValues] = useState<Record<string, { value: unknown; dataType: string; quality: string; timestamp: string }>>({});
+  const [watchBusy, setWatchBusy] = useState(false);
+  const [watchError, setWatchError] = useState("");
   const [endpoints, setEndpoints] = useState<DiscoveredEndpoint[]>([]);
   const [discovering, setDiscovering] = useState(false);
   const [schema, setSchema] = useState<{ name: string; columns: {name:string; dataType:string; primaryKey:boolean}[] }[]>([]);
@@ -67,24 +85,38 @@ export default function Connections({
     try {
       if (create) {
         const result = await api<{success:boolean;message:string}>(`/connections/${encodeURIComponent(selected.id)}/database`, "POST", {initializeSampleData:false});
-        if (stamp !== generation.current) return;
+        if (stamp !== generation.current || !currentSavedRevision(selected)) return;
         setTestResult(result);
         if (!result.success) return;
       }
       const result = await api<typeof schema>(`/connections/${encodeURIComponent(selected.id)}/schema`);
-      if (stamp === generation.current) setSchema(result);
+      if (stamp === generation.current && currentSavedRevision(selected)) setSchema(result);
     } catch (error) { if (stamp === generation.current) notify(error instanceof Error ? error.message : String(error), true); }
     finally { if (stamp === generation.current) setBusy(false); }
   };
   const selected = connections.find((item) => item.id === selectedId);
   const current = draft || selected;
+  const currentSavedRevision = (connection: Connection) => latestConnections.current.some(item => item.id === connection.id && (item.revision ?? 0) === (connection.revision ?? 0));
+  useEffect(() => {
+    // A parent poll may observe our own save before its refresh completes. Invalidate
+    // acquisition state without interrupting that configuration acknowledgement.
+    browseRequest.current++;
+    watchRequest.current++;
+    setBrowseBusy(false); setMapBusy(false); setDiscovering(false);
+    setTestResult(null); setNodes([]); setBrowsePath([]); setMappingNode(null); setBrowseError(""); setSchema([]); setEndpoints([]);
+    setWatchValues({}); setWatchBusy(false); setWatchError("");
+  }, [selected?.id, selected?.revision]);
+  const browseModes = [...new Set(nodes.map(node => node.browseMode).filter(Boolean))];
   const isSample = current?.id === "sample";
   const edit = (patch: Partial<Connection>) => {
+    if (deleting) return;
     if (current) {
       generation.current++;
       setBusy(false); setBrowseBusy(false); setDiscovering(false); setTestResult(null);
       setNodes([]); setBrowsePath([]); setSchema([]); setMappingNode(null); setMapBusy(false); setEndpoints([]);
+      setWatchValues({}); setWatchBusy(false); setWatchError("");
       setDraft({ ...current, ...patch });
+      setDeleteConfirm(false); setDeleteError("");
     }
   };
   const discover = async () => {
@@ -114,16 +146,16 @@ export default function Connections({
     setBrowseError("");
     setEndpoints([]);
     setSchema([]);
+    setWatchValues({}); setWatchBusy(false); setWatchError("");
+    setDeleteConfirm(false); setDeleteError(""); setDiagnosticsOpen(false);
   };
   const add = (type: Connection["type"]) => {
+    if (deleting) return;
     generation.current++;
     setBusy(false); setBrowseBusy(false); setDiscovering(false); setMapBusy(false);
     setDraft({
       id: id(type),
-      name:
-        type === "opcua"
-          ? "New OPC UA connection"
-          : type === "sqlite" ? "New SQLite database" : "New SQL Server connection",
+      name: `New ${connectionTypeName(type)} connection`,
       type,
       enabled: true,
       ...(type === "opcua"
@@ -131,6 +163,7 @@ export default function Connections({
             endpoint: "opc.tcp://localhost:4840",
             securityMode: "SignAndEncrypt",
           }
+        : isDeviceType(type) ? { device: defaultDeviceSettings(type) }
         : type === "sqlite" ? {database:"application.db"} : { server: "localhost", database: "", trustServerCertificate: false }),
     });
     setSelectedId("");
@@ -139,12 +172,18 @@ export default function Connections({
     setBrowsePath([]);
     setEndpoints([]);
     setSchema([]); setMappingNode(null);
+    setWatchValues({}); setWatchBusy(false); setWatchError("");
+    setDeleteConfirm(false); setDeleteError(""); setDiagnosticsOpen(false);
   };
   const save = async () => {
     if (!current) return;
     const stamp = generation.current;
     setBusy(true);
     try {
+      if (isDeviceType(current.type)) {
+        const errors = [...(current.type === "ab-eip" ? validateAllenBradleySettings(current.device ?? defaultDeviceSettings(current.type)) : []), ...validateDevicePoints(current.type, current.device?.points ?? [], current.device?.controllerFamily)];
+        if (errors.length) throw new Error(errors.join("\n"));
+      }
       const saved = await api<Connection>("/connections", "POST", current);
       const refreshed = await api<Connection[]>("/connections");
       if (stamp !== generation.current) return;
@@ -152,6 +191,7 @@ export default function Connections({
       setSelectedId(saved.id);
       setDraft(null);
       setTestResult(null); setNodes([]); setSchema([]);
+      setWatchValues({}); setWatchError("");
       notify(saved.enabled === false ? "Connection disabled. New operations are blocked and tag subscriptions are stopped." : "Connection saved. Test it to check connectivity.");
     } catch (error) {
       if (stamp === generation.current) notify(error instanceof Error ? error.message : String(error), true);
@@ -170,7 +210,7 @@ export default function Connections({
         "POST",
       );
       const refreshed = await api<Connection[]>("/connections");
-      if (stamp !== generation.current) return;
+      if (stamp !== generation.current || !currentSavedRevision(selected)) return;
       setTestResult(result.accepted ? result : { success: false, message: "This test was superseded by a newer test or a configuration change. Review the saved connection before testing again." });
       onChange(refreshed);
     } catch (error) {
@@ -189,33 +229,37 @@ export default function Connections({
   ) => {
     if (!selected || draft || selected.enabled === false) return;
     const stamp = generation.current;
+    const request = ++browseRequest.current;
     setBrowseBusy(true);
     setBrowseError("");
     try {
       const result = await api<BrowseNode[]>(
           `/connections/${encodeURIComponent(selected.id)}/browse?nodeId=${encodeURIComponent(nodeId)}`,
         );
-      if (stamp !== generation.current) return;
+      if (stamp !== generation.current || request !== browseRequest.current || !currentSavedRevision(selected)) return;
       setNodes(result);
       setBrowsePath(history || [...browsePath, { nodeId, name }]);
     } catch (error) {
-      if (stamp === generation.current) setBrowseError(error instanceof Error ? error.message : String(error));
+      if (stamp === generation.current && request === browseRequest.current && currentSavedRevision(selected)) setBrowseError(error instanceof Error ? error.message : String(error));
     } finally {
-      if (stamp === generation.current) setBrowseBusy(false);
+      if (stamp === generation.current && request === browseRequest.current) setBrowseBusy(false);
     }
   };
   const mapTag = async () => {
     if (!selected || draft || selected.enabled === false || !mappingNode || !mappingPath) return;
+    const point = isDeviceType(selected.type) ? mappedDevicePoint(selected, mappingNode) : undefined;
+    if (isDeviceType(selected.type) && !point) { notify("This symbol has no current saved point mapping. Browse the saved map again.", true); return; }
     const stamp = generation.current;
     setMapBusy(true);
     try {
       await api("/tags", "POST", {
         path: mappingPath,
         connectionId: selected.id,
-        nodeId: mappingNode.nodeId,
+        nodeId: point?.id ?? mappingNode.nodeId,
+        ...(point ? { kind: "device", dataType: point.dataType, writable: point.writable } : {}),
       });
       onTagsChanged();
-      if (stamp !== generation.current) return;
+      if (stamp !== generation.current || !currentSavedRevision(selected)) return;
       notify("Tag added. It is now available in the Designer.");
       setMappingNode(null);
     } catch (error) {
@@ -223,6 +267,32 @@ export default function Connections({
     } finally {
       if (stamp === generation.current) setMapBusy(false);
     }
+  };
+  const quickRead = async (node: BrowseNode) => {
+    if (!selected || draft || selected.enabled === false || watchBusy) return;
+    const point = isDeviceType(selected.type) ? mappedDevicePoint(selected, node) : undefined;
+    if (isDeviceType(selected.type) && !point) return;
+    const stamp = generation.current;
+    const request = ++watchRequest.current;
+    const currentRead = () => stamp === generation.current && request === watchRequest.current && currentSavedRevision(selected);
+    setWatchBusy(true); setWatchError("");
+    try {
+      const result = await api<({ nodeId: string; value: unknown; dataType: string; quality: string; timestamp: string })[]>(`/connections/${encodeURIComponent(selected.id)}/read`, "POST", { revision: selected.revision ?? 0, nodeIds: [point?.id ?? node.nodeId] });
+      if (!currentRead()) return;
+      const value = result.find(item => item.nodeId === (point?.id ?? node.nodeId));
+      if (!value) throw new Error("The gateway returned no value for this point.");
+      setWatchValues(previous => ({ ...previous, [node.nodeId]: value }));
+    } catch (error) { if (currentRead()) { setWatchError(error instanceof Error ? error.message : String(error)); setWatchValues(previous => previous[node.nodeId] ? { ...previous, [node.nodeId]: { ...previous[node.nodeId], quality: "Read failed · last value" } } : previous); } }
+    finally { if (currentRead()) setWatchBusy(false); }
+  };
+  const addNativePoint = (node: BrowseNode) => {
+    if (!current || !isDeviceType(current.type) || !engineeringPointTypes(current.type, current.device?.controllerFamily).includes(node.dataType as import("./types").TagWriteDataType)) return;
+    const device = current.device ?? defaultDeviceSettings(current.type);
+    let index = device.points.length + 1;
+    while (device.points.some(point => point.id === `point${index}`)) index++;
+    const point = nativeDevicePoint(current.type, node, index, current.device?.controllerFamily);
+    edit({ device: { ...device, points: [...device.points, point] } });
+    notify("Point added to the register-map draft as read-only. Review its encoding and save the connection before reading or adding a tag.");
   };
   const cancelDraft = async () => {
     const stamp = ++generation.current;
@@ -237,10 +307,36 @@ export default function Connections({
     } catch (error) { if (stamp === generation.current) notify(error instanceof Error ? error.message : String(error), true); }
     finally { if (stamp === generation.current) setBusy(false); }
   };
+  const remove = async () => {
+    if (!selected || draft || selected.id === "sample" || !deleteConfirm || busy || browseBusy || mapBusy) return;
+    const stamp = generation.current;
+    setBusy(true); setDeleting(true); setDeleteError("");
+    try {
+      await api(`/connections/${encodeURIComponent(selected.id)}`, "DELETE", { revision: selected.revision ?? 0 });
+      if (stamp !== generation.current) return;
+      let refreshed: Connection[];
+      let refreshFailed = false;
+      try { refreshed = await api<Connection[]>("/connections"); }
+      catch { refreshed = latestConnections.current.filter(item => item.id !== selected.id); refreshFailed = true; }
+      if (stamp !== generation.current) return;
+      onChange(refreshed);
+      const next = refreshed.find(item => item.id !== "sample") || refreshed[0];
+      if (next) select(next);
+      else {
+        setSelectedId(""); setDraft(null); setDeleteConfirm(false); setDiagnosticsOpen(false);
+        setTestResult(null); setNodes([]); setBrowsePath([]); setSchema([]); setMappingNode(null);
+      }
+      notify(refreshFailed ? "Connection deleted. The list could not be refreshed; reopen Connections to load its latest state." : `Connection deleted.${isEquipmentType(selected.type) ? "" : " Database files are retained."}`, refreshFailed);
+    } catch (error) {
+      if (stamp !== generation.current) return;
+      setDeleteError(error instanceof Error ? error.message : String(error));
+      if (error instanceof ApiError && error.status === 409) setDiagnosticsOpen(true);
+    } finally { if (mounted.current) setDeleting(false); if (stamp === generation.current) setBusy(false); }
+  };
   const displayedTest = testResult || (!draft ? current?.lastTest : null);
   // Pure render helpers share this hook owner, preserving child keys and edit lifetimes.
   function renderConnectionForm(current: Connection) {
-    return (<div className="connection-form">
+    return (<div className="connection-form" inert={deleting}>
       <label className="checkbox-field"><input type="checkbox" checked={current.enabled !== false} onChange={event => edit({ enabled: event.target.checked })} /><span>Connection enabled</span></label>
       <p className="muted">Disabling stops tag subscriptions and blocks new operations. Operations already in progress may finish. Save to apply.</p>
       <div className="form-two-col">
@@ -252,11 +348,7 @@ export default function Connections({
         </Field>
         <Field label="Connection type">
           <input
-            value={
-              current.type === "opcua"
-                ? "OPC UA client"
-                : current.type === "sqlite" ? "SQLite" : "Microsoft SQL Server"
-            }
+            value={connectionTypeName(current.type)}
             disabled
           />
         </Field>
@@ -265,7 +357,7 @@ export default function Connections({
         <>
           <Field
             label="Server endpoint"
-            hint="The OPC UA endpoint advertised by your server."
+            hint="Enter the server address, then choose its security mode and credentials."
           >
             <input
               placeholder="opc.tcp://192.168.1.10:4840"
@@ -300,6 +392,8 @@ export default function Connections({
             </Field>
           </div>
         </>
+      ) : isDeviceType(current.type) ? (
+        <DeviceConnectionFields type={current.type} settings={current.device} onChange={device => edit({ device })} />
       ) : current.type === "sqlite" ? (
         <Field label="Database filename" hint="A local database in the gateway data directory. Use a filename such as production.db.">
           <input value={current.database || ""} onChange={event => edit({ database: event.target.value })} />
@@ -329,7 +423,7 @@ export default function Connections({
           </Field>
         </div>
       )}
-      {current.type !== "sqlite" && <><h3 className="form-section-title">Authentication</h3>
+      {(current.type === "opcua" || current.type === "sqlserver") && <><h3 className="form-section-title">Authentication</h3>
         <div className="form-two-col">
           <Field
             label="Username"
@@ -387,27 +481,25 @@ export default function Connections({
   }
 
   function renderConnectionEditor() {
-    return (<section className="resource-editor">
+    return (<section className="resource-editor connection-editor">
       {!current ? (
         <div className="large-empty">
           <Icon name="plug" size={42} />
           <h2>Connect to your plant</h2>
-          <p>Choose New Connection to add SQLite, SQL Server or an OPC UA client.</p>
+          <p>Choose New Connection to add a PLC, OPC UA server or database.</p>
         </div>
       ) : (
         <>
           <div className="resource-editor-heading">
             <div>
               <Icon
-                name={current.type === "opcua" ? "plug" : "database"}
+                name={isEquipmentType(current.type) ? "plug" : "database"}
                 size={22}
               />
               <div>
                 <h2>{current.name}</h2>
                 <span>
-                  {current.type === "opcua"
-                    ? "OPC UA client"
-                    : current.type === "sqlite" ? "SQLite" : "SQL Server"}{" "}
+                  {connectionTypeName(current.type)}{" "}
                   configuration
                 </span>
               </div>
@@ -419,12 +511,16 @@ export default function Connections({
                 {draft && <button className="button" disabled={busy} onClick={() => void cancelDraft()}>Cancel changes</button>}
                 <button
                   className="button"
-                  disabled={busy || Boolean(draft) || !selected || selected.enabled === false}
+                  disabled={busy || Boolean(draft) || !selected || selected.enabled === false || current.type === "ab-eip" && !supportsNativeDeviceBrowse(current.type, current.device?.controllerFamily) && !current.device?.points.length}
+                  title={current.type === "ab-eip" && !supportsNativeDeviceBrowse(current.type, current.device?.controllerFamily) && !current.device?.points.length ? "Declare and save at least one point to test this controller profile." : undefined}
                   onClick={() => void test()}
                 >
                   <Icon name="activity" size={15} />
                   {busy ? "Working…" : "Test connection"}
                 </button>
+                {selected && !deleteConfirm && <button className="button danger" disabled={busy || browseBusy || mapBusy || Boolean(draft)} onClick={() => { setDeleteConfirm(true); setDeleteError(""); }}>
+                  <Icon name="trash" size={15} />Delete connection
+                </button>}
                 <button
                   className="button primary"
                   disabled={busy || !draft}
@@ -436,6 +532,11 @@ export default function Connections({
               </div>
             )}
           </div>
+          {deleteConfirm && selected && <div className="connection-delete-confirm" role="alert">
+            <div><strong>Delete {selected.name}?</strong><p>Remove or change any saved tag and named-query references first.{!isEquipmentType(selected.type) && " Database files are retained."} Update any scripts that use this connection.</p></div>
+            <div className="editor-actions"><button className="button" disabled={deleting} onClick={() => { setDeleteConfirm(false); setDeleteError(""); }}>Cancel</button><button className="button danger" disabled={busy || browseBusy || mapBusy} onClick={() => void remove()}>{deleting ? "Deleting…" : "Delete connection"}</button></div>
+            {deleteError && <p className="inline-error" role="status">{deleteError}</p>}
+          </div>}
           {isSample ? (
             <div className="info-banner">
               <Icon name="info" size={19} />
@@ -443,7 +544,7 @@ export default function Connections({
                 <strong>Sample connection</strong>
                 <p>
                   This built-in data source helps you explore the Designer
-                  without hardware. Add an OPC UA client or SQL Server to
+                  without hardware. Add a PLC, OPC UA client or database to
                   connect real data.
                 </p>
               </div>
@@ -451,19 +552,19 @@ export default function Connections({
           ) : (
             renderConnectionForm(current)
           )}
-          {current.type === "sqlite" && <div className="browse-section">
+          {isDeviceType(current.type) && <div inert={deleting}><DeviceRegisterMap key={`${current.id}:${current.device?.controllerFamily ?? ""}`} type={current.type} controllerFamily={current.device?.controllerFamily} configurationKey={JSON.stringify({ ...current.device, points: undefined, id: current.id, revision: current.revision })} points={current.device?.points ?? []} disabled={busy} onChange={points => edit({ device: { ...(current.device ?? defaultDeviceSettings(current.type as import("./types").DeviceConnectionType)), points } })} /></div>}
+          {current.type === "sqlite" && <div className="browse-section" inert={deleting}>
             <div className="browse-section-heading"><div><h3>Local database</h3><p>Save the connection, then create an empty database or inspect an existing one.</p></div>
               <div className="editor-actions"><button className="button" disabled={busy || !!draft || !selected || selected.enabled === false} onClick={() => void databaseAction(true)}>Create database</button><button className="button" disabled={busy || !!draft || !selected || selected.enabled === false} onClick={() => void databaseAction(false)}>Browse schema</button></div></div>
             {schema.map(table => <div key={table.name}><h4>{table.name}</h4><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Column</th><th>Type</th><th>Key</th></tr></thead><tbody>{table.columns.map(column => <tr key={column.name}><td>{column.name}</td><td>{column.dataType}</td><td>{column.primaryKey ? "Primary" : ""}</td></tr>)}</tbody></table></div></div>)}
           </div>}
           {current.type === "opcua" && !isSample && (
-            <div className="browse-section certificate-section">
+            <div className="browse-section certificate-section" inert={deleting}>
               <div className="browse-section-heading">
                 <div>
                   <h3>Server identity</h3>
                   <p>
-                    Discover available endpoints and choose the server
-                    certificate to trust.
+                    Discover endpoints can fill in the security mode and certificate pin.
                   </p>
                 </div>
                 <button
@@ -477,7 +578,7 @@ export default function Connections({
               </div>
               <Field
                 label="Server certificate SHA-256 pin"
-                hint="For encrypted connections, verify this fingerprint with the server administrator."
+                hint="Secure connections require a trusted server certificate or a verified pin. Verify this fingerprint with the server administrator."
               >
                 <input
                   className="certificate-pin"
@@ -502,6 +603,7 @@ export default function Connections({
                       {endpoint.serverCertificateSubject ||
                         endpoint.endpointUrl}
                     </span>
+                    {endpoint.userTokenTypes?.length ? <small>Authentication: {endpoint.userTokenTypes.map(type => type === "UserName" ? "Username and password" : type === "IssuedToken" ? "Issued token" : type).join(" / ")}</small> : null}
                     <code>
                       {endpoint.serverCertificateSha256 ||
                         "No server certificate supplied"}
@@ -547,16 +649,18 @@ export default function Connections({
               </div>
             </div>
           )}
-          {current.type === "opcua" && !isSample && (
-            <div className="browse-section">
+          {isEquipmentType(current.type) && !isSample && (
+            <div className="browse-section" inert={deleting}>
               <div className="browse-section-heading">
                 <div>
-                  <h3>Browse server</h3>
+                  <h3>{isDeviceType(current.type) ? "Browse and quick watch" : "Browse server"}</h3>
                   <p>
-                    Explore nodes and add variables to your tag provider.
+                    {isDeviceType(current.type) ? !supportsNativeDeviceBrowse(current.type, current.device?.controllerFamily) ? "Browse the authored address map, read a point and add gateway tags." : "Explore controller symbols or mapped points, read values and add gateway tags." : "Explore nodes and add variables to your tag provider."}
                   </p>
                 </div>
-                <button
+                <div className="editor-actions">
+                {isDeviceType(current.type) && <button className="button" disabled={Boolean(draft) || !selected || browseBusy || selected.enabled === false} onClick={() => void browse("@configured", "Saved point map", [{ nodeId: "@configured", name: "Saved point map" }])}>Browse saved map</button>}
+                {(current.type !== "ab-eip" || supportsNativeDeviceBrowse(current.type, current.device?.controllerFamily)) && <button
                   className="button"
                   disabled={Boolean(draft) || !selected || browseBusy || selected.enabled === false}
                   onClick={() =>
@@ -564,17 +668,20 @@ export default function Connections({
                   }
                 >
                   <Icon name="refresh" size={15} />
-                  {browseBusy ? "Browsing…" : "Browse nodes"}
-                </button>
+                  {browseBusy ? "Browsing…" : isDeviceType(current.type) ? current.type === "modbus-tcp" || current.type === "siemens-s7" ? "Browse points" : "Browse controller" : "Browse nodes"}
+                </button>}
+                </div>
               </div>
               {draft && (
                 <p className="muted">
-                  Save the connection to browse its server.
+                  Save the connection to browse and read its points.
                 </p>
               )}
               {browseError && (
                 <div className="inline-error">{browseError}</div>
               )}
+              {watchError && <div className="inline-error" role="alert">{watchError}</div>}
+              {browseModes.length > 0 && <p className="muted">Browse source: {browseModes.join(" · ")}. Configured points come from the saved map; native metadata comes from the controller.</p>}
               {browsePath.length > 0 && (
                 <div className="browse-breadcrumb">
                   {browsePath.map((part, index) => (
@@ -595,7 +702,9 @@ export default function Connections({
                 </div>
               )}
               <div className="browse-list">
-                {nodes.map((node) => (
+                {nodes.map((node) => {
+                  const point = isDeviceType(current.type) ? mappedDevicePoint(selected, node) : undefined;
+                  return (
                   <div className="browse-node" key={node.nodeId}>
                     <Icon
                       name={node.isVariable ? "tag" : "folder"}
@@ -603,14 +712,21 @@ export default function Connections({
                     />
                     <button
                       className="browse-node-name"
+                      disabled={isDeviceType(current.type) && node.isVariable}
                       onClick={() =>
                         void browse(node.nodeId, node.displayName)
                       }
                     >
                       <strong>{node.displayName}</strong>
-                      <code>{node.nodeId}</code>
+                      <code>{node.address ?? node.nodeId}</code>
+                      {node.dataType && <small>{node.dataType} · {node.writable ? "Read / write" : "Read only"}{node.browseMode ? ` · ${node.browseMode}` : ""}</small>}
+                      {watchValues[node.nodeId] && <small role="status">{displayValue(watchValues[node.nodeId].value)} · {watchValues[node.nodeId].quality} · {new Date(watchValues[node.nodeId].timestamp).toLocaleTimeString()}</small>}
                     </button>
                     {node.isVariable && (
+                      <button className="button small" disabled={watchBusy || browseBusy || Boolean(draft) || isDeviceType(current.type) && !point} title={isDeviceType(current.type) && !point ? "Add this symbol to the saved register map before reading it." : undefined} onClick={() => void quickRead(node)}>{watchBusy ? "Reading…" : "Read value"}</button>
+                    )}
+                    {node.isVariable && isDeviceType(current.type) && !point && <button className="button small" disabled={!engineeringPointTypes(current.type, current.device?.controllerFamily).includes(node.dataType as import("./types").TagWriteDataType)} title={!engineeringPointTypes(current.type, current.device?.controllerFamily).includes(node.dataType as import("./types").TagWriteDataType) ? "This symbol's type is outside the supported controller profile." : undefined} onClick={() => addNativePoint(node)}><Icon name="plus" size={13} />Add to map</button>}
+                    {node.isVariable && (!isDeviceType(current.type) || point) && (
                       <button
                         className="button small"
                         onClick={() => {
@@ -624,7 +740,7 @@ export default function Connections({
                         Add tag
                       </button>
                     )}
-                    <button
+                    {(!isDeviceType(current.type) || !node.isVariable) && <button
                       className="icon-button"
                       title="Browse child nodes"
                       onClick={() =>
@@ -632,9 +748,9 @@ export default function Connections({
                       }
                     >
                       <Icon name="arrow" size={14} />
-                    </button>
+                    </button>}
                   </div>
-                ))}
+                ); })}
               </div>
               {browsePath.length > 0 &&
                 !nodes.length &&
@@ -674,7 +790,7 @@ export default function Connections({
               )}
             </div>
           )}
-          {selected && !isSample && !draft && <ConnectionDiagnostics key={`${selected.id}:${selected.revision ?? 0}`} connection={selected} />}
+          {selected && !isSample && !draft && <ConnectionDiagnostics key={`${selected.id}:${selected.revision ?? 0}`} connection={selected} expanded={diagnosticsOpen} onExpandedChange={setDiagnosticsOpen} />}
         </>
       )}
     </section>);
@@ -687,7 +803,7 @@ export default function Connections({
           <h1>Connections</h1>
           <p>Bring industrial and business data into your applications.</p>
         </div>
-        <div className="page-heading-actions">
+        <div className="page-heading-actions" inert={deleting}>
           <CreationMenu label="New Connection" menuLabel="New connection type" choices={newConnectionChoices} onSelect={add} />
         </div>
       </div>
@@ -698,9 +814,9 @@ export default function Connections({
           </span>
           <span>
             <strong>
-              {connections.filter((item) => item.type === "opcua").length}
+              {connections.filter((item) => isEquipmentType(item.type)).length}
             </strong>
-            <small>OPC UA clients</small>
+            <small>Industrial connections</small>
           </span>
         </div>
         <div>
@@ -731,12 +847,13 @@ export default function Connections({
           {connections.map((connection) => (
             <button
               key={connection.id}
+              disabled={deleting}
               className={`resource-item ${selectedId === connection.id ? "active" : ""}`}
               onClick={() => select(connection)}
             >
               <span className="resource-icon">
                 <Icon
-                  name={connection.type === "opcua" ? "plug" : "database"}
+                  name={isEquipmentType(connection.type) ? "plug" : "database"}
                   size={20}
                 />
               </span>
@@ -747,6 +864,7 @@ export default function Connections({
                     ? "Simulated sample data"
                     : connection.type === "opcua"
                       ? connection.endpoint
+                      : isDeviceType(connection.type) ? `${connectionTypeName(connection.type)} · ${connection.device?.host || "No host"}`
                       : connection.type === "sqlite" ? connection.database : connection.server}
                 </small>
               </span>

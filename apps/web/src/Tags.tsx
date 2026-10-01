@@ -6,11 +6,13 @@ import TagTransfer from "./TagTransfer";
 import TagModels from "./TagModels";
 import type { Connection, Tag, TagDefinition } from "./types";
 import CreationMenu, { type CreationChoice } from "./CreationMenu";
+import { connectionTypeName, isDeviceType } from "./deviceConnections";
 
-type NewTagKind = "memory" | "opcua" | "expression";
+type NewTagKind = "memory" | "opcua" | "device" | "expression";
 const newTagChoices: CreationChoice<NewTagKind>[] = [
   { value: "memory", label: "Memory tag", description: "Store a value on the gateway", icon: "value" },
   { value: "opcua", label: "OPC UA tag", description: "Read a connected server variable", icon: "plug" },
+  { value: "device", label: "Device point tag", description: "Read a saved PLC register or symbol", icon: "plug" },
   { value: "expression", label: "Expression tag", description: "Calculate a value from other tags", icon: "code" },
 ];
 
@@ -63,6 +65,9 @@ export default function Tags({
   const opcConnections = connections.filter(
     (connection) => connection.type === "opcua",
   );
+  const deviceConnections = connections.filter(connection => isDeviceType(connection.type));
+  const deviceConnection = deviceConnections.find(connection => connection.id === current?.connectionId);
+  const devicePoint = deviceConnection?.device?.points.find(point => point.id === current?.nodeId);
 
   const reload = useCallback(async (quiet = false) => {
     if (quiet && loadPending.current) return;
@@ -143,6 +148,7 @@ export default function Tags({
       ...(kind === "memory"
         ? { value: 0 }
         : kind === "expression" ? { expression: "speed * 0.5", inputs: { speed: "[default]Line/Line1/Speed" } }
+        : kind === "device" ? { connectionId: deviceConnections[0]?.id || "", nodeId: deviceConnections[0]?.device?.points[0]?.id || "", dataType: deviceConnections[0]?.device?.points[0]?.dataType || "UInt16", writable: deviceConnections[0]?.device?.points[0]?.writable === true }
         : { connectionId: opcConnections[0]?.id || "", nodeId: "" }),
     });
   };
@@ -194,11 +200,16 @@ export default function Tags({
         next.value = value;
         delete next.connectionId;
         delete next.nodeId;
+        delete next.writable;
       } else if (next.kind === "expression") {
         next.inputs = JSON.parse(inputsText) as Record<string, string>;
         if (!next.inputs || typeof next.inputs !== "object" || Array.isArray(next.inputs)) throw new Error("Inputs must be an object mapping names to tag paths.");
         if (!next.expression?.trim()) throw new Error("Enter an expression using your input names.");
-        delete next.value; delete next.connectionId; delete next.nodeId;
+        delete next.value; delete next.connectionId; delete next.nodeId; delete next.writable;
+      } else if (next.kind === "device") {
+        if (!deviceConnection || !devicePoint) throw new Error("Choose a device connection and a point from its saved register map.");
+        next.dataType = devicePoint.dataType; next.writable = devicePoint.writable;
+        delete next.value; delete next.expression; delete next.inputs; delete next.absoluteDeadband; delete next.queueSize;
       } else {
         if (!next.connectionId || !next.nodeId?.trim())
           throw new Error(
@@ -373,7 +384,7 @@ export default function Tags({
                       <td>
                         <span>{definition.dataType}</span>
                         <small>
-                          {definition.kind === "memory" ? "Memory" : definition.kind === "expression" ? "Expression" : "OPC UA"}
+                          {definition.kind === "memory" ? "Memory" : definition.kind === "expression" ? "Expression" : definition.kind === "device" ? "Device" : "OPC UA"}
                         </small>
                       </td>
                       <td className="tag-current-value">
@@ -466,23 +477,26 @@ export default function Tags({
                     value={current.kind || "opcua"}
                     onChange={(event) =>
                       edit({
-                        kind: event.target.value as "opcua" | "memory" | "expression",
+                        kind: event.target.value as NewTagKind,
                         ...(event.target.value === "opcua"
                           ? {
                               connectionId: opcConnections[0]?.id || "",
                               nodeId: "",
                             }
+                          : event.target.value === "device" ? { connectionId: deviceConnections[0]?.id || "", nodeId: deviceConnections[0]?.device?.points[0]?.id || "", dataType: deviceConnections[0]?.device?.points[0]?.dataType || "UInt16", writable: deviceConnections[0]?.device?.points[0]?.writable === true }
                           : event.target.value === "expression" ? { expression: current.expression || "0", inputs: current.inputs || {} } : { value: 0 }),
                       })
                     }
                   >
                     <option value="opcua">OPC UA variable</option>
+                    <option value="device">Device register / symbol</option>
                     <option value="memory">Memory value</option>
                     <option value="expression">Gateway expression</option>
                   </select>
                 </Field>
                 <Field label="Data type">
                   <select
+                    disabled={current.kind === "device"}
                     value={
                       dataTypes.includes(current.dataType)
                         ? current.dataType
@@ -529,6 +543,12 @@ export default function Tags({
                       <textarea rows={5} spellCheck={false} value={inputsText} onChange={event => { setInputsText(event.target.value); edit({}); }} />
                     </Field>
                   </>
+                ) : current.kind === "device" ? (
+                  <>
+                    <Field label="Device connection"><select value={current.connectionId || ""} onChange={event => { const connection = deviceConnections.find(item => item.id === event.target.value), point = connection?.device?.points[0]; edit({ connectionId: event.target.value, nodeId: point?.id || "", dataType: point?.dataType || "UInt16", writable: point?.writable === true }); }}><option value="">Choose a connection…</option>{deviceConnections.map(connection => <option key={connection.id} value={connection.id}>{connection.name} · {connectionTypeName(connection.type)}</option>)}</select></Field>
+                    <Field label="Saved point" hint="Declare points in Connections → Register map first."><select value={current.nodeId || ""} onChange={event => { const point = deviceConnection?.device?.points.find(item => item.id === event.target.value); edit({ nodeId: event.target.value, dataType: point?.dataType || "UInt16", writable: point?.writable === true }); }}><option value="">Choose a point…</option>{deviceConnection?.device?.points.map(point => <option key={point.id} value={point.id}>{point.name} · {point.address} · {point.dataType}</option>)}</select></Field>
+                    {devicePoint && <p className="muted">{devicePoint.writable ? "This point permits reviewed commands." : "This point is read-only."} Encoding and scaling come from the saved connection map.</p>}
+                  </>
                 ) : (
                   <>
                     <Field label="OPC UA connection">
@@ -571,7 +591,7 @@ export default function Tags({
                 </Field>
                 <Field
                   label="Publishing interval"
-                  hint="100–60,000 ms. OPC UA requests this subscription interval. Expressions run on the gateway at this interval with a 100 ms scheduler resolution."
+                  hint="100–60,000 ms. Device points poll at this interval; OPC UA requests a subscription interval. Expressions use a 100 ms scheduler resolution."
                 >
                   <div className="input-suffix">
                     <input

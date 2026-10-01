@@ -19,6 +19,11 @@ export default function GatewayConfiguration() {
   const [message, setMessage] = useState(""), [error, setError] = useState(false);
   const [loadError, setLoadError] = useState("");
   const notify = (text: string, failed = false) => { setMessage(text); setError(failed); };
+  const applyConnections = (value: Connection[]) => {
+    // A pending snapshot captured before a save/delete must not restore old rows.
+    generation.current++; pending.current = false;
+    setConnections(value);
+  };
   const refresh = useCallback(async (quiet = false) => {
     if (quiet && pending.current) return;
     const request = ++generation.current;
@@ -52,7 +57,7 @@ export default function GatewayConfiguration() {
     {message && <p className={error ? "gateway-error" : "gateway-observation"} role={error ? "alert" : "status"}>{message}</p>}
     {section !== "certificates" && loadError && <p className="gateway-error" role="alert">{loadError} <button type="button" className="button" onClick={() => void refresh()}>Retry</button></p>}
     {sections.map(item => <div key={item.id} id={`${id}-panel-${item.id}`} role="tabpanel" aria-labelledby={`${id}-tab-${item.id}`} hidden={section !== item.id} tabIndex={0}>
-      {section === item.id && (item.id === "certificates" ? <OpcCertificates /> : item.id === "tags" ? <Tags connections={connections} tags={tags} onTagsChanged={() => void refresh()} notify={notify} /> : <Connections connections={connections} onChange={setConnections} onTagsChanged={() => void refresh()} notify={notify} />)}
+      {section === item.id && (item.id === "certificates" ? <OpcCertificates /> : item.id === "tags" ? <Tags connections={connections} tags={tags} onTagsChanged={() => void refresh()} notify={notify} /> : <Connections connections={connections} onChange={applyConnections} onTagsChanged={() => void refresh()} notify={notify} />)}
     </div>)}
   </section>;
 }

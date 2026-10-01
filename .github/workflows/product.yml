@@ -26,6 +26,10 @@ jobs:
         id: python
         with:
           python-version: 3.14.7
+      - name: Prepare pinned Windows native runtime dependency
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tools/bootstrap.ps1 -PythonOnly
       - name: Restore exact dependencies into isolated build output
         run: |
           npm ci --prefix apps/web --no-audit --no-fund

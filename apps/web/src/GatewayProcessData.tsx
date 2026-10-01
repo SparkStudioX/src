@@ -13,7 +13,7 @@ const integer = (value: number, minimum: number, maximum: number) => Number.isIn
 const pathError = (value: string) => !/^\[[^\]\s]+\].+$/.test(value) || value.length > 1024 || /[{}\x00-\x1f]/.test(value);
 const pageSize = 50;
 const priorityNames = ["", "Low", "Medium", "High", "Critical"];
-const tagSourceName = (definition: TagDefinition) => definition.kind === "memory" ? "Memory" : definition.kind === "expression" ? "Expression" : "OPC UA";
+const tagSourceName = (definition: TagDefinition) => definition.kind === "memory" ? "Memory" : definition.kind === "expression" ? "Expression" : definition.kind === "device" ? "Device" : "OPC UA";
 
 function configurationIssue(value: ProcessDataConfiguration): ConfigurationIssue | null {
   if (!integer(value.revision, 1, Number.MAX_SAFE_INTEGER) || !integer(value.alarmRetentionDays, 1, 3650)) return { message: "Alarm journal retention must be 1–3650 whole days.", section: "alarms" };

@@ -35,6 +35,16 @@ public static class TagDefinitionValidator
 
     public static string Kind(JsonObject value) => value.ContainsKey("kind") ? Text(value, "kind") : "opcua";
 
+    public static bool IsDeviceSource(JsonObject value) => Kind(value) is "opcua" or "device";
+
+    public static string DevicePointIdentifier(JsonObject value)
+    {
+        var identifier = Text(value, "nodeId");
+        if (identifier.Length > 256 || identifier.Any(char.IsControl))
+            throw new ArgumentException("A device point ID must contain at most 256 characters without control characters.");
+        return identifier;
+    }
+
     public static bool Enabled(JsonObject value)
     {
         if (!value.TryGetPropertyValue("enabled", out var node)) return true;

@@ -48,8 +48,8 @@ public static class TagModel
     }
     public static void ValidateTagFields(JsonObject value)
     {
-        Fields(value, "path", "kind", "dataType", "value", "enabled", "publishingIntervalMs", "scanGroup", "connectionId", "nodeId", "absoluteDeadband", "queueSize", "expression", "inputs");
-        var sourceFields = TagDefinitionValidator.Kind(value) switch { "memory" => new[] { "value" }, "expression" => new[] { "expression", "inputs" }, _ => new[] { "connectionId", "nodeId", "absoluteDeadband", "queueSize" } };
+        Fields(value, "path", "kind", "dataType", "value", "enabled", "publishingIntervalMs", "scanGroup", "connectionId", "nodeId", "absoluteDeadband", "queueSize", "writable", "expression", "inputs");
+        var sourceFields = TagDefinitionValidator.Kind(value) switch { "memory" => new[] { "value" }, "expression" => new[] { "expression", "inputs" }, "device" => new[] { "connectionId", "nodeId", "absoluteDeadband", "queueSize", "writable" }, _ => new[] { "connectionId", "nodeId", "absoluteDeadband", "queueSize" } };
         if (value.Any(field => field.Key is not ("path" or "kind" or "dataType" or "enabled" or "publishingIntervalMs" or "scanGroup") && !sourceFields.Contains(field.Key, StringComparer.Ordinal)))
             throw new ArgumentException("Tag fields must match the selected value source.");
     }

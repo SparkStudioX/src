@@ -7,6 +7,13 @@ namespace SparkStudio.Connectors;
 
 public sealed partial class ConnectorService
 {
+    /// <summary>Commit removal only when pooled OPC operations are idle; return cleanup to run outside configuration locks.</summary>
+    public Func<Task> PrepareConnectionRemoval(string id, Action commit)
+    {
+        Func<Task>? opcCleanup = null;
+        var deviceCleanup = _deviceSessions.PrepareConnectionRemoval(id, () => opcCleanup = _sessions.PrepareConnectionRemoval(id, commit));
+        return async () => { await deviceCleanup(); await opcCleanup!(); };
+    }
     /// <summary>
     /// Watches one immutable connection configuration until cancellation. Owns its secure session;
     /// callbacks are serialized and should return promptly. Status values are Connected, Reconnecting,
@@ -20,6 +27,11 @@ public sealed partial class ConnectorService
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         ArgumentNullException.ThrowIfNull(onValues);
         ArgumentNullException.ThrowIfNull(onStatus);
+        if (DeviceConfiguration.IsDevice(connection))
+        {
+            await WatchDeviceAsync(connection, nodeIds, publishingIntervalMs, onValues, onStatus, ct);
+            return;
+        }
         var requests = ValidateWatch(connection, nodeIds, publishingIntervalMs);
         if (settings is not null && settings.Values.Any(value => !double.IsFinite(value.AbsoluteDeadband) || value.AbsoluteDeadband < 0 || value.QueueSize is < 1 or > 1000))
             throw new ArgumentException("OPC UA deadband must be finite and nonnegative; monitored queues support 1–1000 values.");

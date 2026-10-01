@@ -238,6 +238,7 @@ routes.MapGet("/opcua/subscriptions", (TagEngine tags) => tags.SubscriptionSnaps
 routes.MapPost("/tags", (JsonObject value, TagEngine tags) => tags.SaveDefinition(value)).Access("configuration", audit: true);
 routes.MapDelete("/tag-definitions", (string path, TagEngine tags) => tags.DeleteDefinition(path) ? Results.NoContent() : Results.NotFound(new { error = "Tag definition not found." })).Access("configuration", audit: true);
 routes.MapGet("/connections", (ProjectStore store) => store.GetConnections()).Access("configuration");
+routes.MapGet("/device-drivers", () => DeviceConfiguration.Drivers).Access("configuration");
 routes.MapGet("/opcua/endpoints", (string endpoint, ConnectorService connector, CancellationToken cancellation) => connector.DiscoverEndpointsAsync(endpoint, cancellation)).Access("configuration");
 routes.MapPost("/connections", (JsonObject connection, TagEngine tags) => tags.SaveConnection(connection)).Access("configuration", audit: true);
 routes.MapGatewayConnectionEndpoints();

@@ -1,6 +1,6 @@
-SparkStudio 0.2.0-preview.9 - unsigned Windows preview
+SparkStudio 0.2.0-preview.12 - unsigned Windows preview
 
-Preview.9 adds a unified Actions & Events editor, Python component lifecycle and form-value support, compile-only syntax checking, gateway-to-operator session messages and a gateway shutdown crash fix. Its companion bundle contains 29 portable workshops. It retains self-signed HTTPS setup, encrypted configuration backups, scheduled remote delivery and offline recovery. See this release's installation, network access, scheduled backup and recovery guides. Elevated preview.9 service upgrade, operator-PC certificate trust and remote SMB/FTPS acceptance remain pending.
+Preview.12 adds Modbus TCP, Allen Bradley EtherNet/IP, Siemens S7 and Beckhoff ADS connections with saved point maps, browsing, polling and reviewed scalar writes. Allen Bradley profiles include ControlLogix, CompactLogix, Micro800, MicroLogix, SLC 500 and PLC-5. It improves connection reference/deletion controls and dropdown pointer/keyboard behavior. Its companion bundle contains 37 portable workshops; the industrial device workshop requires isolated controller setup and is documented separately. Runtime property bindings, native tag buttons, camera/photo badges, Python events, multi-schedule/S3 backups, self-signed HTTPS and offline recovery remain available. Physical-controller acceptance, Linux execution of the new drivers, elevated preview.12 service upgrade, operator-PC certificate trust and real SMB/FTPS/S3 delivery acceptance remain pending. See this release's installation, industrial, network access, scheduled backup and recovery guides.
 
 The offline package includes the gateway, .NET runtime, browser Designer and operator application, and CPython. No separate SDK, Node.js or Python installation is required to run it.
 
@@ -30,7 +30,7 @@ Back up the complete data directory before upgrading. Connections use Windows ac
 
 The executable is unsigned. Verify its SHA256 checksum from the release. Do not disable Windows security or organization policy to run it. This is a local evaluation preview, not production acceptance.
 
-Gateway Settings > Recovery creates encrypted configuration backups and can deliver them daily to SMB, FTP or explicit FTPS. Prefer FTPS; ordinary FTP exposes its credentials and commands on the network. Configuration archives exclude live databases, history and audit data. Use the offline full-backup procedure when the complete stopped gateway data directory is needed. External databases need separate backups.
+Gateway Settings > Recovery creates encrypted configuration backups and supports multiple schedules with SMB, FTP/FTPS and S3 destinations. Prefer FTPS; ordinary FTP exposes its credentials and commands on the network. Configuration archives exclude live databases, history and audit data. Use the offline full-backup procedure when the complete stopped gateway data directory is needed. External databases need separate backups.
 
 Seven-day retention is the default. Uploads are read back and SHA-256 verified before final rename; only then are expired archives with this gateway's exact generated filename pruned. Failed transfers leave earlier remote backups alone. Incomplete retention after successful delivery is reported as a warning. Native Windows UNC calls can outlast their deadline; the gateway retains one bounded worker until Windows returns.
 

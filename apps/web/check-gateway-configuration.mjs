@@ -27,12 +27,11 @@ export const unmount=()=>{for(const scope of scopes.values())dispose(scope);scop
 export const updatesAfterUnmount=()=>lateWrites;
 `);
 const react = pathToFileURL(require.resolve('react')).href;
-const api = uri(`export const api=(...args)=>globalThis.__configurationApi(...args);export const apiUrl=route=>'/api'+route;export const authenticatedFetch=(...args)=>globalThis.__configurationApi(args[0],'FETCH',args[1]);export const assertAuthResponseCurrent=()=>{};export const id=kind=>'new-'+kind;export const displayValue=value=>typeof value==='string'?value:JSON.stringify(value);`);
+const api = uri(`export class ApiError extends Error{constructor(message,status){super(message);this.status=status;this.name='ApiError'}}export const api=(...args)=>globalThis.__configurationApi(...args);export const apiUrl=route=>'/api'+route;export const authenticatedFetch=(...args)=>globalThis.__configurationApi(args[0],'FETCH',args[1]);export const assertAuthResponseCurrent=()=>{};export const id=kind=>'new-'+kind;export const displayValue=value=>typeof value==='string'?value:JSON.stringify(value);`);
 const shells = {
   App: uri(`import React from ${JSON.stringify(react)};export const Field=({label,hint,children})=>React.createElement('label',null,label,children,hint&&React.createElement('small',null,hint));`),
   Icon: uri('export default function Icon(){return null}'),
   CreationMenu: uri(`import React from ${JSON.stringify(react)};export default function CreationMenu({choices,onSelect}){return React.createElement('div',null,choices.map(choice=>React.createElement('button',{key:choice.value,onClick:()=>onSelect(choice.value)},'Create '+choice.label)))}`),
-  ConnectionDiagnostics: uri('export default function ConnectionDiagnostics(){return null}'),
   TagTransfer: uri(`import React from ${JSON.stringify(react)};export default function TagTransfer({onClose}){return React.createElement('button',{onClick:onClose},'Close transfer')}`),
   TagModels: uri(`import React from ${JSON.stringify(react)};export default function TagModels({onClose}){return React.createElement('button',{onClick:onClose},'Close tag models')}`),
 };
@@ -47,7 +46,8 @@ function load(name) {
     .replace(/(from\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, dependency) => prefix + JSON.stringify(dependency === 'react' ? hooks : dependency === './api' ? api : dependency.startsWith('./') ? load(dependency.slice(2)) : pathToFileURL(require.resolve(dependency)).href));
   const result = uri(source); modules.set(name, result); return result;
 }
-const components = Object.fromEntries(await Promise.all(['GatewayConfiguration', 'Tags', 'Connections', 'OpcCertificates'].map(async name => [name, (await import(load(name))).default])));
+const components = Object.fromEntries(await Promise.all(['GatewayConfiguration', 'Tags', 'Connections', 'ConnectionDiagnostics', 'OpcCertificates'].map(async name => [name, (await import(load(name))).default])));
+const { ApiError } = await import(api);
 const lifecycle = await import(hooks), nativeWindow = globalThis.window, nativeDocument = globalThis.document;
 const nodes = (node, visible = true) => Array.isArray(node) ? node.flatMap(child => nodes(child, visible)) : !node || typeof node !== 'object' || (visible && node.props?.hidden) ? [] : [node, ...nodes(node.props?.children, visible)];
 const text = node => Array.isArray(node) ? node.map(text).join('') : typeof node === 'string' || typeof node === 'number' ? String(node) : !node || typeof node !== 'object' || node.props?.hidden ? '' : text(node.props?.children);
@@ -62,7 +62,7 @@ const publicFile = (arrayBuffer = async () => publicBytes.slice().buffer) => ({ 
 async function start(name, handler, { settled = true, props: given } = {}) {
   lifecycle.clear(); let tree, focused = null, nextTimer = 0;
   const calls = [], notices = [], changed = [], hosts = new Map(), timers = new Map();
-  let props = given ?? { connections: connections(), tags: [], onChange: value => { changed.push(value); props = { ...props, connections: value }; }, onTagsChanged: () => changed.push('tags'), notify: (...args) => notices.push(args) };
+  let props = { connections: connections(), tags: [], onChange: value => { changed.push(value); props = { ...props, connections: value }; }, onTagsChanged: () => changed.push('tags'), notify: (...args) => notices.push(args), ...given };
   globalThis.__configurationApi = async (route, method = 'GET', body) => {
     calls.push({ route, method, body: body && structuredClone(body) });
     const overridden = handler?.(route, method, body); if (overridden !== undefined) return await overridden;
@@ -72,6 +72,7 @@ async function start(name, handler, { settled = true, props: given } = {}) {
     if (route === '/tag-engineering/values') return [];
     if (route === '/gateway/opcua/certificates') return listing();
     if (route === '/tags' && method === 'POST') return {};
+    if (/^\/connections\/[^/]+\/diagnostics$/.test(route)) return { capturedAt: new Date().toISOString(), revision: 1, enabled: true, dependencyCount: 0, omittedDependencies: 0, omittedValues: 0, dependencies: [], values: [], subscriptions: [] };
     throw new Error(`Unexpected configuration API request: ${method} ${route}`);
   };
   const expand = (node, path = 'root', parent = null) => {
@@ -86,7 +87,7 @@ async function start(name, handler, { settled = true, props: given } = {}) {
     return result;
   };
   globalThis.document = { visibilityState: 'visible' };
-  globalThis.window = { setInterval: (callback, delay) => { assert.equal(delay, 30_000); const id = ++nextTimer; timers.set(id, callback); return id; }, clearInterval: id => timers.delete(id) };
+  globalThis.window = { setInterval: (callback, delay) => { assert.ok([5000, 15_000, 30_000].includes(delay)); const id = ++nextTimer; timers.set(id, callback); return id; }, clearInterval: id => timers.delete(id) };
   const render = () => { let passes = 0; do { assert.ok(passes++ < 25, 'Configuration effects settle.'); lifecycle.begin(); tree = expand(lifecycle.run(name, () => components[name](props))); lifecycle.finish(); lifecycle.flush(); } while (lifecycle.dirty()); };
   const all = () => nodes(tree);
   const find = (predicate, description) => { const found = all().find(predicate); assert.ok(found, description); return found; };
@@ -163,6 +164,93 @@ try {
   });
   await check('Disposing a Connection Cancel prevents late shared writes, notifications and component state updates', async () => {
     const pending = deferred(); const ui = await start('Connections', route => route === '/connections' ? pending.promise : undefined); ui.change('Connection name', 'Draft'); ui.click('Cancel changes'); ui.unmount(); pending.resolve(connections()); await settle(); await settle(); assert.equal(ui.changed.length, 0); assert.equal(ui.notices.length, 0); assert.equal(lifecycle.updatesAfterUnmount(), 0);
+  });
+  await check('Connection deletion requires confirmation, sends the saved revision and selects the remaining connection', async () => {
+    const remaining = [{ id: 'opc', name: 'Remaining OPC server', type: 'opcua', endpoint: 'opc.tcp://127.0.0.1:4840', revision: 1 }];
+    const ui = await start('Connections', (route, method) => method === 'DELETE' ? null : route === '/connections' ? remaining : undefined);
+    ui.click('Delete connection'); assert.match(ui.text(), /Delete Production database\?/); assert.match(ui.text(), /Database files are retained/);
+    assert.equal(ui.calls.filter(call => call.method === 'DELETE').length, 0); ui.click('Cancel'); assert.equal(ui.calls.filter(call => call.method === 'DELETE').length, 0);
+    ui.click('Delete connection'); ui.click('Delete connection'); await ui.flush();
+    assert.deepEqual(ui.calls.find(call => call.method === 'DELETE'), { route: '/connections/db', method: 'DELETE', body: { revision: 1 } });
+    assert.deepEqual(ui.changed.at(-1), remaining); assert.equal(ui.field('Connection name').props.value, 'Remaining OPC server'); assert.match(ui.notices.at(-1)[0], /Connection deleted/);
+  });
+  await check('Delete conflicts preserve the connection and show dependencies; sample and unsaved connections cannot be deleted', async () => {
+    const ui = await start('Connections', (_route, method) => method === 'DELETE' ? Promise.reject(new ApiError('This connection is used by 1 saved tag reference. Remove it before deleting.', 409)) : undefined);
+    ui.click('Delete connection'); ui.click('Delete connection'); await ui.flush(); assert.match(ui.text(), /used by 1 saved tag/); assert.equal(ui.changed.length, 0); assert.equal(ui.field('Connection name').props.value, 'Production database');
+    assert.equal(ui.find(node => node.type === 'details' && node.props.className === 'connection-diagnostics', 'expanded dependency details').props.open, true);
+    ui.click('Cancel'); ui.change('Connection name', 'Unsaved change'); assert.equal(ui.button('Delete connection').props.disabled, true);
+    ui.click('Create OPC UA client'); assert.ok(!ui.all().some(node => node.type === 'button' && text(node) === 'Delete connection'));
+    const sample = await start('Connections', undefined, { props: { connections: [{ id: 'sample', name: 'Sample', type: 'opcua' }] } }); assert.ok(!sample.all().some(node => node.type === 'button' && text(node) === 'Delete connection'));
+  });
+  await check('Pending deletion prevents editing and selection; successful deletion survives a failed list refresh', async () => {
+    const pending = deferred(); const ui = await start('Connections', (route, method) => method === 'DELETE' ? pending.promise : route === '/connections' ? Promise.reject(new Error('List temporarily unavailable')) : undefined);
+    ui.click('Delete connection'); ui.click('Delete connection'); ui.change('Connection name', 'Must not replace deletion'); assert.equal(ui.field('Connection name').props.value, 'Production database');
+    const item = ui.find(node => node.type === 'button' && node.props.className?.includes('resource-item'), 'selected list item'); assert.equal(item.props.disabled, true);
+    pending.resolve(null); await ui.flush(); assert.deepEqual(ui.changed.at(-1), []); assert.match(ui.text(), /Connect to your plant/); assert.match(ui.notices.at(-1)[0], /Connection deleted/);
+  });
+  await check('Disposing a pending Connection deletion avoids late list reads, notifications and state changes', async () => {
+    const pending = deferred(); const ui = await start('Connections', (_route, method) => method === 'DELETE' ? pending.promise : undefined);
+    ui.click('Delete connection'); ui.click('Delete connection'); const initial = reads(ui, '/connections'); ui.unmount(); pending.resolve(null); await settle(); await settle();
+    assert.equal(reads(ui, '/connections'), initial); assert.equal(ui.changed.length, 0); assert.equal(ui.notices.length, 0); assert.equal(lifecycle.updatesAfterUnmount(), 0);
+  });
+  await check('An older parent poll cannot restore a deleted connection after the child applies its result', async () => {
+    const delayedTags = deferred(); let pendingPoll = false, current = connections();
+    const ui = await start('GatewayConfiguration', (route, method) => {
+      if (route === '/connections') return structuredClone(current);
+      if (route === '/tag-engineering/values' && pendingPoll) return delayedTags.promise;
+      if (route === '/connections/db' && method === 'DELETE') { current = []; return null; }
+    });
+    ui.click('Connections'); await ui.flush(); pendingPoll = true; ui.poll(); await settle();
+    ui.click('Delete connection'); ui.click('Delete connection'); await ui.flush(); assert.match(ui.text(), /Connect to your plant/);
+    delayedTags.resolve([]); await ui.flush(); assert.match(ui.text(), /Connect to your plant/); assert.doesNotMatch(ui.text(), /Production database/);
+  });
+  await check('Delete fallback retains connections added by a newer parent poll while deletion was pending', async () => {
+    const deletion = deferred(); let deleted = false, current = connections();
+    const ui = await start('GatewayConfiguration', (route, method) => {
+      if (route === '/connections') return deleted ? Promise.reject(new Error('Post-delete listing failed')) : structuredClone(current);
+      if (route === '/connections/db' && method === 'DELETE') return deletion.promise.then(() => { deleted = true; return null; });
+    });
+    ui.click('Connections'); await ui.flush(); ui.click('Delete connection'); ui.click('Delete connection');
+    current.push({ id: 'new-db', name: 'Newly added database', type: 'sqlite', database: 'new.db', revision: 1 }); await ui.tick();
+    deletion.resolve(null); await ui.flush(); assert.equal(ui.field('Connection name').props.value, 'Newly added database'); assert.doesNotMatch(ui.text(), /Production database/);
+  });
+  await check('Configuration tab disposal fences pending register-map files and reopening uses the saved map', async () => {
+    const point = { id: 'speed', name: 'Speed', address: 'holdingRegister:0', dataType: 'UInt16', writable: false };
+    const device = { id: 'plc', name: 'Synthetic PLC', type: 'modbus-tcp', revision: 1, device: { host: '127.0.0.1', port: 502, points: [point] } }, pending = deferred();
+    const ui = await start('GatewayConfiguration', route => route === '/connections' ? [device] : undefined);
+    ui.click('Connections'); await ui.flush(); ui.click('Import / edit JSON'); ui.chooseFile({ size: 100, text: () => pending.promise });
+    ui.click('Tags'); await ui.flush(); pending.resolve(JSON.stringify([{ ...point, id: 'obsolete-import' }])); await ui.flush(); assert.equal(lifecycle.updatesAfterUnmount(), 0);
+    ui.click('Connections'); await ui.flush(); ui.click('Import / edit JSON'); assert.equal(JSON.parse(ui.field('Points JSON').props.value)[0].id, 'speed'); assert.doesNotMatch(ui.text(), /obsolete-import/);
+  });
+  await check('Connection cancellation and saved-revision refresh fence register-map preparation without changing saved points', async () => {
+    const point = { id: 'speed', name: 'Speed', address: 'holdingRegister:0', dataType: 'UInt16', writable: false };
+    const device = { id: 'plc', name: 'Synthetic PLC', type: 'modbus-tcp', revision: 1, device: { host: '127.0.0.1', port: 502, points: [point] } };
+    const file = deferred(), cancel = deferred();
+    const canceled = await start('Connections', route => route === '/connections' ? cancel.promise : undefined, { props: { connections: [device] } });
+    canceled.change('Connection name', 'Unsaved PLC'); canceled.click('Import / edit JSON'); canceled.chooseFile({ size: 100, text: () => file.promise }); canceled.click('Cancel changes');
+    file.resolve(JSON.stringify([{ ...point, id: 'discarded-on-cancel' }])); await canceled.flush(); assert.equal(JSON.parse(canceled.field('Points JSON').props.value)[0].id, 'speed');
+    cancel.resolve([device]); await canceled.flush(); assert.equal(canceled.field('Connection name').props.value, 'Synthetic PLC'); assert.equal(JSON.parse(canceled.field('Points JSON').props.value)[0].id, 'speed');
+    canceled.unmount();
+    let current = device; const refreshedFile = deferred();
+    const refreshed = await start('GatewayConfiguration', route => route === '/connections' ? [current] : undefined);
+    refreshed.click('Connections'); await refreshed.flush(); refreshed.click('Import / edit JSON'); refreshed.chooseFile({ size: 100, text: () => refreshedFile.promise });
+    current = { ...device, revision: 2, device: { ...device.device, host: '127.0.0.2' } }; await refreshed.tick();
+    refreshedFile.resolve(JSON.stringify([{ ...point, id: 'discarded-on-refresh' }])); await refreshed.flush();
+    assert.equal(JSON.parse(refreshed.field('Points JSON').props.value)[0].id, 'speed'); assert.equal(refreshed.field('Controller host').props.value, '127.0.0.2'); assert.equal(lifecycle.updatesAfterUnmount(), 0);
+  });
+  await check('Connection diagnostics stay collapsed, start polling only when expanded and stop when closed', async () => {
+    const ui = await start('Connections'); const route = '/connections/db/diagnostics'; assert.equal(reads(ui, route), 1); assert.equal(ui.timers(), 0);
+    const details = () => ui.find(node => node.type === 'details' && node.props.className === 'connection-diagnostics', 'diagnostics disclosure');
+    assert.equal(details().props.open, false); details().props.onToggle({ currentTarget: { open: true } }); ui.render(); await ui.flush(); assert.equal(ui.timers(), 2); const opened = reads(ui, route);
+    await ui.tick(); assert.equal(reads(ui, route), opened + 1); details().props.onToggle({ currentTarget: { open: false } }); ui.render(); await ui.flush(); assert.equal(ui.timers(), 0);
+    await ui.tick(); assert.equal(reads(ui, route), opened + 1); assert.doesNotMatch(ui.text(), /Deletion is not available|Dependencies and tag values|Read-only snapshots/);
+  });
+  await check('OPC discovery shows authentication requirements and does not pin a certificate until an endpoint is chosen', async () => {
+    const endpoints = [{ endpointUrl: 'opc.tcp://localhost:49320', securityMode: 'SignAndEncrypt', securityPolicy: 'http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256', serverCertificateSha256: 'A'.repeat(64), userTokenTypes: ['UserName'] }];
+    const ui = await start('Connections', route => route.startsWith('/opcua/endpoints?') ? endpoints : undefined);
+    ui.click('Create OPC UA client'); ui.change('Server endpoint', 'opc.tcp://localhost:49320'); ui.click('Discover endpoints'); await ui.flush();
+    assert.match(ui.text(), /Authentication: Username and password/); assert.equal(ui.field('Server certificate SHA-256 pin').props.value, '');
+    ui.click('Use endpoint'); assert.equal(ui.field('Server certificate SHA-256 pin').props.value, 'A'.repeat(64)); assert.match(ui.notices.at(-1)[0], /Verify the certificate fingerprint/);
   });
   await check('Certificate polling recovers failed loads using contextual Retry and does not overlap pending requests', async () => {
     let failed = true; const ui = await start('OpcCertificates', route => route === '/gateway/opcua/certificates' && failed ? Promise.reject(new Error('Certificate listing unavailable')) : undefined); noRefreshButtons(ui); assert.match(ui.text(), /Certificate listing unavailable/); failed = false; ui.click('Retry'); await ui.flush(); assert.doesNotMatch(ui.text(), /Certificate listing unavailable/);

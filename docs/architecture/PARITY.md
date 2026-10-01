@@ -6,6 +6,115 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Preview.12 release-candidate review, 2026-10-01
+
+The final offline acceptance run passed **110 aggregate suites with zero failures**,
+including **83 browser suites**, **24 gateway suites / 1,341 checks**, and
+**5 connector suites / 505 checks**. TypeScript, the production browser build,
+Python, normal-account Windows DPAPI backup round trips, workshop generation,
+source-boundary and dependency-inventory policy checks passed. The inventory
+fixtures now cover missing and corrupt native runtime dependencies without
+requiring Windows binaries on Linux. Exact-installer, uploaded-asset and website
+verification are recorded separately after the clean candidate is built.
+
+The candidate includes four industrial drivers and six EtherNet/IP family profiles,
+reference-safe connection removal, point-map authoring and connection/menu fixes.
+Release review corrected stale asynchronous map-file imports and quick-read busy
+state after a connection revision changes. Pointer and keyboard focus now agree
+in the shared New Connection/New Tag menu; the action tag browser closes on Escape
+without discarding its editor draft.
+
+Windows libplctag now loads the exact pinned CPython-bundled Microsoft VC runtime
+from its verified private cache. Native fixture checks confirm both module origins
+and hashes; the installer smoke check also exercises an owned rejected loopback
+endpoint and verifies loaded module provenance. This does not establish physical
+controller acceptance. Linux publishes omit the Windows dependency.
+
+ControlLogix and CompactLogix String maps are rejected before native tag creation,
+reads, setters or writes. The pinned SDK's 82-character capacity is a default
+layout, and an 88-byte STRUCT or observed `0x0FCE` handle does not establish the
+remote controller's LEN/DATA schema. The earlier positive Logix String fixture
+results below describe synthetic layout exercises, not accepted schema identity.
+PCCC ST strings remain supported, as do the six families' reviewed numeric and
+Boolean profiles. The final native suite passed **249 checks**, including rejection
+of both the synthetic standard-looking handle and an unrelated same-size UDT.
+Physical-device, firmware and Linux execution acceptance remain pending.
+
+## Industrial device driver source verification, 2026-10-01
+
+The current working source adds Modbus TCP, EtherNet/IP profiles for ControlLogix,
+CompactLogix, Micro800, MicroLogix, SLC 500 and PLC-5, classic Siemens S7 and Beckhoff
+ADS through shared device sessions. Saved point
+maps separate native addresses, stable point IDs, raw encodings and engineering
+types. Native Logix/ADS metadata is distinct from map browsing; mapped tags poll
+through the existing acquisition engine and writes retain published command
+authority, fresh review, physical-device serialization and single dispatch.
+See the [implementation guide and setup-required workshop](INDUSTRIAL_DEVICE_CONNECTIONS.md).
+
+The following counts record the initial four-driver verification before the
+additional EtherNet/IP family fixtures. The final Windows gateway build passed
+with no compiler warnings. The full
+gateway suite passed **24 suites / 1,320 checks**, including 31 new device/workshop
+checks against an independently authored loopback Modbus endpoint. Connector
+suites passed **302 checks**, including 77 industrial transport/configuration
+checks and 46 native SDK/codec checks. Modbus and S7 fixtures verify native
+read/write payloads and lost-acknowledgement behavior. The EIP suite loads the
+actual packaged native runtime with a read-only payload file and checks verified
+cache integrity. Existing OPC UA subscription integration also passed its
+disposable-server checks during this implementation.
+
+All **83 browser suites** passed, including 19 industrial UI groups for map
+validation, raw/engineering encoding, native identity/capacity, revision fencing
+and successful save acknowledgements during parent refresh. TypeScript and the
+production browser build passed.
+
+Locked gateway publish passed for Windows x64 and Linux x64/ARM64; native PE/ELF
+architecture and payload selection were checked. Dependency license/notice,
+source-boundary and workshop guards passed. Linux execution, actual Logix,
+TwinCAT and physical-controller acceptance remain unverified. This entry records
+source validation, not publication of a new installer or container release.
+The development gateway on loopback port **6090** reports ready and serves the
+rebuilt browser bundle.
+
+### Additional EtherNet/IP families, 2026-10-01
+
+The source now selects all six documented EtherNet/IP families explicitly with
+the pinned native core **2.6.0**. Micro800 and PCCC use saved maps and direct blank
+routes; the family/address matrix and setup-required workshop record their
+supported raw encodings, native masked bit writes and excluded address spaces.
+
+The updated full gateway suite passed **24 suites / 1,341 checks**, including
+**52 device/workshop checks** for family configuration, mapped tag validation,
+offline browsing and saved-reference guards. The backend build passed with no
+warnings or errors. Focused browser runs passed **26 industrial UI groups** and
+**24 gateway lifecycle groups**; TypeScript and the production build passed.
+These focused runs do not rerun the historical 83-suite browser result above.
+
+The final connector run passed **5 suites / 481 checks, zero failures**:
+78 configuration guards, 85 SQLite, 16 reliability, 77 industrial transport and
+**225 native industrial checks**. Independently authored loopback fixtures use
+the actual pinned SDK for all six EtherNet/IP families. They cover PCCC bit-15
+reads and exact set/clear masks, family Float ordering, 84-byte counted strings,
+MicroLogix signed/unsigned L bounds, Micro800 WORD/DWORD and connected Logix
+scalar/standard STRING reads and writes, including four-byte type metadata.
+Mismatch rejection before dispatch, cancellation and lost-acknowledgement
+behavior verify that a failed reviewed intent is not resent.
+
+Those fixtures exposed two pinned-SDK issues: positive metadata byte counts
+were interpreted as errors, and unconnected Logix write acknowledgements were
+misclassified. The implementation now uses an assembly/field-shape-guarded
+metadata bridge with bounded, exact-length native copies and connected Logix
+scalar operations. Read-only Logix catalogs retain unconnected messaging.
+Dependency versions and public gateway APIs remain unchanged; future SDK
+upgrades require requalifying the bridge and family fixtures.
+
+The offline workshop checks passed **11 groups across 37 portable examples**,
+including rejection of all 19 setup-required examples from portable packaging.
+The industrial loader syntax, source boundary and engineering policy checks
+passed. No physical controller or installed gateway data was used by these
+tests; model/firmware hardware acceptance and release publication remain
+separate delivery gates.
+
 ## Docker edition publication verification, 2026-10-01
 
 The [Docker prerelease](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.11-docker.1)
@@ -1424,7 +1533,7 @@ P0 is required for a recoverable connected pilot; P1 broadens that baseline. Des
 | G02 / P0 | **Process/API diagnostic baseline implemented.** CPU, process/managed memory, data-volume free space, active/lifetime counters and 128 completed route-template observations accompany a redacted local support JSON. Identities, request values, configuration and authored bodies are excluded from that export. Structured durable logs, script/subscription correlation, queue/worker metrics and saved dashboards remain open. | A controlled connection failure, slow query, script timeout and low-disk condition each produce attributable status/logs. Retention is bounded; collection overhead is measured; bundles exclude credentials, tokens and private keys; diagnostics remain usable during service faults. |
 | G03 / P0 | **Publication history, offline full-data recovery and online scheduled configuration backups implemented.** Encrypted new-location restore starts in enforced recovery mode and requires reviewed restart. Running-host snapshots exclude live databases/history/audit; multiple daily/weekday schedules deliver to named SMB/FTP/FTPS/S3 targets and verify bytes before schedule-specific age retention. Same-identity DPAPI policy and separate database backups are explicit. Atomic whole-application publish/rollback now captures screens, queries, Python libraries and gateway/browser events together. Service switching and cross-version migration remain open. | Extend the measured isolated recovery and retention tests to intended service identities, real domain SMB/trusted remote FTPS, intended AWS/S3-compatible policies, production-scale data and supported application-version migration. Cover accounts/grants, connections, tags, projects, assets, publications and managed data; test corrupt/incompatible archives, interruption and rollback. |
 | G04 / P0 | **Deployment observations, installer Local/Network HTTPS and a published Docker restart baseline implemented; broader hosting acceptance remains open.** Local management plus optional all-interface TLS uses protected PEM references, strict certificate checks and fail-closed override rules. Docker x86-64/emulated ARM64 verifies guarded setup, persistent configuration/databases/keys/TLS, native dependencies and offline notice/source inventories on 8090/8443. Elevated Windows service acceptance, remote client trust, renewal, trusted proxies, physical ARM and cross-version container upgrade/recovery remain open. | Test remote HTTPS and proxy behavior without weakening loopback restrictions; renew an expiring certificate; install/upgrade/uninstall as the intended service account; recover failed upgrades and container volumes. Define restart requirements and preserve a recovery route after invalid configuration. |
-| G05 / P0 | **Connection lifecycle and OPC UA client security — partial.** Revisioned rename/enable/disable, durable timestamped tests with stale-result rejection, draft/published dependencies and bounded tag quick watch are implemented. Safe deletion, continuous reconnect fault acceptance, certificate trust/quarantine/fingerprint lifecycle and credential-reference administration remain open. | Exercise endpoint downtime, server restart, certificate replacement/rejection, bad credentials, disabled connections and stale samples. Verify subscriptions recover without duplicate monitored items or cached configuration leakage. Deletion reports affected tags/queries. |
+| G05 / P0 | **Connection lifecycle and OPC UA client security — partial.** Revisioned rename/enable/disable and deletion, durable timestamped tests with stale-result rejection, saved tag/UDT/draft/published dependencies and bounded tag quick watch are implemented. Deletion checks references under the shared configuration lock, preserves database/certificate files and releases idle sessions after persistence. Manual endpoint entry retains strict security with actionable authentication/certificate advice; discovery explicitly fills mode and pin. Continuous reconnect fault acceptance, certificate lifecycle and credential-reference administration remain open. | Exercise endpoint downtime, server restart, certificate replacement/rejection, bad credentials, disabled connections and stale samples. Verify subscriptions recover without duplicate monitored items or cached configuration leakage. Deletion reports affected tags/queries. |
 | G06 / P0 then P1 | **Database operations — partial.** Designer read cancellation/deadlines and typed preflight are implemented and exercised against SQLite; connection diagnostics expose named-query dependencies. Atomic optimistic table batches are implemented with one transaction, version-per-row updates and real SQLite rollback/concurrency verification. Complete live SQL Server acceptance and pool health. Add a supported .NET provider catalog and dialect/capability contracts; evaluate PostgreSQL and MariaDB/MySQL after the existing providers pass. | Run reads and guarded writes against actual supported servers, including TLS failure, restart, pool exhaustion, concurrent conflicts and uncertain write outcomes. Prove transaction behavior per provider; do not retry an ambiguous write automatically. Driver availability must be distinct from connection health. |
 | G07 / P0 | **Operation permissions implemented.** Local accounts retain separate engineering/operator sessions and project View/Operate/Design/Publish grants. Explicit Commands permission does not follow from Operate. Five delegated gateway capabilities cover diagnostics, configuration, backups, audit and session administration; account administration and recovery approval remain administrator-only. See [access boundaries](FINE_GRAINED_ACCESS.md). | Negative API tests cover each privilege and audience; revoked/disabled accounts lose access; concurrent changes reject stale revisions; last-administrator recovery works; history identifies actor, target and outcome without secret values. |
 | G08 / P1 | **External identity and machine access — planned.** OIDC first, with SAML/LDAP/AD and database-backed identity evaluated by deployment need. Define claim-to-role mapping, MFA integration, identity-provider outage behavior, security policy scope and service accounts/API credentials. Distinguish inbound API credentials from outbound OAuth clients. | Validate sign-in/out, expiry, issuer/audience checks, mapping changes, denied users and identity-provider outages. Machine credentials need least privilege, rotation, revocation and safe one-time presentation. Context/network policy supplements authentication rather than granting implicit trust. |

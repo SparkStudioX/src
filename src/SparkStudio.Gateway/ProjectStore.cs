@@ -17,6 +17,7 @@ public sealed partial class ProjectStore
     private JsonArray queries;
     private JsonArray definitions = [];
     private readonly Dictionary<string, string> connectionTests = new(StringComparer.Ordinal);
+    private readonly HashSet<string> removedConnectionIds = new(StringComparer.Ordinal);
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
     public ProjectStore(string directory, IDataProtectionProvider protection, ProjectStore? gatewayStore = null, string? projectId = null, bool gatewayOnly = false)
@@ -98,13 +99,17 @@ public sealed partial class ProjectStore
         lock (gate)
         {
             var id = Optional(value, "id") ?? Guid.NewGuid().ToString("N");
+            if (removedConnectionIds.Contains(id))
+                throw new InvalidOperationException("This connection identity was removed. Create a new connection with a fresh ID.");
             var type = Required(value, "type");
-            if (type is not ("opcua" or "sqlserver" or "sqlite")) throw new ArgumentException("Choose an OPC UA, SQL Server, or SQLite connection.");
+            if (type is not ("opcua" or "sqlserver" or "sqlite") && !DeviceConfiguration.IsDevice(type)) throw new ArgumentException("Choose a supported industrial or database connection.");
             var next = (JsonArray)connections.DeepClone();
             var old = next.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "id") == id);
             var revision = old?["revision"]?.GetValue<int>() ?? 0;
             if (value.ContainsKey("revision") && (value["revision"] is not JsonValue supplied || !supplied.TryGetValue<int>(out var suppliedRevision) || suppliedRevision < 0))
                 throw new ArgumentException("Connection revision must be a nonnegative integer.");
+            if (old is null && value.ContainsKey("revision"))
+                throw new InvalidOperationException("This connection was removed. Create a new connection instead of saving an obsolete edit.");
             if (old is not null && value["revision"]?.GetValue<int>() != revision)
                 throw new InvalidOperationException("The connection changed since it was loaded. Reload before saving.");
             if (old is not null && Optional(old, "type") != type)
@@ -117,6 +122,13 @@ public sealed partial class ProjectStore
             foreach (var key in new[] { "endpoint", "server", "database", "username", "securityMode", "serverCertificateSha256" })
                 if (value[key] is { } item) node[key] = item.DeepClone();
             node["trustServerCertificate"] = value["trustServerCertificate"]?.DeepClone() ?? JsonValue.Create(false);
+            if (DeviceConfiguration.IsDevice(type))
+            {
+                var settings = value["device"]?.Deserialize<DeviceSettings>(Json) ?? throw new ArgumentException("Industrial connections require device settings and a saved point map.");
+                DeviceConfiguration.Validate(settings, type);
+                ValidateDeviceMapChange(id, settings);
+                node["device"] = JsonSerializer.SerializeToNode(settings, Json);
+            }
             var password = Optional(value, "password");
             if (password is not null && password.Length > 0) node["protectedPassword"] = protector.Protect(password);
             else if (password is null && old?["protectedPassword"] is { } secret) node["protectedPassword"] = secret.DeepClone();
@@ -144,7 +156,42 @@ public sealed partial class ProjectStore
             if (!allowDisabled && value["enabled"]?.GetValue<bool>() == false)
                 throw new InvalidOperationException("This connection is disabled. Enable and save it before starting an operation.");
             var encrypted = Optional(value, "protectedPassword");
-            return new ConnectionDefinition(id, Required(value, "name"), Required(value, "type"), Optional(value, "endpoint"), Optional(value, "server"), Optional(value, "database"), Optional(value, "username"), encrypted is null ? null : protector.Unprotect(encrypted), Optional(value, "securityMode"), value["trustServerCertificate"]?.GetValue<bool>() ?? false, Optional(value, "serverCertificateSha256"));
+            return new ConnectionDefinition(id, Required(value, "name"), Required(value, "type"), Optional(value, "endpoint"), Optional(value, "server"), Optional(value, "database"), Optional(value, "username"), encrypted is null ? null : protector.Unprotect(encrypted), Optional(value, "securityMode"), value["trustServerCertificate"]?.GetValue<bool>() ?? false, Optional(value, "serverCertificateSha256"), value["device"]?.Deserialize<DeviceSettings>(Json));
+        }
+    }
+
+    private void ValidateDeviceMapChange(string id, DeviceSettings settings)
+    {
+        var oldSettings = connections.OfType<JsonObject>().FirstOrDefault(item => Optional(item, "id") == id)?["device"]?.Deserialize<DeviceSettings>(Json);
+        var bindings = GetRuntimeTagDefinitions().OfType<JsonObject>()
+            .Concat(tagModel["udtDefinitions"]!.AsArray().OfType<JsonObject>().SelectMany(definition => definition["members"]!.AsArray().OfType<JsonObject>()));
+        foreach (var binding in bindings.Where(item => Optional(item, "kind") == "device" && Optional(item, "connectionId") == id))
+        {
+            var point = settings.Points.SingleOrDefault(item => item.Id == Required(binding, "nodeId"));
+            var expectedType = Optional(binding, "dataType") ?? oldSettings?.Points.FirstOrDefault(item => item.Id == Required(binding, "nodeId"))?.DataType;
+            if (point is null || expectedType is not null && point.DataType != expectedType)
+                throw new ArgumentException("A saved tag or UDT member references a point missing from this map or with a different data type. Update its binding before changing the connection map.");
+        }
+    }
+    internal void DeleteConnection(string id, int revision)
+    {
+        if (gatewayStore is not null) { gatewayStore.DeleteConnection(id, revision); return; }
+        lock (gate)
+        {
+            if (revision < 0) throw new ArgumentException("Connection revision must be a nonnegative integer.");
+            var next = (JsonArray)connections.DeepClone();
+            var old = next.OfType<JsonObject>().FirstOrDefault(item => Optional(item, "id") == id)
+                ?? throw new KeyNotFoundException("Connection not found.");
+            if ((old["revision"]?.GetValue<int>() ?? 0) != revision)
+                throw new InvalidOperationException("The connection changed since it was loaded. Select it again before deleting.");
+            next.Remove(old);
+            Persist("connections.json", next);
+            connections = next;
+            removedConnectionIds.Add(id);
+            tagConfigurationGeneration++;
+            expandedTagDefinitions = null;
+            expandedTagIndex = null;
+            connectionTests.Remove(id);
         }
     }
     public ConnectionTestCapture BeginConnectionTest(string id)
@@ -190,9 +237,33 @@ public sealed partial class ProjectStore
         const string missingDatabase = "Managed SQLite database does not exist. Create it explicitly before testing or querying this connection.";
         if (success) return "Connection and read check succeeded.";
         if (message == missingDatabase) return missingDatabase;
-        if (new[] { "BadSecurityChecksFailed", "BadCertificateUntrusted", "BadCertificateHostNameInvalid", "BadCertificateTimeInvalid", "BadCertificateIssuerTimeInvalid", "BadCertificateUriInvalid" }
-            .Any(status => message?.StartsWith($"OPC UA failed ({status}, ", StringComparison.Ordinal) == true))
-            return "OPC UA certificate or security validation failed. Check certificate trust, validity, hostname and endpoint security mode.";
+        if (message is "Username authentication requires Sign or SignAndEncrypt. Anonymous access is supported for explicitly unsecured connections."
+            or "Server certificate pin must be a 64-character SHA-256 fingerprint.") return message;
+        foreach (var mode in new[] { "None", "Sign", "SignAndEncrypt" })
+        {
+            foreach (var advice in new[]
+            {
+                $"The server has no supported {mode} endpoint. Discover endpoints and choose a supported security mode; no weaker fallback was attempted.",
+                $"The server requires a username and password for the selected {mode} endpoint. Enter credentials before testing.",
+                $"The selected {mode} endpoint does not support username/password authentication. Discover endpoints and check the server authentication settings."
+            }) if (message == advice) return advice;
+            foreach (var authentication in new[] { "Anonymous", "UserName" })
+                if (message == $"Server offers no supported {mode} endpoint for {authentication} authentication. No weaker security fallback was attempted.")
+                    return $"No supported {mode} endpoint accepts the selected authentication. Discover endpoints and check the security mode and account settings; no weaker fallback was attempted.";
+        }
+        if (message == "The server certificate does not match this connection's configured SHA-256 fingerprint.")
+            return "The server certificate does not match the saved fingerprint. Discover endpoints and verify its fingerprint independently before updating the pin.";
+        bool Status(string status) => message?.StartsWith($"OPC UA failed ({status}, ", StringComparison.Ordinal) == true;
+        if (Status("BadCertificateUntrusted"))
+            return "The OPC UA server certificate is not trusted. Discover endpoints and verify its fingerprint independently, then set the connection pin or trust its public certificate in Gateway Settings.";
+        if (Status("BadCertificateHostNameInvalid"))
+            return "The endpoint hostname or IP address does not match the server certificate. Use an address listed in the certificate's subject alternative names.";
+        if (Status("BadCertificateTimeInvalid") || Status("BadCertificateIssuerTimeInvalid"))
+            return "An OPC UA certificate is expired or not yet valid. Check its validity dates and the clocks on both computers.";
+        if (Status("BadCertificateUriInvalid"))
+            return "The OPC UA server application URI does not match its certificate. Correct the server's application URI or certificate.";
+        if (Status("BadSecurityChecksFailed"))
+            return "OPC UA security validation failed. Check that the server trusts SparkStudio's client certificate, the gateway trusts the server, and the endpoint address matches the server certificate.";
         if (new[] { "BadIdentityTokenInvalid", "BadIdentityTokenRejected", "BadUserAccessDenied" }
             .Any(status => message?.StartsWith($"OPC UA failed ({status}, ", StringComparison.Ordinal) == true))
             return "OPC UA authentication failed. Check the account credentials and server permissions.";

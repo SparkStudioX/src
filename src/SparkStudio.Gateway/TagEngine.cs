@@ -6,7 +6,7 @@ using SparkStudio.Connectors;
 
 namespace SparkStudio.Gateway;
 
-public record TagValue(string Path, object? Value, string DataType, string Quality, DateTimeOffset Timestamp, string Source);
+public record TagValue(string Path, object? Value, string DataType, string Quality, DateTimeOffset Timestamp, string Source, bool Writable = false);
 
 public sealed class TagEngine(ProjectStore store, ConnectorService connectors, ILogger<TagEngine> logger, RecoveryQuarantine? recovery = null, bool enableDemoTags = false) : BackgroundService
 {
@@ -83,6 +83,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     private long expressionGeneration = -1;
     private long definitionGeneration = -1;
     private JsonObject[] cachedDefinitions = [];
+    private Dictionary<string, JsonObject> cachedDefinitionsByPath = new(StringComparer.Ordinal);
     private HashSet<string> cachedDefinitionPaths = new(StringComparer.Ordinal);
     private HashSet<string> cachedDisabledConnections = new(StringComparer.Ordinal);
     private Dictionary<string, WatchPlan> cachedPlans = new(StringComparer.Ordinal);
@@ -98,10 +99,11 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             var generation = store.TagConfigurationGeneration;
             if (generation == definitionGeneration && cachedRecovery == (recovery?.Active == true)) return;
             cachedDefinitions = store.GetRuntimeTagDefinitions().OfType<JsonObject>().ToArray();
+            cachedDefinitionsByPath = cachedDefinitions.ToDictionary(definition => ProjectStore.Required(definition, "path"), StringComparer.Ordinal);
             cachedDefinitionPaths = cachedDefinitions.Select(definition => ProjectStore.Required(definition, "path")).ToHashSet(StringComparer.Ordinal);
             cachedDisabledConnections = store.GetConnections().OfType<JsonObject>().Where(item => item["enabled"]?.GetValue<bool>() == false)
                 .Select(item => ProjectStore.Required(item, "id")).ToHashSet(StringComparer.Ordinal);
-            cachedPlans = BuildWatchPlans(cachedDefinitions.Where(definition => recovery?.Active != true && TagDefinitionValidator.Kind(definition) == "opcua" && definition["enabled"]?.GetValue<bool>() != false
+            cachedPlans = BuildWatchPlans(cachedDefinitions.Where(definition => recovery?.Active != true && TagDefinitionValidator.IsDeviceSource(definition) && definition["enabled"]?.GetValue<bool>() != false
                     && !cachedDisabledConnections.Contains(ProjectStore.Required(definition, "connectionId"))), id => store.GetConnection(id, allowDisabled: true))
                 .ToDictionary(plan => plan.Key, StringComparer.Ordinal);
             capacityWarnings.RemoveWhere(key => !cachedPlans.ContainsKey(key));
@@ -172,7 +174,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                 // carry a prior memory or demo value into its OPC data record.
                 SetValue(new(path, null, ProjectStore.Optional(saved, "dataType") ?? "Unknown",
                     recovery?.Active == true ? "Bad_RecoveryMode" : saved["effectiveEnabled"]?.GetValue<bool>() == false || disabled ? "Bad_Disabled" : "Bad_WaitingForInitialData",
-                    DateTimeOffset.UtcNow, "opcua"));
+                    DateTimeOffset.UtcNow, TagDefinitionValidator.Kind(saved), saved["writable"]?.GetValue<bool>() == true));
             }
             return saved;
         }
@@ -189,7 +191,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             {
                 var path = ProjectStore.Required(definition, "path");
                 if (TagDefinitionValidator.Kind(definition) == "memory") SetValue(MemoryValue(definition, DateTimeOffset.UtcNow));
-                else SetValue(new(path, null, ProjectStore.Optional(definition, "dataType") ?? "Unknown", recovery?.Active == true && TagDefinitionValidator.Kind(definition) == "opcua" ? "Bad_RecoveryMode" : TagDefinitionValidator.Enabled(definition) ? "Bad_WaitingForInitialData" : "Bad_Disabled", DateTimeOffset.UtcNow, TagDefinitionValidator.Kind(definition)));
+                else SetValue(new(path, null, ProjectStore.Optional(definition, "dataType") ?? "Unknown", recovery?.Active == true && TagDefinitionValidator.IsDeviceSource(definition) ? "Bad_RecoveryMode" : TagDefinitionValidator.Enabled(definition) ? "Bad_WaitingForInitialData" : "Bad_Disabled", DateTimeOffset.UtcNow, TagDefinitionValidator.Kind(definition), definition["writable"]?.GetValue<bool>() == true));
             }
             configurationGeneration++;
             return result;
@@ -217,6 +219,35 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                 SetUnavailable(ProjectStore.Required(definition, "path"), recovery?.Active == true ? "Bad_RecoveryMode" : saved["enabled"]?.GetValue<bool>() == false || definition["enabled"]?.GetValue<bool>() == false ? "Bad_Disabled" : "Bad_WaitingForInitialData");
             configurationGeneration++;
             return saved;
+        }
+    }
+    public async Task DeleteConnectionAsync(string id, int revision, ProjectCatalog catalog)
+    {
+        Func<Task> cleanup;
+        using (ChangeState())
+        lock (GatewayConfigurationLock.SyncRoot)
+        {
+            if (revision < 0) throw new ArgumentException("Connection revision must be a nonnegative integer.");
+            var connection = store.GetConnections().OfType<JsonObject>().FirstOrDefault(item => ProjectStore.Optional(item, "id") == id)
+                ?? throw new KeyNotFoundException("Connection not found.");
+            if (connection["revision"]!.GetValue<int>() != revision)
+                throw new InvalidOperationException("The connection changed since it was loaded. Select it again before deleting.");
+            var references = GatewayConnections.References(id, catalog);
+            if (references.Count > 0)
+                throw new InvalidOperationException($"This connection is used by {references.Count} saved tag, UDT member or named-query reference(s). Remove or change those references before deleting.");
+            if (watches.Values.Any(watch => watch.Plan.Connection.Id == id))
+                throw new InvalidOperationException("A device acquisition is still stopping. Try deleting this connection again shortly.");
+            // Pool admission and persistence share one reservation. Failed writes leave
+            // both configuration and transports intact; graceful close runs outside locks.
+            cleanup = connectors.PrepareConnectionRemoval(id, () => store.DeleteConnection(id, revision));
+            configurationGeneration++;
+        }
+        try { await cleanup(); }
+        catch (Exception error)
+        {
+            // The durable removal already succeeded. Do not report a retryable
+            // configuration failure or restore credentials after disposal failed.
+            logger.LogWarning("A removed connection's transport cleanup failed ({ErrorType}).", error.GetType().Name);
         }
     }
     private void InvalidateWatches(Func<WatchRegistration, bool> matches)
@@ -453,7 +484,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                     var definedPaths = definitions.Select(definition => ProjectStore.Required(definition, "path")).ToHashSet(StringComparer.Ordinal);
                     foreach (var path in values.Keys.Where(path => !(enableDemoTags && TagExpressions.SamplePath(path)) && !definedPaths.Contains(path)))
                         RemoveValue(path);
-                    foreach (var definition in definitions.Where(definition => TagDefinitionValidator.Kind(definition) == "opcua" && (recovery?.Active == true || definition["enabled"]?.GetValue<bool>() == false
+                    foreach (var definition in definitions.Where(definition => TagDefinitionValidator.IsDeviceSource(definition) && (recovery?.Active == true || definition["enabled"]?.GetValue<bool>() == false
                         || disabledConnections.Contains(ProjectStore.Required(definition, "connectionId")))))
                         SetUnavailable(ProjectStore.Required(definition, "path"), recovery?.Active == true ? "Bad_RecoveryMode" : "Bad_Disabled");
                     foreach (var plan in plans.Values)
@@ -461,7 +492,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                         if (watches.ContainsKey(plan.Key)) continue;
                         if (watches.Count >= 32)
                         {
-                            if (capacityWarnings.Add(plan.Key)) logger.LogWarning("OPC UA watch group capacity (32) reached; {TagCount} tags in connection {ConnectionId} cannot subscribe.", plan.Bindings.Length, plan.Connection.Id);
+                            if (capacityWarnings.Add(plan.Key)) logger.LogWarning("Device acquisition group capacity (32) reached; {TagCount} tags in connection {ConnectionId} cannot acquire.", plan.Bindings.Length, plan.Connection.Id);
                             foreach (var binding in plan.Bindings) SetUnavailable(binding.Path, "Bad_ResourceUnavailable");
                             continue;
                         }
@@ -485,7 +516,11 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     private void SetUnavailable(string path, string quality)
     {
         values.TryGetValue(path, out var previous);
-        SetValue(new(path, previous?.Value, previous?.DataType ?? "Unknown", quality, previous?.Timestamp ?? DateTimeOffset.UtcNow, "opcua"));
+        var definition = cachedDefinitionsByPath.GetValueOrDefault(path);
+        var source = previous?.Source ?? (definition is null ? "opcua" : TagDefinitionValidator.Kind(definition));
+        var dataType = previous?.DataType ?? (definition is null ? null : ProjectStore.Optional(definition, "dataType")) ?? "Unknown";
+        var writable = previous?.Writable ?? (definition?["writable"]?.GetValue<bool>() == true);
+        SetValue(new(path, previous?.Value, dataType, quality, previous?.Timestamp ?? DateTimeOffset.UtcNow, source, writable));
     }
 
     private async Task RunWatch(WatchRegistration watch)
@@ -501,7 +536,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                         var byNode = batch.ToDictionary(value => value.NodeId, StringComparer.Ordinal);
                         foreach (var binding in watch.Plan.Bindings)
                             if (byNode.TryGetValue(binding.NodeId, out var value))
-                                SetValue(new(binding.Path, value.Value, value.DataType, value.Quality, value.Timestamp, "opcua"));
+                                SetValue(new(binding.Path, value.Value, value.DataType, value.Quality, value.Timestamp, DeviceConfiguration.IsDevice(watch.Plan.Connection.Type) ? "device" : "opcua", watch.Plan.Connection.Device?.Points.Any(point => point.Id == binding.NodeId && point.Writable) == true));
                         watch.LastNotification = DateTimeOffset.UtcNow;
                     }
                 },
@@ -519,7 +554,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
         catch (OperationCanceledException) when (watch.Cancellation.IsCancellationRequested) { }
         catch (Exception error)
         {
-            logger.LogWarning("OPC UA subscription failed ({ErrorType}); a new subscription will be attempted.", error.GetType().Name);
+            logger.LogWarning("Device acquisition failed ({ErrorType}); a new acquisition will be attempted.", error.GetType().Name);
             using (ChangeState())
             {
                 watch.State = "Error";

@@ -6,7 +6,7 @@
       "kind": "source-commit",
       "value": "4e58e436ef3817458427e23a81d14a65ff1d190a"
     },
-    "note": "Use the matching preview.11 installer or a later compatible release for the complete collection, including runtime property bindings, camera capture and photo badges. Native tag buttons and multi-schedule/S3 backups also require preview.11. The bundle source revision and each workshop prerequisites identify its actual requirements; exact release verification is recorded separately."
+    "note": "Use 0.2.0-preview.12 or a later compatible release for this collection. The portable projects' runtime property bindings, camera capture, photo badges, native tag buttons and multi-schedule/S3 backups require at least preview.11; the setup-required industrial devices workshop requires preview.12. The bundle source revision and each workshop prerequisites identify its actual requirements; exact artifact/source evidence is recorded separately in docs/architecture/PARITY.md."
   },
   "workshops": [
     {
@@ -1514,6 +1514,19 @@
       ]
     },
     {
+      "id": "industrial-devices-workshop",
+      "title": "Industrial device connections",
+      "summary": "Configure isolated Modbus TCP, six EtherNet/IP controller families, Siemens S7 and Beckhoff ADS points, then read and review synthetic scalar commands.",
+      "source": "examples/industrial-devices-workshop.json",
+      "distribution": "setup-required",
+      "features": ["Protocol-specific connection settings", "ControlLogix, CompactLogix, Micro800, MicroLogix, SLC 500 and PLC-5 address/type profiles", "Saved point maps and qualified native symbol mapping", "Read-only quick watch", "Device-tag acquisition", "Reviewed scalar writes and physical alias serialization", "Reference-safe connection deletion"],
+      "prerequisites": ["Requires 0.2.0-preview.12 or a later compatible release containing the four industrial drivers and six EtherNet/IP family profiles; preview.11 and earlier do not contain these drivers. Exact artifact/source evidence is recorded separately in docs/architecture/PARITY.md. EtherNet/IP dependencies remain pinned to libplctag 1.5.2 / NativeImport 1.0.41, native core 2.6.0.", "Use isolated simulators or lab PLCs with independently created synthetic Int16 storage. Logix and Micro800 use SyntheticSetpoint INT; MicroLogix, SLC 500 and PLC-5 use an allocated N7:0 integer element. Logix requires its numeric route; the other four use blank direct routes. Only ControlLogix/CompactLogix have native catalogs. ControlLogix/CompactLogix String is rejected until controller structure-schema qualification is implemented; Micro800 String and DH+ routes are also excluded. PCCC ST strings retain their bounded file profile.", "ADS uses an existing router or a shared gateway-managed router when TCP 48898 has no listener. Its local AMS identity must match, existing routers need a target route, and the controller always needs a back-route. S7 requires accessible non-optimized DB layouts.", "Run tools/load-industrial-devices-example.mjs on an isolated gateway to create only its unpublished project, then configure connections/tags separately and explicitly publish. Rebind the one EtherNet/IP Setpoint tag deliberately to exercise each available family.", "Operators need Commands and tag-read scope for [default]IndustrialWorkshop/. Operate alone cannot write. Physical device/firmware qualification remains separate for every family."],
+      "gatewayWrites": "explicit-lab-device-commands",
+      "entryScreenId": "industrial-devices",
+      "guide": "docs/architecture/INDUSTRIAL_DEVICE_CONNECTIONS.md",
+      "walkthrough": ["Load the authored draft; confirm all unconfigured values remain unavailable.", "Create a protocol-specific lab connection and saved Setpoint map entry. Choose the actual EtherNet/IP family, route and Int16 lab address from the guide; save its map before testing Micro800/PCCC.", "Browse/read without writing and add the device tag. Publish explicitly, review 25, cancel, then review and confirm; verify one write and matching fresh readback.", "Try 101 and an Operate-only account to verify rejection before dispatch. Change lab state or disable the connection after review and verify the old intent is rejected.", "Repeat with each available protocol and EtherNet/IP family. Rebind its Setpoint tag explicitly between connections, recording controller/firmware/OS/dependency evidence rather than transferring acceptance between families.", "Inspect bad quality and command uncertainty after lab disconnect, then remove/rebind saved device tags and UDT members before deleting the connection."]
+    },
+    {
       "id": "data-controls",
       "title": "SQLite lists, trees and tables",
       "summary": "Synthetic SQLite records drive query-backed list and tree selections, table paging and independent station forms.",
@@ -1525,7 +1538,7 @@
         "query list and tree controls",
         "table paging and row-to-form selection",
         "published Python button actions",
-        "connection test history, dependencies and enable/disable"
+        "connection test history, dependencies, enable/disable and safe deletion"
       ],
       "prerequisites": [
         "Use tools/load-data-controls-example.mjs with authenticated administrator access on an isolated development gateway. It creates a separate project, sqlite-data-controls connection and data-controls.db with synthetic production_records.",
@@ -1539,6 +1552,7 @@
         "Run the dedicated setup loader and open the newly created Data workshop operator application.",
         "Select a list item, tree item or table row to fill the local form; page, sort and filter the loaded table result.",
         "On the isolated gateway only, test Data workshop SQLite and inspect the saved time plus draft/published query dependencies. Disable and save it, verify reads fail, then re-enable, save and test again. Changing the connection invalidates its earlier test result.",
+        "Follow docs/architecture/CONNECTION_OPERATIONS.md to confirm that saved queries block connection deletion, then create and delete a separate unused connection. Managed SQLite database files are retained after connection removal.",
         "Preview the selected form values, then open Independent station forms to compare isolated list and tree choices."
       ]
     }

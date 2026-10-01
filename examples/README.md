@@ -2,7 +2,7 @@
 
 Each major user-facing feature should ship with an independently authored workshop project, a short exercise guide, compatibility information and a verified import/publish/runtime check. Workshops serve as both learning material and reproducible acceptance examples. Use synthetic data and make any gateway setup or writes explicit.
 
-[catalog.json](catalog.json) is the machine-readable inventory of all 55 source examples. 37 are portable project workshops; 18 require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
+[catalog.json](catalog.json) is the machine-readable inventory of all 56 source examples. 37 are portable project workshops; 19 require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
 
 ## Use a downloaded workshop
 
@@ -61,7 +61,7 @@ build; preview.10 installers do not support it.
 | [Component lifecycle and property events](component-events.json) | Compare user/property events, popup cleanup and deliberate bounded failures. | None |
 | [Named-query property bindings](query-properties.json) | Drive values, layout and visibility from synthetic query results. | Read-only refresh button |
 
-Use the companion **0.2.0-preview.11** release or a newer compatible gateway for the complete 37-project collection. The catalog retains older minimum versions for individual exercises; runtime property bindings and visitor check-in require preview.11. Each generated bundle records its actual source revision and release label. A workshop may be distributed as an individual `.sparkproj` with its guide or as part of the collection accompanying a release. Exact frozen-bundle verification is recorded in the [release ledger](../docs/architecture/PARITY.md).
+Use the companion **0.2.0-preview.12** release or a newer compatible gateway for the complete 37-project collection. The catalog retains older minimum versions for individual exercises; runtime property bindings and visitor check-in require preview.11. Each generated bundle records its actual source revision and release label. A workshop may be distributed as an individual `.sparkproj` with its guide or as part of the collection accompanying a release. Exact frozen-bundle verification is recorded in the [release ledger](../docs/architecture/PARITY.md).
 
 ## Examples that require gateway setup
 
@@ -79,10 +79,13 @@ These remain useful authored source fixtures, but are excluded from the standalo
 | [Expression bindings](property-bindings.json) | One synthetic Boolean `BindingWorkshop/Permit` memory tag. | None; the Python action only returns form values. |
 | [Reusable applications](reusable-applications.json) | Twelve synthetic `Workcenters` and `Orders` memory tags. | Explicit save/release actions write those tags. |
 | [Images and popups](assets-popups.json) | Eight synthetic memory tags and the local drawing in `examples/assets/assembly-cell.png`. | Explicit popup save/release actions write those tags. |
+| [Industrial devices](industrial-devices-workshop.json) | Independent Int16 lab storage, saved maps and device tags for the four protocols, including six EtherNet/IP families; see the [family/address matrix](../docs/architecture/INDUSTRIAL_DEVICE_CONNECTIONS.md#ethernetip-family-setup). | Explicit reviewed equipment commands write the chosen lab setpoint; rebind its EtherNet/IP tag deliberately between family connections. |
 | [SQLite data controls](data-controls.json) | Separate managed SQLite connection and synthetic database initialized by its dedicated loader. | None during the exercise; setup creates and seeds the database. |
 | [Read query operations](query-testing.json) | Managed SQLite connection and synthetic database; follow the [setup and cancellation guide](../docs/architecture/QUERY_TESTING.md). | None during reads; setup creates and seeds the database. |
 
 The dedicated `tools/load-backup-example.mjs` creates a new Scheduled backup workshop project on an authenticated local gateway; it leaves the checkpoint unpublished unless `--publish` is explicit. It never configures backup credentials or schedules. Its read-only screen helps compare published checkpoint A with an unpublished draft B after an isolated configuration restore. Follow the guide before using any real destination.
+
+The dedicated `tools/load-industrial-devices-example.mjs` creates only a new unpublished Industrial devices workshop project. It creates no connections or tags. Configure isolated lab profiles separately and explicitly publish after checking each mapped address. Profiles you leave unconfigured remain unavailable.
 
 The generic `tools/load-example.mjs <id>` loader is a development tool for an authenticated local gateway on port 5090 or 5091. It backs up and adds missing resources to the **default project**, preserves existing resource IDs and tag values, and leaves the draft unpublished unless `--publish` is supplied. It cannot retarget an arbitrary project. Prefer portable imports for the collection above. The [security verification guide](../docs/architecture/SECURITY.md#verification-commands) describes authentication for an isolated test gateway; there is no unauthenticated loader bypass.
 

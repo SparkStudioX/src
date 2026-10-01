@@ -32,7 +32,8 @@ fs.mkdirSync(path.join(stage, 'runtimes/python/windows-x64'), { recursive: true 
 const write = (name, data) => fs.writeFileSync(path.join(stage, name), JSON.stringify(data));
 write('THIRD-PARTY-NOTICES/browser-package-inventory.json', [{ name: '@test/fixture', version: '1.2.3', license: 'MIT', notices: ['fixture/LICENSE'], integrity: 'sha512-' + Buffer.alloc(64, 1).toString('base64') }]);
 write('THIRD-PARTY-NOTICES/package-inventory.json', [{ name: 'Example.Library/2.3.4', license: 'MIT', licenseType: 'expression', requiresLicenseReview: true }]);
-write('SparkStudio.Gateway.deps.json', { libraries: { 'Example.Library/2.3.4': { type: 'package', sha512: 'sha512-' + Buffer.alloc(64, 2).toString('base64') } } });
+const dependencies = { libraries: { 'Example.Library/2.3.4': { type: 'package', sha512: 'sha512-' + Buffer.alloc(64, 2).toString('base64') } } };
+write('SparkStudio.Gateway.deps.json', dependencies);
 write('SparkStudio.Gateway.runtimeconfig.json', { runtimeOptions: { includedFrameworks: [{ name: 'Microsoft.NETCore.App', version: '10.0.9' }] } });
 fs.writeFileSync(path.join(stage, 'runtimes/python/windows-x64/python.exe'), 'synthetic payload bytes only');
 const command = [path.join(root, 'tools/write-sbom.mjs'), stage, 'a'.repeat(40)];
@@ -49,6 +50,53 @@ assert.equal(sbom.components.find(item => item.name === '@test/fixture').purl, '
 generated = spawnSync(process.execPath, command, { encoding: 'utf8' });
 assert.equal(generated.status, 0, generated.stderr);
 assert.equal(fs.readFileSync(path.join(stage, 'sbom.cdx.json'), 'utf8'), first, 'Inventory is deterministic for identical payload and commit.');
+assert.equal(sbom.components.some(item => item.name === 'Microsoft Visual C Runtime'), false, 'A runtime absent from a non-industrial synthetic payload is not inventoried.');
+// These negative cases need no Windows runtime or network access, so Linux CI
+// verifies the same fail-closed industrial packaging gates as Windows CI.
+const vcRuntime = path.join(stage, 'runtimes/python/windows-x64/vcruntime140.dll');
+const nativeRuntime = path.join(stage, 'plctag.dll');
+const reject = message => {
+  const result = spawnSync(process.execPath, command, { encoding: 'utf8' });
+  assert.notEqual(result.status, 0, 'Incomplete or unreviewed native runtime inventory must fail.');
+  assert.match(result.stderr, message);
+};
+fs.writeFileSync(nativeRuntime, 'synthetic native dependency marker; never executed');
+reject(/Windows EtherNet\/IP payload requires the reviewed bundled VC runtime/);
+fs.unlinkSync(nativeRuntime);
+for (const name of ['libplctag/1.5.2', 'libplctag.NativeImport/1.0.41']) {
+  write('SparkStudio.Gateway.deps.json', { libraries: { ...dependencies.libraries, [name]: { type: 'package' } } });
+  reject(/Windows EtherNet\/IP payload requires the reviewed bundled VC runtime/);
+}
+fs.writeFileSync(vcRuntime, 'unreviewed VC runtime bytes; never executed');
+reject(/bundled VC runtime differs from the reviewed CPython Windows payload/);
+write('SparkStudio.Gateway.deps.json', dependencies);
+reject(/bundled VC runtime differs from the reviewed CPython Windows payload/);
+fs.unlinkSync(vcRuntime);
+// Bootstrap supplies the real pinned DLL on Windows. Exercise its positive
+// inventory there without manufacturing an accepted hash or downloading in tests.
+const preparedRuntime = path.join(root, 'runtimes/python/windows-x64/vcruntime140.dll');
+if (fs.existsSync(preparedRuntime)) {
+  fs.copyFileSync(preparedRuntime, vcRuntime);
+  for (const industrial of [false, true]) {
+    if (industrial) fs.writeFileSync(nativeRuntime, 'synthetic native dependency marker; never executed');
+    generated = spawnSync(process.execPath, command, { encoding: 'utf8' });
+    assert.equal(generated.status, 0, generated.stderr);
+    const withRuntime = JSON.parse(fs.readFileSync(path.join(stage, 'sbom.cdx.json'), 'utf8'));
+    assert.equal(withRuntime.components.length, 5);
+    assert.equal(withRuntime.dependencies[0].dependsOn.length, 5);
+    const runtime = withRuntime.components.find(item => item.name === 'Microsoft Visual C Runtime');
+    assert.equal(runtime.hashes[0].content, 'd1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7');
+    assert.equal(runtime.version, '14.51.36247.0');
+    assert.match(runtime.licenses[0].license.name, /Microsoft Distributable Code/);
+    assert.equal(runtime.properties.find(item => item.name === 'sparkstudio:notices').value, 'runtimes/python/windows-x64/LICENSE.txt');
+    assert.equal(runtime.properties.find(item => item.name === 'sparkstudio:usage').value, industrial ? 'CPython and embedded EtherNet/IP native dependency' : 'CPython');
+  }
+  fs.unlinkSync(nativeRuntime);
+  fs.unlinkSync(vcRuntime);
+}
+generated = spawnSync(process.execPath, command, { encoding: 'utf8' });
+assert.equal(generated.status, 0, generated.stderr);
+assert.equal(fs.readFileSync(path.join(stage, 'sbom.cdx.json'), 'utf8'), first, 'Native fixture checks do not change the original synthetic inventory.');
 const escaped = spawnSync(process.execPath, [command[0], root, command[2]], { encoding: 'utf8' });
 assert.notEqual(escaped.status, 0, 'Source directory cannot be used for generated output.');
 // Only our verified synthetic directory can be removed.

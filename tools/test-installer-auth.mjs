@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { access, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { createServer } from 'node:net';
 
 assert.equal(process.argv.length, 4, 'Pass the fresh installer verification directory and owned gateway process ID.');
 assert.match(process.argv[3], /^[1-9][0-9]*$/);
@@ -30,6 +31,7 @@ async function request(route, method = 'GET', body, expected = 200) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   assert.equal(response.status, expected, `${method} ${route}: unexpected status ${response.status}`);
+  if (expected === 204) return null;
   if (response.headers.getSetCookie().length) cookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
   const result = await response.json();
   if (result?.csrfToken) csrf = result.csrfToken;
@@ -78,7 +80,25 @@ assert.equal(python.success, true, 'Bundled Python script failed.');
 const expectedPython = await realpath(path.join(program, 'runtimes', 'python', 'windows-x64', 'python.exe'));
 assert.equal((await realpath(python.result.executable)).toLowerCase(), expectedPython.toLowerCase(), 'The script used an external Python executable.');
 assert.equal(python.result.value, 10);
+// Exercise the packaged native driver against an owned rejected loopback endpoint.
+// A request reaching this socket proves native loading proceeded to real transport.
+let nativeConnections = 0, nativeSaved;
+const nativeEndpoint = createServer(socket => { nativeConnections++; socket.destroy(); });
+await new Promise((resolve, reject) => { nativeEndpoint.once('error', reject); nativeEndpoint.listen(0, '127.0.0.1', resolve); });
+try {
+  nativeSaved = await request('/api/connections', 'POST', {
+    id: `installer-native-${processId}`, name: 'Isolated bundled native runtime probe', type: 'ab-eip', enabled: true,
+    device: { host: '127.0.0.1', port: nativeEndpoint.address().port, controllerFamily: 'Micro800', route: '', timeoutMs: 250,
+      points: [{ id: 'probe', name: 'Probe', address: 'Speed', dataType: 'UInt16', writable: false }] }
+  });
+  const result = await request(`/api/connections/${nativeSaved.id}/test`, 'POST');
+  assert.equal(result.success, false, 'The deliberately rejected native endpoint must not pass its connection test.');
+  assert.ok(nativeConnections > 0, 'Packaged libplctag did not reach its owned loopback endpoint; inspect native dependency loading.');
+} finally {
+  await new Promise(resolve => nativeEndpoint.close(resolve));
+  if (nativeSaved) await request(`/api/connections/${nativeSaved.id}`, 'DELETE', { revision: nativeSaved.revision }, 204);
+}
 await writeFile(authFile, JSON.stringify({ baseUrl: base.origin, admin, designer, projectId: defaultProject.id }, null, 2), { mode: 0o600, flag: 'wx' });
-await writeFile(path.join(fixture, 'auth-python-verification.json'), JSON.stringify({ setupUsedLocalCode: true, anonymousHealthDenied: true, anonymousReadinessBeforeAndAfterSetup: true, readinessProcessId: processId, invalidReadinessVerbsAndUnknownApisDenied: true, gatewayVersion: health.version, defaultProjectId: defaultProject.id, executable: expectedPython, version: python.result.version, result: 10 }, null, 2), { flag: 'wx' });
+await writeFile(path.join(fixture, 'auth-python-verification.json'), JSON.stringify({ setupUsedLocalCode: true, anonymousHealthDenied: true, anonymousReadinessBeforeAndAfterSetup: true, readinessProcessId: processId, invalidReadinessVerbsAndUnknownApisDenied: true, gatewayVersion: health.version, defaultProjectId: defaultProject.id, executable: expectedPython, version: python.result.version, result: 10, industrialNative: { loopbackTransportReached: true, connections: nativeConnections, disposableConnectionRemoved: true } }, null, 2), { flag: 'wx' });
 await request('/api/auth/logout', 'POST', { audience: 'engineering' });
-console.log('PASS exact process-bound anonymous readiness before/after setup, protected health, invalid API denials, isolated credentials and actual bundled Python execution.');
+console.log('PASS exact process-bound readiness, isolated credentials, bundled Python execution and native EtherNet/IP loopback transport.');

@@ -430,12 +430,14 @@ export interface Tag {
   quality: string;
   timestamp: string;
   source?: string;
+  writable?: boolean;
 }
 export interface TagDefinition {
   absoluteDeadband?: number;
   queueSize?: number;
   path: string;
-  kind?: "opcua" | "memory" | "expression";
+  kind?: "opcua" | "device" | "memory" | "expression";
+  writable?: boolean;
   dataType: string;
   value?: unknown;
   connectionId?: string;
@@ -460,10 +462,39 @@ export interface Publication {
   revision?: number;
   publishedAt?: string;
 }
+export type DeviceConnectionType = "modbus-tcp" | "ab-eip" | "siemens-s7" | "beckhoff-ads";
+export interface DevicePoint {
+  id: string;
+  name: string;
+  address: string;
+  dataType: TagWriteDataType;
+  rawDataType?: TagWriteDataType | null;
+  writable: boolean;
+  byteSwap?: boolean;
+  wordSwap?: boolean;
+  stringLength?: number;
+  scale?: number;
+  offset?: number;
+}
+export interface DeviceSettings {
+  host: string;
+  port: number;
+  unitId?: number;
+  controllerFamily?: string;
+  route?: string;
+  rack?: number;
+  slot?: number;
+  localAmsNetId?: string;
+  targetAmsNetId?: string;
+  contentionDomain?: string;
+  timeoutMs?: number;
+  points: DevicePoint[];
+}
 export interface Connection {
   id: string;
   name: string;
-  type: "opcua" | "sqlserver" | "sqlite";
+  type: "opcua" | "sqlserver" | "sqlite" | DeviceConnectionType;
+  device?: DeviceSettings;
   revision?: number;
   enabled?: boolean;
   lastTest?: { success: boolean; message: string; startedAt: string; completedAt: string; durationMs: number; revision: number; accepted: boolean };
@@ -529,6 +560,12 @@ export interface BrowseNode {
   nodeId: string;
   displayName: string;
   isVariable: boolean;
+  dataType?: string;
+  writable?: boolean;
+  browseMode?: string;
+  pointId?: string;
+  address?: string;
+  stringLength?: number;
 }
 export interface Health {
   status: string;

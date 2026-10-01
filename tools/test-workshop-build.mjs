@@ -31,7 +31,11 @@ await check('every portable archive preserves authored screens/templates/state/s
   }
 });
 const entry = portable[0], source = JSON.parse(await readFile(new URL(entry.source, new URL('../', import.meta.url)), 'utf8'));
-await check('setup-required examples cannot silently become standalone packages', () => {
+await check('setup-required examples cannot silently become standalone packages', async () => {
+  for (const setup of catalog.workshops.filter(item => item.distribution === 'setup-required')) {
+    const authored = JSON.parse(await readFile(new URL(setup.source, new URL('../', import.meta.url)), 'utf8'));
+    assert.throws(() => packWorkshop(authored, setup, options.exportedAt), /Setup-required/);
+  }
   assert.throws(() => packWorkshop(source, { ...entry, distribution: 'setup-required' }, options.exportedAt));
   assert.throws(() => packWorkshop({ ...source, tags: [{ path: '[default]Demo/Permit' }] }, entry, options.exportedAt), /tags/);
   assert.throws(() => packWorkshop({ ...source, assets: [{ id: 'asset' }] }, entry, options.exportedAt), /Asset-backed/);

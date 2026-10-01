@@ -26,9 +26,10 @@ const auth = uri(`export const useAuth=()=>({gatewayAdmin:true,gatewayCapabiliti
 const modules = new Map();
 function module(name) {
   if (modules.has(name)) return modules.get(name);
-  const code = ts.transpileModule(fs.readFileSync(new URL(`src/${name}.tsx`, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
+  const file = ['tsx', 'ts'].map(extension => new URL(`src/${name}.${extension}`, import.meta.url)).find(candidate => fs.existsSync(candidate)); assert.ok(file, name);
+  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
     .replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
-    .replace(/(from\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, dependency) => prefix + JSON.stringify(dependency === 'react' ? hooks : dependency === './api' ? api : dependency === './Auth' ? auth : dependency.startsWith('./') ? uri(`export default function ${dependency.slice(2)}(){return null}`) : pathToFileURL(require.resolve(dependency)).href));
+    .replace(/(from\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, dependency) => prefix + JSON.stringify(dependency === 'react' ? hooks : dependency === './api' ? api : dependency === './Auth' ? auth : dependency === './deviceConnections' ? module('deviceConnections') : dependency.startsWith('./') ? uri(`export default function ${dependency.slice(2)}(){return null}`) : pathToFileURL(require.resolve(dependency)).href));
   const url = uri(code); modules.set(name, url); return url;
 }
 const [{default: Deployment},{default: Listener},{default: Recovery},{default: Console},lifecycle] = await Promise.all([
@@ -131,12 +132,12 @@ await check('quiet gateway status reads preserve support-download action locks a
   ui.poll(15000);lifecycle.unmount();read.resolve(overview('Late gateway'));await settle();assert.equal(lifecycle.updatesAfterUnmount(),0);
 });
 await check('connection diagnostics retain valid data on failure and reject results for another saved revision',async()=>{
-  let reads=0;const next=deferred();const ui=await start(()=>ConnectionPanel({connection}),async()=>{if(++reads===1)return connectionSnapshot();if(reads===2)throw new Error('Temporary diagnostics outage');return next.promise});
-  noToolbarReload(ui);document.visibilityState='hidden';ui.poll(15000);assert.equal(reads,1);document.visibilityState='visible';ui.poll(15000);await settle();ui.render();assert.match(ui.text(),/Fixture value/);assert.match(ui.text(),/Last snapshot may be outdated/);assert.match(ui.text(),/Temporary diagnostics outage/);
-  ui.click('Retry diagnostics');ui.poll(15000);assert.equal(reads,3);next.resolve(connectionSnapshot(8,'Mismatched value'));await settle();ui.render();assert.match(ui.text(),/no longer match the selected saved connection/);assert.match(ui.text(),/Fixture value/);assert.doesNotMatch(ui.text(),/Mismatched value/);
+  let reads=0;const next=deferred();const ui=await start(()=>ConnectionPanel({connection,expanded:true,onExpandedChange:()=>{}}),async()=>{if(++reads===1)return connectionSnapshot();if(reads===2)throw new Error('Temporary diagnostics outage');return next.promise});
+  noToolbarReload(ui);document.visibilityState='hidden';ui.poll(15000);assert.equal(reads,1);document.visibilityState='visible';ui.poll(15000);await settle();ui.render();assert.match(ui.text(),/Fixture value/);assert.match(ui.text(),/Last update may be outdated/);assert.match(ui.text(),/Temporary diagnostics outage/);
+  ui.click('Retry diagnostics');ui.poll(15000);assert.equal(reads,3);next.resolve(connectionSnapshot(8,'Mismatched value'));await settle();ui.render();assert.match(ui.text(),/This connection changed/);assert.match(ui.text(),/Fixture value/);assert.doesNotMatch(ui.text(),/Mismatched value/);
 });
 await check('connection diagnostics retry in context, prevent duplicate reads and fence a late response after unmount',async()=>{
-  let reads=0;const late=deferred();const ui=await start(()=>ConnectionPanel({connection}),async()=>{if(++reads===1)throw new Error('Diagnostics unavailable');return late.promise});
+  let reads=0;const late=deferred();const ui=await start(()=>ConnectionPanel({connection,expanded:true,onExpandedChange:()=>{}}),async()=>{if(++reads===1)throw new Error('Diagnostics unavailable');return late.promise});
   const retry=ui.button('Retry diagnostics');retry.props.onClick();retry.props.onClick();ui.render();assert.equal(reads,2);lifecycle.unmount();late.resolve(connectionSnapshot());await settle();assert.equal(lifecycle.updatesAfterUnmount(),0);assert.equal(timers.size,0);
 });
 console.log(`${checks} gateway deployment/recovery lifecycle groups passed.`);

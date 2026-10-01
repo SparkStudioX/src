@@ -5,6 +5,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="libplctag" Version="1.5.2" />
+    <PackageReference Include="S7netplus" Version="0.20.0" />
+    <PackageReference Include="Beckhoff.TwinCAT.Ads" Version="7.0.317" />
+    <PackageReference Include="Beckhoff.TwinCAT.Ads.TcpRouter" Version="7.0.317" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.3" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
     <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua.Client" Version="1.5.378.176" />
@@ -13,4 +17,59 @@
   <ItemGroup>
     <InternalsVisibleTo Include="SparkStudio.Connectors.Tests" />
   </ItemGroup>
+  <!-- NativeImport otherwise extracts beside the application at first use. Package
+       its exact embedded RID binary so installed/read-only payloads need no writes. -->
+  <UsingTask TaskName="ExtractSparkStudioPlcRuntime" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <PackageAssembly ParameterType="System.String" Required="true" />
+      <Runtime ParameterType="System.String" Required="true" />
+      <OutputDirectory ParameterType="System.String" Required="true" />
+      <OutputFile ParameterType="System.String" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Reflection" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        string platform;
+        string name;
+        switch (Runtime) {
+          case "win-x64": platform = "win_x64"; name = "plctag.dll"; break;
+          case "linux-x64": platform = "linux_x64"; name = "libplctag.so"; break;
+          case "linux-arm64": platform = "linux_ARM64"; name = "libplctag.so"; break;
+          default: Log.LogError("No reviewed EtherNet/IP native payload for RID " + Runtime); return false;
+        }
+        var assembly = Assembly.LoadFrom(PackageAssembly);
+        using (var resource = assembly.GetManifestResourceStream("libplctag.NativeImport.runtime." + platform + "." + name)) {
+          if (resource == null) { Log.LogError("Pinned libplctag native resource missing for " + Runtime); return false; }
+          Directory.CreateDirectory(OutputDirectory);
+          OutputFile = Path.Combine(OutputDirectory, name);
+          using (var output = File.Create(OutputFile)) resource.CopyTo(output);
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+  <Target Name="PrepareSparkStudioPlcRuntime" BeforeTargets="AssignTargetPaths">
+    <PropertyGroup>
+      <_PlcRuntime Condition="'$(PlcRuntimeIdentifier)' != ''">$(PlcRuntimeIdentifier)</_PlcRuntime>
+      <_PlcRuntime Condition="'$(_PlcRuntime)' == '' and '$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_PlcRuntime>
+      <_PlcRuntime Condition="'$(_PlcRuntime)' == ''">$(NETCoreSdkRuntimeIdentifier)</_PlcRuntime>
+    </PropertyGroup>
+    <ExtractSparkStudioPlcRuntime PackageAssembly="$(NuGetPackageRoot)/libplctag.nativeimport/1.0.41/lib/netstandard2.0/libplctag.NativeImport.dll" Runtime="$(_PlcRuntime)" OutputDirectory="$(IntermediateOutputPath)native/$(_PlcRuntime)">
+      <Output TaskParameter="OutputFile" PropertyName="_PlcNativeFile" />
+    </ExtractSparkStudioPlcRuntime>
+    <ItemGroup>
+      <Content Include="$(_PlcNativeFile)" Link="$([System.IO.Path]::GetFileName('$(_PlcNativeFile)'))" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+    <!-- Reuse the exact Microsoft runtime already distributed by the pinned
+         CPython Windows bundle. Never depend on a host-installed VC runtime. -->
+    <Error Condition="'$(_PlcRuntime)' == 'win-x64' and !Exists('../../runtimes/python/windows-x64/vcruntime140.dll')" Text="Run tools/bootstrap.ps1 -PythonOnly to prepare the pinned Windows VC runtime before building." />
+    <GetFileHash Condition="'$(_PlcRuntime)' == 'win-x64'" Files="../../runtimes/python/windows-x64/vcruntime140.dll" Algorithm="SHA256">
+      <Output TaskParameter="Hash" PropertyName="_PlcVcRuntimeHash" />
+    </GetFileHash>
+    <Error Condition="'$(_PlcRuntime)' == 'win-x64' and '$(_PlcVcRuntimeHash)' != 'D1F4225DF2CD877DBF130D5668A021DCE3F94118455FF5EC952061C30AFC9CE7'" Text="The Windows VC runtime differs from the reviewed CPython payload." />
+    <ItemGroup Condition="'$(_PlcRuntime)' == 'win-x64'">
+      <EmbeddedResource Include="../../runtimes/python/windows-x64/vcruntime140.dll" LogicalName="SparkStudio.Native.vcruntime140.dll" />
+    </ItemGroup>
+  </Target>
 </Project>

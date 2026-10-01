@@ -1,0 +1,28 @@
+{
+  "name": "Industrial devices workshop",
+  "commands": [
+    { "id": "modbus-setpoint", "name": "Modbus synthetic setpoint", "tagPath": "[default]IndustrialWorkshop/Modbus/Setpoint", "dataType": "Int16", "min": 0, "max": 100, "confirmation": "Change only the isolated Modbus simulator setpoint?", "timeoutMs": 1000 },
+    { "id": "eip-setpoint", "name": "EtherNet/IP synthetic setpoint", "tagPath": "[default]IndustrialWorkshop/EtherNetIP/Setpoint", "dataType": "Int16", "min": 0, "max": 100, "confirmation": "Change only the isolated EtherNet/IP laboratory variable?", "timeoutMs": 1000 },
+    { "id": "s7-setpoint", "name": "S7 synthetic setpoint", "tagPath": "[default]IndustrialWorkshop/SiemensS7/Setpoint", "dataType": "Int16", "min": 0, "max": 100, "confirmation": "Change only the isolated S7 laboratory DB word?", "timeoutMs": 1000 },
+    { "id": "ads-setpoint", "name": "ADS synthetic setpoint", "tagPath": "[default]IndustrialWorkshop/BeckhoffADS/Setpoint", "dataType": "Int16", "min": 0, "max": 100, "confirmation": "Change only the isolated ADS laboratory symbol?", "timeoutMs": 1000 }
+  ],
+  "navigation": { "mode": "none", "startupScreenId": "industrial-devices", "items": [] },
+  "screens": [
+    {
+      "id": "industrial-devices", "name": "Industrial devices", "width": 1280, "height": 820,
+      "components": [
+        { "id": "heading", "type": "label", "x": 32, "y": 24, "width": 1216, "height": 52, "props": { "text": "Connect, map, watch and review a synthetic setpoint", "fontSize": 28 } },
+        { "id": "instructions", "type": "label", "x": 32, "y": 86, "width": 1216, "height": 70, "props": { "text": "Requires 0.2.0-preview.12 or later and isolated lab setup. Missing tags stay unavailable. EtherNet/IP families: ControlLogix, CompactLogix, Micro800, MicroLogix, SLC 500 or PLC-5. Follow the guide to bind one family at a time; this project creates no connections or automatic commands." } },
+        { "id": "modbus-command", "type": "equipmentCommand", "x": 32, "y": 180, "width": 280, "height": 275, "props": { "commandId": "modbus-setpoint", "text": "Modbus TCP" } },
+        { "id": "modbus-value", "type": "value", "x": 32, "y": 480, "width": 280, "height": 140, "props": { "tagPath": "[default]IndustrialWorkshop/Modbus/Setpoint", "text": "Mapped Modbus value" } },
+        { "id": "eip-command", "type": "equipmentCommand", "x": 344, "y": 180, "width": 280, "height": 275, "props": { "commandId": "eip-setpoint", "text": "Allen Bradley EtherNet/IP" } },
+        { "id": "eip-value", "type": "value", "x": 344, "y": 480, "width": 280, "height": 140, "props": { "tagPath": "[default]IndustrialWorkshop/EtherNetIP/Setpoint", "text": "Chosen EtherNet/IP family" } },
+        { "id": "s7-command", "type": "equipmentCommand", "x": 656, "y": 180, "width": 280, "height": 275, "props": { "commandId": "s7-setpoint", "text": "Siemens S7" } },
+        { "id": "s7-value", "type": "value", "x": 656, "y": 480, "width": 280, "height": 140, "props": { "tagPath": "[default]IndustrialWorkshop/SiemensS7/Setpoint", "text": "Mapped S7 value" } },
+        { "id": "ads-command", "type": "equipmentCommand", "x": 968, "y": 180, "width": 280, "height": 275, "props": { "commandId": "ads-setpoint", "text": "Beckhoff ADS" } },
+        { "id": "ads-value", "type": "value", "x": 968, "y": 480, "width": 280, "height": 140, "props": { "tagPath": "[default]IndustrialWorkshop/BeckhoffADS/Setpoint", "text": "Mapped ADS value" } },
+        { "id": "outcomes", "type": "label", "x": 32, "y": 660, "width": 1216, "height": 110, "props": { "text": "Review 25, cancel, then review and confirm. Try 101 to see the authored bound. Repeat EtherNet/IP after explicitly rebinding its Setpoint tag to another lab family connection. Disconnect a lab endpoint to observe bad quality. Inspect confirmed, rejected, notConfirmed and uncertain receipts before any new command." } }
+      ]
+    }
+  ]
+}

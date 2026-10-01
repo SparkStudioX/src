@@ -63,6 +63,31 @@ var restarted = new ProjectStore(directory, protection, gatewayOnly: true);
 Assert(restarted.GetConnections().OfType<JsonObject>().Single(item => item["id"]!.GetValue<string>() == "fixture")["lastTest"]!.ToJsonString() == failed.ToJsonString(), "Last test was not durable.");
 Console.WriteLine("PASS overlapping test ordering, redacted messages and durable timestamps");
 
+var diagnosticMessages = new List<string>();
+foreach (var mode in new[] { "None", "Sign", "SignAndEncrypt" })
+{
+    diagnosticMessages.Add($"The server has no supported {mode} endpoint. Discover endpoints and choose a supported security mode; no weaker fallback was attempted.");
+    diagnosticMessages.Add($"The server requires a username and password for the selected {mode} endpoint. Enter credentials before testing.");
+    diagnosticMessages.Add($"The selected {mode} endpoint does not support username/password authentication. Discover endpoints and check the server authentication settings.");
+}
+diagnosticMessages.Add("The server certificate does not match this connection's configured SHA-256 fingerprint.");
+diagnosticMessages.Add("Username authentication requires Sign or SignAndEncrypt. Anonymous access is supported for explicitly unsecured connections.");
+diagnosticMessages.Add("Server certificate pin must be a 64-character SHA-256 fingerprint.");
+foreach (var status in new[] { "BadCertificateUntrusted", "BadCertificateHostNameInvalid", "BadCertificateTimeInvalid", "BadCertificateIssuerTimeInvalid", "BadCertificateUriInvalid", "BadSecurityChecksFailed", "BadIdentityTokenRejected" })
+    diagnosticMessages.Add($"OPC UA failed ({status}, 0x80120000). connection-secret-canary untrusted remote content");
+foreach (var message in diagnosticMessages)
+{
+    var diagnostic = store.CompleteConnectionTest(store.BeginConnectionTest("fixture"), false, 10, message);
+    var advice = diagnostic["message"]!.GetValue<string>();
+    Assert(advice != "Connection check failed. Verify the address, authentication and certificate settings." && !advice.Contains("connection-secret-canary"), "Safe fixed OPC guidance was lost or reflected remote content.");
+    var durable = new ProjectStore(directory, protection, gatewayOnly: true).GetConnections().OfType<JsonObject>().Single(item => item["id"]!.GetValue<string>() == "fixture");
+    Assert(durable["lastTest"]!["message"]!.GetValue<string>() == advice && !durable.ToJsonString().Contains("connection-secret-canary"), "Actionable OPC guidance was not durably redacted.");
+}
+var unrecognized = diagnosticMessages[0] + " connection-secret-canary";
+var redacted = store.CompleteConnectionTest(store.BeginConnectionTest("fixture"), false, 10, unrecognized);
+Assert(redacted["message"]!.GetValue<string>() == "Connection check failed. Verify the address, authentication and certificate settings.", "Only exact locally authored endpoint mismatch messages may be retained.");
+Console.WriteLine("PASS mode, authentication and certificate guidance persists without reflecting remote errors or credentials");
+
 oldTest = store.BeginConnectionTest("fixture");
 saved = Saved("fixture"); saved["enabled"] = false; saved = store.SaveConnection(saved);
 Assert(saved["status"]!.GetValue<string>() == "disabled" && saved["lastTest"] is null, "Disable retained obsolete test status.");
@@ -98,10 +123,43 @@ var opcSnapshot = JsonSerializer.SerializeToNode(GatewayConnections.Snapshot("op
 Assert(opcSnapshot["values"]!.AsArray().Count == 1 && opcSnapshot["values"]![0]!["Quality"]!.GetValue<string>() == "Bad_Disabled", "Quick watch did not report disabled quality.");
 Assert(!snapshot.ToJsonString().Contains("SELECT") && !snapshot.ToJsonString().Contains("connection-secret-canary"), "Dependency response exposed SQL or credentials.");
 Console.WriteLine("PASS archived published-only dependencies and bounded read-only quality snapshots");
-Console.WriteLine("6 gateway connection model groups passed.");
+await ThrowsAsync<InvalidOperationException>(() => engine.DeleteConnectionAsync("fixture", Saved("fixture")["revision"]!.GetValue<int>(), catalog));
+await ThrowsAsync<InvalidOperationException>(() => engine.DeleteConnectionAsync("legacy", Saved("legacy")["revision"]!.GetValue<int>(), catalog));
+await ThrowsAsync<InvalidOperationException>(() => engine.DeleteConnectionAsync("opc-fixture", Saved("opc-fixture")["revision"]!.GetValue<int>(), catalog));
+Assert(Saved("fixture") is not null && Saved("opc-fixture") is not null, "A referenced connection disappeared after rejected deletion.");
+var udtPackage = store.ExportTags();
+udtPackage["udtDefinitions"]!.AsArray().Add(new JsonObject { ["id"] = "ConnectionFixture", ["version"] = 1,
+    ["members"] = new JsonArray(new JsonObject { ["path"] = "Value", ["kind"] = "opcua", ["connectionId"] = "opc-fixture", ["nodeId"] = "ns=1;s=Value" }) });
+var udtPreview = store.PreviewTagImport(udtPackage);
+store.ApplyTagImport(new(udtPackage, udtPreview.Revision, udtPreview.PreviewToken));
+engine.DeleteDefinition(tagPath);
+await ThrowsAsync<InvalidOperationException>(() => engine.DeleteConnectionAsync("opc-fixture", Saved("opc-fixture")["revision"]!.GetValue<int>(), catalog));
+var udtSnapshot = JsonSerializer.SerializeToNode(GatewayConnections.Snapshot("opc-fixture", catalog, engine))!.AsObject();
+Assert(udtSnapshot["dependencies"]!.AsArray().OfType<JsonObject>().Any(item => item["Scope"]!.GetValue<string>() == "UDT member"), "A not-yet-instantiated UDT member reference was omitted.");
+Console.WriteLine("PASS disabled tags, uninstantiated UDT definitions and archived draft/published queries block deletion");
+
+var removable = engine.SaveConnection(new JsonObject { ["id"] = "removable", ["name"] = "Remove fixture", ["type"] = "sqlite", ["database"] = "preserved.db", ["password"] = "remove-secret-canary" });
+await connectors.CreateSqliteDatabaseAsync(store.GetConnection("removable"), false, CancellationToken.None);
+var deletedTest = store.BeginConnectionTest("removable");
+await ThrowsAsync<InvalidOperationException>(() => engine.DeleteConnectionAsync("removable", 0, catalog));
+await ThrowsAsync<ArgumentException>(() => engine.DeleteConnectionAsync("removable", -1, catalog));
+await ThrowsAsync<KeyNotFoundException>(() => engine.DeleteConnectionAsync("missing", 1, catalog));
+await engine.DeleteConnectionAsync("removable", 1, catalog);
+Assert(store.GetConnections().OfType<JsonObject>().All(item => item["id"]!.GetValue<string>() != "removable"), "Deleted connection remains in memory.");
+Assert(new ProjectStore(directory, protection, gatewayOnly: true).GetConnections().OfType<JsonObject>().All(item => item["id"]!.GetValue<string>() != "removable"), "Deleted connection returned on restart.");
+Assert(File.Exists(Path.Combine(directory, "databases", "preserved.db")), "Connection removal deleted a managed database file.");
+Assert(!File.ReadAllText(Path.Combine(directory, "connections.json")).Contains("remove-secret-canary"), "Connection removal leaked its password.");
+Assert(!store.CompleteConnectionTest(deletedTest, true, 20)["accepted"]!.GetValue<bool>(), "An in-flight test recreated deleted metadata.");
+Throws<InvalidOperationException>(() => engine.SaveConnection(removable));
+removable.Remove("revision"); Throws<InvalidOperationException>(() => engine.SaveConnection(removable));
+removable["id"] = "replacement"; engine.SaveConnection(removable);
+Assert(store.GetConnection("replacement").Id == "replacement", "A fresh replacement identity cannot be created.");
+Console.WriteLine("PASS revision-checked durable removal preserves data and rejects obsolete tests and editors");
+Console.WriteLine("9 gateway connection model groups passed.");
 JsonObject Saved(string id) => store.GetConnections().OfType<JsonObject>().Single(item => item["id"]!.GetValue<string>() == id);
 static void Assert(bool condition, string message) { if (!condition) throw new Exception(message); }
 static void Throws<T>(Action action) where T : Exception { try { action(); } catch (T) { return; } throw new Exception("Expected " + typeof(T).Name); }
+static async Task ThrowsAsync<T>(Func<Task> action) where T : Exception { try { await action(); } catch (T) { return; } throw new Exception("Expected " + typeof(T).Name); }
 `);
   const dotnet = path.join(root, '.tools/dotnet', process.platform === 'win32' ? 'dotnet.exe' : 'dotnet');
   const options = { cwd: root, encoding: 'utf8', maxBuffer: 1024 * 1024, env: { ...process.env, DOTNET_CLI_HOME: path.join(root, '.tools/dotnet-home'), NUGET_PACKAGES: path.join(root, '.tools/nuget'), DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1' } };
@@ -138,6 +196,7 @@ async function apiChecks() {
     for (const [session, expected] of [[null, 401], [designer, 403], [operator, 401]]) {
       await request(session, `/api/connections/${id}/diagnostics`, 'GET', undefined, expected);
       await request(session, `/api/connections/${id}/test`, 'POST', undefined, expected);
+      await request(session, `/api/connections/${id}`, 'DELETE', { revision: 1 }, expected);
     }
     console.log('PASS connection lifecycle diagnostics require an engineering administrator');
     saved = await request(admin, '/api/connections', 'POST', { id, name: 'Disposable connection lifecycle', type: 'sqlite', database: `${run}.db` });
@@ -158,6 +217,7 @@ async function apiChecks() {
     let snapshot = await request(admin, `/api/connections/${id}/diagnostics`);
     assert.ok(snapshot.dependencies.some(item => item.scope === 'draft query' && item.projectId === project.id));
     assert.ok(snapshot.dependencies.some(item => item.scope === 'published query' && item.projectId === project.id));
+    await request(admin, `/api/connections/${id}`, 'DELETE', { revision: saved.revision }, 409);
     saved = await request(admin, '/api/connections', 'POST', { ...saved, enabled: false });
     for (const [route, method, body] of [[`/api/connections/${id}/test`, 'POST'], [`/api/connections/${id}/schema`, 'GET'], [`/api/connections/${id}/database`, 'POST', { initializeSampleData: false }], [`/api/projects/${project.id}/queries/reference/execute`, 'POST', { parameters: {} }]])
       await request(admin, route, method, body, 409);
@@ -171,8 +231,22 @@ async function apiChecks() {
     snapshot = await request(admin, `/api/connections/${opcId}/diagnostics`);
     assert.equal(snapshot.values[0].quality, 'Bad_Disabled'); assert.equal(snapshot.values[0].path, tag); assert.deepEqual(snapshot.subscriptions, []);
     assert.equal(snapshot.dependencies[0].scope, 'tag'); assert.ok(Number.isFinite(Date.parse(snapshot.capturedAt)));
+    await request(admin, `/api/connections/${opcId}`, 'DELETE', { revision: opc.revision }, 409);
     console.log('PASS disabled OPC UA quick watch exposes quality without creating a server connection');
-    console.log('4 gateway connection API groups passed.');
+    const unusedId = `${id}-unused`;
+    const unused = await request(admin, '/api/connections', 'POST', { id: unusedId, name: 'Remove disposable fixture', type: 'opcua', endpoint: 'opc.tcp://127.0.0.1:1', enabled: false });
+    await request({ ...admin, csrf: '' }, `/api/connections/${unusedId}`, 'DELETE', { revision: unused.revision }, 403);
+    assert.equal((await request(admin, '/api/connections')).some(item => item.id === unusedId), true);
+    for (const body of [{}, { revision: -1 }, { revision: '1' }]) await request(admin, `/api/connections/${unusedId}`, 'DELETE', body, 400);
+    await request(admin, `/api/connections/${unusedId}`, 'DELETE', { revision: 0 }, 409);
+    await request(admin, `/api/connections/${unusedId}`, 'DELETE', { revision: unused.revision }, 204);
+    assert.equal((await request(admin, '/api/connections')).some(item => item.id === unusedId), false);
+    await request(admin, `/api/connections/${unusedId}`, 'DELETE', { revision: unused.revision }, 404);
+    await request(admin, '/api/connections', 'POST', unused, 409);
+    const noRevision = { ...unused }; delete noRevision.revision;
+    await request(admin, '/api/connections', 'POST', noRevision, 409);
+    console.log('PASS removal validates revision, rejects saved references, and prevents stale editor recreation');
+    console.log('5 gateway connection API groups passed.');
   } finally {
     if (saved) {
       const latest = (await request(admin, '/api/connections')).find(item => item.id === id);

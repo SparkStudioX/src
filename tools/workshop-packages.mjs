@@ -71,7 +71,7 @@ export async function readCatalog(root) {
     assert.equal(entry.source, `examples/${entry.id}.json`); assert.ok(['portable', 'setup-required'].includes(entry.distribution));
     for (const key of ['title', 'summary', 'guide', 'entryScreenId']) assert.ok(typeof entry[key] === 'string' && entry[key].trim(), `Missing workshop ${key}.`);
     assert.ok(entry.title.length <= 120); for (const key of ['features', 'prerequisites', 'walkthrough']) assert.ok(Array.isArray(entry[key]) && entry[key].every(value => typeof value === 'string' && value.trim()), `Invalid ${key}.`);
-    assert.ok(entry.features.length && entry.walkthrough.length); assert.ok(['none', 'memory-tags', 'sqlite-setup'].includes(entry.gatewayWrites));
+    assert.ok(entry.features.length && entry.walkthrough.length); assert.ok(['none', 'memory-tags', 'sqlite-setup', 'explicit-lab-device-commands'].includes(entry.gatewayWrites));
     if (entry.distribution === 'portable') assert.equal(entry.gatewayWrites, 'none', 'Standalone workshop actions must not write gateway data.');
     await sourceFile(root, entry.source); await sourceFile(root, entry.guide);
   }

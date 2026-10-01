@@ -5,10 +5,17 @@ namespace SparkStudio.Connectors;
 
 public sealed partial class ConnectorService
 {
-    /// <summary>One explicit OPC UA write. Never retried; a transport failure may have changed the device.</summary>
+    /// <summary>One explicit device write. Never retried; a transport failure may have changed the device.</summary>
     public Task<string> WriteValueAsync(ConnectionDefinition connection, string nodeId, string dataType, JsonElement value, CancellationToken cancellationToken, Action? beforeDispatch = null)
     {
         _ensureOperationsAllowed?.Invoke();
+        if (DeviceConfiguration.IsDevice(connection))
+        {
+            var point = DeviceConfiguration.Point(connection, nodeId);
+            if (point.DataType != dataType || !point.Writable) throw new ArgumentException("The saved device point type and write permission must match the command.");
+            _ = DeviceScalarCodec.Encode(point, value);
+            return WithDeviceAsync(connection, (session, ct) => session.WriteAsync(point, value, beforeDispatch, ct), cancellationToken);
+        }
         object typed = dataType switch
         {
             "Boolean" => value.GetBoolean(), "Int16" => value.GetInt16(), "Int32" => value.GetInt32(),

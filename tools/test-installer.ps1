@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet(5091)][int]$Port = 5091,
-    [string]$ExpectedVersion = '0.2.0-preview.9',
+    [string]$ExpectedVersion = '0.2.0-preview.12',
     [string]$BuildResultPath,
     [string]$WorkshopDirectory
 )
@@ -127,6 +127,19 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'The installer readiness probe failed before gateway setup. See the isolated probe log.' }
     $checks.Add([ordered]@{ name = 'installer-readiness-probe'; passed = $true; seconds = [Math]::Round(([DateTime]::UtcNow - $probeStarted).TotalSeconds, 2); log = $probeLog })
     NodeCheck 'installer-auth-python' @((Join-Path $PSScriptRoot 'test-installer-auth.mjs'), $testRoot, [string]$process.Id)
+    $process.Refresh()
+    $nativeModules = @($process.Modules | Where-Object { $_.ModuleName -in @('plctag.dll', 'vcruntime140.dll') })
+    $nativeCache = (Join-Path $data 'native-libraries') + [IO.Path]::DirectorySeparatorChar
+    if ($nativeModules.Count -ne 2 -or @($nativeModules | Where-Object { !$_.FileName.StartsWith($nativeCache, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) {
+        throw 'The industrial driver must load both libplctag and its VC runtime from its verified bundled cache, without a host-installed VC runtime.'
+    }
+    foreach ($module in $nativeModules) {
+        $original = if ($module.ModuleName -eq 'vcruntime140.dll') { Join-Path $program 'runtimes\python\windows-x64\vcruntime140.dll' } else { Join-Path $program 'plctag.dll' }
+        if ((Get-FileHash -LiteralPath $module.FileName -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $original -Algorithm SHA256).Hash) {
+            throw "Loaded native module differs from the extracted package: $($module.ModuleName)"
+        }
+    }
+    $checks.Add([ordered]@{ name = 'bundled-industrial-native-runtime'; passed = $true; moduleCount = $nativeModules.Count; hostVisualCppRuntimeUsed = $false })
     $env:SPARKSTUDIO_TEST_AUTH_FILE = $authFile
     # Node's --import treats a Windows drive-qualified path as a URL scheme.
     # The verifier runs from $root, so use a portable relative module specifier.

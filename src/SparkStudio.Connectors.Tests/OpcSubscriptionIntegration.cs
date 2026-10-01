@@ -39,19 +39,34 @@ internal static class OpcSubscriptionIntegration
             ServerConfiguration = new ServerConfiguration
             {
                 BaseAddresses = new StringCollection { endpoint },
-                SecurityPolicies = new ServerSecurityPolicyCollection { new() { SecurityMode = MessageSecurityMode.None, SecurityPolicyUri = SecurityPolicies.None } },
+                SecurityPolicies = new ServerSecurityPolicyCollection
+                {
+                    new() { SecurityMode = MessageSecurityMode.None, SecurityPolicyUri = SecurityPolicies.None },
+                    new() { SecurityMode = MessageSecurityMode.SignAndEncrypt, SecurityPolicyUri = SecurityPolicies.Basic256Sha256 }
+                },
                 UserTokenPolicies = new UserTokenPolicyCollection { new(UserTokenType.Anonymous) },
                 MinPublishingInterval = 100, MaxPublishingInterval = 60000, MaxSubscriptionCount = 10,
                 MaxSessionCount = 10, MaxMessageQueueSize = 100, MaxNotificationQueueSize = 100
             },
             TransportQuotas = new TransportQuotas { OperationTimeout = 5000 }
         };
+        using var serverCertificate = CertificateFactory.CreateCertificate(configuration.ApplicationUri, configuration.ApplicationName,
+            "CN=SparkStudioSubscriptionTest", [Dns.GetHostName(), "localhost", "127.0.0.1"]).CreateForRSA();
+        using (var certificateStore = configuration.SecurityConfiguration.ApplicationCertificates[0].OpenStore(telemetry))
+            await certificateStore.AddAsync(serverCertificate);
+        configuration.SecurityConfiguration.ApplicationCertificates[0].Certificate = serverCertificate;
         await configuration.ValidateAsync(ApplicationType.Server);
+        // This disposable loopback fixture accepts untrusted client certificates.
+        // Production ConnectorService still rejects untrusted server certificates unless explicitly pinned/trusted.
+        configuration.CertificateValidator.CertificateValidation += (_, args) =>
+        {
+            if (args.Error.StatusCode == StatusCodes.BadCertificateUntrusted) args.Accept = true;
+        };
         var application = new ApplicationInstance(configuration, telemetry);
         await application.CheckApplicationInstanceCertificatesAsync(true);
         StandardServer? server = new TestServer();
         using var connector = new ConnectorService(Path.Combine(directory, "client"));
-        using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(nativeFixture is null ? 45 : 120));
+        using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(nativeFixture is null ? 60 : 120));
         Task? watch = null;
         var statuses = new ConcurrentQueue<string>();
         var values = new ConcurrentQueue<ConnectorValue>();
@@ -72,6 +87,17 @@ internal static class OpcSubscriptionIntegration
                 await GatewaySubscriptionLifecycle.RunAsync(gateway, endpoint, check);
                 return;
             }
+            var endpoints = await connector.DiscoverEndpointsAsync(endpoint, lifetime.Token);
+            var encrypted = endpoints.First(candidate => candidate.SecurityMode == "SignAndEncrypt" && candidate.SecurityPolicy == SecurityPolicies.Basic256Sha256);
+            check(encrypted.ServerCertificateSha256 == serverCertificate.GetCertHashString(System.Security.Cryptography.HashAlgorithmName.SHA256), "disposable server advertises its explicit loopback certificate");
+            var secure = connection with { Id = "isolated-secure", SecurityMode = "SignAndEncrypt" };
+            var untrusted = await connector.TestAsync(secure, lifetime.Token);
+            check(!untrusted.Success && untrusted.Message.Contains("BadCertificateUntrusted", StringComparison.Ordinal), "typing a secure endpoint alone reports untrusted certificate without weakening security: " + untrusted.Message);
+            var pinned = secure with { ServerCertificateSha256 = encrypted.ServerCertificateSha256 };
+            check((await connector.TestAsync(pinned, lifetime.Token)).Success, "verified discovery fingerprint allows a secure manual endpoint and server read");
+            var incorrectPin = await connector.TestAsync(pinned with { ServerCertificateSha256 = new string('0', 64) }, lifetime.Token);
+            check(!incorrectPin.Success && incorrectPin.Message.Contains("does not match", StringComparison.Ordinal), "incorrect server certificate pin is rejected before session admission");
+            check(!(await connector.TestAsync(secure, lifetime.Token)).Success, "one connection's explicit pin never trusts another unpinned connection");
             var dispatches = 0;
             var write = await connector.WriteValueAsync(connection, writable, "Int32", JsonSerializer.SerializeToElement(42), lifetime.Token, () => dispatches++);
             check(write.StartsWith("Good", StringComparison.Ordinal) && dispatches == 1, "isolated OPC UA scalar command dispatches exactly once and receives Good");

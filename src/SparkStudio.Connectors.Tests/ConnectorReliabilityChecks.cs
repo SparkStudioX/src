@@ -34,6 +34,7 @@ public static class ConnectorReliabilityChecks
             try { await entered.Task.WaitAsync(TimeSpan.FromSeconds(2)); Check(active == 2, "bounded parallel lanes allow independent operations on one endpoint"); }
             finally { release.TrySetResult(); await Task.WhenAll(first, second); }
         }
+        passed += await RemovalChecks();
         var directory = Path.Combine(Path.GetTempPath(), "SparkStudio.ConnectorReliability." + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
@@ -58,5 +59,51 @@ public static class ConnectorReliabilityChecks
             return passed;
         }
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true); }
+    }
+
+    private static async Task<int> RemovalChecks()
+    {
+        var passed = 0;
+        void Check(bool condition, string message) { if (!condition) throw new Exception(message); passed++; }
+        async Task Reject(Func<Task> action)
+        {
+            try { await action(); } catch (InvalidOperationException) { passed++; return; }
+            throw new Exception("Expected an in-use or removed connection conflict.");
+        }
+        var resources = new List<Resource>();
+        using var pool = new ConnectionResourcePool<Resource>(4, (_, _) =>
+            { var item = new Resource(); resources.Add(item); return Task.FromResult(item); }, item => !item.Disposed,
+            _ => throw new IOException("Synthetic graceful-close failure"));
+        var connection = new ConnectionDefinition("remove", "Remove fixture", "opcua");
+        var other = new ConnectionDefinition("preserve", "Other fixture", "opcua");
+        await pool.RunAsync(connection, (_, _) => Task.FromResult(true), default);
+        await pool.RunAsync(other, (_, _) => Task.FromResult(true), default);
+        var commits = 0;
+        try { await pool.PrepareConnectionRemoval(connection.Id, () => throw new IOException("Synthetic persistence failure"))(); }
+        catch (IOException) { passed++; }
+        Check(!resources[0].Disposed && !resources[1].Disposed, "a failed persistence callback leaves cached sessions intact");
+        await pool.RunAsync(connection, (_, _) => Task.FromResult(true), default);
+        Check(resources.Count == 2, "failed removal still allows the same healthy session to be reused");
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var active = pool.RunAsync(connection, async (_, cancellation) =>
+            { entered.SetResult(); await release.Task.WaitAsync(cancellation); return true; }, default);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        try
+        {
+            await Reject(() => pool.PrepareConnectionRemoval(connection.Id, () => commits++)());
+            Check(commits == 0 && !resources[0].Disposed, "an active OPC lease blocks removal before persistence or disposal");
+        }
+        finally { release.SetResult(); await active; }
+        var cleanup = pool.PrepareConnectionRemoval(connection.Id, () => commits++);
+        Check(commits == 1 && !resources[0].Disposed, "removal reserves and persists first while deferring transport close until after configuration locks are released");
+        await cleanup();
+        Check(commits == 1 && resources[0].Disposed && !resources[1].Disposed, "removal releases only the selected connection even when graceful close fails");
+        await Reject(() => pool.RunAsync(connection, (_, _) => Task.FromResult(true), default));
+        Check(resources.Count == 2, "an old captured configuration cannot reopen a deleted connection");
+        var replacement = connection with { Id = "replacement" };
+        await pool.RunAsync(replacement, (_, _) => Task.FromResult(true), default);
+        Check(resources.Count == 3 && !resources[2].Disposed, "a fresh identity can create a replacement session without reopening the removed identity");
+        return passed;
     }
 }

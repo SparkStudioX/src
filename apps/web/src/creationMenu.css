@@ -1,7 +1,7 @@
 .creation-dropdown { position:relative; }
 .creation-menu { position:absolute; z-index:30; top:calc(100% + 8px); right:0; width:290px; max-width:calc(100vw - 32px); padding:6px; border:1px solid var(--border-strong); border-radius:10px; background:var(--panel); box-shadow:0 10px 30px var(--shadow-overlay); }
 .creation-menu > button { display:flex; align-items:center; gap:12px; width:100%; padding:12px; color:var(--ink); border:0; border-radius:6px; background:transparent; cursor:pointer; text-align:left; font:inherit; }
-.creation-menu > button:hover,.creation-menu > button:focus { background:var(--surface-hover); outline:none; }
+.creation-menu > button:hover,.creation-menu > button:focus-visible { background:var(--surface-hover); outline:none; }
 .creation-menu > button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
 .creation-menu > button > svg { flex:none; color:var(--muted); }
 .creation-menu > button > span { display:grid; gap:3px; min-width:0; }

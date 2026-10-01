@@ -78,7 +78,7 @@ public static class EquipmentCommandDefinitions
 public sealed class EquipmentCommands(ConnectorService connectors, TagEngine tags, SecurityStore security, RecoveryQuarantine recovery, TimeProvider? timeProvider = null)
 {
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
-    private sealed record Ticket(string Id, string UserId, long UserRevision, string ProjectId, string PublishedAt, string Resource, JsonObject Definition, JsonNode Value, JsonNode Expected, string Configuration, DateTimeOffset Expires, Func<CancellationToken, Task<JsonObject>>? Resolver = null, Func<bool>? CurrentSession = null);
+    private sealed record Ticket(string Id, string UserId, long UserRevision, string ProjectId, string PublishedAt, string Resource, JsonObject Definition, JsonNode Value, JsonNode Expected, string Configuration, string Contention, DateTimeOffset Expires, Func<CancellationToken, Task<JsonObject>>? Resolver = null, Func<bool>? CurrentSession = null);
     private readonly object gate = new();
     private readonly Dictionary<string, Ticket> tickets = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> paths = new(StringComparer.Ordinal);
@@ -92,7 +92,7 @@ public sealed class EquipmentCommands(ConnectorService connectors, TagEngine tag
     private static JsonObject Tag(ProjectStore store, string path)
     {
         var tag = store.GetRuntimeTagDefinitions().OfType<JsonObject>().SingleOrDefault(item => ProjectStore.Optional(item, "path") == path) ?? throw new ArgumentException("The configured command tag is unavailable.");
-        if (!TagDefinitionValidator.Enabled(tag) || tag["effectiveEnabled"]?.GetValue<bool>() == false || !store.DefaultTagProviderEnabled() || TagDefinitionValidator.Kind(tag) is not ("memory" or "opcua")) throw new ArgumentException("Commands require enabled memory or OPC UA tags.");
+        if (!TagDefinitionValidator.Enabled(tag) || tag["effectiveEnabled"]?.GetValue<bool>() == false || !store.DefaultTagProviderEnabled() || TagDefinitionValidator.Kind(tag) is not ("memory" or "opcua" or "device")) throw new ArgumentException("Commands require enabled memory or device tags.");
         return tag;
     }
     private static string Configuration(ProjectStore store, JsonObject definition)
@@ -104,8 +104,24 @@ public sealed class EquipmentCommands(ConnectorService connectors, TagEngine tag
         // Memory values are compared separately; configuration identity includes all
         // tag options and public connection revisions, never decrypted credentials.
         target.Remove("value"); readback.Remove("value");
-        foreach (var tag in new[] { target, readback }) if (TagDefinitionValidator.Kind(tag) == "opcua") _ = store.GetConnection(ProjectStore.Required(tag, "connectionId"));
+        foreach (var tag in new[] { target, readback }) if (TagDefinitionValidator.IsDeviceSource(tag))
+        {
+            var connection = store.GetConnection(ProjectStore.Required(tag, "connectionId"));
+            if (TagDefinitionValidator.Kind(tag) == "device")
+            {
+                var point = DeviceConfiguration.Point(connection, ProjectStore.Required(tag, "nodeId"));
+                if (point.DataType != TagDefinitionValidator.DataType(tag)) throw new ArgumentException("The configured device point type changed.");
+            }
+        }
+        if (TagDefinitionValidator.Kind(target) == "device" && !DeviceConfiguration.Point(store.GetConnection(ProjectStore.Required(target, "connectionId")), ProjectStore.Required(target, "nodeId")).Writable)
+            throw new ArgumentException("The saved device point is read-only.");
         return Hash(target.ToJsonString() + readback.ToJsonString() + store.GetConnections().ToJsonString());
+    }
+    private static string Contention(ProjectStore store, JsonObject definition)
+    {
+        var target = Tag(store, ProjectStore.Required(definition, "tagPath"));
+        return TagDefinitionValidator.Kind(target) == "memory" ? "memory:" + ProjectStore.Required(target, "path")
+            : DeviceConfiguration.ContentionKey(store.GetConnection(ProjectStore.Required(target, "connectionId")));
     }
     private async Task<JsonNode> Read(ProjectStore store, string path, CancellationToken cancellation)
     {
@@ -144,7 +160,7 @@ public sealed class EquipmentCommands(ConnectorService connectors, TagEngine tag
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation); timeout.CancelAfter(TimeSpan.FromSeconds(10));
         var expected = await Read(store, ProjectStore.Required(definition, "tagPath"), timeout.Token);
         if (currentSession?.Invoke() == false) throw new BadHttpRequestException("The operator session ended before review completed.", 403);
-        var ticket = new Ticket(Guid.NewGuid().ToString("N"), actor.Id, actor.Revision, GatewayAccess.ProjectId(context), stamp, resource, definition, value, expected, configuration, clock.GetUtcNow().AddSeconds(30), resolver, currentSession);
+        var ticket = new Ticket(Guid.NewGuid().ToString("N"), actor.Id, actor.Revision, GatewayAccess.ProjectId(context), stamp, resource, definition, value, expected, configuration, Contention(store, definition), clock.GetUtcNow().AddSeconds(30), resolver, currentSession);
         lock (gate)
         {
             foreach (var expired in tickets.Where(pair => pair.Value.Expires <= clock.GetUtcNow()).Select(pair => pair.Key).ToArray()) tickets.Remove(expired);
@@ -172,9 +188,9 @@ public sealed class EquipmentCommands(ConnectorService connectors, TagEngine tag
         }
         if (ticket.Expires <= clock.GetUtcNow()) throw new InvalidOperationException("This command review expired. Review current equipment state again.");
         var path = ProjectStore.Required(ticket.Definition, "tagPath");
-        if (paths.Count >= 4096 && !paths.ContainsKey(path)) throw new InvalidOperationException("The command path capacity has been reached.");
-        var serial = paths.GetOrAdd(path, _ => new SemaphoreSlim(1, 1));
-        if (!await serial.WaitAsync(0, cancellation)) throw new InvalidOperationException("Another command to this tag is in progress. Review current state when it finishes.");
+        if (paths.Count >= 4096 && !paths.ContainsKey(ticket.Contention)) throw new InvalidOperationException("The command target capacity has been reached.");
+        var serial = paths.GetOrAdd(ticket.Contention, _ => new SemaphoreSlim(1, 1));
+        if (!await serial.WaitAsync(0, cancellation)) throw new InvalidOperationException("Another command to this device is in progress. Review current state when it finishes.");
         var dispatched = false;
         try
         {

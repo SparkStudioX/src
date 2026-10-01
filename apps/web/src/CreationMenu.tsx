@@ -38,7 +38,14 @@ export default function CreationMenu<T extends string>({ label, menuLabel, choic
       onClick={() => { focusLast.current = false; setOpen(!open); }}
       onKeyDown={event => {
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-          event.preventDefault(); focusLast.current = event.key === "ArrowUp"; setOpen(true);
+          event.preventDefault();
+          focusLast.current = event.key === "ArrowUp";
+          if (open) {
+            const items = menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
+            items?.[focusLast.current ? items.length - 1 : 0]?.focus();
+          } else setOpen(true);
+        } else if (event.key === "Escape" && open) {
+          event.preventDefault(); event.stopPropagation(); setOpen(false);
         }
       }}>
       <Icon name="plus" size={16} />{label}<Icon name="down" size={14} />
@@ -50,7 +57,9 @@ export default function CreationMenu<T extends string>({ label, menuLabel, choic
       const next = event.key === "ArrowDown" ? (current + 1) % items.length : event.key === "ArrowUp" ? (current - 1 + items.length) % items.length : event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : -1;
       if (next >= 0) { event.preventDefault(); items[next]?.focus(); }
     }}>
-      {choices.map(choice => <button key={choice.value} type="button" role="menuitem" tabIndex={-1} onClick={() => { setOpen(false); trigger.current?.focus(); onSelect(choice.value); }}>
+      {choices.map(choice => <button key={choice.value} type="button" role="menuitem" tabIndex={-1}
+        onPointerMove={event => { if (event.pointerType !== "touch" && document.activeElement !== event.currentTarget) event.currentTarget.focus({ preventScroll: true }); }}
+        onClick={() => { setOpen(false); trigger.current?.focus(); onSelect(choice.value); }}>
         <Icon name={choice.icon} size={18} /><span><strong>{choice.label}</strong><small>{choice.description}</small></span>
       </button>)}
     </div>}

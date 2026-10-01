@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http.Features;
+using SparkStudio.Connectors;
 
 namespace SparkStudio.Gateway;
 
@@ -129,23 +131,34 @@ public sealed partial class ProjectStore
     private JsonObject NormalizeTag(JsonObject value)
     {
         var kind = TagDefinitionValidator.Kind(value);
-        if (kind is not ("opcua" or "memory" or "expression")) throw new ArgumentException("kind must be opcua, memory or expression.");
+        if (kind is not ("opcua" or "device" or "memory" or "expression")) throw new ArgumentException("kind must be opcua, device, memory or expression.");
         var node = new JsonObject
         {
             ["path"] = TagDefinitionValidator.Path(TagDefinitionValidator.Text(value, "path")), ["kind"] = kind,
             ["enabled"] = TagDefinitionValidator.Enabled(value), ["publishingIntervalMs"] = TagDefinitionValidator.PublishingInterval(value)
         };
         if (value["scanGroup"] is not null) node["scanGroup"] = TagModel.Name(value, "scanGroup");
-        if (kind == "opcua")
+        if (kind is "opcua" or "device")
         {
             var id = TagDefinitionValidator.Text(value, "connectionId");
             var connection = connections.OfType<JsonObject>().FirstOrDefault(item => Optional(item, "id") == id)
-                ?? throw new ArgumentException("An existing OPC UA connection is required.");
-            if (Optional(connection, "type") != "opcua") throw new ArgumentException("Tag bindings require an OPC UA connection.");
-            node["connectionId"] = id; node["nodeId"] = TagDefinitionValidator.NodeIdentifier(value);
+                ?? throw new ArgumentException("An existing device connection is required.");
+            if (kind == "opcua" && Optional(connection, "type") != "opcua") throw new ArgumentException("OPC tag bindings require an OPC UA connection.");
+            if (kind == "device" && !DeviceConfiguration.IsDevice(Required(connection, "type"))) throw new ArgumentException("Device tag bindings require an industrial device connection.");
+            node["connectionId"] = id;
+            node["nodeId"] = kind == "opcua" ? TagDefinitionValidator.NodeIdentifier(value) : TagDefinitionValidator.DevicePointIdentifier(value);
             node["absoluteDeadband"] = TagDefinitionValidator.AbsoluteDeadband(value);
             node["queueSize"] = TagDefinitionValidator.MonitorQueueSize(value);
-            if (value.ContainsKey("dataType")) node["dataType"] = TagDefinitionValidator.DataType(value);
+            if (kind == "device")
+            {
+                var settings = connection["device"]?.Deserialize<DeviceSettings>(Json) ?? throw new ArgumentException("The device connection has no point map.");
+                var point = settings.Points.SingleOrDefault(item => item.Id == Required(node, "nodeId")) ?? throw new ArgumentException("Select a saved point from the device connection's map.");
+                var dataType = value.ContainsKey("dataType") ? TagDefinitionValidator.DataType(value) : point.DataType;
+                if (dataType != point.DataType) throw new ArgumentException("The tag data type must match the saved device point.");
+                node["dataType"] = dataType;
+                node["writable"] = point.Writable;
+            }
+            else if (value.ContainsKey("dataType")) node["dataType"] = TagDefinitionValidator.DataType(value);
         }
         else
         {

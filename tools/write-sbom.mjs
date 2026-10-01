@@ -31,7 +31,7 @@ for (const [key, value] of Object.entries(deps.libraries)) {
   const purl = `pkg:nuget/${name}@${version}`;
   const notice = packageInventory.find(item => item.name === key);
   add({ type: 'library', name, version, purl, 'bom-ref': purl,
-    ...(notice?.licenseType === 'expression' && notice.license ? { licenses: [{ expression: notice.license }] } : {}),
+    ...(notice?.reviewedLicense || notice?.licenseType === 'expression' && notice.license ? { licenses: [{ expression: notice.reviewedLicense ?? notice.license }] } : {}),
     ...(notice ? { properties: [{ name: 'sparkstudio:license-review-required', value: String(notice.requiresLicenseReview) }] } : {}),
     ...(value.sha512 ? { hashes: [{ alg: 'SHA-512', content: Buffer.from(value.sha512.replace(/^sha512-/, ''), 'base64').toString('hex') }] } : {}) });
 }
@@ -40,6 +40,20 @@ const pythonVersion = bootstrap.match(/python-(\d+\.\d+\.\d+)-embed/)[1];
 const python = path.join(stage, 'runtimes/python/windows-x64/python.exe');
 if (!fs.existsSync(python)) throw new Error('The exact bundled Python payload is required for its SBOM.');
 add({ type: 'application', name: 'CPython', version: pythonVersion, 'bom-ref': `cpython-${pythonVersion}`, licenses: [{ license: { id: 'PSF-2.0' } }], hashes: [{ alg: 'SHA-256', content: createHash('sha256').update(fs.readFileSync(python)).digest('hex') }] });
+const vcRuntime = path.join(stage, 'runtimes/python/windows-x64/vcruntime140.dll');
+// Inspect both the staged native file and dependency inventory: an incomplete
+// industrial payload must not evade this gate by omitting either one of them.
+const usesPlcRuntime = fs.existsSync(path.join(stage, 'plctag.dll')) || Object.entries(deps.libraries).some(([key, value]) =>
+  value.type === 'package' && ['libplctag', 'libplctag.nativeimport'].includes(key.slice(0, key.lastIndexOf('/')).toLowerCase()));
+if (!fs.existsSync(vcRuntime) && usesPlcRuntime) throw new Error('The Windows EtherNet/IP payload requires the reviewed bundled VC runtime.');
+if (fs.existsSync(vcRuntime)) {
+  const vcRuntimeHash = createHash('sha256').update(fs.readFileSync(vcRuntime)).digest('hex');
+  if (vcRuntimeHash !== 'd1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7') throw new Error('The bundled VC runtime differs from the reviewed CPython Windows payload.');
+  add({ type: 'library', name: 'Microsoft Visual C Runtime', version: '14.51.36247.0', 'bom-ref': 'msvc-runtime-14.51.36247.0',
+    licenses: [{ license: { name: 'Microsoft Distributable Code (CPython Windows binary redistribution terms)' } }],
+    hashes: [{ alg: 'SHA-256', content: vcRuntimeHash }],
+    properties: [{ name: 'sparkstudio:notices', value: 'runtimes/python/windows-x64/LICENSE.txt' }, { name: 'sparkstudio:usage', value: usesPlcRuntime ? 'CPython and embedded EtherNet/IP native dependency' : 'CPython' }] });
+}
 for (const framework of read(path.join(stage, 'SparkStudio.Gateway.runtimeconfig.json')).runtimeOptions.includedFrameworks ?? []) add({ type: 'framework', name: framework.name, version: framework.version, 'bom-ref': `dotnet-${framework.name}-${framework.version}`, licenses: [{ license: { id: 'MIT' } }] });
 const sorted = [...components.values()].sort((a, b) => a['bom-ref'].localeCompare(b['bom-ref']));
 const bom = { bomFormat: 'CycloneDX', specVersion: '1.6', version: 1,

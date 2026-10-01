@@ -70,6 +70,9 @@ Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md).
 
 - [Gateway console](GATEWAY_CONSOLE.md)
 - [Connection operations](CONNECTION_OPERATIONS.md)
+- [Industrial protocol support plan](INDUSTRIAL_PROTOCOLS.md)
+- [Industrial device setup and workshop](INDUSTRIAL_DEVICE_CONNECTIONS.md)
+- [Industrial connector technical specification](INDUSTRIAL_CONNECTOR_SPECIFICATION.md)
 - [Tag engineering](TAG_ENGINEERING.md)
 - [Deployment settings](DEPLOYMENT_SETTINGS.md)
 - [Network access](NETWORK_ACCESS.md)

@@ -43,6 +43,8 @@ if (args.Contains("--opc-integration") || gatewayAddress is not null) suites.Add
     return passed;
 }));
 suites.Add(("Connector reliability", ConnectorReliabilityChecks.RunAsync));
+suites.Add(("Industrial devices", DeviceConnectorChecks.RunAsync));
+suites.Add(("Native industrial drivers", NativeDeviceChecks.RunAsync));
 await TestReport.RunAsync("Connectors", args, suites);
 
 static async Task<int> RunModelChecks()
@@ -101,6 +103,26 @@ Check(builder.ApplicationIntent == ApplicationIntent.ReadOnly && !builder.Persis
 Check(ConnectorService.ParseSecurityMode(null) == MessageSecurityMode.SignAndEncrypt, "secure OPC default");
 Check(ConnectorService.ParseSecurityMode("None") == MessageSecurityMode.None, "explicit unsecured opt-in");
 Reject(() => ConnectorService.ParseSecurityMode("auto"), "no automatic security downgrade");
+EndpointDescription Endpoint(string policy, MessageSecurityMode mode, UserTokenType authentication, byte level = 1) => new()
+{
+    EndpointUrl = "opc.tcp://advertised-server:4840", SecurityMode = mode, SecurityPolicyUri = policy, SecurityLevel = level,
+    UserIdentityTokens = new UserTokenPolicyCollection { new(authentication) }
+};
+var encryptedEndpoint = Endpoint(SecurityPolicies.Basic256Sha256, MessageSecurityMode.SignAndEncrypt, UserTokenType.UserName);
+var strongestEndpoint = Endpoint(SecurityPolicies.Aes256_Sha256_RsaPss, MessageSecurityMode.SignAndEncrypt, UserTokenType.UserName);
+var anonymousEndpoint = Endpoint(SecurityPolicies.Basic256Sha256, MessageSecurityMode.SignAndEncrypt, UserTokenType.Anonymous);
+Check(ReferenceEquals(ConnectorService.SelectEndpoint([encryptedEndpoint, strongestEndpoint, anonymousEndpoint], MessageSecurityMode.SignAndEncrypt, UserTokenType.UserName), strongestEndpoint), "manual endpoint selects the strongest compatible configured security mode and authentication");
+Check(ReferenceEquals(ConnectorService.SelectEndpoint([encryptedEndpoint, anonymousEndpoint], MessageSecurityMode.SignAndEncrypt, UserTokenType.Anonymous), anonymousEndpoint), "endpoint selection respects anonymous authentication without changing security mode");
+void EndpointFailure(EndpointDescription[] endpoints, MessageSecurityMode mode, UserTokenType authentication, string guidance)
+{
+    try { ConnectorService.SelectEndpoint(endpoints, mode, authentication); }
+    catch (InvalidOperationException error) { Check(error.Message.Contains(guidance, StringComparison.Ordinal), "endpoint mismatch explains the required settings"); return; }
+    throw new Exception("FAILED: incompatible endpoint must be rejected");
+}
+EndpointFailure([encryptedEndpoint], MessageSecurityMode.SignAndEncrypt, UserTokenType.Anonymous, "requires a username and password");
+EndpointFailure([anonymousEndpoint], MessageSecurityMode.SignAndEncrypt, UserTokenType.UserName, "does not support username/password");
+EndpointFailure([Endpoint(SecurityPolicies.None, MessageSecurityMode.None, UserTokenType.Anonymous)], MessageSecurityMode.SignAndEncrypt, UserTokenType.Anonymous, "no weaker fallback");
+EndpointFailure([Endpoint(SecurityPolicies.Basic128Rsa15, MessageSecurityMode.SignAndEncrypt, UserTokenType.Anonymous)], MessageSecurityMode.SignAndEncrypt, UserTokenType.Anonymous, "no supported SignAndEncrypt endpoint");
 Check(ConnectorService.NormalizeValue(double.NaN) is string, "nonfinite OPC value is JSON serializable");
 Check((string)ConnectorService.NormalizeValue(new byte[] { 1, 2, 3 })! == "AQID", "binary value is base64");
 Check(ConnectorService.OpcError(2148728832).Contains("BadSecurityChecksFailed, 0x80130000") && ConnectorService.OpcError(2148728832).Contains("rejected-client"), "security failure has symbolic status and client trust guidance");

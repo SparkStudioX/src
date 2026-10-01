@@ -2,11 +2,11 @@
 
 SparkStudio is an early-preview industrial application builder with a browser designer, a published operator runtime and a self-hosted gateway. The application uses ASP.NET Core/.NET 10, React/TypeScript and CPython 3; it does not require Java or Jython.
 
-[Website](https://sparkstudiox.com/) · [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.11) · [Product scope](docs/architecture/PRODUCT.md) · [Verification and roadmap](docs/architecture/PARITY.md)
+[Website](https://sparkstudiox.com/) · [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.12) · [Product scope](docs/architecture/PRODUCT.md) · [Verification and roadmap](docs/architecture/PARITY.md)
 
 The current source includes **local accounts, separate engineering/operator sessions, server-enforced project permissions and a bounded audit trail**. First run requires administrator setup on the gateway computer. Remote account/API access requires HTTPS; network deployment and service lifecycle acceptance remain separate gates. Python scripts run with the gateway account's operating-system access; worker processes are not a security sandbox. See the [security guide](docs/architecture/SECURITY.md).
 
-The feature list below describes the published preview.11 release. It adds component-specific runtime bindings, native Set tag value buttons, camera/photo-badge workshops, multiple backup schedules with S3 targets and the revised Designer/Gateway Settings interface. Exact-package verification passed for build `fcd26034153d4192bd6e11b352b1d57ba3324aeb`; [the release ledger](docs/architecture/PARITY.md) records its checks, asset hashes and source CI. The feature guides identify compatibility and remaining acceptance limits.
+Preview.12 adds Modbus TCP, Allen Bradley EtherNet/IP, Siemens S7 and Beckhoff ADS connections, saved point maps, browsing, polling and reviewed scalar writes. Allen Bradley profiles include ControlLogix, CompactLogix, Micro800, MicroLogix, SLC 500 and PLC-5. It also improves connection deletion/reference handling and menu pointer/keyboard behavior. The [release ledger](docs/architecture/PARITY.md) records exact-package verification, asset hashes, source revision and remaining acceptance limits. The features below remain available.
 
 ## What works today
 
@@ -51,7 +51,7 @@ The current source includes query-backed forms and scalar properties, single-sel
 
 ## Run on Windows
 
-Download the preview.11 installer, checksum and matching 37-project workshop collection from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.11). The installer bundles .NET, Python and browser assets; setup-required examples are documented separately. It retains unified publication, local alarms/history and the 10,000-expanded-tag configuration limit while adding the features above. Consult the release notes and [release ledger](docs/architecture/PARITY.md) for exact-package verification, and [load measurements](docs/architecture/LOAD_TESTING.md) for throughput limits. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md). Elevated preview.11 service/network installation, remote browser trust, rollback, uninstall, complete real-data preservation, broader service-account/ACL behavior, actual domain SMB, trusted external FTPS and real S3 account-policy/delivery acceptance remain pending.
+Download the preview.12 installer, checksum and matching 37-project workshop collection from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.12). The installer bundles .NET, Python and browser assets; setup-required examples are documented separately. It retains unified publication, local alarms/history and the 10,000-expanded-tag configuration limit while adding the features above. Consult the release notes and [release ledger](docs/architecture/PARITY.md) for exact-package verification, and [load measurements](docs/architecture/LOAD_TESTING.md) for throughput limits. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md). Physical industrial controllers and Linux execution of the new drivers remain unverified. Elevated preview.12 service/network installation, remote browser trust, rollback, uninstall, complete real-data preservation, broader service-account/ACL behavior, actual domain SMB, trusted external FTPS and real S3 account-policy/delivery acceptance remain pending.
 
 For development, use Windows x64 with Node/npm available. Node 22.17.1 was used for the recorded checks. Run from the repository root in PowerShell:
 
@@ -104,7 +104,7 @@ node tools/load-example.mjs process-graphics
 
 The loader backs up the current project under `.data/example-backups` and adds missing resources and memory tags. Existing IDs and values are preserved. Review the draft, then publish in Designer. The loader currently accepts only local development ports 5090 and 5091; these combined example files are not complete project exports.
 
-Use [templates](docs/architecture/TEMPLATES.md) for reusable forms and saved-row cards, and [assets/popups](docs/architecture/ASSETS_POPUPS.md) for local images and contextual dialogs. The examples write local memory tags, not external equipment or a production database.
+Use [templates](docs/architecture/TEMPLATES.md) for reusable forms and saved-row cards, and [assets/popups](docs/architecture/ASSETS_POPUPS.md) for local images and contextual dialogs. The portable examples use synthetic data. Setup-required exercises describe their gateway/database writes separately; the industrial workshop includes explicitly reviewed writes to isolated lab variables.
 
 The [nested forms workshop](examples/nested-forms.json) contains paired machine cards, a two-row saved repeater and a contextual inspection popup. Each card embeds a setpoint form and read-only summary; each Python preview reports only its inner form's inputs and typed parameters without writing tags or records. The [nested-form guide](docs/architecture/NESTED_FORMS.md#workshop) covers loading, draft isolation, popup checks and the four-level/10,000-component bounds. A generated `.sparkproj` can be imported through Projects; generated packages stay in the local-only `artifacts/sparkproj/` directory.
 
@@ -206,7 +206,9 @@ Open `https://localhost:8443`; HTTP on 8090 redirects there. The Windows gateway
 
 ## Feature workshops
 
-The [workshop catalog](examples/README.md) covers 55 authored examples. 37 build into independent, importable `.sparkproj` projects; 18 require gateway tags, databases, administrative exercises or local image assignment and are clearly listed separately. Each major feature includes a workshop, walkthrough, prerequisites and verification. The portable collection uses synthetic data. Visitor check-in requires a webcam and internet access to Labelary; the other exercises work offline.
+The [workshop catalog](examples/README.md) covers 56 authored examples. 37 build into independent, importable `.sparkproj` projects; 19 require gateway tags, databases, industrial lab devices, administrative exercises or local image assignment and are clearly listed separately. Each major feature includes a workshop, walkthrough, prerequisites and verification. The portable collection uses synthetic data. Visitor check-in requires a webcam and internet access to Labelary; the other portable exercises work offline.
+
+Preview.12 supports [Modbus TCP, Allen Bradley EtherNet/IP, Siemens S7 and Beckhoff ADS](docs/architecture/INDUSTRIAL_DEVICE_CONNECTIONS.md) through shared device sessions, saved point maps, polling and reviewed scalar commands. Raw storage and engineering types can differ for numeric scaling; native symbolic browse identities remain separate from saved point IDs. Follow the setup-required industrial workshop and record acceptance against each actual controller/firmware before deployment.
 
 Designer **Search project** (Ctrl+Shift+F / Cmd+Shift+F) finds draft resources, properties, bindings, queries and scripts, with direct navigation and structured-reference views. See [project search](docs/architecture/PROJECT_SEARCH.md) and its portable workshop. Run `node tools/test-project-search.mjs` with Node 22.17 or newer to check the pure index and reference contracts offline.
 

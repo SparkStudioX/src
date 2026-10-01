@@ -7,7 +7,8 @@ internal sealed class ConnectionResourcePool<T>(
     Func<T, bool> healthy,
     Func<T, Task> close,
     Func<Exception, bool>? reusableAfterError = null,
-    int maximumConcurrencyPerConnection = 1) : IDisposable where T : class, IDisposable
+    int maximumConcurrencyPerConnection = 1,
+    Func<ConnectionDefinition, ConnectionDefinition, bool>? sameConfiguration = null) : IDisposable where T : class, IDisposable
 {
     private sealed class Slot
     {
@@ -20,6 +21,7 @@ internal sealed class ConnectionResourcePool<T>(
 
     private readonly object _sync = new();
     private readonly Dictionary<(string Id, int Lane), Slot> _slots = new();
+    private readonly HashSet<string> _removed = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _shutdown = new();
     private bool _disposed;
     private int _leases;
@@ -34,6 +36,7 @@ internal sealed class ConnectionResourcePool<T>(
         lock (_sync)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_removed.Contains(connection.Id)) throw new InvalidOperationException("This connection has been removed. Select a saved connection before starting an operation.");
             stopping = _shutdown.Token;
             var candidates = _slots.Where(pair => pair.Key.Id == connection.Id).OrderBy(pair => pair.Value.Users).ThenBy(pair => pair.Key.Lane).ToArray();
             slot = candidates.FirstOrDefault().Value!;
@@ -43,7 +46,7 @@ internal sealed class ConnectionResourcePool<T>(
                 if (_slots.Count >= capacity)
                 {
                     var candidate = _slots.Where(pair => pair.Value.Users == 0).OrderBy(pair => pair.Value.LastUse).FirstOrDefault();
-                    if (candidate.Value is null) throw new InvalidOperationException($"All {capacity} OPC UA connection slots are busy. Retry after an operation completes.");
+                    if (candidate.Value is null) throw new InvalidOperationException($"All {capacity} connection slots are busy. Retry after an operation completes.");
                     _slots.Remove(candidate.Key);
                     evicted = candidate.Value;
                 }
@@ -64,7 +67,7 @@ internal sealed class ConnectionResourcePool<T>(
             try
             {
                 operation.Token.ThrowIfCancellationRequested();
-                if (slot.Resource is null || slot.Configuration != connection || !healthy(slot.Resource))
+                if (slot.Resource is null || slot.Configuration is null || !(sameConfiguration?.Invoke(slot.Configuration, connection) ?? slot.Configuration == connection) || !healthy(slot.Resource))
                 {
                     await CloseSlotAsync(slot);
                     slot.Resource = await create(connection, operation.Token);
@@ -98,6 +101,34 @@ internal sealed class ConnectionResourcePool<T>(
                 if (_disposed && _leases == 0) _shutdown.Dispose();
             }
         }
+    }
+
+    internal Func<Task> PrepareConnectionRemoval(string id, Action commit)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        ArgumentNullException.ThrowIfNull(commit);
+        Slot[] idle;
+        lock (_sync)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var slots = _slots.Where(pair => pair.Key.Id == id).ToArray();
+            if (slots.Any(pair => pair.Value.Users > 0))
+                throw new InvalidOperationException("An operation is using this connection. Wait for it to finish before deleting.");
+            commit();
+            _removed.Add(id);
+            foreach (var pair in slots) _slots.Remove(pair.Key);
+            idle = slots.Select(pair => pair.Value).ToArray();
+        }
+        return () => CloseRemovedAsync(idle);
+    }
+
+    private async Task CloseRemovedAsync(Slot[] idle)
+    {
+        await Task.WhenAll(idle.Select(async slot =>
+        {
+            try { await CloseSlotAsync(slot); }
+            finally { slot.Gate.Dispose(); }
+        }));
     }
 
     private async Task CloseSlotAsync(Slot slot)

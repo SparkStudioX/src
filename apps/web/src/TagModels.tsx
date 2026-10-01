@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { api } from "./api";
 import "./accountSettings.css";
 
-type Member = { path: string; kind: string; dataType: string; value?: unknown; expression?: string; inputs?: Record<string, string> };
+type Member = { path: string; kind: string; dataType: string; value?: unknown; expression?: string; inputs?: Record<string, string>; connectionId?: string; nodeId?: string; writable?: boolean };
 type Definition = { id: string; version: number; members: Member[] };
 type Instance = { path: string; definitionId: string; version: number; enabled?: boolean; overrides: Record<string, unknown> };
 type Group = { name: string; publishingIntervalMs: number; enabled?: boolean };
@@ -87,7 +87,7 @@ export default function TagModels({ onClose, onApplied }: { onClose: () => void;
           <label>Definition ID<input value={name} onChange={event => { change(); setName(event.target.value); }} /></label>
           <label>New version<input type="number" min={1} max={1000000} value={version} onChange={event => { change(); setVersion(Number(event.target.value)); }} /></label>
           <label>Members (JSON)<textarea rows={12} spellCheck={false} value={text} onChange={event => { change(); setText(event.target.value); }} /></label>
-          <small>Use relative member paths and ./Member for expression inputs. Each member has a source, scalar dataType, and optional scanGroup. Nested UDTs and additional providers are unsupported.</small>
+          <small>Use relative member paths and ./Member for expression inputs. Device members use kind "device", connectionId and the saved map's point ID as nodeId. Each member has a source, scalar dataType, and optional scanGroup. Nested UDTs and additional providers are unsupported.</small>
         </>}
         {tab === "instances" && <>
           <label>Instance<select value={selected} onChange={event => choose(tab, event.target.value)}><option value="">New instance</option>{model.instances.map(item => <option key={item.path}>{item.path}</option>)}</select></label>
@@ -103,9 +103,9 @@ export default function TagModels({ onClose, onApplied }: { onClose: () => void;
           <label>Scan group<select value={selected} onChange={event => choose(tab, event.target.value)}><option value="">New scan group</option>{model.scanGroups.map(item => <option key={item.name}>{item.name}</option>)}</select></label>
           <label>Name<input value={name} readOnly={Boolean(selected)} onChange={event => { change(); setName(event.target.value); }} /></label>
           <label>Publishing interval (ms)<input type="number" min={100} max={60000} step={100} value={interval} onChange={event => { change(); setInterval(Number(event.target.value)); }} /></label>
-          <small>OPC UA requests this interval. Expressions use a 100 ms scheduler resolution.</small>
+          <small>Device points poll at this interval; OPC UA requests a subscription interval. Expressions use a 100 ms scheduler resolution.</small>
         </>}
-        {tab === "provider" && <p>The built-in [default] provider owns all configured tags and sample tags. Disabling it marks values unavailable and stops configured OPC UA subscriptions. Re-enabling restarts acquisition. Connection settings remain separate.</p>}
+        {tab === "provider" && <p>The built-in [default] provider owns all configured tags and sample tags. Disabling it marks values unavailable and stops configured equipment acquisition. Re-enabling restarts acquisition. Connection settings remain separate.</p>}
         {tab !== "definitions" && <label className="checkbox-field"><input type="checkbox" checked={enabled} onChange={event => { change(); setEnabled(event.target.checked); }} /><span>{tab === "provider" ? "Provider" : tab === "groups" ? "Scan group" : "Instance"} enabled</span></label>}
       </fieldset>}
       <div style={{ display: "flex", gap: 8 }}><button className="button" disabled={busy || !model} onClick={() => void run(() => preview())}>Preview changes</button>

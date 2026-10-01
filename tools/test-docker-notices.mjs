@@ -11,6 +11,10 @@ const metadata = readPackageMetadata('<package><metadata><id>AWSSDK.S3</id><vers
 assert.equal(validateReviewedMetadata('AWSSDK.S3/4.0.104', metadata, root), 'Apache-2.0');
 assert.throws(() => validateReviewedMetadata('AWSSDK.S3/4.0.105', metadata, root), /requires a distribution license review/);
 assert.throws(() => validateReviewedMetadata('AWSSDK.S3/4.0.104', { ...metadata, license: 'MIT' }, root), /differs from its reviewed/);
+const s7Metadata = { license: null, licenseType: null, repository: 'https://github.com/killnine/s7netplus', repositoryCommit: 'f1ae0ea084e712b59e414de6aaee7d196244a239' };
+assert.equal(validateReviewedMetadata('S7netplus/0.20.0', s7Metadata, root), 'MIT');
+assert.throws(() => validateReviewedMetadata('S7netplus/0.20.0', { ...s7Metadata, license: 'GPL-3.0' }, root), /differs from its reviewed/);
+assert.throws(() => validateReviewedMetadata('S7netplus/0.20.1', s7Metadata, root), /requires a distribution license review/);
 assert.throws(() => validateReviewedMetadata('AWSSDK.S3/4.0.104', { ...metadata, repositoryCommit: '0'.repeat(40) }, root), /differs from its reviewed/);
 assert.throws(() => validateReviewedMetadata('AWSSDK.S3/4.0.104', { ...metadata, repository: 'https://github.com/unreviewed/sdk' }, root), /differs from its reviewed/);
 assert.throws(() => readPackageMetadata('<!DOCTYPE package [<!ENTITY key SYSTEM "file:///secret">]><package />'), /cannot contain XML entities/);

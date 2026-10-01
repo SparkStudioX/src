@@ -69,7 +69,10 @@ export function readPackageMetadata(xml) {
 export function validateReviewedMetadata(identity, metadata, packageDirectory) {
   const supplement = reviewedSupplements.get(identity);
   if (supplement) {
-    if (metadata.licenseType !== 'expression' || metadata.license !== supplement.license || (metadata.repository && metadata.repository.toLowerCase() !== `https://github.com/${supplement.repository}`.toLowerCase()) || (metadata.repositoryCommit && metadata.repositoryCommit !== supplement.revision)) throw new Error(`Package metadata differs from its reviewed notice supplement: ${identity}`);
+    const licenseMatches = supplement.licenseDeclarationAbsent === true
+      ? metadata.licenseType === null && metadata.license === null
+      : metadata.licenseType === 'expression' && metadata.license === supplement.license;
+    if (!licenseMatches || (metadata.repository && metadata.repository.toLowerCase() !== `https://github.com/${supplement.repository}`.toLowerCase()) || (metadata.repositoryCommit && metadata.repositoryCommit !== supplement.revision)) throw new Error(`Package metadata differs from its reviewed notice supplement: ${identity}`);
     return supplement.license;
   }
   const bundled = reviewedBundledLicenses.get(identity);
@@ -134,6 +137,15 @@ async function nugetInventory(payload, nuget, notices, cache) {
     const spec = reviewedSupplements.get(identity);
     if (spec) {
       entry.reviewedNoticeSources = [];
+      if (spec.sourceAvailability) {
+        entry.sourceAvailability = spec.sourceAvailability;
+        const relative = `nuget/${identity}/SOURCE-AVAILABILITY.txt`;
+        const destination = path.join(notices, relative);
+        fs.mkdirSync(path.dirname(destination), { recursive: true });
+        fs.writeFileSync(destination, `Source code for the unmodified libraries distributed in ${identity} is available under ${spec.license} at:\n${spec.sourceAvailability.join('\n')}\n`);
+        entry.noticeFiles.push(relative);
+        entry.noticeHashes.push({ path: relative, sha256: hash(fs.readFileSync(destination)) });
+      }
       for (const [name, checksum] of spec.files) {
         const upstream = await reviewedUpstreamFile(spec, name, checksum, cache);
         const relative = `nuget/${identity}/upstream/${name}`;

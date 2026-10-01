@@ -9,7 +9,7 @@ import type { EquipmentCommandDefinition } from "./EquipmentCommand";
 
 export const tagWriteDataTypes: TagWriteDataType[] = ["Boolean", "Int16", "Int32", "Int64", "UInt16", "UInt32", "Float", "Double", "String"];
 export const isTagWriteDataType = (value: string): value is TagWriteDataType => tagWriteDataTypes.includes(value as TagWriteDataType);
-export const writableActionTags = (tags: Tag[]) => tags.filter(tag => (tag.source === "memory" || tag.source === "opcua") && isTagWriteDataType(tag.dataType));
+export const writableActionTags = (tags: Tag[]) => tags.filter(tag => (tag.source === "memory" || tag.source === "opcua" || tag.source === "device" && tag.writable === true) && isTagWriteDataType(tag.dataType));
 export function tagWritePathError(path: string): string | undefined {
   if (!path.startsWith("[default]") || path.length > 512) return "Enter a concrete [default] tag path of at most 512 characters.";
   const relative = path.slice(9);
@@ -175,7 +175,7 @@ function applyTagValueAction({ component, draft, props, tags, components, parent
   const path = draft.tagPath.trim(), pathError = tagWritePathError(path);
   if (pathError) return pathError;
   const known = tags.find(tag => tag.path === path);
-  if (known && !writableActionTags([known]).length) return "Choose a writable memory or OPC UA tag with a supported data type.";
+  if (known && !writableActionTags([known]).length) return "Choose a writable memory, OPC UA or device tag with a supported data type.";
   const dataType = known && isTagWriteDataType(known.dataType) ? known.dataType : draft.tagDataType;
   const declared = commands.filter(command => command.tagPath === path);
   if (declared.length > 1) return "Multiple equipment commands target this tag. Use a declared command control instead of Set tag value.";
