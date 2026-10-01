@@ -33,20 +33,14 @@ function Get-ReviewedPackageNoticeSpec([string]$Package) {
     $revision = $null; $family = $null
     if ($Package -in @('AWSSDK.S3/4.0.104', 'AWSSDK.Core/4.0.102.8')) { $family = 'aws'; $revision = 'f5257515bbd26d04376ee826d07ec80ea267c9b9' }
     elseif ($Package -in @('SQLitePCLRaw.bundle_e_sqlite3/2.1.12', 'SQLitePCLRaw.core/2.1.12', 'SQLitePCLRaw.lib.e_sqlite3/2.1.12', 'SQLitePCLRaw.provider.e_sqlite3/2.1.12')) { $family = 'sqlite'; $revision = 'ca835d21508bff43121c65081035840ac5006c4c' }
-    elseif ($Package -eq 'Azure.Core/1.50.0') { $family = 'azure'; $revision = '724366b17b92e657d2136d470077c769e89818c7' }
-    elseif ($Package -eq 'Azure.Identity/1.17.1') { $family = 'azure'; $revision = 'f6aaf7f37262151b1df40b79d1a64dacc7c98021' }
-    elseif ($Package -eq 'System.ClientModel/1.8.0') { $family = 'azure'; $revision = '033d7cea151a65b3c11037021403787d7e6e01a3' }
-    elseif ($Package -in @('Microsoft.Data.SqlClient/6.1.7', 'Microsoft.SqlServer.Server/1.0.0')) {
+    elseif ($Package -in @('Microsoft.Data.SqlClient/7.0.3', 'Microsoft.Data.SqlClient.Extensions.Abstractions/7.0.3', 'Microsoft.Data.SqlClient.Internal.Logging/7.0.3', 'Microsoft.SqlServer.Server/1.0.0')) {
         # SqlServer.Server's nuspec identifies this repository but no commit.
         # Its MIT declaration was reviewed against this applicable family text.
-        $family = 'sqlclient'; $revision = 'efca28cabb8d13fe0b0afd277bf6ff66eb8231e5'
+        $family = 'sqlclient'; $revision = 'daadd381d1da478c8f13ea220ecb9a4a2ef7d076'
     }
     elseif ($Package -in @('Microsoft.Data.Sqlite/10.0.12', 'Microsoft.Data.Sqlite.Core/10.0.12')) { $family = 'efcore'; $revision = '95017c711e6afc1085133d440e42b4bd78155701' }
     elseif ($Package -in @('Microsoft.Extensions.Hosting.WindowsServices/10.0.9', 'System.ServiceProcess.ServiceController/10.0.9')) { $family = 'runtime'; $revision = '901ca941248413c79832d2fdbd709da0c4386353' }
-    elseif ($Package -in @('Microsoft.Identity.Client/4.84.2', 'Microsoft.Identity.Client.Broker/4.84.2')) { $family = 'msal'; $revision = 'bad7cae331c1d9e699ca2150a5fecb108ea54916' }
-    elseif ($Package -eq 'Microsoft.Identity.Client.Extensions.Msal/4.78.0') { $family = 'msal'; $revision = 'd6f9310e2f1073ad2db8ca3bf39827b9bcf26e06' }
-    elseif ($Package -eq 'Microsoft.IdentityModel.Abstractions/8.14.0') { $family = 'identity'; $revision = 'c8f7d87bcda35557a68f6cb9c55856a2ee733856' }
-    elseif ($Package -in @('Microsoft.IdentityModel.JsonWebTokens/7.7.1', 'Microsoft.IdentityModel.Logging/7.7.1', 'Microsoft.IdentityModel.Protocols/7.7.1', 'Microsoft.IdentityModel.Protocols.OpenIdConnect/7.7.1', 'Microsoft.IdentityModel.Tokens/7.7.1', 'System.IdentityModel.Tokens.Jwt/7.7.1')) { $family = 'identity'; $revision = 'e65fcb2b0eb679a6eed0f8731a9d21a8e8d2dd5b' }
+    elseif ($Package -in @('Microsoft.IdentityModel.Abstractions/8.16.0', 'Microsoft.IdentityModel.JsonWebTokens/8.16.0', 'Microsoft.IdentityModel.Logging/8.16.0', 'Microsoft.IdentityModel.Protocols/8.16.0', 'Microsoft.IdentityModel.Protocols.OpenIdConnect/8.16.0', 'Microsoft.IdentityModel.Tokens/8.16.0', 'System.IdentityModel.Tokens.Jwt/8.16.0')) { $family = 'identity'; $revision = 'f8172402e711c043a59bef81bba2609cf1fb9f46' }
     if (!$family) { return $null }
     $license = 'MIT'
     switch ($family) {
@@ -62,13 +56,6 @@ function Get-ReviewedPackageNoticeSpec([string]$Package) {
             $files = @(
                 @{ name = 'LICENSE.TXT'; sha256 = 'cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30' },
                 @{ name = 'NOTICE.TXT'; sha256 = '485b276b3d2bfaa26df348e1e5c84df3648981e09b88531a6a53006f0705c24b' }
-            )
-        }
-        'azure' {
-            $repository = 'Azure/azure-sdk-for-net'
-            $files = @(
-                @{ name = 'LICENSE.txt'; sha256 = '9b45236978bb5cd5de992021769e1eeaa79f0116d3b02cf8ba065a1ed603d5fa' },
-                @{ name = 'NOTICE.txt'; sha256 = 'edca5c0353ab7281300dec18793a4eb06d26857e5bf9cb905e4b77543e467210' }
             )
         }
         'sqlclient' {
@@ -87,13 +74,6 @@ function Get-ReviewedPackageNoticeSpec([string]$Package) {
             $files = @(
                 @{ name = 'src/runtime/LICENSE.TXT'; sha256 = 'cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310' },
                 @{ name = 'src/runtime/THIRD-PARTY-NOTICES.TXT'; sha256 = '66f1d4e44973185519bb4aa8a9718eb22fc7af2cc532e3ae9cfc4c127ee7fc54' }
-            )
-        }
-        'msal' {
-            $repository = 'AzureAD/microsoft-authentication-library-for-dotnet'
-            $files = @(
-                @{ name = 'LICENSE'; sha256 = '2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c' },
-                @{ name = 'ThirdPartyNotice.txt'; sha256 = '6ceaa32c30e007e6f7f7a4ba5e07926da77c82866c459f29b020e66c78d8adcf' }
             )
         }
         'identity' {

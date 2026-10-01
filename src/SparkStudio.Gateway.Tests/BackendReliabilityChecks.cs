@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.DataProtection;
@@ -35,6 +36,7 @@ public static class BackendReliabilityChecks
                 var frame = System.Text.Encoding.UTF8.GetString(frames.ToArray());
                 Check(frame == "event: heartbeat\ndata: {}\n\n", "idle SSE sends a named event visible to the browser liveness watchdog");
             }
+            passed += await MemoryDefinitionCacheChecks(Path.Combine(directory, "memory-cache"), protection);
             var store = new ProjectStore(directory, protection);
             var package = new JsonObject { ["format"] = "sparkstudio.tags", ["version"] = 1,
                 ["tags"] = new JsonArray(Enumerable.Range(0, 100).Select(index => (JsonNode)new JsonObject
@@ -186,5 +188,57 @@ public static class BackendReliabilityChecks
             return passed;
         }
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true); }
+    }
+
+    private static async Task<int> MemoryDefinitionCacheChecks(string directory, IDataProtectionProvider protection)
+    {
+        var passed = 0;
+        void Check(bool condition, string description) { if (!condition) throw new Exception(description); passed++; }
+        var store = new ProjectStore(directory, protection, gatewayOnly: true);
+        using var connectors = new ConnectorService(directory);
+        using var tags = new TagEngine(store, connectors, NullLogger<TagEngine>.Instance);
+        JsonObject Memory(string name, int value, bool enabled = true) => new()
+        { ["path"] = "[default]Cache/" + name, ["kind"] = "memory", ["dataType"] = "Int32", ["value"] = value, ["enabled"] = enabled };
+        TagValue Read(string name) => tags.Read(["[default]Cache/" + name], null)[0];
+        void Write(string name, int value) => Check(tags.WriteMemory(["[default]Cache/" + name], [JsonSerializer.SerializeToElement(value)])[0] == "Good", "fixture memory write succeeds");
+        var refresh = typeof(TagEngine).GetMethod("RefreshDefinitions", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var apply = typeof(TagEngine).GetMethod("DefinitionLoop", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        void PrimeCache() => refresh.Invoke(tags, null);
+        async Task ApplyPendingDefinitions()
+        {
+            using var stop = new CancellationTokenSource();
+            // The loop applies its first generation synchronously, then awaits the
+            // next scan. Isolate that step so the stale-cache ordering is deterministic.
+            var task = (Task)apply.Invoke(tags, [stop.Token])!;
+            stop.Cancel();
+            try { await task; } catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+        }
+        tags.SaveDefinition(Memory("A", 0)); tags.SaveDefinition(Memory("B", 0));
+        PrimeCache(); Write("A", 11); Write("B", 22);
+        var a = Read("A"); var b = Read("B");
+        await ApplyPendingDefinitions();
+        Check(Read("A").Value is JsonElement first && first.GetInt32() == 11 && Read("B").Value is JsonElement second && second.GetInt32() == 22,
+            "definition application retains memory writes made after another loop cached the configuration");
+        Check(Read("A").Timestamp == a.Timestamp && Read("B").Timestamp == b.Timestamp,
+            "definition application does not invent a timestamp for retained memory values");
+        Check(tags.DefinitionBuildCount == 1, "runtime writes and authoritative value application do not rebuild configuration plans");
+
+        tags.SaveDefinition(Memory("C", 0)); PrimeCache(); Write("A", 44); Write("B", 55); store.FlushMemoryValues();
+        await ApplyPendingDefinitions();
+        Check(Read("A").Value is JsonElement updated && updated.GetInt32() == 44 && Read("B").Value is JsonElement unrelated && unrelated.GetInt32() == 55,
+            "unrelated configuration changes and checkpoints retain writes newer than the cached memory snapshot");
+        Check(tags.DefinitionBuildCount == 2, "only the unrelated configuration change rebuilds plans");
+
+        tags.SaveDefinition(Memory("A", 7)); PrimeCache(); Write("B", 66);
+        await ApplyPendingDefinitions();
+        Check(Read("A").Value is JsonElement changed && changed.GetInt32() == 7 && Read("B").Value is JsonElement retained && retained.GetInt32() == 66,
+            "an edited memory default replaces its old runtime value while another tag retains its newer write");
+        tags.SaveDefinition(Memory("B", 0, enabled: false)); PrimeCache(); await ApplyPendingDefinitions();
+        Check(Read("B").Quality == "Bad_Disabled" && tags.WriteMemory(["[default]Cache/B"], [JsonSerializer.SerializeToElement(77)])[0] == "Bad_NotWritable",
+            "authoritative definition application preserves disabled memory quality and write rejection");
+        tags.SaveDefinition(Memory("B", 9)); PrimeCache(); await ApplyPendingDefinitions();
+        Check(Read("B").Quality == "Good" && Read("B").Value is JsonElement enabled && enabled.GetInt32() == 9,
+            "re-enabling a changed memory definition applies its reviewed default");
+        return passed;
     }
 }

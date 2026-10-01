@@ -27,6 +27,15 @@ including the AWS SDK and SQLite attribution texts, in the hashed payload.
 Their inclusion and manifest/SBOM inventory are package-verification gates,
 not a legal or vulnerability guarantee.
 
+Exact-package testing exposed a stale memory-definition cache that could reset a
+recent write while applying a pending configuration generation. The fix reads
+authoritative memory state during that application without rebuilding plans for
+ordinary writes. A deterministic regression failed before the fix and passed
+after it; the isolated Gateway suite passed 1,217 checks. The installer must be
+rebuilt and reverified with this correction. The candidate also moves to core
+SqlClient 7.0.3, omitting optional Azure/WAM authentication dependencies that are
+outside SparkStudio's supported SQL password/Windows integrated connection model.
+
 Elevated service install/upgrade/uninstall, rollback and complete real-data
 preservation, broader service-account/ACL behavior, remote HTTPS trust/renewal,
 real SQL Server and device/site workloads, actual domain SMB, trusted external

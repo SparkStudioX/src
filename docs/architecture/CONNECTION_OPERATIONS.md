@@ -2,6 +2,18 @@
 
 Gateway administrators manage shared connections in the Designer's **Connections** workspace. Named queries belong to projects; their connection IDs point at the shared gateway configuration.
 
+## SQL Server authentication
+
+Preview.11 uses the core Microsoft.Data.SqlClient 7.0.3 package. Connections use
+SQL username/password authentication, or Windows integrated security when the
+username is empty. Encryption remains mandatory; certificate trust follows the
+explicit saved connection setting. Microsoft Entra authentication, interactive
+sign-in and the Windows WAM broker are outside the supported connection model.
+The optional Azure authentication extension and its native broker are not shipped.
+Microsoft documents this dependency separation in the [SqlClient package guide](https://learn.microsoft.com/en-us/sql/connect/ado-net/download-microsoft-sqlclient-data-provider?view=sql-server-ver17).
+Actual SQL Server connectivity still requires acceptance against a test server;
+SQLite and connection-string checks do not establish it.
+
 ## Lifecycle
 
 - **Save connection** accepts new IDs without a revision. Existing entries must send their current `revision`; a stale or missing revision returns HTTP 409 without changing saved configuration. **Cancel changes** appears while editing and retrieves the current saved entry. Only a successful retrieval discards the draft; failures preserve edited credentials and fields.

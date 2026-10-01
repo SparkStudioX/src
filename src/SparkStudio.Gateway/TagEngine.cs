@@ -413,6 +413,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                 Dictionary<string, WatchPlan> plans;
                 long generation, tagGeneration;
                 using (ChangeState())
+                lock (GatewayConfigurationLock.SyncRoot)
                 {
                     generation = configurationGeneration;
                     RefreshDefinitions();
@@ -422,7 +423,14 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                     definitions = cachedDefinitions;
                     disabledConnections = cachedDisabledConnections;
                     plans = cachedPlans;
-                    foreach (var definition in definitions.Where(definition => ProjectStore.Optional(definition, "kind") == "memory" && (changed || !values.ContainsKey(ProjectStore.Required(definition, "path")))))
+                    var memoryPaths = definitions.Where(definition => ProjectStore.Optional(definition, "kind") == "memory" && (changed || !values.ContainsKey(ProjectStore.Required(definition, "path"))))
+                        .Select(definition => ProjectStore.Required(definition, "path")).ToHashSet(StringComparer.Ordinal);
+                    // Configuration plans may have been cached by another loop
+                    // before a runtime write. Read current memory state only when
+                    // applying a configuration generation, under the same lock.
+                    // Ordinary value writes still leave the expensive plans intact.
+                    if (memoryPaths.Count > 0)
+                    foreach (var definition in store.GetRuntimeTagDefinitions().OfType<JsonObject>().Where(definition => memoryPaths.Contains(ProjectStore.Required(definition, "path"))))
                     {
                         var next = MemoryValue(definition, DateTimeOffset.UtcNow);
                         if (values.TryGetValue(next.Path, out var previous) && previous.Source == "memory"
