@@ -121,7 +121,7 @@ internal static class ProjectStateValidator
             throw new ArgumentException("Input state bindings need only scope (session, screen or instance) and a valid state key.");
         var expectedType = ProjectStore.Required(component, "type") switch
         {
-            "textInput" or "formattedInput" or "barcodeInput" or "textArea" or "dateTimeInput" or "select" or "list" or "treeView" or "radioGroup" or "multiStateButton" => "string",
+            "textInput" or "formattedInput" or "barcodeInput" or "textArea" or "computerCamera" or "dateTimeInput" or "select" or "list" or "treeView" or "radioGroup" or "multiStateButton" => "string",
             "numberInput" or "spinner" or "slider" => "number",
             "checkbox" or "toggle" => "boolean",
             _ => throw new ArgumentException("State bindings support non-password inputs only.")
@@ -140,6 +140,8 @@ internal static class ProjectStateValidator
         if (ProjectStore.Optional(declaration, "type") != expectedType)
             throw new ArgumentException($"{scope} state '{key}' must have type {expectedType} for input '{ProjectStore.Required(component, "id")}'.");
         var props = component["props"]!.AsObject();
+        if (ProjectStore.Optional(component, "type") == "computerCamera" && declaration["value"]?.GetValue<string>() != "")
+            throw new ArgumentException("A computer camera's bound state default must be empty.");
         // A state declaration is the bound control's initial value. Keep saved
         // defaults compatible with its ordinary range, option and date rules.
         InputDefinitionValidator.ValidateValue(ProjectStore.Required(props, "fieldKey"), ProjectStore.Required(component, "type"), props,

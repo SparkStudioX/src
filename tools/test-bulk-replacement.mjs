@@ -1,14 +1,8 @@
 #!/usr/bin/env node
 // Offline previews and atomic edits of an explicit authored-field inventory.
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { stripTypeScriptTypes } from 'node:module';
-
-const moduleUrl = source => `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString('base64')}`;
-const navigationUrl = moduleUrl(await readFile(new URL('../apps/web/src/runtimeNavigation.ts', import.meta.url), 'utf8'));
-const source = (await readFile(new URL('../apps/web/src/bulkReplacement.ts', import.meta.url), 'utf8'))
-  .replace('from "./runtimeNavigation";', `from "${navigationUrl}";`);
-const { planBulkReplacement, applyBulkReplacement } = await import(moduleUrl(source));
+import { webModelModule } from './web-model-module.mjs';
+const { planBulkReplacement, applyBulkReplacement } = await import(await webModelModule('bulkReplacement'));
 const component = (id, type = 'label', props = {}) => ({ id, type, x: 10, y: 20, width: 200, height: 40, props });
 const tagBinding = (path = '[default]Line1/Speed') => ({ expression: 'live', references: { live: { kind: 'tag', path } } });
 const fixture = () => ({
@@ -333,5 +327,44 @@ check('preview and application never execute authored functions or scripts', () 
   project.screens[0].components[8].props.bindings = { text: { expression: 'danger()', references: {} } };
   globalThis.danger = () => { called = true; throw new Error('Unexpected execution'); };
   try { applyAll(project); assert.equal(called, false); } finally { delete globalThis.danger; }
+});
+check('nested runtime and declared custom bindings participate through the shared catalog', () => {
+  const project = fixture();
+  project.screens[0].components.push(component('chart-runtime', 'chart', { chart: { kind: 'line', xKey: 'x', series: [{ key: 'y' }] }, bindings: { 'chart.yMin': tagBinding(), 'chart.unknown': tagBinding() } }),
+    component('custom-runtime', 'label', { customProperties: { speed: { type: 'number', value: 0 } }, bindings: { 'customProperties.speed.value': tagBinding(), 'customProperties.missing.value': tagBinding() } }),
+    component('history-runtime', 'historicalTrend', { bindings: { historyMinutes: tagBinding() } }));
+  const plan = planBulkReplacement(project, request({ kind: 'tagPaths' }));
+  for (const id of ['chart-runtime', 'custom-runtime', 'history-runtime']) {
+    const changes = plan.changes.filter(change => change.target.componentId === id);
+    assert.equal(changes.length, 1); assert.equal(changes[0].after, '[default]Line2/Speed');
+  }
+  const next = applyBulkReplacement(plan, project, all(plan));
+  assert.equal(next.screens[0].components.find(item => item.id === 'custom-runtime').props.bindings['customProperties.speed.value'].references.live.path, '[default]Line2/Speed');
+  assert.equal(next.screens[0].components.find(item => item.id === 'chart-runtime').props.bindings['chart.unknown'].references.live.path, '[default]Line1/Speed');
+});
+check('camera captions and general tag-binding references participate without changing captured input identity', () => {
+  const project = fixture();
+  project.screens[0].components.push(component('camera', 'computerCamera', { text: 'Line1 visitor photo', fieldKey: 'Line1-photo', defaultValue: '', bindings: { text: tagBinding() } }));
+  const camera = project.screens[0].components.at(-1);
+  const displayed = applyAll(project);
+  assert.equal(displayed.screens[0].components.at(-1).props.text, 'Line2 visitor photo');
+  assert.deepEqual(displayed.screens[0].components.at(-1).props.bindings, camera.props.bindings);
+  const tagged = applyAll(project, { kind: 'tagPaths' });
+  assert.equal(tagged.screens[0].components.at(-1).props.bindings.text.references.live.path, '[default]Line2/Speed');
+  assert.equal(tagged.screens[0].components.at(-1).props.text, camera.props.text);
+  for (const next of [displayed, tagged]) {
+    assert.equal(next.screens[0].components.at(-1).props.fieldKey, 'Line1-photo');
+    assert.equal(next.screens[0].components.at(-1).props.defaultValue, '');
+  }
+  assert.equal(camera.props.text, 'Line1 visitor photo');
+  assert.equal(camera.props.bindings.text.references.live.path, '[default]Line1/Speed');
+});
+check('native tag-write targets remain outside tag-path replacement', () => {
+  const project = fixture();
+  project.screens[0].components.push(component('write', 'button', { action: 'setTagValue', tagWrite: { tagPath: '[default]Line1/Speed', dataType: 'Double', value: 1 } }));
+  const plan = planBulkReplacement(project, request({ kind: 'tagPaths' }));
+  assert.ok(!plan.changes.some(change => change.target.componentId === 'write'));
+  const next = applyBulkReplacement(plan, project, all(plan));
+  assert.deepEqual(next.screens[0].components.at(-1).props.tagWrite, project.screens[0].components.at(-1).props.tagWrite);
 });
 console.log(`Bulk replacement: ${passed} checks passed.`);

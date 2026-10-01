@@ -1,0 +1,17 @@
+.view-container-editor { display: grid; gap: 16px; min-width: 0; }
+.view-container-help { color: var(--muted); font-size: 12px; line-height: 1.6; }
+.view-container-editor > fieldset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; min-width: 0; margin: 0; padding: 14px; border: 1px solid var(--border); border-radius: 6px; }
+.view-container-editor legend { padding: 0 6px; color: var(--ink); font-size: 12px; font-weight: 600; }
+.view-container-editor label { display: flex; flex-direction: column; gap: 6px; min-width: 0; color: var(--text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.view-container-editor input:not([type=checkbox]), .view-container-editor select { width: 100%; min-width: 0; height: auto; min-height: 36px; padding: 7px 9px; font: inherit; font-size: 12px; line-height: 1.4; }
+.view-container-wide { grid-column: 1 / -1; }
+.view-container-editor .view-container-check { flex-direction: row; align-items: center; gap: 8px; }
+.view-container-check input { flex: 0 0 16px; width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.view-container-parameter { display: grid; gap: 7px; padding-top: 12px; border-top: 1px solid var(--border); }
+.view-container-editor .button { width: fit-content; max-width: 100%; white-space: normal; }
+.view-container-editor > fieldset > .button { grid-column: 1 / -1; }
+.view-container-editor .binding-actions { justify-content: flex-end; margin: 0; padding-top: 14px; border-top: 1px solid var(--border); }
+.view-container-error { color: var(--danger); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .view-container-editor > fieldset { grid-template-columns: minmax(0, 1fr); } }
+
+.view-container-editor > fieldset > .runtime-property-row { grid-column: 1 / -1; }

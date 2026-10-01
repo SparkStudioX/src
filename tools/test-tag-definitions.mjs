@@ -104,8 +104,25 @@ try {
       await reject(definition);
   });
 
-  await test('invalid, indirect and reserved paths cannot be configured', async () => {
-    for (const path of ['', '[other]Tag', '[default]', '[default]/Tag', '[default]A/', '[default]A//B', '[default]A/./B', '[default]A/../B', '[default]A/ /B', '[default]A\nB', '[default]A[B]', '[default]A{line}', '[default]A\\B', '[default]Line/Custom', '[default]Setpoints/Custom', '[default]Line', `[default]${'x'.repeat(504)}`])
+  await test('authored memory tags can use Line and Setpoints folders', async () => {
+    for (const folder of ['Line', 'Setpoints']) {
+      const path = `[default]${folder}/${prefix.slice(9)}/Temperature`;
+      try {
+        const saved = await save({ ...memory('Temperature', 'Double', 666), path });
+        assert.equal(saved.path, path);
+        assert.equal(saved.value, 666);
+        const values = (await request('/api/tags/read', 'POST', { paths: [path] })).data;
+        assert.equal(values[0].value, 666);
+        assert.equal(values[0].quality, 'Good');
+        assert.equal(values[0].source, 'memory');
+      } finally {
+        if (created.has(path)) await remove(path);
+      }
+    }
+  });
+
+  await test('invalid and indirect paths cannot be configured', async () => {
+    for (const path of ['', '[other]Tag', '[default]', '[default]/Tag', '[default]A/', '[default]A//B', '[default]A/./B', '[default]A/../B', '[default]A/ /B', '[default]A\nB', '[default]A[B]', '[default]A{line}', '[default]A\\B', `[default]${'x'.repeat(504)}`])
       await reject({ ...memory('InvalidPath'), path });
   });
 

@@ -59,6 +59,12 @@ per path.
 
 Synthetic `[default]Line/*` demonstration values are disabled by default. Enable
 `SparkStudio:EnableDemoTags` explicitly only for a development/demo gateway.
+`Line` and `Setpoints` are ordinary folder names: configured memory, expression
+and OPC UA tags may use them, including paths shown by the sample project. An
+explicit definition always takes precedence over optional demo data, even when
+that definition is disabled or unavailable. Configured memory values use normal
+datatype validation and persistence; the demo's temporary target-speed behavior
+applies only when that exact tag has no configured definition.
 Operator event streams send an initial snapshot, then bounded `tags-delta`
 upserts/removals and heartbeats. Each authenticated sign-in is limited to 32 tag
 streams; overflow causes a fresh snapshot rather than silent permanent drift.

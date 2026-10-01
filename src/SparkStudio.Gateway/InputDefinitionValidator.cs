@@ -12,7 +12,7 @@ internal static class InputDefinitionValidator
     private const double MaximumSafeInteger = 9007199254740991;
     private static readonly HashSet<string> Types = new(StringComparer.Ordinal)
     {
-        "textInput", "formattedInput", "barcodeInput", "textArea", "passwordInput", "numberInput", "spinner", "slider", "checkbox", "toggle", "select", "list", "treeView", "radioGroup", "multiStateButton", "dateTimeInput"
+        "textInput", "formattedInput", "barcodeInput", "textArea", "passwordInput", "computerCamera", "numberInput", "spinner", "slider", "checkbox", "toggle", "select", "list", "treeView", "radioGroup", "multiStateButton", "dateTimeInput"
     };
     private static readonly Regex FieldKey = new(@"\A[A-Za-z_][A-Za-z0-9_]{0,63}\z", RegexOptions.CultureInvariant);
     private static readonly Regex LocalDateTime = new(@"\A[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}\z", RegexOptions.CultureInvariant);
@@ -33,6 +33,13 @@ internal static class InputDefinitionValidator
                 throw new ArgumentException("Password inputs cannot read saved tag or query values.");
             if (props.ContainsKey("defaultValue") && (props["defaultValue"] is not JsonValue initial || !initial.TryGetValue<string>(out var secret) || secret.Length != 0))
                 throw new ArgumentException("A password input's saved default must be omitted or empty.");
+        }
+        if (type == "computerCamera")
+        {
+            if (props.ContainsKey("tagPath") || props.ContainsKey("optionsSource") || props.ContainsKey("selectionFields"))
+                throw new ArgumentException("Computer cameras capture browser photos and cannot read tags, queries or selection mappings.");
+            if (props.ContainsKey("defaultValue") && (props["defaultValue"] is not JsonValue initial || !initial.TryGetValue<string>(out var photo) || photo.Length != 0))
+                throw new ArgumentException("A computer camera's saved default must be omitted or empty.");
         }
         if (props.ContainsKey("tagPath") && (props["tagPath"] is not JsonValue path || !path.TryGetValue<string>(out _)))
             throw new ArgumentException("An input tag binding must be text.");
@@ -89,6 +96,11 @@ internal static class InputDefinitionValidator
     {
         switch (type)
         {
+            case "computerCamera":
+                if (value.ValueKind != JsonValueKind.String || value.GetString() is not { } photo || photo.Length > 4096 ||
+                    photo.Length != 0 && (!photo.StartsWith("blob:", StringComparison.Ordinal) || !Uri.TryCreate(photo[5..], UriKind.Absolute, out var address) || address.Scheme is not ("http" or "https") || address.Host.Length == 0 || address.UserInfo.Length != 0 || address.Query.Length != 0 || address.Fragment.Length != 0 || address.AbsolutePath.Length <= 1 || photo.Any(char.IsWhiteSpace)))
+                    throw new ArgumentException($"Input field '{key}' must be empty or a temporary browser photo URL.");
+                break;
             case "textInput":
             case "formattedInput":
             case "barcodeInput":

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import ts from 'typescript';
 const cache = new Map();
 function url(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   if (cache.has(name)) return cache.get(name);
   const code = ts.transpileModule(fs.readFileSync(new URL(`src/${name}.ts`, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText
     .replace(/from "\.\/([^"\n]+)"/g, (_, dependency) => `from ${JSON.stringify(url(dependency))}`);

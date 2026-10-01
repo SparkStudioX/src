@@ -13,9 +13,10 @@ export const useState=initial=>{const values=scopes.get(current),at=index++;if(!
 export const useRef=initial=>{const values=scopes.get(current),at=index++;return values[at]??={current:initial};};
 export const useId=()=>'message-authoring';export const useEffect=()=>{};export const useMemo=factory=>factory();`);
 const scriptUrl = asModule(`import React from ${JSON.stringify(pathToFileURL(require.resolve('react')).href)};export default function ScriptEditor(props){return React.createElement('script-editor',props);}`);
-const apiUrl = asModule(`let sequence=0;export const id=prefix=>prefix+'-'+(++sequence);export const resolvePath=value=>value;export const tagByPath=(tags,path)=>tags.find(tag=>tag.path===path);export const api=async()=>({resources:[]});`);
+const apiUrl = asModule(`let sequence=0;export const id=prefix=>prefix+'-'+(++sequence);export const resolvePath=value=>value;export const displayValue=value=>String(value??"");export const tagByPath=(tags,path)=>tags.find(tag=>tag.path===path);export const api=async()=>({resources:[]});`);
 const modules = new Map();
 function url(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   if (modules.has(name)) return modules.get(name);
   const file = ['tsx', 'ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(file => fs.existsSync(file)); assert.ok(file, name);
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
@@ -24,7 +25,7 @@ function url(name) {
   const result = asModule(code); modules.set(name, result); return result;
 }
 const hooks = await import(hookUrl), { default: Editor } = await import(url('ComponentActionsEditor'));
-const { componentActionsDraft, applyComponentActionsDraft } = await import(url('componentActionsAuthoring'));
+const { componentActionsDraft, applyComponentActionsDraft, tagWriteValue, tagWritePathError, tagWritePropertyChoices, tagWritePropertyReferenceError } = await import(url('componentActionsAuthoring'));
 const { componentEventProperties } = await import(url('componentEventModel'));
 const { validateComponentMessageHandlers: validateHandlers } = await import(url('componentMessageAuthoring'));
 const { eventScriptError, pythonSystemCompletions, pythonEventCompletions } = await import(url('eventScriptAuthoring'));
@@ -110,6 +111,113 @@ check('button messages validate JSON, type and scope within the shared draft', (
   assert.deepEqual(ui.applied[0].message,{messageType:'orders.refresh',scope:'instance',payload:{quantity:6}});
   ui.edit('Button message payload','[]');apply(ui);assert.equal(ui.applied.length,1);assert.match(ui.content(),/JSON object/);
   ui.edit('Button message payload','{}');ui.edit('Button message type','bad\nname');apply(ui);assert.equal(ui.applied.length,1);
+});
+check('Send message suggests authored types and distinguishes receiver locations as drafts change', () => {
+  const sender={...button,id:'sender',props:{text:'Notify',action:'message',message:{messageType:'refresh',scope:'screen',payload:{}}}};
+  const receiver={...base,id:'production-receiver',props:{text:'Production receiver',messageHandlers:[handler({language:'python',code:'print(event.messageType)'}),handler({id:'session-a',scope:'session'})]}};
+  const popupReceiver={...base,id:'popup-receiver',props:{text:'Popup receiver',messageHandlers:[handler({id:'popup-a'}),handler({id:'popup-session',scope:'session',messageType:'popup.notice'})]}};
+  const home={id:'home',name:'Production',width:800,height:600,components:[sender,receiver]},popup={id:'popup',name:'Inspection',kind:'popup',width:500,height:400,components:[popupReceiver]};
+  const project={screens:[home,popup],templates:[]},ui=drive(sender,{components:home.components,parent:home,project,screens:project.screens});
+  const panel=()=>ui.find(node=>node.type==='section'&&node.props['aria-label']==='Message receivers');
+  const suggestions=()=>ui.find(node=>node.type==='datalist');
+  assert.equal(ui.field('Button message type').props.list,suggestions().props.id);
+  assert.ok(nodes(suggestions()).some(node=>node.type==='option'&&node.props.value==='refresh'));
+  assert.match(text(panel()),/Production receiver/);assert.match(text(panel()),/Component ID production-receiver/);assert.match(text(panel()),/Handler ID handler-a/);assert.match(text(panel()),/label component/);assert.match(text(panel()),/Production/);assert.match(text(panel()),/Python/);
+  assert.match(text(panel()),/Potential receivers in this scope/);assert.match(text(panel()),/Other locations/);assert.match(text(panel()),/Popup receiver/);
+  ui.edit('Button message type','  refresh  ');assert.match(text(panel()),/Production receiver/);assert.equal(ui.field('Button message type').props.value,'  refresh  ');
+  ui.edit('Button message scope','instance');assert.match(text(panel()),/No receiver definitions match/);
+  ui.edit('Button message scope','session');assert.ok(nodes(suggestions()).some(node=>node.type==='option'&&node.props.value==='popup.notice'));
+  ui.edit('Button message type','popup.notice');assert.match(text(panel()),/Popup receiver/);assert.doesNotMatch(text(panel()),/Production receiver/);
+  ui.edit('Button message type','REFRESH');assert.match(text(panel()),/No receiver definitions match/);assert.match(text(panel()),/case-sensitive/);
+  ui.edit('Button message type','');assert.match(text(panel()),/Choose or enter a message type/);
+  assert.deepEqual(ui.applied,[]);assert.equal(sender.props.message.messageType,'refresh');
+  ui.edit('Button message type','popup.notice');apply(ui);assert.deepEqual(ui.applied[0].message,{messageType:'popup.notice',scope:'session',payload:{}});
+});
+check('unapplied receiver edits are reflected in the same component Send message list without losing other drafts', () => {
+  const sender={...button,id:'self-listener',props:{text:' ',action:'message',message:{messageType:'refresh',scope:'screen',payload:{}},messageHandlers:[handler()]}};
+  const home={id:'home',name:'Local form',width:800,height:600,components:[sender]},ui=drive(sender,{components:[sender],parent:home,project:{screens:[home],templates:[]},screens:[home]});
+  assert.equal(text(ui.find(node=>node.type==='h2')),'self-listener');
+  ui.edit('Button message payload','{"draft":true}');ui.nav('Messages');assert.equal(ui.field('Message handler ID').props.value,'handler-a');assert.equal(ui.field('Message handler ID').props.readOnly,true);assert.match(text(ui.field('Selected message handler')),/handler-a/);ui.edit('Message handler type','  orders.updated  ');selectLanguage(ui,'python');ui.code('print(event.messageType)');
+  ui.nav('On click');ui.edit('Button message type','orders.updated');
+  const panel=ui.find(node=>node.type==='section'&&node.props['aria-label']==='Message receivers');assert.match(text(panel),/self-listener/);assert.match(text(panel),/Python/);
+  assert.equal(ui.field('Button message payload').props.value,'{"draft":true}');assert.equal(sender.props.messageHandlers[0].messageType,'refresh');assert.deepEqual(ui.applied,[]);
+  ui.nav('Messages');ui.click('Remove handler');ui.nav('On click');assert.match(text(ui.find(node=>node.type==='section'&&node.props['aria-label']==='Message receivers')),/No receiver definitions match/);
+  ui.click('Cancel');assert.deepEqual(ui.applied,[]);assert.equal(sender.props.messageHandlers.length,1);
+});
+const writableTag = (path, dataType = 'Double', source = 'memory') => ({path,dataType,source,value:0,quality:'Good',timestamp:'2026-09-30T00:00:00Z'});
+check('native tag action browses writable targets and stages a typed value without scripts or JSON', () => {
+  const tags=[writableTag('[default]Workshop/Enabled','Boolean'),writableTag('[default]Workshop/Count','UInt16','opcua'),writableTag('[default]Workshop/Caption','String'),writableTag('[default]Workshop/Calculated','Double','expression')];
+  const ui=drive(button,{tags});ui.edit('Click action','setTagValue');assert.ok(!ui.all().some(node=>node.type==='script-editor'));
+  ui.click('Browse');assert.ok(!ui.all().some(node=>node.props?.['aria-label']==='Select tag [default]Workshop/Calculated'));ui.field('Select tag [default]Workshop/Enabled').props.onClick();ui.refresh();
+  assert.equal(ui.field('Set tag path').props.value,'[default]Workshop/Enabled');assert.equal(ui.field('Set tag data type').props.value,'Boolean');assert.equal(ui.field('Set tag data type').props.readOnly,true);
+  ui.edit('Set tag Boolean value','true');ui.field('Require tag write confirmation').props.onChange({target:{checked:true}});ui.refresh();ui.edit('Tag write confirmation message','  Start this line?  ');
+  ui.nav('Mounted');ui.code('print("ready")');assert.deepEqual(ui.applied,[]);apply(ui);
+  assert.deepEqual(ui.applied[0].tagWrite,{tagPath:'[default]Workshop/Enabled',dataType:'Boolean',value:true,confirmation:'Start this line?'});assert.equal(ui.applied[0].script,button.props.script);assert.equal(ui.applied[0].componentEvents.mount.code,'print("ready")');
+  assert.match(ui.content(),/Save and publish/);ui.nav('On click');assert.match(ui.content(),/Designer Preview does not write tags/);
+});
+check('manual tag entry has typed numeric and plain text editors and preserves independent action drafts', () => {
+  const ui=drive(button);ui.edit('Click action','setTagValue');ui.edit('Set tag path','[default]Workshop/Setpoint');ui.edit('Set tag data type','Int16');ui.edit('Set tag value','-12');
+  ui.edit('Click action','script');assert.equal(current(ui).value,button.props.script);ui.edit('Click action','setTagValue');assert.equal(ui.field('Set tag value').props.value,'-12');apply(ui);
+  assert.deepEqual(ui.applied[0].tagWrite,{tagPath:'[default]Workshop/Setpoint',dataType:'Int16',value:-12});
+  ui.edit('Set tag data type','String');ui.edit('Set tag value','Hello "operator"');apply(ui);assert.equal(ui.applied[1].tagWrite.value,'Hello "operator"');assert.equal(ui.field('Set tag value').props.type,'text');
+  ui.edit('Set tag data type','Boolean');assert.equal(ui.field('Set tag Boolean value').props.value,'false');apply(ui);assert.equal(ui.applied[2].tagWrite.value,false);
+});
+check('tag action validation rejects unavailable source kinds, invalid paths, type ranges and confirmation before Apply', () => {
+  const tags=[writableTag('[default]Workshop/Calculated','Double','expression'),writableTag('[default]Workshop/Count','UInt16')],ui=drive(button,{tags});ui.edit('Click action','setTagValue');ui.edit('Set tag path','[default]Workshop/Calculated');apply(ui);assert.match(ui.content(),/writable memory or OPC UA tag/);
+  ui.edit('Set tag path','[default]Workshop/Count');ui.edit('Set tag value','65536');apply(ui);assert.match(ui.content(),/65,535/);ui.edit('Set tag value','1.2');apply(ui);assert.match(ui.content(),/exact whole numbers/);
+  ui.edit('Set tag value','42');ui.field('Require tag write confirmation').props.onChange({target:{checked:true}});ui.refresh();ui.edit('Tag write confirmation message','  ');apply(ui);assert.match(ui.content(),/1 to 512/);assert.deepEqual(ui.applied,[]);
+  ui.edit('Tag write confirmation message','Continue?');apply(ui);assert.equal(ui.applied[0].tagWrite.dataType,'UInt16');
+  for(const path of ['Workshop/Count','[default]','[default]../Count','[default]Area//Count','[default]Area/{parameter}','[default]Area\\Count','[default]Area/\nCount','[other]Area/Count'])assert.ok(tagWritePathError(path),path);
+  assert.equal(tagWritePathError('[default]Workshop/Count'),undefined);
+});
+check('native tag values enforce exact canonical numeric, Boolean and String limits', () => {
+  for(const [type,value,expected]of [['Boolean','true',true],['Boolean','false',false],['Int16','-32768',-32768],['UInt16','65535',65535],['Int32','2147483647',2147483647],['UInt32','4294967295',4294967295],['Int64','9007199254740991',9007199254740991],['Double','1.25e2',125],['Float','-2.5',-2.5],['String','', '']])assert.equal(tagWriteValue(type,value),expected);
+  for(const [type,value]of [['Boolean','1'],['Double','NaN'],['Double','Infinity'],['Double',''],['Double','0x10'],['Double','9007199254740992'],['Float','1e39'],['UInt16','-1'],['Int16','32768'],['Int32','2147483648'],['UInt32','4294967296'],['Int64','9007199254740992'],['Int16','1.1'],['String','x'.repeat(1025)]])assert.throws(()=>tagWriteValue(type,value),undefined,`${type}: ${value.slice(0,40)}`);
+});
+check('saved tag actions round trip and remain inactive when another native action is selected', () => {
+  const component={...button,props:{...button.props,action:'setTagValue',tagWrite:{tagPath:'[default]Workshop/Count',dataType:'UInt16',value:7,confirmation:'Continue?'}}},ui=drive(component);apply(ui);assert.deepEqual(ui.applied[0].tagWrite,component.props.tagWrite);
+  ui.edit('Click action','navigate');ui.edit('Action destination','home');apply(ui);assert.deepEqual(ui.applied[1].tagWrite,component.props.tagWrite);
+  const cancel=drive(component);cancel.edit('Set tag value','8');cancel.click('Cancel');assert.deepEqual(cancel.applied,[]);assert.equal(component.props.tagWrite.value,7);
+});
+check('component property tag values save a current input reference instead of its authored or preview value', () => {
+  const ui=drive(button,{tags:[writableTag('[default]Workshop/Setpoint')]});ui.edit('Click action','setTagValue');ui.edit('Set tag path','[default]Workshop/Setpoint');ui.edit('Set tag value','42');ui.edit('Set tag value source','property');ui.edit('Set tag source component','component:amount');
+  assert.equal(ui.field('Set tag source property').props.value,'value');assert.match(ui.content(),/current validated field/);apply(ui);
+  assert.deepEqual(ui.applied[0].tagWrite,{tagPath:'[default]Workshop/Setpoint',dataType:'Double',valueReference:{kind:'property',componentId:'amount',property:'value'}});assert.equal(Object.hasOwn(ui.applied[0].tagWrite,'value'),false);
+  ui.edit('Set tag value source','fixed');assert.equal(ui.field('Set tag value').props.value,'42');ui.edit('Set tag value source','property');assert.equal(ui.field('Set tag source component').props.value,'component:amount');ui.edit('Click action','script');assert.equal(current(ui).value,button.props.script);
+});
+check('property picker includes general, component-specific, nested and custom scalar properties', () => {
+  const chart={...base,id:'trend',type:'chart',props:{chart:{kind:'line',xKey:'time',series:[{key:'amount'}],yMax:300,showLegend:true},customProperties:{ceiling:{type:'number',value:350}}}};
+  const choices=tagWritePropertyChoices(chart).map(choice=>choice.property);
+  for(const key of ['text','width','height','chart.yMax','chart.showLegend','customProperties.ceiling.value'])assert.ok(choices.includes(key),key);
+  for(const key of ['chart.series','data','tableColumns'])assert.ok(!choices.includes(key),key);
+  const ui=drive(button,{components:[button,chart]});ui.edit('Click action','setTagValue');ui.edit('Set tag path','[default]Workshop/Setpoint');ui.edit('Set tag value source','property');ui.edit('Set tag source component','component:trend');ui.edit('Set tag source property','customProperties.ceiling.value');apply(ui);
+  assert.deepEqual(ui.applied[0].tagWrite.valueReference,{kind:'property',componentId:'trend',property:'customProperties.ceiling.value'});
+  ui.edit('Set tag source property','chart.yMax');apply(ui);assert.equal(ui.applied[1].tagWrite.valueReference.property,'chart.yMax');
+});
+check('self text and parent metadata references remain explicit and round trip without converting to constants', () => {
+  const parent={id:'home',name:'Workshop',width:1000,height:700,components:[button]},ui=drive(button,{parent});ui.edit('Click action','setTagValue');ui.edit('Set tag path','[default]Workshop/Caption');ui.edit('Set tag data type','String');ui.edit('Set tag value source','property');ui.edit('Set tag source property','text');apply(ui);
+  assert.deepEqual(ui.applied[0].tagWrite.valueReference,{kind:'property',property:'text'});
+  ui.edit('Set tag source component','parent');assert.equal(ui.field('Set tag source property').props.value,'name');apply(ui);assert.deepEqual(ui.applied[1].tagWrite.valueReference,{kind:'parentProperty',property:'name'});
+  ui.edit('Set tag data type','Double');ui.edit('Set tag source property','height');apply(ui);assert.deepEqual(ui.applied[2].tagWrite.valueReference,{kind:'parentProperty',property:'height'});
+  const saved={...button,props:{...button.props,action:'setTagValue',tagWrite:ui.applied[2].tagWrite}},reopened=drive(saved,{parent});assert.equal(reopened.field('Set tag value source').props.value,'property');assert.equal(reopened.field('Set tag source component').props.value,'parent');apply(reopened);assert.deepEqual(reopened.applied[0].tagWrite,saved.props.tagWrite);
+});
+check('property sources reject password values, structured paths, other forms and incompatible scalar types', () => {
+  const ui=drive(button);ui.edit('Click action','setTagValue');ui.edit('Set tag path','[default]Workshop/Setpoint');ui.edit('Set tag value source','property');ui.edit('Set tag source component','component:password');
+  assert.ok(!React.Children.toArray(ui.field('Set tag source property').props.children).some(option=>option.props.value==='value'));
+  ui.edit('Set tag source property','value');apply(ui);assert.match(ui.content(),/Password values and structured properties/);assert.deepEqual(ui.applied,[]);
+  ui.edit('Set tag source component','component:caption');ui.edit('Set tag source property','text');apply(ui);assert.match(ui.content(),/does not match the Double tag/);
+  ui.edit('Set tag source component','component:other-form');ui.edit('Set tag source property','width');apply(ui);assert.match(ui.content(),/not in this form/);
+  for(const reference of [{kind:'property',property:'data'},{kind:'property',property:'__proto__'},{kind:'property',componentId:'',property:'text'},{kind:'property',property:'width',extra:'x'},{kind:'parentProperty',property:'height'},{kind:'parentProperty',property:'titlebarHeight'},{kind:'expression',property:'width'}])assert.ok(tagWritePropertyReferenceError(reference,button,[button],undefined,'Double'));
+});
+check('component IDs matching picker scopes retain unambiguous saved identities', () => {
+  const sibling={...input,id:'self'},ui=drive(button,{components:[button,sibling]});ui.edit('Click action','setTagValue');ui.edit('Set tag path','[default]Workshop/Setpoint');ui.edit('Set tag value source','property');ui.edit('Set tag source component','component:self');apply(ui);assert.deepEqual(ui.applied[0].tagWrite.valueReference,{kind:'property',componentId:'self',property:'value'});
+});
+check('declared command rules explain inherited confirmation and block conflicting definitions before Apply', () => {
+  const command={id:'set-speed',name:'Change speed',tagPath:'[default]Workshop/Speed',dataType:'Double',min:0,max:100,readbackPath:'[default]Workshop/ActualSpeed',confirmation:'Apply the requested speed?'};
+  const ui=drive(button,{commands:[command]});ui.edit('Click action','setTagValue');ui.edit('Set tag path',command.tagPath);ui.edit('Set tag value','50');
+  assert.equal(ui.field('Require tag write confirmation').props.checked,false);assert.match(ui.content(),/Uses declared command: Change speed/);assert.match(ui.content(),/bounds, readback and required confirmation take precedence/);assert.match(ui.content(),/\[default\]Workshop\/ActualSpeed/);assert.match(ui.content(),/Apply the requested speed\?/);assert.ok(!ui.all().some(node=>node.type==='script-editor'));
+  apply(ui);assert.deepEqual(ui.applied[0].tagWrite,{tagPath:command.tagPath,dataType:'Double',value:50});ui.edit('Set tag value','101');apply(ui);assert.equal(ui.applied.length,1);assert.match(ui.content(),/declared command's range of 0 to 100/);
+  const conflicting=drive(button,{commands:[command,{...command,id:'also-speed'}]});conflicting.edit('Click action','setTagValue');conflicting.edit('Set tag path',command.tagPath);assert.match(conflicting.content(),/Multiple declared equipment commands/);apply(conflicting);assert.deepEqual(conflicting.applied,[]);assert.match(conflicting.content(),/Use a declared command control/);
 });
 check('close-popup and equipment symbol activation retain their original supported definitions', () => {
   for(const component of [{...button,props:{action:'closePopup'}},{...base,type:'equipmentSymbol',props:{}},{...base,type:'equipmentSymbol',props:{action:'navigate',targetScreenId:'home'}},{...base,type:'equipmentSymbol',props:{action:'openPopup',targetScreenId:'popup',parameters:{station:'A'}}}]) {

@@ -1,3 +1,6 @@
+import { validateDataset } from "./datasets";
+import { RuntimePropertyRow } from "./RuntimePropertyRow";
+import type { BindingTarget } from "./types";
 import ProcessDataProperties from "./ProcessDataProperties";
 import { isProcessDataComponent } from "./processDataModel";
 import { TagSnapshotStore } from "./tagStore";
@@ -132,6 +135,7 @@ const palettes: { type: ComponentType; name: string; hint: string; viewKind?: Vi
   { type: "button", name: "Button", hint: "Screen navigation" },
   { type: "table", name: "Table", hint: "Named query results" },
   { type: "image", name: "Image", hint: "Local photos & diagrams" },
+  { type: "computerCamera", name: "Computer camera", hint: "Capture a visitor photo in this browser" },
   { type: "icon", name: "Icon", hint: "Built-in symbols" },
   { type: "textInput", name: "Text box", hint: "Enter text" },
   { type: "formattedInput", name: "Formatted input", hint: "Masked text with validation" },
@@ -199,15 +203,17 @@ const typeIcon: Record<ComponentType, string> = {
   template: "layers",
   repeater: "grid",
   image: "monitor",
+  computerCamera: "camera",
   icon: "spark",
 };
-const acceptsInitialTag = (type: ComponentType) => type === "value" || type === "gauge" || isProcessDisplay(type) || isInput(type) && type !== "passwordInput";
+const acceptsInitialTag = (type: ComponentType) => type === "value" || type === "gauge" || isProcessDisplay(type) || isInput(type) && type !== "passwordInput" && type !== "computerCamera";
 function tagBindingPatch(component: CanvasComponent, path: string): CanvasComponent["props"] {
   return isProcessDisplay(component.type)
     ? { bindings: { ...component.props.bindings, value: { expression: "tagValue", references: { tagValue: { kind: "tag", path } } } } }
     : { tagPath: path };
 }
 const processDimensions: Partial<Record<ComponentType, { width: number; height: number }>> = {
+  computerCamera: { width: 360, height: 380 },
   equipmentCommand: { width: 360, height: 230 },
   alarmStatusTable: { width: 780, height: 360 }, alarmJournalTable: { width: 780, height: 360 }, historicalTrend: { width: 640, height: 380 },
   chart: { width: 520, height: 340 }, sparkline: { width: 300, height: 120 },
@@ -593,6 +599,7 @@ export default function App() {
     instance?: InstanceAction,
     uiAction?: PythonUiAction,
   ) => {
+    if (component.props.action === "setTagValue") { notify("Publish the application and open its operator link to run Set tag value.", true); return; }
     if (instance?.isCurrent?.() === false) return;
     if (!gatewayAdmin) { notify("A gateway administrator must sign in to run draft Python code.", true); return; }
     if (!screen || !project || previewActionBusy || editorParameterError || previewCommunication.busy || !previewCommunication.session) return;
@@ -878,38 +885,77 @@ export default function App() {
       )
     )
       fieldIndex++;
+    function initialDimensions(screen: Screen | Template) {
+      return {
+        width: processDimensions[type]?.width ?? (
+          type === "viewContainer" ? Math.min(720, Math.max(200, screen.width - 80)) : type === "repeater"
+            ? Math.min(900, screen.width - 80)
+            : type === "template"
+              ? reusable!.width
+              : type === "table"
+                ? 620
+                : type === "label"
+                  ? 340
+                  : 260),
+        height: processDimensions[type]?.height ?? (type === "viewContainer" ? 420 : isTemplateInstance(type)
+          ? type === "template"
+            ? reusable!.height
+            : 450
+          : type === "table"
+            ? 270
+            : type === "label"
+              ? 56
+              : type === "treeView" ? 260
+                : type === "list" ? 200
+                  : type === "textArea" || type === "radioGroup"
+                    ? 150
+                    : type === "button" || type === "checkbox" || type === "toggle"
+                      ? 52
+                      : isInput(type)
+                        ? 90
+                        : 170),
+      };
+    }
+    function initialInputProperties() {
+      return {
+        ...(isInput(type)
+          ? {
+            fieldKey: `${type}${fieldIndex}`,
+            defaultValue:
+              type === "checkbox" || type === "toggle"
+                ? false
+                : ["numberInput", "spinner", "slider"].includes(type)
+                  ? 0
+                  : type === "treeView" ? "group1"
+                    : type === "select" || type === "radioGroup" || type === "multiStateButton" || type === "list"
+                      ? "option1"
+                      : "",
+          }
+          : {}),
+        ...(["numberInput", "spinner", "slider"].includes(type) ? { min: 0, max: 100, ...(["spinner", "slider"].includes(type) ? { step: 1 } : {}) } : {}),
+        ...(type === "select" || type === "radioGroup" || type === "multiStateButton" || type === "list"
+          ? {
+            options: [
+              { label: "Option 1", value: "option1" },
+              { label: "Option 2", value: "option2" },
+            ],
+          }
+          : {}),
+        ...(type === "treeView" ? {
+          options: [
+            { value: "group1", label: "Equipment" },
+            { value: "option1", label: "Machine 1", parentValue: "group1" },
+            { value: "option2", label: "Machine 2", parentValue: "group1" },
+          ]
+        } : {}),
+      };
+    }
     const component: CanvasComponent = {
       id: id(type),
       type,
       x: 40 + offset,
       y: 48 + offset,
-      width: processDimensions[type]?.width ?? (
-        type === "viewContainer" ? Math.min(720, Math.max(200, screen.width - 80)) : type === "repeater"
-          ? Math.min(900, screen.width - 80)
-          : type === "template"
-            ? reusable!.width
-            : type === "table"
-              ? 620
-              : type === "label"
-                ? 340
-                : 260),
-      height: processDimensions[type]?.height ?? (type === "viewContainer" ? 420 : isTemplateInstance(type)
-        ? type === "template"
-          ? reusable!.height
-          : 450
-        : type === "table"
-          ? 270
-          : type === "label"
-            ? 56
-            : type === "treeView" ? 260
-            : type === "list" ? 200
-            : type === "textArea" || type === "radioGroup"
-              ? 150
-            : type === "button" || type === "checkbox" || type === "toggle"
-              ? 52
-              : isInput(type)
-                ? 90
-                : 170),
+      ...initialDimensions(screen),
       props: {
         text: {
           alarmStatusTable: "Alarm status", alarmJournalTable: "Alarm journal", historicalTrend: "Historical trend",
@@ -933,6 +979,7 @@ export default function App() {
           button: "Open screen",
           table: "Production data",
           image: "",
+          computerCamera: "Computer camera",
           icon: "Status icon",
           textInput: "Text input",
           formattedInput: "Part code",
@@ -1004,34 +1051,7 @@ export default function App() {
           ...(type !== "ledDisplay" ? { min: 0, max: 100, showValue: true, showPercent: false } : {}),
           ...(type === "progressBar" || type === "levelIndicator" ? { orientation: type === "progressBar" ? "horizontal" : "vertical" } : {}),
         } : {}),
-        ...(isInput(type)
-          ? {
-              fieldKey: `${type}${fieldIndex}`,
-              defaultValue:
-                type === "checkbox" || type === "toggle"
-                  ? false
-                  : ["numberInput", "spinner", "slider"].includes(type)
-                    ? 0
-                    : type === "treeView" ? "group1"
-                    : type === "select" || type === "radioGroup" || type === "multiStateButton" || type === "list"
-                      ? "option1"
-                      : "",
-            }
-          : {}),
-        ...(["numberInput", "spinner", "slider"].includes(type) ? { min: 0, max: 100, ...(["spinner", "slider"].includes(type) ? { step: 1 } : {}) } : {}),
-        ...(type === "select" || type === "radioGroup" || type === "multiStateButton" || type === "list"
-          ? {
-              options: [
-                { label: "Option 1", value: "option1" },
-                { label: "Option 2", value: "option2" },
-              ],
-            }
-          : {}),
-        ...(type === "treeView" ? { options: [
-          { value: "group1", label: "Equipment" },
-          { value: "option1", label: "Machine 1", parentValue: "group1" },
-          { value: "option2", label: "Machine 2", parentValue: "group1" },
-        ] } : {}),
+        ...initialInputProperties(),
         ...(type === "multiStateIndicator" ? {
           stateValue: "idle",
           states: [
@@ -1128,13 +1148,1406 @@ export default function App() {
     }
     return { rows, count };
   }, [tags, tagFilter]);
-  const parameterChoices = [
-    ...new Set(
-      tags
-        .map((tag) => tag.path.match(/\]Line\/([^/]+)\//)?.[1])
-        .filter((value): value is string => Boolean(value)),
-    ),
-  ];
+
+
+  // Pure render helpers share this hook owner, preserving child keys and edit lifetimes.
+  function renderImageProperties(selected: CanvasComponent) {
+    return (selected.type === "image" && (
+      <>
+        <Field target="imageUrl" label="Generated image URL">
+          <input value={selected.props.imageUrl ?? ""} maxLength={4096} placeholder="Bind a local browser blob URL"
+            spellCheck={false} onChange={event => updateProps({ imageUrl: event.target.value })} />
+        </Field>
+        <RuntimePropertyRow target="assetId" label="Image asset"><AssetPicker
+          assets={assets}
+          selected={selected.props.assetId}
+          onSelect={(assetId) => updateProps({ assetId })}
+          onUploaded={(asset) =>
+            setAssets((previous) => [
+              ...previous.filter(
+                (item) => item.id !== asset.id,
+              ),
+              asset,
+            ])
+          }
+          notify={notify}
+        />
+        </RuntimePropertyRow>
+        <Field target="fit" label="Image fit">
+          <select
+            value={selected.props.fit || "contain"}
+            onChange={(event) =>
+              updateProps({
+                fit: event.target.value as
+                  "contain" | "cover" | "fill",
+              })
+            }
+          >
+            <option value="contain">
+              Contain · show entire image
+            </option>
+            <option value="cover">
+              Cover · crop to fill
+            </option>
+            <option value="fill">Stretch to fill</option>
+          </select>
+        </Field>
+      </>
+    ));
+  }
+
+  function renderIconProperties(selected: CanvasComponent) {
+    return (selected.type === "icon" && (
+      <>
+        <div className="icon-picker-preview">
+          <Icon
+            name={selected.props.icon || "spark"}
+            size={42}
+          />
+        </div>
+        <Field target="icon" label="Built-in icon">
+          <select
+            value={selected.props.icon || "spark"}
+            onChange={(event) =>
+              updateProps({ icon: event.target.value })
+            }
+          >
+            {iconNames.map((name) => (
+              <option key={name} value={name}>
+                {name.charAt(0).toUpperCase() + name.slice(1)}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </>
+    ));
+  }
+
+  function renderInputProperties(selected: CanvasComponent) {
+    return (isInput(selected.type) && (
+      <>
+        <InputValidationEditor key={`input-validation:${selected.id}`} component={selected} onChange={updateProps} />
+        <Field
+          designTime label="Field name"
+          hint="Available in event form snapshots as inputs['fieldName']. Automatic Python events omit password fields."
+        >
+          <input
+            value={selected.props.fieldKey || ""}
+            placeholder="setpoint"
+            onChange={(event) =>
+              updateProps({ fieldKey: event.target.value })
+            }
+          />
+        </Field>
+        {selected.type === "passwordInput" ? (
+          <p className="template-property-note">Password fields always start empty. Operators enter a masked form value; no password is saved as a project default.</p>
+        ) : selected.type === "computerCamera" ? (
+          <p className="template-property-note">Capture a 320 × 320 PNG photo using Start camera and Capture photo. The field holds a temporary browser blob URL. Use HTTPS or localhost; camera access needs the visitor's permission. Photos are cleared on retake, reset or leaving this screen.</p>
+        ) : selected.type === "multiStateButton" ? (
+          <StateControlEditor key={`button-states:${selected.id}`} component={selected} onChange={updateProps} notify={notify} />
+        ) : (selected.type === "list" || selected.type === "treeView") && !selected.props.optionsSource ? (
+          <ListTreeOptionsEditor key={`list-tree-options:${selected.id}`} component={selected} onChange={updateProps} notify={notify} />
+        ) : selected.type === "checkbox" || selected.type === "toggle" ? (
+          <Field designTime label="Default value">
+            <select
+              value={String(
+                selected.props.defaultValue === true,
+              )}
+              onChange={(event) =>
+                updateProps({
+                  defaultValue: event.target.value === "true",
+                })
+              }
+            >
+              <option value="false">Unchecked</option>
+              <option value="true">Checked</option>
+            </select>
+          </Field>
+        ) : selected.type === "textArea" ? (
+          <Field designTime label="Default value"><textarea rows={4} maxLength={4096} value={String(selected.props.defaultValue ?? "")} onChange={(event) => updateProps({ defaultValue: event.target.value })} /></Field>
+        ) : (
+          <Field designTime label="Default value">
+            <input
+              type={
+                ["numberInput", "spinner", "slider"].includes(selected.type)
+                  ? "number"
+                  : selected.type === "dateTimeInput" ? "datetime-local" : "text"
+              }
+              step={selected.type === "dateTimeInput" ? 60 : "any"}
+              value={String(
+                selected.props.defaultValue ?? "",
+              )}
+              onChange={(event) =>
+                updateProps({
+                  defaultValue:
+                    ["numberInput", "spinner", "slider"].includes(selected.type)
+                      ? Number(event.target.value)
+                      : event.target.value,
+                })
+              }
+            />
+          </Field>
+        )}
+        {selected.type === "dateTimeInput" && <p className="template-property-note">Local wall-clock time, to the minute. No timezone conversion is applied.</p>}
+        {["select", "list", "treeView"].includes(selected.type) && <Field designTime label="Option source" hint="Named queries populate choices without changing the current selection or other edited fields on refresh.">
+          <select value={selected.props.optionsSource ? "query" : "static"} onChange={event => updateProps({
+            optionsSource: event.target.value === "query" ? { queryId: queries.find(query => query.kind !== "update")?.id || "", valueColumn: "id", labelColumn: "name", ...(selected.type === "treeView" ? { parentColumn: "parent_id" } : {}) } : undefined,
+            defaultValue: event.target.value === "query" ? "" : selected.props.options?.[0]?.value,
+            selectionFields: undefined,
+          })}>
+            <option value="static">Static options</option>
+            <option value="query">Named query</option>
+          </select>
+        </Field>}
+        {["select", "list", "treeView"].includes(selected.type) && selected.props.optionsSource && <>
+          <Field designTime label="Options query">
+            <select value={selected.props.optionsSource.queryId} onChange={event => updateProps({ optionsSource: { ...selected.props.optionsSource!, queryId: event.target.value } })}>
+              <option value="">Select query…</option>
+              {queries.filter(query => query.kind !== "update").map(query => <option key={query.id} value={query.id}>{query.name}</option>)}
+            </select>
+          </Field>
+          <Field designTime label="Option value column" hint="A unique, nonempty value for each choice."><input maxLength={128} value={selected.props.optionsSource.valueColumn} onChange={event => updateProps({ optionsSource: { ...selected.props.optionsSource!, valueColumn: event.target.value } })} /></Field>
+          <Field designTime label="Option label column"><input maxLength={128} value={selected.props.optionsSource.labelColumn} onChange={event => updateProps({ optionsSource: { ...selected.props.optionsSource!, labelColumn: event.target.value } })} /></Field>
+          {selected.type === "treeView" && <Field designTime label="Parent value column" hint="Required. Each parent must match another option value; null or empty values identify roots."><input aria-label="Tree parent column" maxLength={128} value={selected.props.optionsSource.parentColumn || ""} onChange={event => updateProps({ optionsSource: { ...selected.props.optionsSource!, parentColumn: event.target.value } })} /></Field>}
+          <InspectorDetails label="Selection mappings" summary="Edit form mappings"><p className="muted">When the operator chooses an option, fill these fields from the selected query row. Blank mappings leave fields unchanged.</p>
+            {screen?.components.filter(item => isInput(item.type) && item.id !== selected.id).map(input => {
+              const field = input.props.fieldKey || input.id;
+              return <Field key={field} label={input.props.text || field}><input maxLength={128} placeholder="Column name (optional)" value={selected.props.selectionFields?.[field] || ""} onChange={event => {
+                const mapping = { ...selected.props.selectionFields };
+                if (event.target.value) mapping[field] = event.target.value;
+                else delete mapping[field];
+                updateProps({ selectionFields: mapping });
+              }} /></Field>;
+            })}
+          </InspectorDetails></>}
+        {(selected.type === "radioGroup" || selected.type === "select" && !selected.props.optionsSource) && <OptionsEditor key={`input-options:${selected.id}`} component={selected} onChange={updateProps} />}
+        {selected.type !== "passwordInput" && selected.type !== "computerCamera" && <Field
+          designTime label="Initial value tag (optional)"
+          hint="Read a tag’s value before the operator edits this field. Submitting a button event controls writing."
+        >
+          <input
+            value={selected.props.tagPath || ""}
+            placeholder="[default]Application/Setpoint"
+            onChange={(event) =>
+              updateProps({ tagPath: event.target.value })
+            }
+          />
+        </Field>}
+      </>
+    ));
+  }
+
+  function renderTableProperties(selected: CanvasComponent) {
+    return (selected.type === "table" && (
+      <><Field designTime label="Named query">
+        <select
+          value={selected.props.queryId || ""}
+          onChange={(event) =>
+            updateProps({ queryId: event.target.value })
+          }
+        >
+          <option value="">Select query…</option>
+          {queries.filter(query => query.kind !== "update").map((query) => (
+            <option key={query.id} value={query.id}>
+              {query.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+        <JsonEditor target="data" label="Saved dataset" value={selected.props.data ?? { columns: [], rows: [] }} onSave={value => updateProps({ data: validateDataset(value) })} notify={notify} hint="Saved or bound data takes precedence over the named query. Dataset tables are read-only; editing requires data from a named query." />
+        <Field target="selectionMode" label="Selection mode" hint="Multiple selection keeps a local set of stable row keys. Atomic batch editing requires multiple selection."><select aria-label="Table selection mode" value={selected.props.tableEdit?.batch ? "multiple" : selected.props.selectionMode ?? "single"} disabled={Boolean(selected.props.tableEdit?.batch)} onChange={event => updateProps({ selectionMode: event.target.value as "single" | "multiple", ...(event.target.value === "multiple" ? { selectionFields: undefined } : {}) })}><option value="single">Single row</option><option value="multiple">Multiple rows</option></select></Field>
+        <Field target="pageSize" label="Rows per page" hint="Page through the rows already loaded by the query. This does not change the query's result limit."><TablePageSizeEditor key={`table-page-size:${selected.id}`} value={selected.props.pageSize} onChange={pageSize => updateProps({ pageSize })} notify={notify} /></Field>
+        <TableColumnsEditor key={`table-columns:${selected.id}:${JSON.stringify(selected.props.tableColumns)}`} component={selected} onChange={updateProps} notify={notify} />
+        <Field designTime label="Unique row column" hint="A stable primary key, usually id."><input value={selected.props.rowKey || ""} onChange={event => updateProps({ rowKey: event.target.value })} /></Field>
+        <TableEditingEditor key={`table-editing:${selected.id}:${JSON.stringify([selected.props.queryId, selected.props.rowKey, selected.props.tableEdit])}`} component={selected} onChange={updateProps} notify={notify} />
+        {selected.props.selectionMode !== "multiple" && !selected.props.tableEdit?.batch && <InspectorDetails label="Selection mappings" summary="Edit form mappings"><p className="muted">Select a table row to fill these form fields. Enter the source column name for each field.</p>
+          {screen?.components.filter(item => isInput(item.type)).map(input => {
+            const field = input.props.fieldKey || input.id;
+            return <Field key={field} label={input.props.text || field}><input placeholder="Column name (optional)" value={selected.props.selectionFields?.[field] || ""} onChange={event => { const mapping = { ...selected.props.selectionFields }; if (event.target.value) mapping[field] = event.target.value; else delete mapping[field]; updateProps({ selectionFields: mapping, rowKey: selected.props.rowKey || "id" }); }} /></Field>;
+          })}</InspectorDetails>}</>
+    ));
+  }
+
+  function renderTemplateProperties(selected: CanvasComponent, project: Project) {
+    return (isTemplateInstance(selected.type) && (
+      <div className="inspector-section">
+        <h3>Reusable template</h3>
+        <Field designTime label="Template">
+          <select
+            value={selected.props.templateId || ""}
+            onChange={(event) =>
+              updateProps({
+                templateId: event.target.value,
+                parameters: {},
+                parameterBindings: {},
+                ...(selected.type === "repeater"
+                  ? { rows: [], rowsSource: selected.props.rowsSource ? { ...selected.props.rowsSource, parameterMap: {} } : undefined }
+                  : {}),
+              })
+            }
+          >
+            <option value="">Choose template…</option>
+            {(project.templates || []).map((item) => (
+              <option key={item.id} value={item.id} disabled={Boolean(editingTemplate && templatePlacementError(project.templates || [], editingTemplate.id, item.id))}>
+                {item.name}{editingTemplate && templatePlacementError(project.templates || [], editingTemplate.id, item.id) ? " (cannot nest here)" : ""}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {selected.props.templateId && (
+          <Field designTime label="Template definition">
+            <button
+              type="button"
+              className="button template-open-button"
+              onClick={() =>
+                openTemplate(selected.props.templateId!)
+              }
+            >
+              <Icon name="layers" size={14} /> Edit shared
+              template
+            </button>
+          </Field>
+        )}
+        {selected.type === "repeater" && (
+          <>
+            <Field designTime label="Row source">
+              <select aria-label="Repeater row source" value={selected.props.rowsSource ? "query" : "saved"} onChange={event => updateProps({
+                rows: [], rowsSource: event.target.value === "query"
+                  ? { queryId: queries.find(query => query.kind !== "update")?.id || "", rowKey: "row_id", parameterMap: {} }
+                  : undefined,
+              })}>
+                <option value="saved">Saved rows</option>
+                <option value="query">Named query</option>
+              </select>
+            </Field>
+            {editingTemplate && <p className="template-property-note">Nested query repeaters read their containing row's typed parameters. Every query level reserves up to 100 rows within the project expansion limit.</p>}
+            <div className="field-grid">
+              <Field target="columns" label="Columns">
+                <input
+                  type="number"
+                  min={1}
+                  max={12}
+                  value={selected.props.columns ?? 1}
+                  onChange={(event) =>
+                    updateProps({
+                      columns: Math.max(
+                        1,
+                        Math.min(
+                          12,
+                          Math.trunc(
+                            Number(event.target.value) || 1,
+                          ),
+                        ),
+                      ),
+                    })
+                  }
+                />
+              </Field>
+              <Field target="gap" label="Gap (px)">
+                <input
+                  type="number"
+                  min={0}
+                  max={64}
+                  value={selected.props.gap ?? 16}
+                  onChange={(event) =>
+                    updateProps({
+                      gap: Math.max(
+                        0,
+                        Math.min(
+                          64,
+                          Number(event.target.value) || 0,
+                        ),
+                      ),
+                    })
+                  }
+                />
+              </Field>
+            </div>
+            {selected.props.rowsSource ? <>
+              <Field designTime label="Maximum query rows">
+                <input aria-label="Repeater maximum query rows" type="number" min={1} max={100} step={1} value={selected.props.rowsSource.maxRows ?? 100}
+                  onChange={event => updateProps({ rowsSource: { ...selected.props.rowsSource!, maxRows: Number(event.target.value) } })} />
+              </Field>
+              <Field designTime label="Rows query">
+                <select aria-label="Repeater rows query" value={selected.props.rowsSource.queryId} onChange={event => updateProps({ rowsSource: { ...selected.props.rowsSource!, queryId: event.target.value } })}>
+                  <option value="">Choose query…</option>
+                  {queries.filter(query => query.kind !== "update").map(query => <option key={query.id} value={query.id}>{query.name}</option>)}
+                </select>
+              </Field>
+              <Field designTime label="Row key column" hint="Every returned row needs a unique text key. Include its revision in the key when an older row must no longer accept actions.">
+                <input aria-label="Repeater row key column" maxLength={128} value={selected.props.rowsSource.rowKey} onChange={event => updateProps({ rowsSource: { ...selected.props.rowsSource!, rowKey: event.target.value } })} />
+              </Field>
+              <InspectorDetails label="Parameter columns" summary="Edit column mappings">
+                {Object.keys(project.templates?.find(item => item.id === selected.props.templateId)?.parameters || {}).map(parameter => <Field key={parameter} label={parameter} hint="Query column name; leave blank to keep the saved parameter default.">
+                  <input aria-label={`Query column for ${parameter}`} maxLength={128} value={selected.props.rowsSource!.parameterMap[parameter] || ""} onChange={event => {
+                    const parameterMap = { ...selected.props.rowsSource!.parameterMap };
+                    if (event.target.value) parameterMap[parameter] = event.target.value;
+                    else delete parameterMap[parameter];
+                    updateProps({ rowsSource: { ...selected.props.rowsSource!, parameterMap } });
+                  }} />
+                </Field>)}
+              </InspectorDetails>
+              <p className="template-property-note">Up to 100 rows refresh every ten seconds and after actions. Query values are literal parameter values. Changed or removed rows reset their input forms. Popups keep the selected row context and require reopening if that row changes.</p>
+            </> : <>
+              <JsonEditor
+                designTime label="Saved rows"
+                value={selected.props.rows || []}
+                rows={12}
+                onSave={(value) => {
+                  if (!Array.isArray(value) || value.length > 100)
+                    throw new Error(
+                      "Rows must be a JSON array with at most 100 entries.",
+                    );
+                  const keys = new Set<string>();
+                  const definition = project.templates?.find(
+                    (item) =>
+                      item.id === selected.props.templateId,
+                  );
+                  const rows = value.map((row) => {
+                    if (
+                      !row ||
+                      typeof row !== "object" ||
+                      typeof row.id !== "string" ||
+                      !row.id.trim() ||
+                      keys.has(row.id)
+                    )
+                      throw new Error(
+                        "Each row needs a unique, nonempty id.",
+                      );
+                    keys.add(row.id);
+                    const parameters = textParameters(
+                      row.parameters,
+                    );
+                    if (
+                      Object.keys(parameters).some(
+                        (key) =>
+                          !Object.hasOwn(
+                            definition?.parameters || {},
+                            key,
+                          ),
+                      )
+                    )
+                      throw new Error(
+                        "Row parameters must be declared by the template.",
+                      );
+                    return { id: row.id, parameters };
+                  });
+                  updateProps({ rows });
+                }}
+                notify={notify}
+              />
+              <p className="template-property-note">
+                Example:{" "}
+                <code>
+                  {
+                    '[{"id":"row1","parameters":{"machine":"WC1"}}]'
+                  }
+                </code>
+                . Each row has independent input values. Rows are
+                saved with the project.
+              </p>
+            </>}
+          </>
+        )}
+      </div>
+    ));
+  }
+
+  function renderContentProperties(selected: CanvasComponent) {
+    return (!isTemplateInstance(selected.type) && !isProcessDisplay(selected.type) && !isChart(selected.type) && !isProcessDataComponent(selected.type) && !["viewContainer", "equipmentCommand", "button", "label", "value", "gauge"].includes(selected.type) && !isDrawingComponent(selected.type) && <div className="inspector-section">
+      <h3>Content</h3>
+      {selected.type === "multiStateIndicator" && <StateControlEditor key={`indicator-states:${selected.id}`} component={selected} onChange={updateProps} notify={notify} />}
+      {renderImageProperties(selected)}
+      {renderIconProperties(selected)}
+      {(selected.type === "image" ||
+        selected.type === "icon") && (
+          <Field
+            target="alt" label="Accessible description"
+            hint="Describe the image or symbol. Supports {parameter} text."
+          >
+            <input
+              value={selected.props.alt || ""}
+              onChange={(event) =>
+                updateProps({ alt: event.target.value })
+              }
+            />
+          </Field>
+        )}
+      {["numberInput", "spinner", "slider"].includes(selected.type) && (
+        <Field target="step" label="Step" hint="Increment used by the control. Actions accept any valid value in range.">
+          <input type="number" min="0.000001" step="any" value={selected.props.step ?? (selected.type === "numberInput" ? "" : 1)} placeholder="Any" onChange={(event) => updateProps({ step: event.target.value === "" ? undefined : Number(event.target.value) })} />
+        </Field>
+      )}
+      {renderInputProperties(selected)}
+      {renderTableProperties(selected)}
+    </div>);
+  }
+
+  function renderPropertiesPane(project: Project) {
+    return (<aside id="designer-properties-panel" className={`inspector${selected ? " property-sheet-inspector" : ""}`}>
+      <div className="inspector-heading">
+        <Icon name="settings" size={15} />
+        <strong>Properties</strong>
+        <span>
+          {selection.length > 1 && !selected ? "SELECTION" : selected
+            ? "COMPONENT"
+            : editingTemplate
+              ? "TEMPLATE"
+              : screen ? "SCREEN" : "NO SELECTION"}
+        </span>
+      </div>
+      {searchLocation?.property && searchLocation.id === screen?.id && searchLocation.componentId === selected?.id && <div className="inspector-section search-location" role="status"><small>Search location</small><code>{searchLocation.property}</code><button type="button" aria-label="Dismiss search location" onClick={() => setSearchLocation(null)}>×</button></div>}
+      {inspectingSearchComponent && selection.length > 1 && <div className="inspector-section"><p>Inspecting {selected?.props.text || selectedId} within the selected group. Canvas move, duplicate and delete commands still affect the group.</p></div>}
+      {selection.length > 1 && !selected ? (
+        <div className="inspector-section multi-selection-panel">
+          <h3>{selectedGroupId ? "Group" : "Selection"} · {selection.length} components</h3>
+          <p>{selectedGroupId ? "Drag any member to move the group. Drag the group's bottom-right handle to scale its component positions and sizes. Ungroup to edit individual controls." : "Drag any selected control to move the selection. Align and Distribute treat each saved group as one unit."}</p>
+          {selectedGroupId && <p>Font sizes stay authored. Layout bindings override these values in Preview.</p>}
+          <ul>{selection.map((component) => <li key={component.id}>{component.props.text || component.type}</li>)}</ul>
+          <button className="button" onClick={duplicateSelection}><Icon name="copy" size={14} /> Duplicate selection</button>
+          <button className="button" disabled={Boolean(selectedGroupId)} onClick={groupSelection}><Icon name="layers" size={14} /> Group selection</button>
+          <button className="button" disabled={!selection.some(component => component.groupId)} onClick={ungroupSelection}>Ungroup selection</button>
+          <p>Drag empty canvas to select intersecting controls; Shift/Ctrl adds to selection. Groups select, move, copy and delete together. Ctrl+G groups; Ctrl+Shift+G ungroups. Arrow keys move 1 px; Shift+arrows move 10 px. Ctrl+A selects all, Ctrl+D duplicates, Delete removes, Ctrl+Z undoes and Ctrl+Y redoes.</p>
+          <p>Distribution keeps the outside edges fixed and needs enough room for non-overlapping gaps.</p>
+        </div>
+      ) : selected ? (
+        <>
+          <div className="inspector-selection">
+            <span className="palette-icon">
+              <Icon name={typeIcon[selected.type]} size={20} />
+            </span>
+            <div>
+              <strong>{selected.props.text?.trim() || selected.id}</strong>
+              <small>
+                {selected.type.charAt(0).toUpperCase() +
+                  selected.type.slice(1)}{" "}
+                component
+              </small>
+            </div>
+            <button
+              className="icon-button"
+              title={selection.length > 1 ? "Delete selected group" : "Delete component"}
+              aria-label={selection.length > 1 ? "Delete selected group" : "Delete component"}
+              onClick={deleteSelection}
+            >
+              <Icon name="trash" size={15} />
+            </button>
+          </div>
+          <div className="component-property-grid" aria-label="Component properties">
+            <PropertyBindingsEditor
+              key={`bindings:${selected.id}`}
+              component={selected}
+              components={screen?.components || []}
+              tags={tags}
+              parameters={editorParameters}
+              queries={queries}
+              inputs={currentPreviewInputs}
+              state={applicationState.values}
+              allowUnresolvedScreenState={Boolean(editingTemplate)}
+              communicationLost={!connected}
+              parameterTemplate={project.templates?.find(item => item.id === selected.props.templateId)}
+              notify={notify}
+              onChange={updateProps}
+              onGeometryChange={patch => updateComponent(selected.id, patch)}
+            >
+              {selected.type === "numberInput" && <div className="property-sheet-group"><h4>Setpoint command</h4><div className="property-sheet-row" data-property="commandId"><label htmlFor="input-command-id">Review on commit<small className="property-design-time">Design time</small></label><div className="property-sheet-value"><select id="input-command-id" value={selected.props.commandId ?? ""} onChange={event => updateProps({ commandId: event.target.value || undefined })}><option value="">Local form value only</option>{project.commands?.filter(command => !["Boolean", "String"].includes(command.dataType)).map(command => <option key={command.id} value={command.id}>{command.name}</option>)}</select><small>Enter or leaving the input opens review. Every device write needs explicit confirmation, Commands permission and readback.</small></div><span /></div></div>}
+              {isProcessDataComponent(selected.type) && <ProcessDataProperties component={selected} onChange={updateProps} />}
+              {isDrawingComponent(selected.type) && <DrawingEditor key={`drawing:${selected.id}`} component={selected} onChange={updateProps} notify={notify} />}
+              {selected.type === "viewContainer" && <ViewContainerProperties key={`view-container:${selected.id}`} component={selected} templates={project.templates ?? []} parentTemplateId={editingTemplate?.id} onChange={updateProps} />}
+              {renderTemplateProperties(selected, project)}
+              {selected.type === "equipmentCommand" && <div className="inspector-section"><h3>Equipment command</h3><Field designTime label="Declared command"><select value={selected.props.commandId ?? ""} onChange={event => updateProps({ commandId: event.target.value })}><option value="">Select a command</option>{project.commands?.map(command => <option key={command.id} value={command.id}>{command.name}</option>)}</select></Field><Field designTime label="Command definitions"><button className="button" onClick={() => setEquipmentCommandsOpen(true)}>Configure project commands</button></Field><p>Operators need Commands permission. Designer Preview never dispatches equipment commands.</p></div>}
+              {renderContentProperties(selected)}
+              <ComponentStyleAssignment component={selected} styles={project.styles} onChange={updateProps} onManage={() => setStylesEditorOpen(true)} />
+              <ComponentTranslationAssignment component={selected} catalog={project.localization} onChange={updateProps} onManage={() => setTranslationsOpen(true)} />
+              <div className="inspector-section">
+                <h3>Behavior</h3>
+                <Field designTime label="Actions & events"><button type="button" className="button component-actions-open" onClick={() => setEventEditorId(selected.id)}>
+                  <Icon name="code" size={14} /> Edit actions &amp; events
+                </button></Field>
+                <p className="component-lifecycle-hint">Configure actions, input events, lifecycle events and message handlers together. Apply creates one undo step.</p>
+              </div>
+            </PropertyBindingsEditor>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="inspector-selection">
+            <span className="palette-icon">
+              <Icon name="monitor" size={20} />
+            </span>
+            <div>
+              <strong>{screen?.name || "Nothing selected"}</strong>
+              <small>
+                {editingTemplate
+                  ? "Shared template settings"
+                  : screen ? "Screen settings" : "Open a screen or template"}
+              </small>
+            </div>
+          </div>
+          {screen && <DocumentProperties
+            key={`${editingTemplate ? "template" : "screen"}:${screen.id}`}
+            document={screen}
+            templates={project.templates}
+            isTemplate={Boolean(editingTemplate)}
+            parentParameters={project.parameters}
+            canChangeToPopup={screen.kind === "popup" || project.screens.filter(item => item.kind !== "popup").length > 1}
+            onChange={patch => updateScreen(current => ({ ...current, ...patch }))}
+            onRename={() => previewResourceChange({ action: "rename", target: { kind: editingTemplate ? "template" : "screen", id: screen.id }, name: screen.name })}
+            notify={notify}
+          />}
+          {screen && <div className="inspector-section">
+            <button
+              className="button danger subtle"
+              disabled={
+                !screen || !editingTemplate &&
+                screen?.kind !== "popup" &&
+                project.screens.filter(
+                  (item) => item.kind !== "popup",
+                ).length < 2
+              }
+              onClick={() => previewResourceChange({ action: "delete", target: { kind: editingTemplate ? "template" : "screen", id: screen.id } })}
+            >
+              <Icon name="trash" size={15} />
+              {editingTemplate ? "Delete template" : "Delete screen"}
+            </button>
+          </div>}
+          <div className="inspector-tip">
+            <div className="inspector-tip-heading">
+              <span className="tip-icon">
+                <Icon name="spark" size={18} />
+              </span>
+              <strong>Make it your own</strong>
+            </div>
+            <p>
+              Choose a component from the palette, connect a tag, and
+              preview your application.
+            </p>
+            <button onClick={() => setLeftTab("components")}>
+              Browse components <Icon name="arrow" size={12} />
+            </button>
+          </div>
+        </>
+      )}
+    </aside>);
+  }
+
+  function renderCanvasWorkspace(project: Project) {
+    return (<section className="canvas-workspace">
+      <div className="screen-tabs">
+        {documents.open.map(document => {
+          const item = (document.kind === "template" ? project.templates ?? [] : project.screens).find(item => item.id === document.id);
+          if (!item) return null;
+          const active = documentKey(document) === documents.active;
+          return <div key={documentKey(document)} className={`document-tab${active ? " active" : ""}${document.kind === "template" ? " template-tab" : ""}`}>
+            <button className="document-tab-label" aria-current={active ? "page" : undefined} disabled={Boolean(previewActionBusy)} onClick={() => openDocument(document)} title={`${document.kind === "template" ? "Template" : item.kind === "popup" ? "Popup" : "Screen"}: ${item.name}`}>
+              <Icon name={document.kind === "template" ? "layers" : item.kind === "popup" ? "external" : "monitor"} size={14} />
+              <span>{item.name}</span>
+              {document.kind === "template" && <span className="template-editor-badge">TEMPLATE</span>}
+              {active && dirty && <span className="tiny-orange-dot" />}
+            </button>
+            {!preview && <button className="document-tab-close" disabled={Boolean(previewActionBusy)} title={`Close ${item.name} tab`} aria-label={`Close ${item.name} tab`} onClick={() => closeDocument(document)}><Icon name="close" size={12} /></button>}
+          </div>;
+        })}
+        {!preview && (
+          <button
+            className="add-screen-tab"
+            title="Add screen"
+            onClick={addScreen}
+          >
+            <Icon name="plus" size={15} />
+          </button>
+        )}
+        <span className="screen-tabs-spacer" />
+        <span className="screen-tabs-mode">
+          {preview
+            ? "INTERACTIVE PREVIEW"
+            : editingTemplate
+              ? "TEMPLATE EDITOR"
+              : screen ? "SCREEN EDITOR" : "NO DOCUMENT OPEN"}
+        </span>
+      </div>
+
+      {editingTemplate && (
+        <div className="template-editor-banner">
+          <Icon name="layers" size={14} />
+          <strong>Editing shared template</strong>
+          <span>Save and publish to update every instance.</span>
+          <button
+            disabled={Boolean(previewActionBusy)}
+            onClick={() => {
+              const target = documents.open.find(item => item.kind === "screen")?.id || project.screens[0]?.id;
+              if (target) openDocument({ kind: "screen", id: target });
+            }}
+          >
+            <Icon name="arrow" size={12} /> Back to screen
+          </button>
+        </div>
+      )}
+      {editorParameterError && <div className="template-parameter-context-error" role="alert">
+        <strong>Template parameters need attention.</strong> {editorParameterError} Preview is unavailable until the default or its parent value is corrected. Select the template document to edit its parameters.
+      </div>}
+      {!preview && screen && (
+        <div className="canvas-arrange-toolbar" aria-label="Canvas arrangement">
+          <div className="toolbar-group">
+            <button className="icon-button active" title="Select and move components">
+              <Icon name="move" size={16} />
+            </button>
+            <span className="toolbar-divider" />
+            <button className="icon-button" title="Undo (Ctrl+Z)" onClick={undo} disabled={!history.past.length}>
+              <Icon name="undo" size={16} />
+            </button>
+            <button className="icon-button" title="Redo (Ctrl+Y or Ctrl+Shift+Z)" onClick={redo} disabled={!history.future.length}>
+              <span className="redo-icon"><Icon name="undo" size={16} /></span>
+            </button>
+            <button className="icon-button" title="Duplicate selection (Ctrl+D)" disabled={!selection.length} onClick={duplicateSelection}>
+              <Icon name="copy" size={16} />
+            </button>
+            <span className="toolbar-divider" />
+          </div>
+          <label title="Whole design pixels from 0 to 128. Zero disables snapping; canvas bounds take precedence.">Grid <input className="canvas-grid-input" aria-label="Snap grid pixels" type="number" min={0} max={128} step={1} value={gridDraft} aria-invalid={parseGridSize(gridDraft) === null} onChange={event => {
+            setGridDraft(event.target.value);
+            const size = parseGridSize(event.target.value);
+            if (size !== null) setGridSize(size);
+          }} onBlur={finishGridEdit} onKeyDown={event => {
+            if (event.key === "Enter") { event.preventDefault(); finishGridEdit(); }
+            else if (event.key === "Escape") { event.preventDefault(); setGridDraft(String(gridSize)); }
+          }} /> px</label>
+          <select aria-label="Select components by type" value="" disabled={!screen.components.length} title="Select this component type in the current document, including its group members. Ctrl+Shift+A selects the first selected control's type." onChange={event => selectType(event.target.value)}>
+            <option value="" disabled>Select type…</option>
+            {palettes.filter((item, index) => palettes.findIndex(other => other.type === item.type) === index && screen.components.some(component => component.type === item.type)).map(item => <option key={item.type} value={item.type}>{item.type === "viewContainer" ? "View container" : item.name}</option>)}
+          </select>
+          <button className="canvas-group-command" disabled={selection.length < 2 || Boolean(selectedGroupId)} onClick={groupSelection} title="Group selection (Ctrl+G)"><Icon name="layers" size={14} /> Group</button>
+          <button className="canvas-group-command" disabled={!selection.some(component => component.groupId)} onClick={ungroupSelection} title="Ungroup selection (Ctrl+Shift+G)">Ungroup</button>
+          <select aria-label="Align selection" value="" disabled={selectedUnitCount < 2} onChange={(event) => replaceComponents(alignSelected(screen.components, selectedIds, event.target.value as "left" | "hcenter" | "right" | "top" | "vcenter" | "bottom"))}>
+            <option value="" disabled>Align…</option><option value="left">Left edges</option><option value="hcenter">Horizontal centers</option><option value="right">Right edges</option><option value="top">Top edges</option><option value="vcenter">Vertical centers</option><option value="bottom">Bottom edges</option>
+          </select>
+          <select aria-label="Distribute selection" value="" disabled={selectedUnitCount < 3} onChange={(event) => replaceComponents(distributeSelected(screen.components, selectedIds, event.target.value as "horizontal" | "vertical"))}>
+            <option value="" disabled>Distribute…</option><option value="horizontal">Horizontal gaps</option><option value="vertical">Vertical gaps</option>
+          </select>
+          <select aria-label="Match selected sizes" value="" disabled={selectedUnitCount < 2} title="Match the first selected object in layer order. Groups scale as one object; bound geometry remains authored." onChange={event => matchSelectionSize(event.target.value as MatchingSize)}>
+            <option value="" disabled>Match size…</option><option value="width">Same width</option><option value="height">Same height</option><option value="both">Same width and height</option>
+          </select>
+          <button disabled={!selection.length} onClick={deleteSelection} title="Delete selection"><Icon name="trash" size={14} /></button>
+          <span aria-live="polite">{selectedGroupId ? `Group · ${selection.length} controls` : selection.length ? `${selection.length} selected` : "Drag empty canvas to select · Shift-click to add"}</span>
+        </div>
+      )}
+      {!screen && <div className="designer-empty-document">
+        <Icon name="monitor" size={34} />
+        <h2>No document open</h2>
+        <p>Open a screen or template from Project to continue editing. Closing a tab keeps the document and your changes in this project.</p>
+        <button className="button" onClick={() => setLeftTab("project")}><Icon name="layers" size={15} /> Show Project</button>
+      </div>}
+      {screen && (!preview || !editorParameterError) && (
+        <Canvas
+          key={JSON.stringify([screen.id, preview, previewCommunication.session?.token, editingTemplate?.parameterTypes ?? null])}
+          screen={screen}
+          tags={tags}
+          parameters={editorParameters}
+          templates={project.templates || []}
+          templateAncestors={editingTemplate ? [editingTemplate.id] : []}
+          scopedInputs={previewInputs}
+          onScopedInputChange={(scope, fieldKey, value) =>
+            setPreviewInputs((previous) => ({
+              ...previous,
+              [scope]: { ...previous[scope], [fieldKey]: value },
+            }))
+          }
+          communicationLost={!connected}
+          preview={preview}
+          inputs={currentPreviewInputs}
+          onInputChange={previewForm.assign}
+          onAutomaticInputChange={previewForm.assignAutomatic}
+          onAction={(component, instance, uiAction) =>
+            void runPreviewAction(component, instance, uiAction)
+          }
+          onPythonEvent={(component, invocation, instance) => gatewayAdmin && previewCommunication.session?.mode === "live-actions"
+            ? runSavedPythonEvent({
+              scope: "designer", ...(editingTemplate ? { templateId: editingTemplate.id } : { screenId: screen.id }),
+              parameters: project.parameters
+            }, component, invocation, instance)
+            : Promise.reject(new Error("Python events require a gateway administrator and Live actions Preview."))}
+          onOpenPopup={(component, instance) => {
+            if (previewActionBusy || previewPopup || editorParameterError) return;
+            try {
+              setPreviewPopup(
+                createPopup(
+                  project,
+                  screen,
+                  component,
+                  project.parameters,
+                  instance?.parameters || editorParameters,
+                  instance,
+                ),
+              );
+              setToast(null);
+            } catch (error) {
+              notify(
+                error instanceof Error ? error.message : String(error),
+                true,
+              );
+            }
+          }}
+          onClosePopup={() =>
+            notify(
+              "There is no popup open. Open this screen from a popup button to test closing it.",
+            )
+          }
+          actionBusyId={previewActionBusy}
+          selectedIds={selectedIds}
+          gridSize={gridSize}
+          onSelect={values => { setSearchLocation(null); setSelectedIds(values); }}
+          onReplace={replaceComponents}
+          onKeyDown={canvasKeyboard}
+          onBeginMove={() => {
+            if (projectRef.current) updateHistory(checkpoint(historyRef.current, projectRef.current));
+          }}
+          onNavigate={(target) => {
+            if (previewActionBusy) return;
+            if (
+              project.screens.some(
+                (item) => item.id === target && item.kind !== "popup",
+              )
+            ) {
+              openDocument({ kind: "screen", id: target });
+            } else
+              notify(
+                "Choose a destination screen in this button’s properties.",
+                true,
+              );
+          }}
+          onBind={(componentId, path) => {
+            const component = screen.components.find(
+              (item) => item.id === componentId,
+            );
+            if (component && (component.type === "value" || component.type === "gauge" || isProcessDisplay(component.type)))
+              updateComponent(componentId, {
+                props: { ...component.props, ...tagBindingPatch(component, path) },
+              });
+          }}
+        />
+      )}
+      {!preview && <div className="canvas-bottom">
+        <span>
+          <Icon name="move" size={13} />
+          {selection.length > 1
+            ? `${selection.length} selected · Drag together · Arrows nudge · Shift+arrows move 10 px`
+            : selected
+              ? `${selected.type.charAt(0).toUpperCase() + selected.type.slice(1)} selected · Drag to move`
+              : "Select a component to edit its properties"}
+        </span>
+        <span>
+          <span className="status-dot" />
+          {tags.filter((tag) =>
+            tag.source?.toLowerCase().includes("sim"),
+          ).length
+            ? "Sample data is simulated"
+            : `${tags.length} tags available`}
+        </span>
+      </div>}
+    </section>);
+  }
+
+  function renderProjectPane(project: Project) {
+    return (<aside id="designer-project-panel" className="project-panel">
+      <div className="panel-tabs">
+        <button
+          className={leftTab === "project" ? "active" : ""}
+          onClick={() => setLeftTab("project")}
+        >
+          <Icon name="layers" size={15} />
+          Project
+        </button>
+        <button
+          className={leftTab === "components" ? "active" : ""}
+          onClick={() => setLeftTab("components")}
+        >
+          <Icon name="grid" size={15} />
+          Components
+        </button>
+        <button className={leftTab === "tags" ? "active" : ""} onClick={() => setLeftTab("tags")}>
+          <Icon name="tag" size={15} /> Tags
+        </button>
+      </div>
+      {leftTab === "project" ? (
+        <>
+          <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setProjectSettingsOpen(true)}>
+            <Icon name="settings" size={15} /> Project settings
+          </button>
+          <details className="project-tools"><summary>Project tools</summary><div>
+            <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setEquipmentCommandsOpen(true)}>Equipment commands</button>
+            <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setStylesEditorOpen(true)}>Visual styles</button>
+            <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setTranslationsOpen(true)}>Translations</button>
+            <button className="project-settings-button" type="button" onClick={() => setDiagnosticsOpen(true)}>Project diagnostics</button>
+            <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setPublicationHistoryOpen(true)}>Publication history</button>
+            <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setAssetLibraryOpen(true)}>Asset library</button>
+          </div></details>
+          <ProjectNavigation key={project.id} storageKey={projectStorageKey("sparkstudio.projectPanes.v1", project.id)}>
+            <div className="project-tree">
+              <div className="section-heading">
+                <span>
+                  SCREENS <em>{project.screens.length}</em>
+                </span>
+                <button
+                  className="icon-button"
+                  title="Add screen"
+                  aria-label="Add screen"
+                  onClick={addScreen}
+                >
+                  <Icon name="plus" size={16} />
+                </button>
+              </div>
+              <div className="project-document-list" aria-label="Project screens">{project.screens.map((item) => (
+                <button
+                  key={item.id}
+                  className={`tree-item ${screen?.id === item.id ? "selected" : ""}`}
+                  onClick={() => {
+                    openDocument({ kind: "screen", id: item.id });
+                  }}
+                >
+                  <Icon name="monitor" size={16} />
+                  <span>{item.name}</span>
+                  {item.kind === "popup" && (
+                    <span className="popup-screen-badge">POPUP</span>
+                  )}
+                  {screen?.id === item.id && (
+                    <span className="tiny-orange-dot" />
+                  )}
+                </button>
+              ))}</div>
+              <div className="project-actions">
+                <button
+                  onClick={() => void exportProject()}
+                  disabled={packageExporting}
+                  title="Export saved screens, templates, queries, scripts and referenced images"
+                >
+                  <Icon name="download" size={13} />
+                  {packageExporting ? "Exporting…" : "Export .sparkproj"}
+                </button>
+                {gatewayAdmin && <button
+                  onClick={() => setProjectImportOpen(true)}
+                  title="Import a package as an independent project"
+                >
+                  <Icon name="upload" size={13} />
+                  Import package
+                </button>}
+              </div>
+            </div>
+            <div className="template-list">
+              <div className="section-heading">
+                <span>
+                  TEMPLATES <em>{project.templates?.length || 0}</em>
+                </span>
+                <button
+                  className="icon-button"
+                  title="Add template"
+                  aria-label="Add template"
+                  onClick={addTemplate}
+                >
+                  <Icon name="plus" size={16} />
+                </button>
+              </div>
+              <div className="project-document-list" aria-label="Project templates">{(project.templates || []).map((item) => (
+                <button
+                  key={item.id}
+                  className={`tree-item ${editingTemplate?.id === item.id ? "selected" : ""}`}
+                  onClick={() => openTemplate(item.id)}
+                >
+                  <Icon name="layers" size={16} />
+                  <span>{item.name}</span>
+                  {editingTemplate?.id === item.id && (
+                    <span className="tiny-orange-dot" />
+                  )}
+                </button>
+              ))}
+                {!project.templates?.length && (
+                  <p className="panel-empty">
+                    Create reusable forms and cards, then place instances
+                    on your screens.
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="component-tree">
+              <div className="section-heading">
+                <span>
+                  LAYERS <em>{screen?.components.length || 0}</em>
+                </span>
+                <button
+                  className="icon-button"
+                  title="Add a component"
+                  onClick={() => setLeftTab("components")}
+                >
+                  <Icon name="plus" size={16} />
+                </button>
+              </div>
+              <div className="project-document-list" aria-label="Document layers">{screen?.components.map((component) => (
+                <button
+                  className={`layer-item ${selectedIds.includes(component.id) ? "selected" : ""}`}
+                  key={component.id}
+                  title={`Component ID: ${component.id}`}
+                  onClick={() => setSelectedId(component.id)}
+                >
+                  <Icon name={typeIcon[component.type]} size={15} />
+                  <span>{component.props.text?.trim() || component.id}</span>
+                  {component.groupId && <span className="layer-group-marker" title="Member of a persistent group"><Icon name="layers" size={12} /></span>}
+                  {component.props.tagPath && (
+                    <Icon name="link" size={12} />
+                  )}
+                </button>
+              ))}
+                {!screen?.components.length && (
+                  <p className="panel-empty">
+                    {screen ? "Add a component to start building this screen." : "Open a screen or template to view its layers."}
+                  </p>
+                )}
+              </div>
+            </div>
+          </ProjectNavigation>
+        </>
+      ) : leftTab === "components" ? (
+        <div className="palette">
+          <div className="section-heading">
+            <span>BUILDING BLOCKS</span>
+            <span className="count-pill">
+              {palettes.length}
+            </span>
+          </div>
+          <p className="panel-description">
+            Click a component to add it to your screen.
+          </p>
+          {!availableTemplates.length && <p className="panel-description">
+            Embedded views, tabs, split panes, docks and repeaters display shared templates.
+            Create one in Project → Templates to enable them.
+          </p>}
+          {palettes.map((item) => (
+            <button
+              key={`${item.type}:${item.viewKind ?? ""}`}
+              className="palette-item"
+              disabled={
+                !screen || (isTemplateInstance(item.type) || item.type === "viewContainer") &&
+                !availableTemplates.length
+              }
+              title={
+                (isTemplateInstance(item.type) || item.type === "viewContainer") &&
+                  !availableTemplates.length
+                  ? "Create a compatible template in the Project tab first"
+                  : item.hint
+              }
+              onClick={() => addComponent(item.type, undefined, item.viewKind)}
+            >
+              <span className="palette-icon">
+                <Icon name={typeIcon[item.type]} size={20} />
+              </span>
+              <span>
+                <strong>{item.name}</strong>
+                <small>{item.hint}</small>
+              </span>
+              <Icon name="plus" size={14} />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {leftTab === "tags" && <div className="tag-panel standalone-tag-panel">
+        <div
+          className="tag-panel-title"
+        >
+          <Icon name="tag" size={16} />
+          <strong>Tag browser</strong>
+          <span className="count-pill">{tags.length}</span>
+        </div>
+        <label className="search-box">
+          <Icon name="search" size={15} />
+          <input
+            aria-label="Search tags"
+            placeholder="Search tags…"
+            value={tagFilter}
+            onChange={(event) => setTagFilter(event.target.value)}
+          />
+        </label>
+        {matchingTagCount > filteredTags.length && <p className="panel-help" role="status">
+          Showing {filteredTags.length} of {matchingTagCount.toLocaleString()} matching tags. Refine the search to find another tag.
+        </p>}
+        <div className="tag-list">
+          {filteredTags.map((tag) => (
+            <button
+              key={tag.path}
+              draggable
+              onDragStart={(event) =>
+                event.dataTransfer.setData(
+                  "text/spark-tag",
+                  tag.path,
+                )
+              }
+              onClick={() => setTagSelection(tag)}
+              onDoubleClick={() =>
+                selected &&
+                  (selected.type === "value" ||
+                    selected.type === "gauge" || isProcessDisplay(selected.type))
+                  ? updateProps(tagBindingPatch(selected, tag.path))
+                  : addComponent("value", tag.path)
+              }
+              className={`tag-row ${tagSelection?.path === tag.path ? "selected" : ""}`}
+              title={`${tag.path}\nDouble-click to bind or add a value`}
+            >
+              <span
+                className={`tag-quality ${String(tag.quality).toLowerCase().includes("good") ? "" : "bad"}`}
+              />
+              <span className="tag-row-name">
+                {tag.path.replace("[default]", "")}
+              </span>
+              <span className="tag-row-value">
+                {displayValue(tag.value)}
+              </span>
+            </button>
+          ))}
+          {!filteredTags.length && (
+            <p className="panel-empty">No matching tags.</p>
+          )}
+        </div>
+        {tagSelection && (
+          <div className="tag-detail">
+            <strong>{tagSelection.path}</strong>
+            <div>
+              <span>{tagSelection.dataType}</span>
+              <span>{tagSelection.quality}</span>
+            </div>
+            <button
+              disabled={!screen}
+              onClick={() =>
+                selected && acceptsInitialTag(selected.type)
+                  ? updateProps(tagBindingPatch(selected, tagSelection.path))
+                  : addComponent("value", tagSelection.path)
+              }
+            >
+              <Icon name="link" size={13} />
+              {selected && acceptsInitialTag(selected.type)
+                ? "Bind to selection"
+                : "Add value to screen"}
+            </button>
+          </div>
+        )}
+        <p className="tag-hint">
+          <Icon name="info" size={12} />
+          Drag a tag onto a value to bind it.
+        </p>
+      </div>}
+    </aside>);
+  }
+
+  function renderTopbar() {
+    return (<header className="topbar">
+      <div className="breadcrumb">
+        <span>Workspace</span>
+        <Icon name="arrow" size={13} />
+        <strong>
+          {workspace === "designer"
+            ? project?.name || "Designer"
+            : workspace === "tags"
+              ? "Tags"
+              : workspace === "connections"
+                ? "Connections"
+                : workspace === "queries"
+                  ? "Named queries"
+                  : "Scripting"}
+        </strong>
+        {workspace === "designer" && (
+          <span className="version-pill">
+            {preview ? "PREVIEW" : "DESIGN"}
+          </span>
+        )}
+      </div>
+      <div className="topbar-actions">
+        {workspace === "designer" && project && (
+          <>
+            <span className={`save-state ${dirty ? "unsaved" : ""}`}>
+              <span className="status-dot" />
+              {dirty ? "Save before publishing" : "All changes saved"}
+            </span>
+            <button
+              className={`button ${preview ? "preview-active" : ""}`}
+              disabled={!screen || previewCommunication.busy || Boolean(previewActionBusy) || !preview && Boolean(editorParameterError)}
+              onClick={() => void (async () => {
+                try {
+                  if (preview) { setPreview(false); await previewCommunication.stop(); }
+                  else if (await previewCommunication.start("read-only")) setPreview(true);
+                  setPreviewPopup(null); setPreviewInputs({}); setSelectedId(null);
+                } catch (error) { setPreview(false); await previewCommunication.stop().catch(() => { }); notify(error instanceof Error ? error.message : String(error), true); }
+              })()}
+            >
+              <Icon name={preview ? "stop" : "play"} size={15} />
+              {preview ? "Exit preview" : "Preview"}
+            </button>
+            <button
+              className="button"
+              disabled={preview || saving || !dirty}
+              onClick={() => void save()}
+            >
+              <Icon name="save" size={16} />
+              {saving ? "Saving…" : "Save project"}
+            </button>
+            <button
+              className="button primary"
+              disabled={preview || !permissions.publish || dirty || saving || publishing}
+              title={
+                !permissions.publish ? "Your account needs publish permission for this project" : dirty
+                  ? "Save your project before publishing to operators"
+                  : "Publish the saved project for operators"
+              }
+              onClick={() => void publish()}
+            >
+              <Icon name="upload" size={15} />
+              {publishing ? "Publishing…" : "Publish"}
+            </button>
+          </>
+        )}
+      </div>
+    </header>);
+  }
+
+  function renderWorkspace() {
+    return (<div className="app-main">
+      {renderTopbar()}
+
+      {preview && <ComponentEventDiagnostics state={applicationState} />}
+      {loadError && (
+        <div className="gateway-error">
+          <Icon name="info" />
+          <div>
+            <strong>Cannot reach the gateway</strong>
+            <p>{loadError}</p>
+            <button className="button" onClick={() => void load()}>
+              <Icon name="refresh" size={15} />
+              Try again
+            </button>
+          </div>
+        </div>
+      )}
+      {!project && !loadError && (
+        <div className="loading-state">
+          <span className="loading-ring" />
+          <p>Connecting to your workspace…</p>
+        </div>
+      )}
+
+      {project && workspace === "designer" && (
+        <div ref={designerPanes.host} style={designerPanes.style} className={`designer ${preview ? "is-preview" : ""}${designerPanes.resizing ? " designer-panes-resizing" : ""}`}>
+          {!preview && (
+            renderProjectPane(project)
+          )}
+
+          {!preview && designerPanes.separator(0)}
+          {renderCanvasWorkspace(project)}
+
+          {!preview && designerPanes.separator(1)}
+          {!preview && (
+            renderPropertiesPane(project)
+          )}
+        </div>
+      )}
+      {gatewayCapabilities.configuration && project && workspace === "tags" && (
+        <Tags
+          connections={connections}
+          tags={tags}
+          onTagsChanged={() => {
+            void api<Tag[]>("/tags")
+              .then(setTags)
+              .catch(() => { });
+          }}
+          notify={notify}
+        />
+      )}
+      {gatewayCapabilities.configuration && project && workspace === "connections" && (
+        <Connections
+          connections={connections}
+          onChange={setConnections}
+          onTagsChanged={() => {
+            void api<Tag[]>("/tags").then(setTags);
+          }}
+          notify={notify}
+        />
+      )}
+      {project && (workspace === "queries" || queriesVisited) && <div style={{ display: workspace === "queries" ? "contents" : "none" }}>
+        <Queries
+          queries={queries}
+          canRunUpdates={gatewayAdmin}
+          connections={connections}
+          onChange={setQueries}
+          parameters={project.parameters}
+          notify={notify}
+          onDirtyChange={setQueriesDirty}
+          navigationRequest={queryNavigation}
+          onNavigationHandled={() => setQueryNavigation(undefined)}
+          onSearchResources={setSearchQueries}
+        />
+      </div>}
+      {project && (workspace === "scripts" || scriptsVisited) && <div style={{ display: workspace === "scripts" ? "contents" : "none" }}><Suspense fallback={<div className="management-page">Loading scripting workspace…</div>}>
+        <Scripts
+          parameters={project.parameters}
+          pythonAvailable={health?.pythonAvailable || false}
+          notify={notify}
+          onDirtyChange={setScriptsDirty}
+          navigationRequest={scriptNavigation}
+          onNavigationHandled={() => setScriptNavigation(undefined)}
+          onSearchResources={receiveScriptDraft}
+          onSearchError={setSearchScriptsError}
+          onSearchLoading={setSearchScriptsLoading}
+        />
+      </Suspense></div>}
+      <footer className="statusbar">
+        <span>
+          <span className={`status-dot ${connected ? "" : "offline"}`} />
+          {connected ? "Gateway connected" : "Gateway unavailable"}
+        </span>
+        <span>
+          <Icon name="activity" size={12} />
+          {tags.length} tags{tags.some(tag => tag.source?.toLowerCase().includes("sim")) && " · simulated"}
+        </span>
+        <span>
+          <Icon name="clock" size={12} />
+          {lastUpdate ? `Updated ${lastUpdate}` : "Awaiting values"}
+        </span>
+        {workspace === "designer" && screen && <span className="statusbar-screen-size" title="Screen size in pixels"><Icon name="monitor" size={12} />{screen.width} × {screen.height} px</span>}
+        <span className="statusbar-spacer" />
+        {preview && <PreviewControls session={previewCommunication.session} busy={previewCommunication.busy} gatewayAdmin={gatewayAdmin}
+          onDiagnostics={() => setDiagnosticsOpen(true)}
+          onChangeMode={async mode => { if (await previewCommunication.start(mode)) { setPreviewInputs({}); setPreviewPopup(null); } }}>
+          <LocaleSelector catalog={project?.localization} locale={projectLocale.locale} onChange={projectLocale.setLocale} />
+        </PreviewControls>}
+        <span>SPARKSTUDIO</span>
+        <span className="statusbar-version">EARLY PREVIEW</span>
+      </footer>
+    </div>);
+  }
+
+  function renderEditingDialogs() {
+    return <>{eventEditorId && screen?.components.find(component => component.id === eventEditorId) && <ComponentActionsEditor
+      key={eventEditorId}
+      component={screen.components.find(component => component.id === eventEditorId)!}
+      components={screen.components}
+      screens={project?.screens ?? []}
+      tags={tags}
+      parent={screen}
+      project={project ?? undefined}
+      documentKind={editingTemplate ? "template" : "screen"}
+      commands={project?.commands ?? []}
+      inputs={currentPreviewInputs}
+      parameters={editorParameters}
+      instanceStateAvailable={Boolean(editingTemplate)}
+      popupAllowed={Boolean(editingTemplate) || screen.kind !== "popup"}
+      onApply={props => {
+        const component = screen.components.find(item => item.id === eventEditorId);
+        if (component && JSON.stringify(props) !== JSON.stringify(component.props)) updateComponent(component.id, { props });
+        setEventEditorId(null);
+      }}
+      onClose={() => setEventEditorId(null)}
+    />}
+      {gatewayAdmin && projectImportOpen && <ProjectImportDialog onClose={() => setProjectImportOpen(false)} />}
+      {accountSettingsOpen && <AccountSettingsDialog hasUnsavedChanges={dirty || queriesDirty || scriptsDirty} onClose={() => setAccountSettingsOpen(false)} />}
+      {searchOpen && project && <ProjectSearch entries={searchEntries} onOpen={navigateSearch} onClose={() => setSearchOpen(false)} scriptsLoading={searchScriptsLoading} scriptsError={searchScriptsError}
+        onReplace={find => { setSearchOpen(false); setBulkReplaceFind(find); }} />}
+      {bulkReplaceFind !== null && project && <BulkReplaceDialog project={project} initialFind={bulkReplaceFind}
+        onClose={() => setBulkReplaceFind(null)} onOpenReference={navigateSearch}
+        onApply={(plan, selectedIds) => {
+          if (previewActionBusy) throw new Error("Wait for the current preview action to finish before applying replacements.");
+          change(current => applyBulkReplacement(plan, current, selectedIds));
+          setBulkReplaceFind(null);
+          notify(`${selectedIds.length} properties replaced in the draft. Undo is available; save and publish when ready.`);
+        }} />}
+      {resourceChangePlan && <ResourceChangeDialog plan={resourceChangePlan}
+        onNameChange={name => setResourceChangeContext(previous => previous && previous.request.action === "rename" ? { ...previous, request: { ...previous.request, name } } : previous)}
+        onApply={commitResourceChange} onClose={closeResourceChange} onOpenReference={navigateSearch}
+        loading={resourceChangeLoading || scriptsEditorReady && searchScriptsLoading}
+        loadError={resourceChangeError || (scriptsEditorReady ? searchScriptsError : "")}
+        retryLabel={scriptsEditorReady && searchScriptsError ? "Open script workspace" : "Refresh preview"}
+        onRetry={() => {
+          if (scriptsEditorReady && searchScriptsError) { closeResourceChange(); setWorkspace("scripts"); notify("Reload script resources to check references again. Your current drafts are retained until you choose to reload.", true); }
+          else if (resourceChangeContext) previewResourceChange(resourceChangeContext.request);
+        }} />}
+      {projectSettingsOpen && project && <ProjectSettingsDialog project={project} canRename={gatewayAdmin} notify={notify}
+        onChange={patch => change(current => ({ ...current, ...patch }))} onClose={() => setProjectSettingsOpen(false)} />}
+      {equipmentCommandsOpen && project && <EquipmentCommandsEditor project={project} onApply={commands => change(current => ({ ...current, commands }))} onClose={() => setEquipmentCommandsOpen(false)} />}
+      {pendingNavigation && <UnsavedProjectNavigation onStay={() => setPendingNavigation(null)} onDiscard={() => {
+        discardNavigation.current = true;
+        window.location.assign(pendingNavigation);
+      }} />}
+    </>;
+  }
+
+  function renderPreviewPopup() {
+    return (project && previewPopup && !editorParameterError && (
+      <Popup
+        key={previewPopup.id}
+        project={project}
+        popup={previewPopup}
+        tags={tags}
+        communicationLost={!connected}
+        queryScope="designer"
+        onClose={() => {
+          if (!previewActionBusy) setPreviewPopup(null);
+        }}
+        onBusyChange={(busy) => setPreviewActionBusy(busy ? "popup" : "")}
+        onNavigate={(target) => {
+          if (previewActionBusy) return;
+          if (
+            project.screens.some(
+              (item) => item.id === target && item.kind !== "popup",
+            )
+          ) {
+            setPreviewPopup(null);
+            openDocument({ kind: "screen", id: target });
+          }
+        }}
+        onExecute={async (action) => {
+          if (action.component.props.action === "setTagValue") throw new Error("Publish the application and open its operator link to run Set tag value.");
+          if (previewCommunication.busy || !previewCommunication.session) throw new Error("A current preview communication session is required. Exit and reopen Preview.");
+          if (action.instance?.isCurrent?.() === false) throw new Error("The template parameters changed before this action could run.");
+          if (!gatewayAdmin) throw new Error("A gateway administrator must sign in to run draft Python code.");
+          const result = await api<ScriptResult>("/scripts/run", "POST", {
+            code: action.component.props.script || "",
+            parameters: action.instance?.parameters || action.parameters,
+            inputs: action.inputs,
+            ...pythonUiRequest(action.uiAction),
+            ...(action.uiAction ? { uiContext: pythonUiPreviewContext({ screenId: action.screen.id }, action.component.id, action.instance) } : {}),
+          });
+          if (action.instance?.isCurrent?.() === false) throw new Error("The template parameters changed while this action was running.");
+          return result;
+        }}
+      />
+    ));
+  }
+
+  function renderVisualStyleEditor() {
+    return (stylesEditorOpen && project && <VisualStylesEditor project={project} onClose={() => setStylesEditorOpen(false)} onApply={(styles, expected) => {
+      if (previewActionBusy) throw new Error("Wait for the active preview action to finish.");
+      change(current => applyStyleCatalog(current, expected, styles)); setStylesEditorOpen(false);
+    }} />);
+  }
+
+  function renderPublicationReview() { return (publishing && project && <ApplicationPublishDialog projectRevision={project.revision} onClose={() => setPublishing(false)} onPublished={published => { setPublication(published); setPublishing(false); notify(`Application revision ${published.revision} published with scripts revision ${published.scriptsRevision}. ${published.warnings?.join(" ") ?? ""}`, Boolean(published.warnings?.length)); if (published.warnings?.length) setPublicationHistoryOpen(true); }} />); }
+
+  function renderPublicationHistory() { return (publicationHistoryOpen && <PublicationHistoryDialog canPublish={permissions.publish} onClose={() => setPublicationHistoryOpen(false)} onRestored={published => { setPublication(published); notify(published.complete ? "Application restored with its matching scripts. Designer drafts are unchanged." : "Legacy snapshot restored; active scripts were preserved. Review the compatibility warning."); }} />); }
+
+  function renderTranslationsEditor() {
+    return (translationsOpen && project && <TranslationsEditor project={project} onClose={() => setTranslationsOpen(false)} onApply={(catalog, expected) => {
+      if (previewActionBusy) throw new Error("Wait for the active preview action to finish.");
+      change(current => applyLocalizationCatalog(current, expected, catalog)); setTranslationsOpen(false);
+    }} />);
+  }
+
+  function renderDiagnostics() {
+    return (diagnosticsOpen && project && <DesignerDiagnostics project={project} document={screen} ownerKind={editingTemplate ? "template" : "screen"}
+      context={{ components: screen?.components || [], tags, parameters: editorParameters, inputs: currentPreviewInputs, state: applicationState.values, communicationLost: !connected }}
+      searchEntries={searchEntries} eventCoordinator={applicationState.store.componentEvents} onOpen={navigateSearch} onClose={() => setDiagnosticsOpen(false)} />);
+  }
+
+  function renderAssetLibrary() {
+    return (assetLibraryOpen && project && <AssetLibraryDialog project={project} assets={assets} onClose={() => setAssetLibraryOpen(false)}
+      onOpenReference={use => { setAssetLibraryOpen(false); navigateSearch({ kind: use.ownerKind, id: use.ownerId, componentId: use.componentId }); }}
+      onApply={(plan, ids) => {
+        if (previewActionBusy) throw new Error("Wait for the active preview action to finish.");
+        change(current => applyAssetReplacement(plan, current, assets, ids)); setAssetLibraryOpen(false); notify(`${ids.length} image references replaced. Undo is available; save and publish when ready.`);
+      }} />);
+  }
 
   return (
     <LocalizationProvider catalog={project?.localization} locale={projectLocale.locale}><VisualStyleProvider styles={project?.styles}><ApplicationStateProvider value={applicationState}><div className="app-shell" onClickCapture={event => {
@@ -1217,7 +2630,6 @@ export default function App() {
             >
               <Icon name={icon} />
               <span>{label}</span>
-              {key === "designer" && <kbd>D</kbd>}
             </button>
           ))}
         </nav>
@@ -1262,1386 +2674,9 @@ export default function App() {
         </div>
       </aside>
 
-      <div className="app-main">
-        <header className="topbar">
-          <div className="breadcrumb">
-            <span>Workspace</span>
-            <Icon name="arrow" size={13} />
-            <strong>
-              {workspace === "designer"
-                ? project?.name || "Designer"
-                : workspace === "tags"
-                  ? "Tags"
-                  : workspace === "connections"
-                    ? "Connections"
-                    : workspace === "queries"
-                      ? "Named queries"
-                      : "Scripting"}
-            </strong>
-            {workspace === "designer" && (
-              <span className="version-pill">
-                {preview ? "PREVIEW" : "DESIGN"}
-              </span>
-            )}
-          </div>
-          <div className="topbar-actions">
-            {workspace === "designer" && project && (
-              <>
-                <span className={`save-state ${dirty ? "unsaved" : ""}`}>
-                  <span className="status-dot" />
-                  {dirty ? "Save before publishing" : "All changes saved"}
-                </span>
-                <button
-                  className={`button ${preview ? "preview-active" : ""}`}
-                  disabled={!screen || previewCommunication.busy || Boolean(previewActionBusy) || !preview && Boolean(editorParameterError)}
-                  onClick={() => void (async () => {
-                    try {
-                      if (preview) { setPreview(false); await previewCommunication.stop(); }
-                      else if (await previewCommunication.start("read-only")) setPreview(true);
-                      setPreviewPopup(null); setPreviewInputs({}); setSelectedId(null);
-                    } catch (error) { setPreview(false); await previewCommunication.stop().catch(() => {}); notify(error instanceof Error ? error.message : String(error), true); }
-                  })()}
-                >
-                  <Icon name={preview ? "stop" : "play"} size={15} />
-                  {preview ? "Exit preview" : "Preview"}
-                </button>
-                <button
-                  className="button"
-                  disabled={preview || saving || !dirty}
-                  onClick={() => void save()}
-                >
-                  <Icon name="save" size={16} />
-                  {saving ? "Saving…" : "Save project"}
-                </button>
-                <button
-                  className="button primary"
-                  disabled={preview || !permissions.publish || dirty || saving || publishing}
-                  title={
-                    !permissions.publish ? "Your account needs publish permission for this project" : dirty
-                      ? "Save your project before publishing to operators"
-                      : "Publish the saved project for operators"
-                  }
-                  onClick={() => void publish()}
-                >
-                  <Icon name="upload" size={15} />
-                  {publishing ? "Publishing…" : "Publish"}
-                </button>
-              </>
-            )}
-          </div>
-        </header>
-        {preview && <PreviewControls session={previewCommunication.session} busy={previewCommunication.busy} gatewayAdmin={gatewayAdmin}
-          onDiagnostics={() => setDiagnosticsOpen(true)}
-          onChangeMode={async mode => { if (await previewCommunication.start(mode)) { setPreviewInputs({}); setPreviewPopup(null); } }}>
-          <LocaleSelector catalog={project?.localization} locale={projectLocale.locale} onChange={projectLocale.setLocale} />
-        </PreviewControls>}
-        {preview && <ComponentEventDiagnostics state={applicationState} />}
-        {loadError && (
-          <div className="gateway-error">
-            <Icon name="info" />
-            <div>
-              <strong>Cannot reach the gateway</strong>
-              <p>{loadError}</p>
-              <button className="button" onClick={() => void load()}>
-                <Icon name="refresh" size={15} />
-                Try again
-              </button>
-            </div>
-          </div>
-        )}
-        {!project && !loadError && (
-          <div className="loading-state">
-            <span className="loading-ring" />
-            <p>Connecting to your workspace…</p>
-          </div>
-        )}
-
-        {project && workspace === "designer" && (
-          <div ref={designerPanes.host} style={designerPanes.style} className={`designer ${preview ? "is-preview" : ""}${designerPanes.resizing ? " designer-panes-resizing" : ""}`}>
-            {!preview && (
-              <aside id="designer-project-panel" className="project-panel">
-                <div className="panel-tabs">
-                  <button
-                    className={leftTab === "project" ? "active" : ""}
-                    onClick={() => setLeftTab("project")}
-                  >
-                    <Icon name="layers" size={15} />
-                    Project
-                  </button>
-                  <button
-                    className={leftTab === "components" ? "active" : ""}
-                    onClick={() => setLeftTab("components")}
-                  >
-                    <Icon name="grid" size={15} />
-                    Components
-                  </button>
-                  <button className={leftTab === "tags" ? "active" : ""} onClick={() => setLeftTab("tags")}>
-                    <Icon name="tag" size={15} /> Tags
-                  </button>
-                </div>
-                {leftTab === "project" ? (
-                  <>
-                  <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setProjectSettingsOpen(true)}>
-                    <Icon name="settings" size={15} /> Project settings
-                  </button>
-                  <details className="project-tools"><summary>Project tools</summary><div>
-                  <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setEquipmentCommandsOpen(true)}>Equipment commands</button>
-                  <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setStylesEditorOpen(true)}>Visual styles</button>
-                  <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setTranslationsOpen(true)}>Translations</button>
-                  <button className="project-settings-button" type="button" onClick={() => setDiagnosticsOpen(true)}>Project diagnostics</button>
-                  <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setPublicationHistoryOpen(true)}>Publication history</button>
-                  <button className="project-settings-button" type="button" disabled={Boolean(previewActionBusy)} onClick={() => setAssetLibraryOpen(true)}>Asset library</button>
-                  </div></details>
-                  <ProjectNavigation key={project.id} storageKey={projectStorageKey("sparkstudio.projectPanes.v1", project.id)}>
-                    <div className="project-tree">
-                      <div className="section-heading">
-                        <span>
-                          SCREENS <em>{project.screens.length}</em>
-                        </span>
-                        <button
-                          className="icon-button"
-                          title="Add screen"
-                          aria-label="Add screen"
-                          onClick={addScreen}
-                        >
-                          <Icon name="plus" size={16} />
-                        </button>
-                      </div>
-                      <div className="project-document-list" aria-label="Project screens">{project.screens.map((item) => (
-                        <button
-                          key={item.id}
-                          className={`tree-item ${screen?.id === item.id ? "selected" : ""}`}
-                          onClick={() => {
-                            openDocument({ kind: "screen", id: item.id });
-                          }}
-                        >
-                          <Icon name="monitor" size={16} />
-                          <span>{item.name}</span>
-                          {item.kind === "popup" && (
-                            <span className="popup-screen-badge">POPUP</span>
-                          )}
-                          {screen?.id === item.id && (
-                            <span className="tiny-orange-dot" />
-                          )}
-                        </button>
-                      ))}</div>
-                      <div className="project-actions">
-                        <button
-                          onClick={() => void exportProject()}
-                          disabled={packageExporting}
-                          title="Export saved screens, templates, queries, scripts and referenced images"
-                        >
-                          <Icon name="download" size={13} />
-                          {packageExporting ? "Exporting…" : "Export .sparkproj"}
-                        </button>
-                        {gatewayAdmin && <button
-                          onClick={() => setProjectImportOpen(true)}
-                          title="Import a package as an independent project"
-                        >
-                          <Icon name="upload" size={13} />
-                          Import package
-                        </button>}
-                      </div>
-                    </div>
-                    <div className="template-list">
-                      <div className="section-heading">
-                        <span>
-                          TEMPLATES <em>{project.templates?.length || 0}</em>
-                        </span>
-                        <button
-                          className="icon-button"
-                          title="Add template"
-                          aria-label="Add template"
-                          onClick={addTemplate}
-                        >
-                          <Icon name="plus" size={16} />
-                        </button>
-                      </div>
-                      <div className="project-document-list" aria-label="Project templates">{(project.templates || []).map((item) => (
-                        <button
-                          key={item.id}
-                          className={`tree-item ${editingTemplate?.id === item.id ? "selected" : ""}`}
-                          onClick={() => openTemplate(item.id)}
-                        >
-                          <Icon name="layers" size={16} />
-                          <span>{item.name}</span>
-                          {editingTemplate?.id === item.id && (
-                            <span className="tiny-orange-dot" />
-                          )}
-                        </button>
-                      ))}
-                      {!project.templates?.length && (
-                        <p className="panel-empty">
-                          Create reusable forms and cards, then place instances
-                          on your screens.
-                        </p>
-                      )}
-                      </div>
-                    </div>
-                    <div className="component-tree">
-                      <div className="section-heading">
-                        <span>
-                          LAYERS <em>{screen?.components.length || 0}</em>
-                        </span>
-                        <button
-                          className="icon-button"
-                          title="Add a component"
-                          onClick={() => setLeftTab("components")}
-                        >
-                          <Icon name="plus" size={16} />
-                        </button>
-                      </div>
-                      <div className="project-document-list" aria-label="Document layers">{screen?.components.map((component) => (
-                        <button
-                          className={`layer-item ${selectedIds.includes(component.id) ? "selected" : ""}`}
-                          key={component.id}
-                          onClick={() => setSelectedId(component.id)}
-                        >
-                          <Icon name={typeIcon[component.type]} size={15} />
-                          <span>{component.props.text || component.type}</span>
-                          {component.groupId && <span className="layer-group-marker" title="Member of a persistent group"><Icon name="layers" size={12} /></span>}
-                          {component.props.tagPath && (
-                            <Icon name="link" size={12} />
-                          )}
-                        </button>
-                      ))}
-                      {!screen?.components.length && (
-                        <p className="panel-empty">
-                          {screen ? "Add a component to start building this screen." : "Open a screen or template to view its layers."}
-                        </p>
-                      )}
-                      </div>
-                    </div>
-                  </ProjectNavigation>
-                  </>
-                ) : leftTab === "components" ? (
-                  <div className="palette">
-                    <div className="section-heading">
-                      <span>BUILDING BLOCKS</span>
-                      <span className="count-pill">
-                        {palettes.length}
-                      </span>
-                    </div>
-                    <p className="panel-description">
-                      Click a component to add it to your screen.
-                    </p>
-                    {palettes.map((item) => (
-                        <button
-                          key={`${item.type}:${item.viewKind ?? ""}`}
-                          className="palette-item"
-                          disabled={
-                            !screen || (isTemplateInstance(item.type) || item.type === "viewContainer") &&
-                            !availableTemplates.length
-                          }
-                          title={
-                            (isTemplateInstance(item.type) || item.type === "viewContainer") &&
-                            !availableTemplates.length
-                              ? "Create a compatible template in the Project tab first"
-                              : item.hint
-                          }
-                          onClick={() => addComponent(item.type, undefined, item.viewKind)}
-                        >
-                          <span className="palette-icon">
-                            <Icon name={typeIcon[item.type]} size={20} />
-                          </span>
-                          <span>
-                            <strong>{item.name}</strong>
-                            <small>{item.hint}</small>
-                          </span>
-                          <Icon name="plus" size={14} />
-                        </button>
-                      ))}
-                  </div>
-                ) : null}
-                {leftTab === "tags" && <div className="tag-panel standalone-tag-panel">
-                  <div
-                    className="tag-panel-title"
-                  >
-                    <Icon name="tag" size={16} />
-                    <strong>Tag browser</strong>
-                    <span className="count-pill">{tags.length}</span>
-                  </div>
-                      <label className="search-box">
-                        <Icon name="search" size={15} />
-                        <input
-                          aria-label="Search tags"
-                          placeholder="Search tags…"
-                          value={tagFilter}
-                          onChange={(event) => setTagFilter(event.target.value)}
-                        />
-                      </label>
-                      {matchingTagCount > filteredTags.length && <p className="panel-help" role="status">
-                        Showing {filteredTags.length} of {matchingTagCount.toLocaleString()} matching tags. Refine the search to find another tag.
-                      </p>}
-                      <div className="tag-list">
-                        {filteredTags.map((tag) => (
-                          <button
-                            key={tag.path}
-                            draggable
-                            onDragStart={(event) =>
-                              event.dataTransfer.setData(
-                                "text/spark-tag",
-                                tag.path,
-                              )
-                            }
-                            onClick={() => setTagSelection(tag)}
-                            onDoubleClick={() =>
-                              selected &&
-                              (selected.type === "value" ||
-                                selected.type === "gauge" || isProcessDisplay(selected.type))
-                                ? updateProps(tagBindingPatch(selected, tag.path))
-                                : addComponent("value", tag.path)
-                            }
-                            className={`tag-row ${tagSelection?.path === tag.path ? "selected" : ""}`}
-                            title={`${tag.path}\nDouble-click to bind or add a value`}
-                          >
-                            <span
-                              className={`tag-quality ${String(tag.quality).toLowerCase().includes("good") ? "" : "bad"}`}
-                            />
-                            <span className="tag-row-name">
-                              {tag.path.replace("[default]", "")}
-                            </span>
-                            <span className="tag-row-value">
-                              {displayValue(tag.value)}
-                            </span>
-                          </button>
-                        ))}
-                        {!filteredTags.length && (
-                          <p className="panel-empty">No matching tags.</p>
-                        )}
-                      </div>
-                      {tagSelection && (
-                        <div className="tag-detail">
-                          <strong>{tagSelection.path}</strong>
-                          <div>
-                            <span>{tagSelection.dataType}</span>
-                            <span>{tagSelection.quality}</span>
-                          </div>
-                          <button
-                            disabled={!screen}
-                            onClick={() =>
-                              selected && acceptsInitialTag(selected.type)
-                                ? updateProps(tagBindingPatch(selected, tagSelection.path))
-                                : addComponent("value", tagSelection.path)
-                            }
-                          >
-                            <Icon name="link" size={13} />
-                            {selected && acceptsInitialTag(selected.type)
-                              ? "Bind to selection"
-                              : "Add value to screen"}
-                          </button>
-                        </div>
-                      )}
-                      <p className="tag-hint">
-                        <Icon name="info" size={12} />
-                        Drag a tag onto a value to bind it.
-                      </p>
-                </div>}
-              </aside>
-            )}
-
-            {!preview && designerPanes.separator(0)}
-            <section className="canvas-workspace">
-              <div className="screen-tabs">
-                {documents.open.map(document => {
-                  const item = (document.kind === "template" ? project.templates ?? [] : project.screens).find(item => item.id === document.id);
-                  if (!item) return null;
-                  const active = documentKey(document) === documents.active;
-                  return <div key={documentKey(document)} className={`document-tab${active ? " active" : ""}${document.kind === "template" ? " template-tab" : ""}`}>
-                    <button className="document-tab-label" aria-current={active ? "page" : undefined} disabled={Boolean(previewActionBusy)} onClick={() => openDocument(document)} title={`${document.kind === "template" ? "Template" : item.kind === "popup" ? "Popup" : "Screen"}: ${item.name}`}>
-                      <Icon name={document.kind === "template" ? "layers" : item.kind === "popup" ? "external" : "monitor"} size={14} />
-                      <span>{item.name}</span>
-                      {document.kind === "template" && <span className="template-editor-badge">TEMPLATE</span>}
-                      {active && dirty && <span className="tiny-orange-dot" />}
-                    </button>
-                    {!preview && <button className="document-tab-close" disabled={Boolean(previewActionBusy)} title={`Close ${item.name} tab`} aria-label={`Close ${item.name} tab`} onClick={() => closeDocument(document)}><Icon name="close" size={12} /></button>}
-                  </div>;
-                })}
-                {!preview && (
-                  <button
-                    className="add-screen-tab"
-                    title="Add screen"
-                    onClick={addScreen}
-                  >
-                    <Icon name="plus" size={15} />
-                  </button>
-                )}
-                <span className="screen-tabs-spacer" />
-                <span className="screen-tabs-mode">
-                  {preview
-                    ? "INTERACTIVE PREVIEW"
-                    : editingTemplate
-                      ? "TEMPLATE EDITOR"
-                      : screen ? "SCREEN EDITOR" : "NO DOCUMENT OPEN"}
-                </span>
-              </div>
-              <div className="canvas-toolbar">
-                <div className="toolbar-group">
-                  {!preview && (
-                    <>
-                      <button
-                        className="icon-button active"
-                        title="Select and move components"
-                      >
-                        <Icon name="move" size={16} />
-                      </button>
-                      <span className="toolbar-divider" />
-                      <button
-                        className="icon-button"
-                        title="Undo (Ctrl+Z)"
-                        onClick={undo}
-                        disabled={!history.past.length}
-                      >
-                        <Icon name="undo" size={16} />
-                      </button>
-                      <button className="icon-button" title="Redo (Ctrl+Y or Ctrl+Shift+Z)" onClick={redo} disabled={!history.future.length}>
-                        <span className="redo-icon"><Icon name="undo" size={16} /></span>
-                      </button>
-                      <button
-                        className="icon-button"
-                        title="Duplicate selection (Ctrl+D)"
-                        disabled={!selection.length}
-                        onClick={duplicateSelection}
-                      >
-                        <Icon name="copy" size={16} />
-                      </button>
-                      <span className="toolbar-divider" />
-                    </>
-                  )}
-                  <Icon name="monitor" size={15} />
-                  <span>
-                    {screen ? `${screen.width} × ${screen.height}` : "No document open"}
-                  </span>
-                </div>
-                <div className="toolbar-group parameter-toolbar">
-                  <span className="toolbar-caption">Screen context</span>
-                  {Object.entries(project.parameters).map(([key, value]) => (
-                    <label key={key}>
-                      <span>{key}</span>
-                      {key === "line" && parameterChoices.length ? (
-                        <select
-                          value={value}
-                          disabled={Boolean(previewActionBusy)}
-                          onChange={(event) =>
-                            change((current) => ({
-                              ...current,
-                              parameters: {
-                                ...current.parameters,
-                                [key]: event.target.value,
-                              },
-                            }))
-                          }
-                        >
-                          {[...new Set([...parameterChoices, value])].map(
-                            (choice) => (
-                              <option key={choice}>{choice}</option>
-                            ),
-                          )}
-                        </select>
-                      ) : (
-                        <input
-                          aria-label={`${key} parameter`}
-                          value={value}
-                          disabled={Boolean(previewActionBusy)}
-                          onChange={(event) =>
-                            change((current) => ({
-                              ...current,
-                              parameters: {
-                                ...current.parameters,
-                                [key]: event.target.value,
-                              },
-                            }))
-                          }
-                        />
-                      )}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              {editingTemplate && (
-                <div className="template-editor-banner">
-                  <Icon name="layers" size={14} />
-                  <strong>Editing shared template</strong>
-                  <span>Save and publish to update every instance.</span>
-                  <button
-                    disabled={Boolean(previewActionBusy)}
-                    onClick={() => {
-                      const target = documents.open.find(item => item.kind === "screen")?.id || project.screens[0]?.id;
-                      if (target) openDocument({ kind: "screen", id: target });
-                    }}
-                  >
-                    <Icon name="arrow" size={12} /> Back to screen
-                  </button>
-                </div>
-              )}
-              {editorParameterError && <div className="template-parameter-context-error" role="alert">
-                <strong>Template parameters need attention.</strong> {editorParameterError} Preview is unavailable until the default or its parent value is corrected. Select the template document to edit its parameters.
-              </div>}
-              {!preview && screen && (
-                <div className="canvas-arrange-toolbar" aria-label="Canvas arrangement">
-                  <label title="Whole design pixels from 0 to 128. Zero disables snapping; canvas bounds take precedence.">Grid <input className="canvas-grid-input" aria-label="Snap grid pixels" type="number" min={0} max={128} step={1} value={gridDraft} aria-invalid={parseGridSize(gridDraft) === null} onChange={event => {
-                    setGridDraft(event.target.value);
-                    const size = parseGridSize(event.target.value);
-                    if (size !== null) setGridSize(size);
-                  }} onBlur={finishGridEdit} onKeyDown={event => {
-                    if (event.key === "Enter") { event.preventDefault(); finishGridEdit(); }
-                    else if (event.key === "Escape") { event.preventDefault(); setGridDraft(String(gridSize)); }
-                  }} /> px</label>
-                  <select aria-label="Select components by type" value="" disabled={!screen.components.length} title="Select this component type in the current document, including its group members. Ctrl+Shift+A selects the first selected control's type." onChange={event => selectType(event.target.value)}>
-                    <option value="" disabled>Select type…</option>
-                    {palettes.filter((item, index) => palettes.findIndex(other => other.type === item.type) === index && screen.components.some(component => component.type === item.type)).map(item => <option key={item.type} value={item.type}>{item.type === "viewContainer" ? "View container" : item.name}</option>)}
-                  </select>
-                  <button className="canvas-group-command" disabled={selection.length < 2 || Boolean(selectedGroupId)} onClick={groupSelection} title="Group selection (Ctrl+G)"><Icon name="layers" size={14} /> Group</button>
-                  <button className="canvas-group-command" disabled={!selection.some(component => component.groupId)} onClick={ungroupSelection} title="Ungroup selection (Ctrl+Shift+G)">Ungroup</button>
-                  <select aria-label="Align selection" value="" disabled={selectedUnitCount < 2} onChange={(event) => replaceComponents(alignSelected(screen.components, selectedIds, event.target.value as "left" | "hcenter" | "right" | "top" | "vcenter" | "bottom"))}>
-                    <option value="" disabled>Align…</option><option value="left">Left edges</option><option value="hcenter">Horizontal centers</option><option value="right">Right edges</option><option value="top">Top edges</option><option value="vcenter">Vertical centers</option><option value="bottom">Bottom edges</option>
-                  </select>
-                  <select aria-label="Distribute selection" value="" disabled={selectedUnitCount < 3} onChange={(event) => replaceComponents(distributeSelected(screen.components, selectedIds, event.target.value as "horizontal" | "vertical"))}>
-                    <option value="" disabled>Distribute…</option><option value="horizontal">Horizontal gaps</option><option value="vertical">Vertical gaps</option>
-                  </select>
-                  <select aria-label="Match selected sizes" value="" disabled={selectedUnitCount < 2} title="Match the first selected object in layer order. Groups scale as one object; bound geometry remains authored." onChange={event => matchSelectionSize(event.target.value as MatchingSize)}>
-                    <option value="" disabled>Match size…</option><option value="width">Same width</option><option value="height">Same height</option><option value="both">Same width and height</option>
-                  </select>
-                  <button disabled={!selection.length} onClick={deleteSelection} title="Delete selection"><Icon name="trash" size={14} /></button>
-                  <span aria-live="polite">{selectedGroupId ? `Group · ${selection.length} controls` : selection.length ? `${selection.length} selected` : "Drag empty canvas to select · Shift-click to add"}</span>
-                </div>
-              )}
-              {!screen && <div className="designer-empty-document">
-                <Icon name="monitor" size={34} />
-                <h2>No document open</h2>
-                <p>Open a screen or template from Project to continue editing. Closing a tab keeps the document and your changes in this project.</p>
-                <button className="button" onClick={() => setLeftTab("project")}><Icon name="layers" size={15} /> Show Project</button>
-              </div>}
-              {screen && (!preview || !editorParameterError) && (
-                <Canvas
-                  key={JSON.stringify([screen.id, preview, previewCommunication.session?.token, editingTemplate?.parameterTypes ?? null])}
-                  screen={screen}
-                  tags={tags}
-                  parameters={editorParameters}
-                  templates={project.templates || []}
-                  templateAncestors={editingTemplate ? [editingTemplate.id] : []}
-                  scopedInputs={previewInputs}
-                  onScopedInputChange={(scope, fieldKey, value) =>
-                    setPreviewInputs((previous) => ({
-                      ...previous,
-                      [scope]: { ...previous[scope], [fieldKey]: value },
-                    }))
-                  }
-                  communicationLost={!connected}
-                  preview={preview}
-                  inputs={currentPreviewInputs}
-                  onInputChange={previewForm.assign}
-                  onAutomaticInputChange={previewForm.assignAutomatic}
-                  onAction={(component, instance, uiAction) =>
-                    void runPreviewAction(component, instance, uiAction)
-                  }
-                  onPythonEvent={(component, invocation, instance) => gatewayAdmin && previewCommunication.session?.mode === "live-actions"
-                    ? runSavedPythonEvent({ scope: "designer", ...(editingTemplate ? { templateId: editingTemplate.id } : { screenId: screen.id }),
-                      parameters: project.parameters }, component, invocation, instance)
-                    : Promise.reject(new Error("Python events require a gateway administrator and Live actions Preview."))}
-                  onOpenPopup={(component, instance) => {
-                    if (previewActionBusy || previewPopup || editorParameterError) return;
-                    try {
-                      setPreviewPopup(
-                        createPopup(
-                          project,
-                          screen,
-                          component,
-                          project.parameters,
-                          instance?.parameters || editorParameters,
-                          instance,
-                        ),
-                      );
-                      setToast(null);
-                    } catch (error) {
-                      notify(
-                        error instanceof Error ? error.message : String(error),
-                        true,
-                      );
-                    }
-                  }}
-                  onClosePopup={() =>
-                    notify(
-                      "There is no popup open. Open this screen from a popup button to test closing it.",
-                    )
-                  }
-                  actionBusyId={previewActionBusy}
-                  selectedIds={selectedIds}
-                  gridSize={gridSize}
-                  onSelect={values => { setSearchLocation(null); setSelectedIds(values); }}
-                  onReplace={replaceComponents}
-                  onKeyDown={canvasKeyboard}
-                  onBeginMove={() => {
-                    if (projectRef.current) updateHistory(checkpoint(historyRef.current, projectRef.current));
-                  }}
-                  onNavigate={(target) => {
-                    if (previewActionBusy) return;
-                    if (
-                      project.screens.some(
-                        (item) => item.id === target && item.kind !== "popup",
-                      )
-                    ) {
-                      openDocument({ kind: "screen", id: target });
-                    } else
-                      notify(
-                        "Choose a destination screen in this button’s properties.",
-                        true,
-                      );
-                  }}
-                  onBind={(componentId, path) => {
-                    const component = screen.components.find(
-                      (item) => item.id === componentId,
-                    );
-                    if (component && (component.type === "value" || component.type === "gauge" || isProcessDisplay(component.type)))
-                      updateComponent(componentId, {
-                        props: { ...component.props, ...tagBindingPatch(component, path) },
-                      });
-                  }}
-                />
-              )}
-              <div className="canvas-bottom">
-                <span>
-                  <Icon name={preview ? "play" : "move"} size={13} />
-                  {preview
-                    ? "Preview uses current unsaved screen changes"
-                    : selection.length > 1
-                      ? `${selection.length} selected · Drag together · Arrows nudge · Shift+arrows move 10 px`
-                    : selected
-                      ? `${selected.type.charAt(0).toUpperCase() + selected.type.slice(1)} selected · Drag to move`
-                      : "Select a component to edit its properties"}
-                </span>
-                <span>
-                  <span className="status-dot" />
-                  {tags.filter((tag) =>
-                    tag.source?.toLowerCase().includes("sim"),
-                  ).length
-                    ? "Sample data is simulated"
-                    : `${tags.length} tags available`}
-                </span>
-              </div>
-            </section>
-
-            {!preview && designerPanes.separator(1)}
-            {!preview && (
-              <aside id="designer-properties-panel" className={`inspector${selected ? " property-sheet-inspector" : ""}`}>
-                <div className="inspector-heading">
-                  <Icon name="settings" size={15} />
-                  <strong>Properties</strong>
-                  <span>
-                    {selection.length > 1 && !selected ? "SELECTION" : selected
-                      ? "COMPONENT"
-                      : editingTemplate
-                        ? "TEMPLATE"
-                        : screen ? "SCREEN" : "NO SELECTION"}
-                  </span>
-                </div>
-                {searchLocation?.property && searchLocation.id === screen?.id && searchLocation.componentId === selected?.id && <div className="inspector-section search-location" role="status"><small>Search location</small><code>{searchLocation.property}</code><button type="button" aria-label="Dismiss search location" onClick={() => setSearchLocation(null)}>×</button></div>}
-                {inspectingSearchComponent && selection.length > 1 && <div className="inspector-section"><p>Inspecting {selected?.props.text || selectedId} within the selected group. Canvas move, duplicate and delete commands still affect the group.</p></div>}
-                {selection.length > 1 && !selected ? (
-                  <div className="inspector-section multi-selection-panel">
-                    <h3>{selectedGroupId ? "Group" : "Selection"} · {selection.length} components</h3>
-                    <p>{selectedGroupId ? "Drag any member to move the group. Drag the group's bottom-right handle to scale its component positions and sizes. Ungroup to edit individual controls." : "Drag any selected control to move the selection. Align and Distribute treat each saved group as one unit."}</p>
-                    {selectedGroupId && <p>Font sizes stay authored. Layout bindings override these values in Preview.</p>}
-                    <ul>{selection.map((component) => <li key={component.id}>{component.props.text || component.type}</li>)}</ul>
-                    <button className="button" onClick={duplicateSelection}><Icon name="copy" size={14} /> Duplicate selection</button>
-                    <button className="button" disabled={Boolean(selectedGroupId)} onClick={groupSelection}><Icon name="layers" size={14} /> Group selection</button>
-                    <button className="button" disabled={!selection.some(component => component.groupId)} onClick={ungroupSelection}>Ungroup selection</button>
-                    <p>Drag empty canvas to select intersecting controls; Shift/Ctrl adds to selection. Groups select, move, copy and delete together. Ctrl+G groups; Ctrl+Shift+G ungroups. Arrow keys move 1 px; Shift+arrows move 10 px. Ctrl+A selects all, Ctrl+D duplicates, Delete removes, Ctrl+Z undoes and Ctrl+Y redoes.</p>
-                    <p>Distribution keeps the outside edges fixed and needs enough room for non-overlapping gaps.</p>
-                  </div>
-                ) : selected ? (
-                  <>
-                    <div className="inspector-selection">
-                      <span className="palette-icon">
-                        <Icon name={typeIcon[selected.type]} size={20} />
-                      </span>
-                      <div>
-                        <strong>{selected.props.text || selected.type}</strong>
-                        <small>
-                          {selected.type.charAt(0).toUpperCase() +
-                            selected.type.slice(1)}{" "}
-                          component
-                        </small>
-                      </div>
-                      <button
-                        className="icon-button"
-                        title={selection.length > 1 ? "Delete selected group" : "Delete component"}
-                        aria-label={selection.length > 1 ? "Delete selected group" : "Delete component"}
-                        onClick={deleteSelection}
-                      >
-                        <Icon name="trash" size={15} />
-                      </button>
-                    </div>
-                    <div className="component-property-grid" aria-label="Component properties">
-                    <PropertyBindingsEditor
-                      key={selected.id}
-                      component={selected}
-                      components={screen?.components || []}
-                      tags={tags}
-                      parameters={editorParameters}
-                      queries={queries}
-                      inputs={currentPreviewInputs}
-                      state={applicationState.values}
-                      allowUnresolvedScreenState={Boolean(editingTemplate)}
-                      communicationLost={!connected}
-                      parameterTemplate={project.templates?.find(item => item.id === selected.props.templateId)}
-                      notify={notify}
-                      onChange={updateProps}
-                      onGeometryChange={patch => updateComponent(selected.id, patch)}
-                    />
-                    {selected.type === "numberInput" && <div className="property-sheet-group"><h4>Setpoint command</h4><div className="property-sheet-row" data-property="commandId"><label htmlFor="input-command-id">Review on commit</label><div className="property-sheet-value"><select id="input-command-id" value={selected.props.commandId ?? ""} onChange={event => updateProps({ commandId: event.target.value || undefined })}><option value="">Local form value only</option>{project.commands?.filter(command => !["Boolean", "String"].includes(command.dataType)).map(command => <option key={command.id} value={command.id}>{command.name}</option>)}</select><small>Enter or leaving the input opens review. Every device write needs explicit confirmation, Commands permission and readback.</small></div><span /></div></div>}
-                    {isProcessDataComponent(selected.type) && <ProcessDataProperties component={selected} onChange={updateProps} />}
-                    <ComponentStyleAssignment component={selected} styles={project.styles} onChange={updateProps} onManage={() => setStylesEditorOpen(true)} />
-                    <ComponentTranslationAssignment component={selected} catalog={project.localization} onChange={updateProps} onManage={() => setTranslationsOpen(true)} />
-                    <div className="inspector-section">
-                      <h3>Behavior</h3>
-                      <Field label="Actions & events"><button type="button" className="button component-actions-open" onClick={() => setEventEditorId(selected.id)}>
-                        <Icon name="code" size={14} /> Edit actions &amp; events
-                      </button></Field>
-                      <p className="component-lifecycle-hint">Configure actions, input events, lifecycle events and message handlers together. Apply creates one undo step.</p>
-                    </div>
-                    {isDrawingComponent(selected.type) && <DrawingEditor key={`drawing:${selected.id}`} component={selected} onChange={updateProps} notify={notify} />}
-                    {selected.type === "viewContainer" && <ViewContainerProperties key={selected.id} component={selected} templates={project.templates ?? []} parentTemplateId={editingTemplate?.id} onChange={updateProps} />}
-                    {isTemplateInstance(selected.type) && (
-                      <div className="inspector-section">
-                        <h3>Reusable template</h3>
-                        <Field label="Template">
-                          <select
-                            value={selected.props.templateId || ""}
-                            onChange={(event) =>
-                              updateProps({
-                                templateId: event.target.value,
-                                parameters: {},
-                                parameterBindings: {},
-                                ...(selected.type === "repeater"
-                                  ? { rows: [], rowsSource: selected.props.rowsSource ? { ...selected.props.rowsSource, parameterMap: {} } : undefined }
-                                  : {}),
-                              })
-                            }
-                          >
-                            <option value="">Choose template…</option>
-                            {(project.templates || []).map((item) => (
-                              <option key={item.id} value={item.id} disabled={Boolean(editingTemplate && templatePlacementError(project.templates || [], editingTemplate.id, item.id))}>
-                                {item.name}{editingTemplate && templatePlacementError(project.templates || [], editingTemplate.id, item.id) ? " (cannot nest here)" : ""}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                        {selected.props.templateId && (
-                          <Field label="Template definition">
-                          <button
-                            type="button"
-                            className="button template-open-button"
-                            onClick={() =>
-                              openTemplate(selected.props.templateId!)
-                            }
-                          >
-                            <Icon name="layers" size={14} /> Edit shared
-                            template
-                          </button>
-                          </Field>
-                        )}
-                        {selected.type === "repeater" && (
-                          <>
-                            <Field label="Row source">
-                              <select aria-label="Repeater row source" value={selected.props.rowsSource ? "query" : "saved"} onChange={event => updateProps({
-                                rows: [], rowsSource: event.target.value === "query"
-                                  ? { queryId: queries.find(query => query.kind !== "update")?.id || "", rowKey: "row_id", parameterMap: {} }
-                                  : undefined,
-                              })}>
-                                <option value="saved">Saved rows</option>
-                                <option value="query">Named query</option>
-                              </select>
-                            </Field>
-                            {editingTemplate && <p className="template-property-note">Nested query repeaters read their containing row's typed parameters. Every query level reserves up to 100 rows within the project expansion limit.</p>}
-                            <div className="field-grid">
-                              <Field label="Columns">
-                                <input
-                                  type="number"
-                                  min={1}
-                                  max={12}
-                                  value={selected.props.columns ?? 1}
-                                  onChange={(event) =>
-                                    updateProps({
-                                      columns: Math.max(
-                                        1,
-                                        Math.min(
-                                          12,
-                                          Math.trunc(
-                                            Number(event.target.value) || 1,
-                                          ),
-                                        ),
-                                      ),
-                                    })
-                                  }
-                                />
-                              </Field>
-                              <Field label="Gap (px)">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  max={64}
-                                  value={selected.props.gap ?? 16}
-                                  onChange={(event) =>
-                                    updateProps({
-                                      gap: Math.max(
-                                        0,
-                                        Math.min(
-                                          64,
-                                          Number(event.target.value) || 0,
-                                        ),
-                                      ),
-                                    })
-                                  }
-                                />
-                              </Field>
-                            </div>
-                            {selected.props.rowsSource ? <>
-                              <Field label="Maximum query rows">
-                                <input aria-label="Repeater maximum query rows" type="number" min={1} max={100} step={1} value={selected.props.rowsSource.maxRows ?? 100}
-                                  onChange={event => updateProps({ rowsSource: { ...selected.props.rowsSource!, maxRows: Number(event.target.value) } })} />
-                              </Field>
-                              <Field label="Rows query">
-                                <select aria-label="Repeater rows query" value={selected.props.rowsSource.queryId} onChange={event => updateProps({ rowsSource: { ...selected.props.rowsSource!, queryId: event.target.value } })}>
-                                  <option value="">Choose query…</option>
-                                  {queries.filter(query => query.kind !== "update").map(query => <option key={query.id} value={query.id}>{query.name}</option>)}
-                                </select>
-                              </Field>
-                              <Field label="Row key column" hint="Every returned row needs a unique text key. Include its revision in the key when an older row must no longer accept actions.">
-                                <input aria-label="Repeater row key column" maxLength={128} value={selected.props.rowsSource.rowKey} onChange={event => updateProps({ rowsSource: { ...selected.props.rowsSource!, rowKey: event.target.value } })} />
-                              </Field>
-                              <InspectorDetails label="Parameter columns" summary="Edit column mappings">
-                              {Object.keys(project.templates?.find(item => item.id === selected.props.templateId)?.parameters || {}).map(parameter => <Field key={parameter} label={parameter} hint="Query column name; leave blank to keep the saved parameter default.">
-                                <input aria-label={`Query column for ${parameter}`} maxLength={128} value={selected.props.rowsSource!.parameterMap[parameter] || ""} onChange={event => {
-                                  const parameterMap = { ...selected.props.rowsSource!.parameterMap };
-                                  if (event.target.value) parameterMap[parameter] = event.target.value;
-                                  else delete parameterMap[parameter];
-                                  updateProps({ rowsSource: { ...selected.props.rowsSource!, parameterMap } });
-                                }} />
-                              </Field>)}
-                              </InspectorDetails>
-                              <p className="template-property-note">Up to 100 rows refresh every ten seconds and after actions. Query values are literal parameter values. Changed or removed rows reset their input forms. Popups keep the selected row context and require reopening if that row changes.</p>
-                            </> : <>
-                            <JsonEditor
-                              label="Saved rows"
-                              value={selected.props.rows || []}
-                              rows={12}
-                              onSave={(value) => {
-                                if (!Array.isArray(value) || value.length > 100)
-                                  throw new Error(
-                                    "Rows must be a JSON array with at most 100 entries.",
-                                  );
-                                const keys = new Set<string>();
-                                const definition = project.templates?.find(
-                                  (item) =>
-                                    item.id === selected.props.templateId,
-                                );
-                                const rows = value.map((row) => {
-                                  if (
-                                    !row ||
-                                    typeof row !== "object" ||
-                                    typeof row.id !== "string" ||
-                                    !row.id.trim() ||
-                                    keys.has(row.id)
-                                  )
-                                    throw new Error(
-                                      "Each row needs a unique, nonempty id.",
-                                    );
-                                  keys.add(row.id);
-                                  const parameters = textParameters(
-                                    row.parameters,
-                                  );
-                                  if (
-                                    Object.keys(parameters).some(
-                                      (key) =>
-                                        !Object.hasOwn(
-                                          definition?.parameters || {},
-                                          key,
-                                        ),
-                                    )
-                                  )
-                                    throw new Error(
-                                      "Row parameters must be declared by the template.",
-                                    );
-                                  return { id: row.id, parameters };
-                                });
-                                updateProps({ rows });
-                              }}
-                              notify={notify}
-                            />
-                            <p className="template-property-note">
-                              Example:{" "}
-                              <code>
-                                {
-                                  '[{"id":"row1","parameters":{"machine":"WC1"}}]'
-                                }
-                              </code>
-                              . Each row has independent input values. Rows are
-                              saved with the project.
-                            </p>
-                            </>}
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {selected.type === "equipmentCommand" && <div className="inspector-section"><h3>Equipment command</h3><Field label="Declared command"><select value={selected.props.commandId ?? ""} onChange={event => updateProps({ commandId: event.target.value })}><option value="">Select a command</option>{project.commands?.map(command => <option key={command.id} value={command.id}>{command.name}</option>)}</select></Field><Field label="Command definitions"><button className="button" onClick={() => setEquipmentCommandsOpen(true)}>Configure project commands</button></Field><p>Operators need Commands permission. Designer Preview never dispatches equipment commands.</p></div>}
-                    {!isTemplateInstance(selected.type) && !isProcessDisplay(selected.type) && !isChart(selected.type) && !isProcessDataComponent(selected.type) && !["viewContainer", "equipmentCommand", "button", "label"].includes(selected.type) && !isDrawingComponent(selected.type) && <div className="inspector-section">
-                      <h3>Content</h3>
-                      {selected.type === "multiStateIndicator" && <StateControlEditor key={selected.id} component={selected} onChange={updateProps} notify={notify} />}
-                      {selected.type === "image" && (
-                        <>
-                          <AssetPicker
-                            assets={assets}
-                            selected={selected.props.assetId}
-                            onSelect={(assetId) => updateProps({ assetId })}
-                            onUploaded={(asset) =>
-                              setAssets((previous) => [
-                                ...previous.filter(
-                                  (item) => item.id !== asset.id,
-                                ),
-                                asset,
-                              ])
-                            }
-                            notify={notify}
-                          />
-                          <Field label="Image fit">
-                            <select
-                              value={selected.props.fit || "contain"}
-                              onChange={(event) =>
-                                updateProps({
-                                  fit: event.target.value as
-                                    "contain" | "cover" | "fill",
-                                })
-                              }
-                            >
-                              <option value="contain">
-                                Contain · show entire image
-                              </option>
-                              <option value="cover">
-                                Cover · crop to fill
-                              </option>
-                              <option value="fill">Stretch to fill</option>
-                            </select>
-                          </Field>
-                        </>
-                      )}
-                      {selected.type === "icon" && (
-                        <>
-                          <div className="icon-picker-preview">
-                            <Icon
-                              name={selected.props.icon || "spark"}
-                              size={42}
-                            />
-                          </div>
-                          <Field label="Built-in icon">
-                            <select
-                              value={selected.props.icon || "spark"}
-                              onChange={(event) =>
-                                updateProps({ icon: event.target.value })
-                              }
-                            >
-                              {iconNames.map((name) => (
-                                <option key={name} value={name}>
-                                  {name.charAt(0).toUpperCase() + name.slice(1)}
-                                </option>
-                              ))}
-                            </select>
-                          </Field>
-                        </>
-                      )}
-                      {(selected.type === "image" ||
-                        selected.type === "icon") && (
-                        <Field
-                          label="Accessible description"
-                          hint="Describe the image or symbol. Supports {parameter} text."
-                        >
-                          <input
-                            value={selected.props.alt || ""}
-                            onChange={(event) =>
-                              updateProps({ alt: event.target.value })
-                            }
-                          />
-                        </Field>
-                      )}
-                      {(selected.type === "value" || selected.type === "gauge") && <Field label="Unit"><input value={selected.props.unit || ""} placeholder="rpm, °C, units" onChange={event => updateProps({ unit: event.target.value })} /></Field>}
-                      {(selected.type === "gauge" || ["numberInput", "spinner", "slider"].includes(selected.type)) && (
-                        <div className="field-grid">
-                          <Field label="Minimum">
-                            <input
-                              type="number"
-                              value={selected.props.min ?? 0}
-                              onChange={(event) =>
-                                updateProps({ min: Number(event.target.value) })
-                              }
-                            />
-                          </Field>
-                          <Field label="Maximum">
-                            <input
-                              type="number"
-                              value={selected.props.max ?? 100}
-                              onChange={(event) =>
-                                updateProps({ max: Number(event.target.value) })
-                              }
-                            />
-                          </Field>
-                        </div>
-                      )}
-                      {["numberInput", "spinner", "slider"].includes(selected.type) && (
-                        <Field label="Step" hint="Increment used by the control. Actions accept any valid value in range.">
-                          <input type="number" min="0.000001" step="any" value={selected.props.step ?? (selected.type === "numberInput" ? "" : 1)} placeholder="Any" onChange={(event) => updateProps({ step: event.target.value === "" ? undefined : Number(event.target.value) })} />
-                        </Field>
-                      )}
-                      {isInput(selected.type) && (
-                        <>
-                          <InputValidationEditor key={selected.id} component={selected} onChange={updateProps} />
-                          <Field
-                            label="Field name"
-                            hint="Available in event form snapshots as inputs['fieldName']. Automatic Python events omit password fields."
-                          >
-                            <input
-                              value={selected.props.fieldKey || ""}
-                              placeholder="setpoint"
-                              onChange={(event) =>
-                                updateProps({ fieldKey: event.target.value })
-                              }
-                            />
-                          </Field>
-                          {selected.type === "passwordInput" ? (
-                            <p className="template-property-note">Password fields always start empty. Operators enter a masked form value; no password is saved as a project default.</p>
-                          ) : selected.type === "multiStateButton" ? (
-                            <StateControlEditor key={selected.id} component={selected} onChange={updateProps} notify={notify} />
-                          ) : (selected.type === "list" || selected.type === "treeView") && !selected.props.optionsSource ? (
-                            <ListTreeOptionsEditor key={selected.id} component={selected} onChange={updateProps} notify={notify} />
-                          ) : selected.type === "checkbox" || selected.type === "toggle" ? (
-                            <Field label="Default value">
-                              <select
-                                value={String(
-                                  selected.props.defaultValue === true,
-                                )}
-                                onChange={(event) =>
-                                  updateProps({
-                                    defaultValue: event.target.value === "true",
-                                  })
-                                }
-                              >
-                                <option value="false">Unchecked</option>
-                                <option value="true">Checked</option>
-                              </select>
-                            </Field>
-                          ) : selected.type === "textArea" ? (
-                            <Field label="Default value"><textarea rows={4} maxLength={4096} value={String(selected.props.defaultValue ?? "")} onChange={(event) => updateProps({ defaultValue: event.target.value })} /></Field>
-                          ) : (
-                            <Field label="Default value">
-                              <input
-                                type={
-                                  ["numberInput", "spinner", "slider"].includes(selected.type)
-                                    ? "number"
-                                    : selected.type === "dateTimeInput" ? "datetime-local" : "text"
-                                }
-                                step={selected.type === "dateTimeInput" ? 60 : "any"}
-                                value={String(
-                                  selected.props.defaultValue ?? "",
-                                )}
-                                onChange={(event) =>
-                                  updateProps({
-                                    defaultValue:
-                                      ["numberInput", "spinner", "slider"].includes(selected.type)
-                                        ? Number(event.target.value)
-                                        : event.target.value,
-                                  })
-                                }
-                              />
-                            </Field>
-                          )}
-                          {selected.type === "dateTimeInput" && <p className="template-property-note">Local wall-clock time, to the minute. No timezone conversion is applied.</p>}
-                          {["select", "list", "treeView"].includes(selected.type) && <Field label="Option source" hint="Named queries populate choices without changing the current selection or other edited fields on refresh.">
-                            <select value={selected.props.optionsSource ? "query" : "static"} onChange={event => updateProps({
-                              optionsSource: event.target.value === "query" ? { queryId: queries.find(query => query.kind !== "update")?.id || "", valueColumn: "id", labelColumn: "name", ...(selected.type === "treeView" ? { parentColumn: "parent_id" } : {}) } : undefined,
-                              defaultValue: event.target.value === "query" ? "" : selected.props.options?.[0]?.value,
-                              selectionFields: undefined,
-                            })}>
-                              <option value="static">Static options</option>
-                              <option value="query">Named query</option>
-                            </select>
-                          </Field>}
-                          {["select", "list", "treeView"].includes(selected.type) && selected.props.optionsSource && <>
-                            <Field label="Options query">
-                              <select value={selected.props.optionsSource.queryId} onChange={event => updateProps({ optionsSource: { ...selected.props.optionsSource!, queryId: event.target.value } })}>
-                                <option value="">Select query…</option>
-                                {queries.filter(query => query.kind !== "update").map(query => <option key={query.id} value={query.id}>{query.name}</option>)}
-                              </select>
-                            </Field>
-                            <Field label="Option value column" hint="A unique, nonempty value for each choice."><input maxLength={128} value={selected.props.optionsSource.valueColumn} onChange={event => updateProps({ optionsSource: { ...selected.props.optionsSource!, valueColumn: event.target.value } })} /></Field>
-                            <Field label="Option label column"><input maxLength={128} value={selected.props.optionsSource.labelColumn} onChange={event => updateProps({ optionsSource: { ...selected.props.optionsSource!, labelColumn: event.target.value } })} /></Field>
-                            {selected.type === "treeView" && <Field label="Parent value column" hint="Required. Each parent must match another option value; null or empty values identify roots."><input aria-label="Tree parent column" maxLength={128} value={selected.props.optionsSource.parentColumn || ""} onChange={event => updateProps({ optionsSource: { ...selected.props.optionsSource!, parentColumn: event.target.value } })} /></Field>}
-                            <InspectorDetails label="Selection mappings" summary="Edit form mappings"><p className="muted">When the operator chooses an option, fill these fields from the selected query row. Blank mappings leave fields unchanged.</p>
-                            {screen?.components.filter(item => isInput(item.type) && item.id !== selected.id).map(input => {
-                              const field = input.props.fieldKey || input.id;
-                              return <Field key={field} label={input.props.text || field}><input maxLength={128} placeholder="Column name (optional)" value={selected.props.selectionFields?.[field] || ""} onChange={event => {
-                                const mapping = { ...selected.props.selectionFields };
-                                if (event.target.value) mapping[field] = event.target.value;
-                                else delete mapping[field];
-                                updateProps({ selectionFields: mapping });
-                              }} /></Field>;
-                            })}
-                          </InspectorDetails></>}
-                          {(selected.type === "radioGroup" || selected.type === "select" && !selected.props.optionsSource) && <OptionsEditor key={selected.id} component={selected} onChange={updateProps} />}
-                          {selected.type !== "passwordInput" && <Field
-                            label="Initial value tag (optional)"
-                            hint="Read a tag’s value before the operator edits this field. Submitting a button event controls writing."
-                          >
-                            <input
-                              value={selected.props.tagPath || ""}
-                              placeholder="[default]Application/Setpoint"
-                              onChange={(event) =>
-                                updateProps({ tagPath: event.target.value })
-                              }
-                            />
-                          </Field>}
-                        </>
-                      )}
-                      {selected.type === "table" && (
-                        <><Field label="Named query">
-                          <select
-                            value={selected.props.queryId || ""}
-                            onChange={(event) =>
-                              updateProps({ queryId: event.target.value })
-                            }
-                          >
-                            <option value="">Select query…</option>
-                            {queries.filter(query => query.kind !== "update").map((query) => (
-                              <option key={query.id} value={query.id}>
-                                {query.name}
-                              </option>
-                            ))}
-                          </select>
-                        </Field>
-                        <Field label="Selection mode" hint="Multiple selection keeps a local set of stable row keys. Atomic batch editing requires multiple selection."><select aria-label="Table selection mode" value={selected.props.tableEdit?.batch ? "multiple" : selected.props.selectionMode ?? "single"} disabled={Boolean(selected.props.tableEdit?.batch)} onChange={event => updateProps({ selectionMode: event.target.value as "single" | "multiple", ...(event.target.value === "multiple" ? { selectionFields: undefined } : {}) })}><option value="single">Single row</option><option value="multiple">Multiple rows</option></select></Field>
-                        <Field label="Rows per page" hint="Page through the rows already loaded by the query. This does not change the query's result limit."><TablePageSizeEditor key={selected.id} value={selected.props.pageSize} onChange={pageSize => updateProps({ pageSize })} notify={notify} /></Field>
-                        <TableColumnsEditor key={`${selected.id}:${JSON.stringify(selected.props.tableColumns)}`} component={selected} onChange={updateProps} notify={notify} />
-                        <Field label="Unique row column" hint="A stable primary key, usually id."><input value={selected.props.rowKey || ""} onChange={event => updateProps({rowKey:event.target.value})} /></Field>
-                        <TableEditingEditor key={`${selected.id}:${JSON.stringify([selected.props.queryId, selected.props.rowKey, selected.props.tableEdit])}`} component={selected} onChange={updateProps} notify={notify} />
-                        {selected.props.selectionMode !== "multiple" && !selected.props.tableEdit?.batch && <InspectorDetails label="Selection mappings" summary="Edit form mappings"><p className="muted">Select a table row to fill these form fields. Enter the source column name for each field.</p>
-                        {screen?.components.filter(item => isInput(item.type)).map(input => {
-                          const field=input.props.fieldKey || input.id;
-                          return <Field key={field} label={input.props.text || field}><input placeholder="Column name (optional)" value={selected.props.selectionFields?.[field] || ""} onChange={event => { const mapping={...selected.props.selectionFields}; if (event.target.value) mapping[field]=event.target.value; else delete mapping[field]; updateProps({selectionFields:mapping, rowKey:selected.props.rowKey || "id"}); }} /></Field>;
-                        })}</InspectorDetails>}</>
-                      )}
-                    </div>}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="inspector-selection">
-                      <span className="palette-icon">
-                        <Icon name="monitor" size={20} />
-                      </span>
-                      <div>
-                        <strong>{screen?.name || "Nothing selected"}</strong>
-                        <small>
-                          {editingTemplate
-                            ? "Shared template settings"
-                            : screen ? "Screen settings" : "Open a screen or template"}
-                        </small>
-                      </div>
-                    </div>
-                    {screen && <DocumentProperties
-                      key={`${editingTemplate ? "template" : "screen"}:${screen.id}`}
-                      document={screen}
-                      templates={project.templates}
-                      isTemplate={Boolean(editingTemplate)}
-                      parentParameters={project.parameters}
-                      canChangeToPopup={screen.kind === "popup" || project.screens.filter(item => item.kind !== "popup").length > 1}
-                      onChange={patch => updateScreen(current => ({ ...current, ...patch }))}
-                      onRename={() => previewResourceChange({ action: "rename", target: { kind: editingTemplate ? "template" : "screen", id: screen.id }, name: screen.name })}
-                      notify={notify}
-                    />}
-                    {screen && <div className="inspector-section">
-                      <button
-                        className="button danger subtle"
-                        disabled={
-                          !screen || !editingTemplate &&
-                          screen?.kind !== "popup" &&
-                          project.screens.filter(
-                            (item) => item.kind !== "popup",
-                          ).length < 2
-                        }
-                        onClick={() => previewResourceChange({ action: "delete", target: { kind: editingTemplate ? "template" : "screen", id: screen.id } })}
-                      >
-                        <Icon name="trash" size={15} />
-                        {editingTemplate ? "Delete template" : "Delete screen"}
-                      </button>
-                    </div>}
-                    <div className="inspector-tip">
-                      <span className="tip-icon">
-                        <Icon name="spark" size={18} />
-                      </span>
-                      <strong>Make it your own</strong>
-                      <p>
-                        Choose a component from the palette, connect a tag, and
-                        preview your application.
-                      </p>
-                      <button onClick={() => setLeftTab("components")}>
-                        Browse components <Icon name="arrow" size={12} />
-                      </button>
-                    </div>
-                  </>
-                )}
-              </aside>
-            )}
-          </div>
-        )}
-        {gatewayCapabilities.configuration && project && workspace === "tags" && (
-          <Tags
-            connections={connections}
-            tags={tags}
-            onTagsChanged={() => {
-              void api<Tag[]>("/tags")
-                .then(setTags)
-                .catch(() => {});
-            }}
-            notify={notify}
-          />
-        )}
-        {gatewayCapabilities.configuration && project && workspace === "connections" && (
-          <Connections
-            connections={connections}
-            onChange={setConnections}
-            onTagsChanged={() => {
-              void api<Tag[]>("/tags").then(setTags);
-            }}
-            notify={notify}
-          />
-        )}
-        {project && (workspace === "queries" || queriesVisited) && <div style={{ display: workspace === "queries" ? "contents" : "none" }}>
-          <Queries
-            queries={queries}
-            canRunUpdates={gatewayAdmin}
-            connections={connections}
-            onChange={setQueries}
-            parameters={project.parameters}
-            notify={notify}
-            onDirtyChange={setQueriesDirty}
-            navigationRequest={queryNavigation}
-            onNavigationHandled={() => setQueryNavigation(undefined)}
-            onSearchResources={setSearchQueries}
-          />
-        </div>}
-        {project && (workspace === "scripts" || scriptsVisited) && <div style={{display:workspace === "scripts" ? "contents" : "none"}}><Suspense fallback={<div className="management-page">Loading scripting workspace…</div>}>
-          <Scripts
-            parameters={project.parameters}
-            pythonAvailable={health?.pythonAvailable || false}
-            notify={notify}
-            onDirtyChange={setScriptsDirty}
-            navigationRequest={scriptNavigation}
-            onNavigationHandled={() => setScriptNavigation(undefined)}
-            onSearchResources={receiveScriptDraft}
-            onSearchError={setSearchScriptsError}
-            onSearchLoading={setSearchScriptsLoading}
-          />
-        </Suspense></div>}
-        <footer className="statusbar">
-          <span>
-            <span className={`status-dot ${connected ? "" : "offline"}`} />
-            {connected ? "Gateway connected" : "Gateway unavailable"}
-          </span>
-          <span>
-            <Icon name="activity" size={12} />
-            {tags.length} tags
-          </span>
-          <span>
-            <Icon name="clock" size={12} />
-            {lastUpdate ? `Updated ${lastUpdate}` : "Awaiting values"}
-          </span>
-          <span className="statusbar-spacer" />
-          <span>SPARKSTUDIO</span>
-          <span className="statusbar-version">EARLY PREVIEW</span>
-        </footer>
-      </div>
-      {eventEditorId && screen?.components.find(component => component.id === eventEditorId) && <ComponentActionsEditor
-        key={eventEditorId}
-        component={screen.components.find(component => component.id === eventEditorId)!}
-        components={screen.components}
-        screens={project?.screens ?? []}
-        inputs={currentPreviewInputs}
-        parameters={editorParameters}
-        instanceStateAvailable={Boolean(editingTemplate)}
-        popupAllowed={Boolean(editingTemplate) || screen.kind !== "popup"}
-        onApply={props => {
-          const component = screen.components.find(item => item.id === eventEditorId);
-          if (component && JSON.stringify(props) !== JSON.stringify(component.props)) updateComponent(component.id, { props });
-          setEventEditorId(null);
-        }}
-        onClose={() => setEventEditorId(null)}
-      />}
-      {gatewayAdmin && projectImportOpen && <ProjectImportDialog onClose={() => setProjectImportOpen(false)} />}
-      {accountSettingsOpen && <AccountSettingsDialog hasUnsavedChanges={dirty || queriesDirty || scriptsDirty} onClose={() => setAccountSettingsOpen(false)} />}
-      {searchOpen && project && <ProjectSearch entries={searchEntries} onOpen={navigateSearch} onClose={() => setSearchOpen(false)} scriptsLoading={searchScriptsLoading} scriptsError={searchScriptsError}
-        onReplace={find => { setSearchOpen(false); setBulkReplaceFind(find); }} />}
-      {bulkReplaceFind !== null && project && <BulkReplaceDialog project={project} initialFind={bulkReplaceFind}
-        onClose={() => setBulkReplaceFind(null)} onOpenReference={navigateSearch}
-        onApply={(plan, selectedIds) => {
-          if (previewActionBusy) throw new Error("Wait for the current preview action to finish before applying replacements.");
-          change(current => applyBulkReplacement(plan, current, selectedIds));
-          setBulkReplaceFind(null);
-          notify(`${selectedIds.length} properties replaced in the draft. Undo is available; save and publish when ready.`);
-        }} />}
-      {resourceChangePlan && <ResourceChangeDialog plan={resourceChangePlan}
-        onNameChange={name => setResourceChangeContext(previous => previous && previous.request.action === "rename" ? { ...previous, request: { ...previous.request, name } } : previous)}
-        onApply={commitResourceChange} onClose={closeResourceChange} onOpenReference={navigateSearch}
-        loading={resourceChangeLoading || scriptsEditorReady && searchScriptsLoading}
-        loadError={resourceChangeError || (scriptsEditorReady ? searchScriptsError : "")}
-        retryLabel={scriptsEditorReady && searchScriptsError ? "Open script workspace" : "Refresh preview"}
-        onRetry={() => {
-          if (scriptsEditorReady && searchScriptsError) { closeResourceChange(); setWorkspace("scripts"); notify("Reload script resources to check references again. Your current drafts are retained until you choose to reload.", true); }
-          else if (resourceChangeContext) previewResourceChange(resourceChangeContext.request);
-        }} />}
-      {projectSettingsOpen && project && <ProjectSettingsDialog project={project} canRename={gatewayAdmin} notify={notify}
-        onChange={patch => change(current => ({ ...current, ...patch }))} onClose={() => setProjectSettingsOpen(false)} />}
-      {equipmentCommandsOpen && project && <EquipmentCommandsEditor project={project} onApply={commands => change(current => ({ ...current, commands }))} onClose={() => setEquipmentCommandsOpen(false)} />}
-      {pendingNavigation && <UnsavedProjectNavigation onStay={() => setPendingNavigation(null)} onDiscard={() => {
-        discardNavigation.current = true;
-        window.location.assign(pendingNavigation);
-      }} />}
-      {project && previewPopup && !editorParameterError && (
-        <Popup
-          key={previewPopup.id}
-          project={project}
-          popup={previewPopup}
-          tags={tags}
-          communicationLost={!connected}
-          queryScope="designer"
-          onClose={() => {
-            if (!previewActionBusy) setPreviewPopup(null);
-          }}
-          onBusyChange={(busy) => setPreviewActionBusy(busy ? "popup" : "")}
-          onNavigate={(target) => {
-            if (previewActionBusy) return;
-            if (
-              project.screens.some(
-                (item) => item.id === target && item.kind !== "popup",
-              )
-            ) {
-              setPreviewPopup(null);
-              openDocument({ kind: "screen", id: target });
-            }
-          }}
-          onExecute={async (action) => {
-            if (previewCommunication.busy || !previewCommunication.session) throw new Error("A current preview communication session is required. Exit and reopen Preview.");
-            if (action.instance?.isCurrent?.() === false) throw new Error("The template parameters changed before this action could run.");
-            if (!gatewayAdmin) throw new Error("A gateway administrator must sign in to run draft Python code.");
-            const result = await api<ScriptResult>("/scripts/run", "POST", {
-              code: action.component.props.script || "",
-              parameters: action.instance?.parameters || action.parameters,
-              inputs: action.inputs,
-              ...pythonUiRequest(action.uiAction),
-              ...(action.uiAction ? { uiContext: pythonUiPreviewContext({ screenId: action.screen.id }, action.component.id, action.instance) } : {}),
-            });
-            if (action.instance?.isCurrent?.() === false) throw new Error("The template parameters changed while this action was running.");
-            return result;
-          }}
-        />
-      )}
+      {renderWorkspace()}
+      {renderEditingDialogs()}
+      {renderPreviewPopup()}
       {toast && (
         <div className={`toast ${toast.error ? "error" : ""}`} role="status">
           <Icon name={toast.error ? "info" : "check"} size={18} />
@@ -2655,25 +2690,12 @@ export default function App() {
           </button>
         </div>
       )}
-      {stylesEditorOpen && project && <VisualStylesEditor project={project} onClose={() => setStylesEditorOpen(false)} onApply={(styles, expected) => {
-        if (previewActionBusy) throw new Error("Wait for the active preview action to finish.");
-        change(current => applyStyleCatalog(current, expected, styles)); setStylesEditorOpen(false);
-      }} />}
-      {publishing && project && <ApplicationPublishDialog projectRevision={project.revision} onClose={() => setPublishing(false)} onPublished={published => { setPublication(published); setPublishing(false); notify(`Application revision ${published.revision} published with scripts revision ${published.scriptsRevision}. ${published.warnings?.join(" ") ?? ""}`, Boolean(published.warnings?.length)); if (published.warnings?.length) setPublicationHistoryOpen(true); }} />}
-      {publicationHistoryOpen && <PublicationHistoryDialog canPublish={permissions.publish} onClose={() => setPublicationHistoryOpen(false)} onRestored={published => { setPublication(published); notify(published.complete ? "Application restored with its matching scripts. Designer drafts are unchanged." : "Legacy snapshot restored; active scripts were preserved. Review the compatibility warning."); }} />}
-      {translationsOpen && project && <TranslationsEditor project={project} onClose={() => setTranslationsOpen(false)} onApply={(catalog, expected) => {
-        if (previewActionBusy) throw new Error("Wait for the active preview action to finish.");
-        change(current => applyLocalizationCatalog(current, expected, catalog)); setTranslationsOpen(false);
-      }} />}
-      {diagnosticsOpen && project && <DesignerDiagnostics project={project} document={screen} ownerKind={editingTemplate ? "template" : "screen"}
-        context={{ components: screen?.components || [], tags, parameters: editorParameters, inputs: currentPreviewInputs, state: applicationState.values, communicationLost: !connected }}
-        searchEntries={searchEntries} eventCoordinator={applicationState.store.componentEvents} onOpen={navigateSearch} onClose={() => setDiagnosticsOpen(false)} />}
-      {assetLibraryOpen && project && <AssetLibraryDialog project={project} assets={assets} onClose={() => setAssetLibraryOpen(false)}
-        onOpenReference={use => { setAssetLibraryOpen(false); navigateSearch({ kind: use.ownerKind, id: use.ownerId, componentId: use.componentId }); }}
-        onApply={(plan, ids) => {
-          if (previewActionBusy) throw new Error("Wait for the active preview action to finish.");
-          change(current => applyAssetReplacement(plan, current, assets, ids)); setAssetLibraryOpen(false); notify(`${ids.length} image references replaced. Undo is available; save and publish when ready.`);
-        }} />}
+      {renderVisualStyleEditor()}
+      {renderPublicationReview()}
+      {renderPublicationHistory()}
+      {renderTranslationsEditor()}
+      {renderDiagnostics()}
+      {renderAssetLibrary()}
     </div></ApplicationStateProvider></VisualStyleProvider></LocalizationProvider>
   );
 }
@@ -2682,11 +2704,16 @@ export function Field({
   label,
   children,
   hint,
+  target,
+  designTime,
 }: {
+  target?: BindingTarget;
+  designTime?: boolean;
   label: string;
   children: React.ReactNode;
   hint?: string;
 }) {
+  if (target || designTime) return <RuntimePropertyRow target={target} label={label} hint={hint} designTime={designTime}>{children}</RuntimePropertyRow>;
   return (
     <label className="field">
       <span>{label}</span>
@@ -2707,15 +2734,15 @@ function textParameters(value: unknown): Record<string, string> {
   return value as Record<string, string>;
 }
 
-function JsonEditor({ label, value, onSave, notify, rows = 6 }: {
-  label: string; value: unknown; onSave: (value: unknown) => void; notify: (message: string, error?: boolean) => void; rows?: number;
+function JsonEditor({ label, value, onSave, notify, rows = 6, target, designTime, hint }: {
+  target?: BindingTarget; designTime?: boolean; hint?: string; label: string; value: unknown; onSave: (value: unknown) => void; notify: (message: string, error?: boolean) => void; rows?: number;
 }) {
   const [open, setOpen] = useState(false), [draft, setDraft] = useState(""), [error, setError] = useState("");
   function apply() {
     try { const next: unknown = JSON.parse(draft); if (JSON.stringify(next) !== JSON.stringify(value)) onSave(next); setOpen(false); }
     catch (cause) { const message = cause instanceof Error ? cause.message : "Enter valid JSON."; setError(message); notify(message, true); }
   }
-  return <><div className="property-sheet-row"><label>{label}</label><div className="property-sheet-value property-collection-value"><span>{Array.isArray(value) ? value.length + " rows" : "Structured value"}</span><button type="button" className="button" onClick={() => { setDraft(JSON.stringify(value, null, 2)); setError(""); setOpen(true); }}>Edit {label.toLowerCase()}</button></div><span aria-hidden="true" /></div>
+  return <><RuntimePropertyRow target={target} label={label} designTime={designTime} hint={hint}><span>{Array.isArray(value) ? value.length + " rows" : "Structured value"}</span><button type="button" className="button" onClick={() => { setDraft(JSON.stringify(value, null, 2)); setError(""); setOpen(true); }}>Edit {label.toLowerCase()}</button></RuntimePropertyRow>
     {open && <PropertyCollectionDialog title={label} onClose={() => setOpen(false)}><label className="field"><span>{label} (JSON)</span><textarea aria-label={label + " JSON"} rows={rows} spellCheck={false} value={draft} onChange={event => setDraft(event.target.value)} /></label>{error && <p role="alert">{error}</p>}<div className="binding-actions"><button type="button" className="button" onClick={() => setOpen(false)}>Cancel</button><button type="button" className="button primary" onClick={apply}>Apply {label.toLowerCase()}</button></div></PropertyCollectionDialog>}
   </>;
 }
@@ -2732,7 +2759,7 @@ function OptionsEditor({ component, onChange }: { component: CanvasComponent; on
     if (component.props.defaultValue !== undefined && !options.some(option => option.value === component.props.defaultValue)) { setError("The default value must match one of these option values."); return; }
     onChange({ options }); setOpen(false);
   }
-  return <><div className="property-sheet-row" data-property="options"><label>Options</label><div className="property-sheet-value property-collection-value"><span>{component.props.options?.length ?? 0} choices</span><button type="button" className="button" onClick={() => { setDraft((component.props.options ?? []).map(option => option.label + " | " + option.value).join("\n")); setError(""); setOpen(true); }}>Edit options</button></div><span aria-hidden="true" /></div>
+  return <><RuntimePropertyRow target="options" label="Options"><span>{component.props.options?.length ?? 0} choices</span><button type="button" className="button" onClick={() => { setDraft((component.props.options ?? []).map(option => option.label + " | " + option.value).join("\n")); setError(""); setOpen(true); }}>Edit options</button></RuntimePropertyRow>
     {open && <PropertyCollectionDialog title="Options" onClose={() => setOpen(false)}><label className="field"><span>Options · one Label | value per line</span><textarea aria-label="Option definitions" rows={8} value={draft} onChange={event => setDraft(event.target.value)} /></label>{error && <p role="alert">{error}</p>}<div className="binding-actions"><button type="button" className="button" onClick={() => setOpen(false)}>Cancel</button><button type="button" className="button primary" onClick={apply}>Apply options</button></div></PropertyCollectionDialog>}
   </>;
 }
@@ -2811,12 +2838,13 @@ function Canvas({
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const resize = () =>
-      setScale(
-        Math.min(1, Math.max(0.2, (host.clientWidth - 64) / screen.width)),
-      );
-    resize();
-    const observer = new ResizeObserver(resize);
+    const resize = (availableWidth: number) =>
+      setScale(Math.min(1, Math.max(0.2, Math.floor(availableWidth) / screen.width)));
+    // Fit the actual content box: padding varies with the window breakpoint.
+    // The stable scrollbar gutter prevents fitting from changing its own width.
+    const style = window.getComputedStyle(host);
+    resize(host.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0));
+    const observer = new ResizeObserver(([entry]) => resize(entry.contentRect.width));
     observer.observe(host);
     return () => observer.disconnect();
   }, [screen.width]);
@@ -3049,11 +3077,9 @@ function Canvas({
           </div>}
         </div>
       </div>
-      <div className="canvas-footnote">
-        {preview
-          ? "LIVE APPLICATION PREVIEW"
-          : `${gridSize ? `${gridSize} PX GRID` : "FREE POSITION"} · DRAG EMPTY CANVAS TO SELECT · ARROWS TO NUDGE`}
-      </div>
+      {!preview && <div className="canvas-footnote">
+        {`${gridSize ? `${gridSize} PX GRID` : "FREE POSITION"} · DRAG EMPTY CANVAS TO SELECT · ARROWS TO NUDGE`}
+      </div>}
     </div></QueryPropertyProvider>
   );
 }

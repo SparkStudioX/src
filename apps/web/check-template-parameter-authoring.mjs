@@ -8,7 +8,10 @@ import ts from 'typescript';
 
 const require = createRequire(import.meta.url);
 const asModule = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
-const hookUrl = asModule(`let scopes = new Map(), current = '', index = 0, effects = [];
+const hookUrl = asModule(`export {Children,cloneElement,isValidElement} from ${JSON.stringify(pathToFileURL(require.resolve("react")).href)};
+export const createContext=initial=>{const context={value:initial};context.Provider=({value,children})=>{context.value=value;return children;};return context;};
+export const useContext=context=>context.value;
+let scopes = new Map(), current = '', index = 0, effects = [];
 export const begin = scope => {current=scope; index=0; if(!scopes.has(scope)) scopes.set(scope,[]);};
 export const clear = () => {scopes=new Map(); effects=[];};
 export const useState = initial => {const values=scopes.get(current), at=index++; if(!(at in values)) values[at]=typeof initial==='function'?initial():initial; return [values[at],next=>{values[at]=typeof next==='function'?next(values[at]):next;}];};
@@ -20,6 +23,7 @@ const portalUrl = asModule('export const createPortal = children => children;');
 function loader(interactive = false) {
   const modules = new Map();
   return function moduleUrl(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
     if (modules.has(name)) return modules.get(name);
     const file = ['tsx', 'ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(url => fs.existsSync(url));
     assert.ok(file, name);
@@ -316,7 +320,7 @@ passed++; console.log('PASS Designer refuses stale dispatch while current templa
 {
   const request = deferred(); let current = true, calls = 0;
   const run = makePopupExecute(true, () => { calls++; return request.promise; });
-  await assert.rejects(run({ instance: { isCurrent: () => false } }), /changed before/); assert.equal(calls, 0);
+  await assert.rejects(run({ component: { props: { action: 'script' } }, instance: { isCurrent: () => false } }), /changed before/); assert.equal(calls, 0);
   const pending = run({ component: { props: {} }, inputs: {}, instance: { parameters: {}, isCurrent: () => current } });
   current = false; request.resolve({ success: true }); await assert.rejects(pending, /changed while/); assert.equal(calls, 1);
 }

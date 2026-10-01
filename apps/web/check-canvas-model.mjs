@@ -10,7 +10,8 @@ const previewRequestUrl = asModule(compile(source('previewRequest')));
 const apiUrl = asModule(compile(source('api')).replaceAll('"./authSession"', JSON.stringify(authSessionUrl)).replaceAll('"./previewRequest"', JSON.stringify(previewRequestUrl)));
 const listTreeUrl = asModule(compile(source('listTreeModel')));
 const validationUrl = asModule(compile(source('inputValidation')));
-const inputsUrl = asModule(compile(source('inputs')).replaceAll('"./api"', JSON.stringify(apiUrl)).replaceAll('"./listTreeModel"', JSON.stringify(listTreeUrl)).replaceAll('"./inputValidation"', JSON.stringify(validationUrl)));
+const cameraUrl = asModule(compile(source('computerCameraModel')));
+const inputsUrl = asModule(compile(source('inputs')).replaceAll('"./api"', JSON.stringify(apiUrl)).replaceAll('"./listTreeModel"', JSON.stringify(listTreeUrl)).replaceAll('"./inputValidation"', JSON.stringify(validationUrl)).replaceAll('"./computerCameraModel"', JSON.stringify(cameraUrl)));
 const compiled = compile(source('canvasEditing')).replaceAll('"./inputs"', JSON.stringify(inputsUrl));
 const { selectionBounds, snapToGrid, moveSelected, resizeComponent, alignSelected, distributeSelected, duplicateSelected, marqueeBounds, marqueeSelection, checkpoint, restoreHistory, projectContent, expandGroupSelection, toggleGroupSelection, groupSelected, ungroupSelected, deleteSelected, resizeGroup, arrangementCount, selectComponentType, parseGridSize, matchSelectedSize } =
   await import(asModule(compiled));
@@ -194,6 +195,15 @@ check('duplicates deep-clone nested props while retaining authored script and bi
   assert.equal(save.props.script, items[1].props.script);
   assert.equal(save.props.tagPath, items[1].props.tagPath);
 });
+check('copied native tag property sources follow copied components while external and self scopes remain stable', () => {
+  const tagWrite=reference=>({tagPath:'[default]Workshop/Setpoint',dataType:'Double',valueReference:reference});
+  const items=[component('amount',0,0,40,28,'numberInput'),component('write',50,0,40,28,'button',{action:'setTagValue',tagWrite:tagWrite({kind:'property',componentId:'amount',property:'value'})}),
+    component('self-read',100,0,40,28,'button',{action:'setTagValue',tagWrite:tagWrite({kind:'property',property:'width'})}),component('parent-read',150,0,40,28,'button',{action:'setTagValue',tagWrite:tagWrite({kind:'parentProperty',property:'height'})})];
+  const copies=duplicateSelected(items,items.map(item=>item.id),bounds).components.slice(items.length);
+  assert.equal(copies[1].props.tagWrite.valueReference.componentId,copies[0].id);assert.equal(items[1].props.tagWrite.valueReference.componentId,'amount');
+  assert.deepEqual(copies[2].props.tagWrite.valueReference,{kind:'property',property:'width'});assert.deepEqual(copies[3].props.tagWrite.valueReference,{kind:'parentProperty',property:'height'});
+  assert.equal(duplicateSelected(items,['write'],bounds).components.at(-1).props.tagWrite.valueReference.componentId,'amount');
+});
 
 check('every supported input type receives a new unique field name', () => {
   const types = ['textInput', 'textArea', 'numberInput', 'spinner', 'slider', 'checkbox', 'toggle', 'select', 'radioGroup', 'dateTimeInput'];
@@ -247,6 +257,18 @@ check('duplicate custom-property links follow copied siblings but retain links o
   copies[0].props.customProperties.count.value = 0;
   assert.equal(items[0].props.customProperties.count.value, 5);
   assert.equal(copies[0].props.script, items[0].props.script);
+});
+check('duplicate remaps custom query and dataset parameters inside the copied scope', () => {
+  const reference = { expression: 'value', references: { value: { kind: 'custom', componentId: 'source', key: 'value' } } };
+  const source = component('source', 0, 0, 40, 28, 'label', { customProperties: { value: { type: 'number', value: 2 } } });
+  const target = component('target', 60, 0, 40, 28, 'chart', {
+    queryBindings: { 'chart.yMax': { queryId: 'q', column: 'maximum', parameters: { amount: reference } }, 'customProperties.limit.value': { queryId: 'q', column: 'maximum', parameters: { amount: reference } } },
+    dataSource: { queryId: 'data', parameters: { amount: reference } },
+  });
+  const copies = duplicateSelected([source, target], ['source', 'target'], bounds).components.slice(2);
+  for (const query of Object.values(copies[1].props.queryBindings)) assert.equal(query.parameters.amount.references.value.componentId, copies[0].id);
+  assert.equal(copies[1].props.dataSource.parameters.amount.references.value.componentId, copies[0].id);
+  assert.equal(target.props.dataSource.parameters.amount.references.value.componentId, 'source');
 });
 
 check('Undo/Redo preserve current server revision and save equivalence through edits and saves', () => {

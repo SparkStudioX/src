@@ -45,32 +45,36 @@ export default function GatewayDeployment() {
   const [busy, setBusy] = useState(true), [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
   const [receivedAt, setReceivedAt] = useState(0);
-  const serial = useRef(0);
-  const refresh = useCallback(async () => {
+  const serial = useRef(0), mounted = useRef(false), pending = useRef(false);
+  const refresh = useCallback(async (showLoading = false) => {
+    if (!mounted.current || pending.current) return;
+    pending.current = true;
     const run = ++serial.current;
-    setBusy(true); setError("");
+    if (showLoading) setBusy(true);
     try {
       const next = await api<DeploymentSnapshot>("/gateway/deployment");
-      if (run !== serial.current) return;
+      if (!mounted.current || run !== serial.current) return;
       const received = Date.now();
-      setSnapshot(next); setNow(received); setReceivedAt(received);
+      setSnapshot(next); setNow(received); setReceivedAt(received); setError("");
     } catch (reason) {
-      if (run === serial.current) setError(reason instanceof Error ? reason.message : "Unable to load deployment status.");
-    } finally { if (run === serial.current) setBusy(false); }
+      if (mounted.current && run === serial.current) setError(reason instanceof Error ? reason.message : "Unable to load deployment status.");
+    } finally { if (mounted.current && run === serial.current) { pending.current = false; setBusy(false); } }
   }, []);
   useEffect(() => {
-    void refresh();
+    mounted.current = true;
+    void refresh(true);
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => { serial.current++; window.clearInterval(timer); };
+    const polling = window.setInterval(() => void refresh(), 30_000);
+    return () => { mounted.current = false; pending.current = false; serial.current++; window.clearInterval(timer); window.clearInterval(polling); };
   }, [refresh]);
   const stale = snapshot !== null && (Boolean(error) || now - receivedAt > 30_000);
   const certificate = snapshot?.transport.certificate;
-  return <section className="gateway-deployment" aria-labelledby="gateway-deployment-title">
-    <div className="gateway-deployment-heading"><div><h2 id="gateway-deployment-title">Deployment &amp; HTTPS</h2><p>Inspect the running gateway and the configuration captured when it started.</p></div><button type="button" className="button" disabled={busy} onClick={() => void refresh()}>{busy ? "Refreshing…" : "Refresh deployment"}</button></div>
-    {error && <p className="gateway-error" role="alert">{error}</p>}
-    {snapshot && <p className={stale ? "gateway-stale" : "gateway-observation"} role="status">{stale ? "Stale observation — refresh before relying on this status." : "Snapshot"} · Observed <time dateTime={snapshot.observedAt}>{date(snapshot.observedAt)}</time></p>}
+  return <section className="gateway-deployment management-page" aria-labelledby="gateway-deployment-title">
+    <div className="gateway-deployment-heading"><div><h2 id="gateway-deployment-title">Deployment &amp; HTTPS</h2><p>Inspect the running gateway and the configuration captured when it started. Live status updates automatically.</p></div></div>
+    {error && <div className="gateway-error gateway-deployment-error" role="alert"><p>{error}</p><button type="button" className="button" disabled={busy} onClick={() => void refresh(true)}>Retry deployment status</button></div>}
+    {snapshot && <p className={`gateway-deployment-status ${stale ? "gateway-stale" : "gateway-observation"}`} role="status"><strong>{stale ? "Last observation may be outdated." : "Deployment snapshot"}</strong><span>Observed <time dateTime={snapshot.observedAt}>{date(snapshot.observedAt)}</time></span></p>}
     <GatewayDeploymentSettings />
-    {!snapshot ? <p role="status">{busy ? "Loading deployment status…" : "Deployment status is unavailable. Use Refresh deployment to retry."}</p> : <>
+    {!snapshot ? <p role="status">{busy ? "Loading deployment status…" : "Deployment status is unavailable."}</p> : <>
       <div className="gateway-deployment-summary">
         <article><span>Hosting</span><strong>{hostingNames[snapshot.hosting.kind]}</strong><small>{snapshot.hosting.description}</small></article>
         <article><span>Observed listeners</span><strong>{!snapshot.listeners.addresses.length ? "Unavailable" : snapshot.listeners.httpsEnabled === null ? "Transport not determined" : snapshot.listeners.httpsEnabled ? "HTTPS listener present" : "HTTP only"}</strong><small>{snapshot.listeners.loopbackOnly === null ? "Listener scope is not determined." : snapshot.listeners.loopbackOnly ? "All observed listeners use loopback addresses." : "At least one listener uses a non-loopback or wildcard address."}</small></article>
@@ -78,20 +82,20 @@ export default function GatewayDeployment() {
         <article><span>Certificate expiry</span><strong>{certificate?.status === "observed" && certificate.expiresAt ? date(certificate.expiresAt) : "Not observed"}</strong><small>{certificate?.note}</small></article>
       </div>
       <div className="gateway-deployment-grid">
-        <section className="gateway-deployment-panel" aria-labelledby="deployment-listeners-title"><h3 id="deployment-listeners-title">Actual listening addresses</h3><p>Addresses reported by the running web server. This observation does not test firewall rules or access from another computer.</p>
+        <section className="gateway-deployment-panel" aria-labelledby="deployment-listeners-title"><div className="gateway-deployment-panel-heading"><h3 id="deployment-listeners-title">Actual listening addresses</h3><p>Addresses reported by the running web server.</p></div><div className="gateway-deployment-panel-body"><p>This observation does not test firewall rules or access from another computer.</p>
           {snapshot.listeners.addresses.length ? <ul className="gateway-deployment-values">{snapshot.listeners.addresses.map((address, index) => <li key={index}><code>{address}</code></li>)}</ul> : <p>{snapshot.listeners.omittedEntries > 0 ? "No supported listening addresses are available to display." : "No listening addresses were reported."}</p>}
           {snapshot.listeners.omittedEntries > 0 && <p>At least {snapshot.listeners.omittedEntries} additional or unsupported {snapshot.listeners.omittedEntries === 1 ? "address omitted" : "addresses omitted"}. The displayed list is incomplete.</p>}
-        </section>
-        <section className="gateway-deployment-panel" aria-labelledby="deployment-public-title"><h3 id="deployment-public-title">Public operator address</h3><p className="gateway-deployment-address"><code>{snapshot.publicOperatorAddress.value || "Uses the requesting gateway address"}</code></p><p><strong>Source:</strong> {publicSources[snapshot.publicOperatorAddress.source]}</p><p>{snapshot.publicOperatorAddress.description}</p><p>Manage the saved address under Security → Operator settings. This address does not configure a listener or enable HTTPS.</p></section>
-        <section className="gateway-deployment-panel" aria-labelledby="deployment-runtime-title"><h3 id="deployment-runtime-title">Runtime environment</h3><dl className="gateway-deployment-config">
+        </div></section>
+        <section className="gateway-deployment-panel" aria-labelledby="deployment-public-title"><div className="gateway-deployment-panel-heading"><h3 id="deployment-public-title">Public operator address</h3><p>The address included in published operator links.</p></div><div className="gateway-deployment-panel-body"><p className="gateway-deployment-address"><code>{snapshot.publicOperatorAddress.value || "Uses the requesting gateway address"}</code></p><p><strong>Source:</strong> {publicSources[snapshot.publicOperatorAddress.source]}</p><p>{snapshot.publicOperatorAddress.description}</p><p>Manage the saved address under Security → Operator settings. This address does not configure a listener or enable HTTPS.</p></div></section>
+        <section className="gateway-deployment-panel" aria-labelledby="deployment-runtime-title"><div className="gateway-deployment-panel-heading"><h3 id="deployment-runtime-title">Runtime environment</h3><p>The process and data directory currently in use.</p></div><div className="gateway-deployment-panel-body"><dl className="gateway-deployment-config">
           <div className="gateway-deployment-config-row"><dt>Started</dt><dd><time dateTime={snapshot.startedAt}>{date(snapshot.startedAt)}</time></dd></div>
           <div className="gateway-deployment-config-row"><dt>Environment<small>Source: {snapshot.environment.source}</small></dt><dd><code>{snapshot.environment.value}</code></dd></div>
           <div className="gateway-deployment-config-row"><dt>Gateway data directory<small>Source: {snapshot.configuration.dataDirectory.source}</small></dt><dd><code>{snapshot.configuration.dataDirectory.value}</code></dd></div>
-        </dl></section>
-        <section className="gateway-deployment-panel" aria-labelledby="deployment-proxy-title"><h3 id="deployment-proxy-title">Proxy and certificate observations</h3><p><strong>Forwarded headers:</strong> {snapshot.transport.forwardedHeadersEnabled === null ? "Not determined" : snapshot.transport.forwardedHeadersEnabled ? "Enabled by hosting configuration" : "Not enabled"}</p>{snapshot.transport.forwardedHeadersHostOverride && <p>The host requests a forwarded-header override.</p>}<p>{snapshot.transport.proxyNote}</p><p>Certificate trust, renewal and the certificate presented by a proxy are not verified by this page.</p></section>
+        </dl></div></section>
+        <section className="gateway-deployment-panel" aria-labelledby="deployment-proxy-title"><div className="gateway-deployment-panel-heading"><h3 id="deployment-proxy-title">Proxy and certificate observations</h3><p>Transport information visible to the gateway process.</p></div><div className="gateway-deployment-panel-body"><p><strong>Forwarded headers:</strong> {snapshot.transport.forwardedHeadersEnabled === null ? "Not determined" : snapshot.transport.forwardedHeadersEnabled ? "Enabled by hosting configuration" : "Not enabled"}</p>{snapshot.transport.forwardedHeadersHostOverride && <p>The host requests a forwarded-header override.</p>}<p>{snapshot.transport.proxyNote}</p><p>Certificate trust, renewal and the certificate presented by a proxy are not verified by this page.</p></div></section>
       </div>
-      <section className="gateway-deployment-panel" aria-labelledby="deployment-config-title"><h3 id="deployment-config-title">Startup configuration</h3><p>Selected deployment values and their winning configuration sources. Captured <time dateTime={snapshot.configuration.capturedAt}>{date(snapshot.configuration.capturedAt)}</time>. Compare these inputs with the actual listening addresses above.</p>
-        <dl className="gateway-deployment-config"><ConfigurationRow label="URL bindings" value={snapshot.configuration.urls} /><ConfigurationRow label="Kestrel endpoints" value={snapshot.configuration.kestrelEndpoints} /><ConfigurationRow label="Allowed hosts" value={snapshot.configuration.allowedHosts} /></dl><p>{snapshot.configuration.restartNote}</p>
+      <section className="gateway-deployment-panel" aria-labelledby="deployment-config-title"><div className="gateway-deployment-panel-heading"><h3 id="deployment-config-title">Startup configuration</h3><p>Selected deployment values and their winning configuration sources.</p></div><div className="gateway-deployment-panel-body"><p>Captured <time dateTime={snapshot.configuration.capturedAt}>{date(snapshot.configuration.capturedAt)}</time>. Compare these inputs with the actual listening addresses above.</p>
+        <dl className="gateway-deployment-config"><ConfigurationRow label="URL bindings" value={snapshot.configuration.urls} /><ConfigurationRow label="Kestrel endpoints" value={snapshot.configuration.kestrelEndpoints} /><ConfigurationRow label="Allowed hosts" value={snapshot.configuration.allowedHosts} /></dl><p>{snapshot.configuration.restartNote}</p></div>
       </section>
     </>}
   </section>;

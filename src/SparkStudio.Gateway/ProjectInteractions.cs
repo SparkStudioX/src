@@ -42,7 +42,8 @@ internal static class ProjectInteractions
             if (ProjectStore.Required(props, "script").Length > 65536) throw new ArgumentException("Button scripts are limited to 64 KB.");
         }
         else if (action == "message") ComponentEventValidator.ValidateMessageAction(props["message"]);
-        else if (action != "closePopup") throw new ArgumentException("Button action must be navigate, script, openPopup, closePopup or message.");
+        else if (action == "setTagValue") NativeTagActionDefinitions.Validate(props["tagWrite"]);
+        else if (action != "closePopup") throw new ArgumentException("Button action must be navigate, script, openPopup, closePopup, message or setTagValue.");
     }
 
     public static void ValidateDrawingActions(JsonObject project)

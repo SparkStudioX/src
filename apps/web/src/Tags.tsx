@@ -1,10 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, displayValue } from "./api";
 import { Field } from "./App";
 import Icon from "./Icon";
 import TagTransfer from "./TagTransfer";
 import TagModels from "./TagModels";
 import type { Connection, Tag, TagDefinition } from "./types";
+import CreationMenu, { type CreationChoice } from "./CreationMenu";
+
+type NewTagKind = "memory" | "opcua" | "expression";
+const newTagChoices: CreationChoice<NewTagKind>[] = [
+  { value: "memory", label: "Memory tag", description: "Store a value on the gateway", icon: "value" },
+  { value: "opcua", label: "OPC UA tag", description: "Read a connected server variable", icon: "plug" },
+  { value: "expression", label: "Expression tag", description: "Calculate a value from other tags", icon: "code" },
+];
 
 const dataTypes = [
   "Boolean",
@@ -47,6 +55,7 @@ export default function Tags({
   const [models, setModels] = useState(false);
   const [scanGroups, setScanGroups] = useState<{ name: string; publishingIntervalMs: number; enabled?: boolean }[]>([]);
   const [inputsText, setInputsText] = useState("{}");
+  const loadSerial = useRef(0), loadPending = useRef(false), operationSerial = useRef(0);
   const selected = definitions.find(
     (definition) => definition.path === selectedPath,
   );
@@ -55,21 +64,30 @@ export default function Tags({
     (connection) => connection.type === "opcua",
   );
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const reload = useCallback(async (quiet = false) => {
+    if (quiet && loadPending.current) return;
+    const run = ++loadSerial.current;
+    loadPending.current = true;
+    if (!quiet) setLoading(true);
     try {
       const [configured, model] = await Promise.all([api<TagDefinition[]>("/tag-definitions"), api<{ scanGroups: { name: string; publishingIntervalMs: number; enabled?: boolean }[] }>("/tag-engineering/export")]);
-      setDefinitions(configured); setScanGroups(model.scanGroups);
+      if (run !== loadSerial.current) return;
+      setDefinitions(configured); setScanGroups(model.scanGroups); setError("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      if (run === loadSerial.current) setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      setLoading(false);
+      if (run === loadSerial.current) { loadPending.current = false; if (!quiet) setLoading(false); }
     }
   }, []);
   useEffect(() => {
     void reload();
+    return () => { loadSerial.current++; loadPending.current = false; operationSerial.current++; };
   }, [reload]);
+  useEffect(() => {
+    if (draft || busy || transfer || models || deleteConfirm) return;
+    const timer = window.setInterval(() => { if (document.visibilityState !== "hidden") void reload(true); }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [reload, draft, busy, transfer, models, deleteConfirm]);
 
   const folders = useMemo(() => {
     const found = new Set<string>();
@@ -111,7 +129,7 @@ export default function Tags({
     setDeleteConfirm(false);
     setInputsText(JSON.stringify(definition.inputs ?? {}, null, 2));
   };
-  const add = (kind: "memory" | "opcua" | "expression") => {
+  const add = (kind: NewTagKind) => {
     setSelectedPath("");
     setDeleteConfirm(false);
     setValueText("0");
@@ -130,6 +148,7 @@ export default function Tags({
   };
   const save = async () => {
     if (!current) return;
+    const operation = ++operationSerial.current;
     try {
       if (
         !/^\[[^\]]+\][^/][^\r\n]*$/.test(current.path) ||
@@ -189,7 +208,9 @@ export default function Tags({
       }
       setBusy(true);
       await api("/tags", "POST", next);
+      if (operation !== operationSerial.current) return;
       await reload();
+      if (operation !== operationSerial.current) return;
       setSelectedPath(next.path);
       setDraft(null);
       onTagsChanged();
@@ -197,19 +218,21 @@ export default function Tags({
         "Tag saved. Live values are available in the Designer and operator application.",
       );
     } catch (reason) {
-      notify(reason instanceof Error ? reason.message : String(reason), true);
+      if (operation === operationSerial.current) notify(reason instanceof Error ? reason.message : String(reason), true);
     } finally {
-      setBusy(false);
+      if (operation === operationSerial.current) setBusy(false);
     }
   };
   const remove = async () => {
     if (!selected) return;
+    const operation = ++operationSerial.current;
     setBusy(true);
     try {
       await api(
         `/tag-definitions?path=${encodeURIComponent(selected.path)}`,
         "DELETE",
       );
+      if (operation !== operationSerial.current) return;
       setDefinitions((previous) =>
         previous.filter((definition) => definition.path !== selected.path),
       );
@@ -221,9 +244,9 @@ export default function Tags({
         "Tag deleted. Any screen using this path will show a missing binding.",
       );
     } catch (reason) {
-      notify(reason instanceof Error ? reason.message : String(reason), true);
+      if (operation === operationSerial.current) notify(reason instanceof Error ? reason.message : String(reason), true);
     } finally {
-      setBusy(false);
+      if (operation === operationSerial.current) setBusy(false);
     }
   };
   const live = current
@@ -234,7 +257,6 @@ export default function Tags({
     <div className="management-page tags-page">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">A SHARED MODEL OF YOUR PROCESS</div>
           <h1>Tags</h1>
           <p>
             Organize live variables and memory values into reusable application
@@ -244,15 +266,7 @@ export default function Tags({
         <div className="page-heading-actions">
           <button className="button" onClick={() => setModels(true)}>UDTs / scan groups</button>
           <button className="button" onClick={() => setTransfer(true)}>Import / export</button>
-          <button className="button" onClick={() => add("expression")}><Icon name="plus" size={16} />Expression tag</button>
-          <button className="button" onClick={() => add("memory")}>
-            <Icon name="plus" size={16} />
-            Memory tag
-          </button>
-          <button className="button primary" onClick={() => add("opcua")}>
-            <Icon name="plus" size={16} />
-            OPC UA tag
-          </button>
+          <CreationMenu label="New Tag" menuLabel="New tag type" choices={newTagChoices} onSelect={add} />
         </div>
       </div>
       <div className="tag-manager-layout">
@@ -282,8 +296,8 @@ export default function Tags({
             </button>
           ))}
           <p className="folder-help">
-            Folders come from your tag paths. Use a slash to organize a new tag,
-            such as <code>Production/Line1/Speed</code>.
+            Folders come from your tag paths. Use slashes to organize tags:
+            <code>Production/Line1/Speed</code>
           </p>
           <div className="tag-source-note">
             <Icon name="info" size={15} />
@@ -305,16 +319,8 @@ export default function Tags({
               />
             </label>
             <span>{visible.length} tags</span>
-            <button
-              className="icon-button"
-              title="Refresh tags"
-              onClick={() => void reload()}
-              disabled={loading}
-            >
-              <Icon name="refresh" size={16} />
-            </button>
           </div>
-          {error && <div className="inline-error">{error}</div>}
+          {error && <div className="inline-error">{error} <button type="button" className="button small" disabled={loading || busy} onClick={() => void reload()}>Retry</button></div>}
           <nav aria-label="Configured tag pages" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "8px 12px" }}>
             <span role="status">{visible.length ? `${currentPage * pageSize + 1}–${Math.min((currentPage + 1) * pageSize, visible.length)} of ${visible.length} tags` : "0 tags"}</span>
             <button className="button small" disabled={currentPage === 0} onClick={() => setPage(0)}>First</button>

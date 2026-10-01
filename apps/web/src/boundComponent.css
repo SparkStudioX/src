@@ -1,10 +1,15 @@
 .bound-component, .bound-component-content { width: 100%; height: 100%; min-width: 0; min-height: 0; }
 .bound-component { position: relative; }
-/* Remove the positioned geometry too, so hidden overlapping controls cannot
-   intercept input intended for a visible control below them. */
+/* display:contents removes a boundary's visual box, not its DOM ancestry.
+   Hide only a geometry wrapper's own marker, including that boundary hop;
+   a hidden nested leaf must never hide its visible container. display:none
+   preserves mounted React owners while removing pointer and focus targets. */
 .canvas-component:has(> .bound-component-hidden),
+.canvas-component:has(> .render-boundary-contents > .bound-component-hidden),
 .popup-component:has(> .bound-component-hidden),
-.template-leaf:has(> .bound-component-hidden) { display: none; }
+.popup-component:has(> .render-boundary-contents > .bound-component-hidden),
+.template-leaf:has(> .bound-component-hidden),
+.template-leaf:has(> .render-boundary-contents > .bound-component-hidden) { display: none; }
 .bound-component.design-hidden > .bound-component-content { opacity: .35; }
 .bound-component.binding-failed { outline: 1px solid var(--warning-border); }
 .component-binding-error, .binding-visibility-note {

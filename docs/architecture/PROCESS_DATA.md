@@ -1,10 +1,24 @@
 # Alarms and retained history
 
-Open **Gateway Settings → Alarms & history** with the gateway Configuration
-capability. Add alarm conditions and historical tags using their typed fields.
-New rules start disabled. **Save configuration** applies the complete revision;
-**Cancel changes** restores the last loaded configuration. A concurrent edit is
-rejected so one administrator cannot silently overwrite another's changes.
+Open **Gateway Settings → Alarms** or **History** with the gateway Configuration
+capability. Search the list and select a rule to edit its property form. Add a new
+alarm or historical tag from the list toolbar; new rules start disabled. The
+Alarms tab also contains the shared alarm journal retention setting.
+
+Use **Browse** beside **Tag path** to search configured gateway tags and select
+their exact path. The browser shows each tag's value source, data type and enabled
+state, with bounded pages for longer lists. Choosing a tag only updates the
+selected rule's draft; it does not save configuration or write a tag value.
+Manual paths remain available.
+
+Edits stay in one shared draft when you select another rule or switch between
+Alarms and History. **Save configuration** applies both tabs together as one
+revision; **Cancel changes** discards the draft and retrieves the latest saved
+configuration on both tabs. If retrieval fails, the draft remains available.
+The pending-change summary identifies which sections have edits. Invalid
+rules block saving and can be opened from the validation message. A concurrent
+edit is rejected so one administrator cannot silently overwrite another's
+changes. Removing a rule from the draft takes effect only after saving.
 
 An alarm names a resolved tag, a high/low/equal condition, setpoint, absolute
 deadband and priority 1–4. High activates at or above its setpoint and clears below
@@ -71,8 +85,12 @@ there is no device or external database connection.
    loader leaves the draft unpublished unless `--publish` is supplied. Grant
    the operator View, Commands and Operate, and allow `[default]ProcessWorkshop/`
    in any configured project tag scope.
-3. In Gateway Settings, stage a changed deadband and choose Cancel. The saved
-   revision must be unchanged. Use Save only for the intended configuration.
+3. In **Gateway Settings → Alarms**, select Workshop high temperature and stage
+   a changed deadband. Select Workshop low temperature, then open **History**
+   and select the workshop tag. The alarm edit must remain staged. Change the
+   history retention, then choose **Cancel changes**: both tabs must restore the
+   saved values without changing the revision. Use Save only for the intended
+   configuration. Search by name or tag path to locate rules in longer lists.
 4. In the operator application, review and confirm temperature **90**. The High
    alarm activates. Acknowledge it and compare a second operator tab.
    The numeric setpoint input and command button use the same reviewed equipment

@@ -27,6 +27,10 @@ try {
   const created=await api('/projects','POST',{name:example.name}), route=`/projects/${created.id}`;
   const draft=await api(route+'/project');
   const saved=await api(route+'/project','PUT',{...draft,screens:example.screens,templates:[],parameters:{},commands:example.commands});
-  if(publish) await api(route+'/project/publish','POST',{revision:saved.revision});
+  if(publish) {
+    const publication=await api(route+'/project/publication-review');
+    assert.equal(publication.revision,saved.revision,'Workshop changed before publication review.');
+    await api(route+'/project/publish','POST',{revision:publication.revision,scriptsRevision:publication.scriptsRevision,reviewToken:publication.reviewToken});
+  }
   console.log(`Created synthetic command workshop at ${new URL(`${publish?'/runtime/':'/designer/'}${created.id}`,base)}. No equipment connections or device writes.`);
 } finally {await api('/auth/logout','POST',{audience:'engineering'});}

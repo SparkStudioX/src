@@ -42,6 +42,16 @@ node tools/load-access-permissions-example.mjs http://127.0.0.1:5091
 
 The loader refuses project/tag collisions and leaves the new project unpublished. Review its script and publish explicitly in Designer, or use `--publish` when deliberately requesting publication. It preserves existing tag-read scopes and adds `[default]AccessPermissionsWorkshop/` only for the new project. The initial value is 0; the synthetic operator action sets it to 1.
 
+As administrator, open **Gateway Settings → Security → Operator settings**.
+Search **Project tag access** for the workshop and select it. Its multiline
+allowed-paths form should contain `[default]AccessPermissionsWorkshop/`.
+Select another project, then return: each project keeps its own draft. Switch
+to **Users & access** and back to confirm unsaved scopes remain intact.
+Cancel changes before continuing if this was only a navigation exercise.
+Blanking the workshop's scope and saving should deny its non-administrator
+operator reads; restore its narrow prefix and save to resume the exercise.
+Use only the disposable workshop project, and preserve other projects' scopes.
+
 Create separate temporary accounts from the fixture’s `roles` matrix, granting project rights only on this workshop. Sign in as Viewer to read the value and verify the action is unavailable. Sign in as Operator to set the synthetic value to 1. Inspect that Equipment commands remains unchecked for this account. The Command operator role demonstrates the separate grant without issuing a physical command.
 
 Create each capability-only account without project grants. Sign in to engineering and use Settings: a Diagnostic observer sees diagnostics; a Configuration engineer sees shared configuration and deployment; Backup operator, Auditor and Session manager see their respective tasks. None can administer accounts. Use the Session manager to revoke the Viewer session, then verify its next authenticated request requires sign-in. Remove an account’s capability as administrator and verify its existing session expires.

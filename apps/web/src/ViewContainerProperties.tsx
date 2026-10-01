@@ -1,13 +1,15 @@
+import { RuntimePropertyRow } from "./RuntimePropertyRow";
 import { useEffect, useId, useState } from "react";
 import type { ReactNode } from "react";
-import type { CanvasComponent, Template } from "./types";
+import type { BindingTarget, CanvasComponent, Template } from "./types";
 import { PropertyCollectionDialog } from "./PropertyCollectionEditor";
 import { defaultViewLayout, viewLayoutError, viewLayoutKinds } from "./viewContainers";
 import type { ViewLayout, ViewLayoutKind, ViewPane } from "./viewContainers";
 import { coerceTemplateParameter, templateExpansion, templatePlacementError } from "./templateModel";
+import "./viewContainerProperties.css";
 
 function Row({ name, label, children }: { name: string; label: string; children: ReactNode }) {
-  return <div className="property-sheet-row" data-property={`viewLayout.${name}`}><label>{label}</label><div className="property-sheet-value">{children}</div><span aria-hidden="true" /></div>;
+  return <RuntimePropertyRow target={`viewLayout.${name}`} label={label} designTime={name === "initialPaneId" || name === "panes"}>{children}</RuntimePropertyRow>;
 }
 export default function ViewContainerProperties({ component, templates, parentTemplateId, onChange }: {
   component: CanvasComponent; templates: Template[]; parentTemplateId?: string; onChange: (patch: Partial<CanvasComponent["props"]>) => void;
@@ -17,6 +19,15 @@ export default function ViewContainerProperties({ component, templates, parentTe
   const id = useId();
   const reset = () => { setDraft(structuredClone(component.props.viewLayout ?? defaultViewLayout("embedded", templates[0]?.id))); setError(""); };
   useEffect(() => { reset(); setOpen(false); }, [component.id, component.props.viewLayout]);
+  function remapPaneBindings<T,>(bindings: Partial<Record<BindingTarget, T>>): Partial<Record<BindingTarget, T>> {
+    return Object.fromEntries(Object.entries(bindings).flatMap(([target, binding]) => {
+      const match = /^viewLayout\.panes\.(\d+)\.(.+)$/.exec(target);
+      if (!match) return [[target, binding]];
+      const savedId = component.props.viewLayout?.panes[Number(match[1])]?.id;
+      const index = draft.panes.findIndex(pane => pane.id === savedId);
+      return index < 0 ? [] : [[`viewLayout.panes.${index}.${match[2]}`, binding]];
+    })) as Partial<Record<BindingTarget, T>>;
+  }
   function updatePane(index: number, patch: Partial<ViewPane>) { setDraft(previous => ({ ...previous, panes: previous.panes.map((pane, at) => at === index ? { ...pane, ...patch } : pane) })); setError(""); }
   function apply() {
     try {
@@ -28,7 +39,10 @@ export default function ViewContainerProperties({ component, templates, parentTe
       }
       const next = { ...component, props: { ...component.props, viewLayout: draft } };
       const graph = templateExpansion([next], templates, parentTemplateId ? [parentTemplateId] : []); if (graph.error) throw new Error(graph.error);
-      onChange({ viewLayout: structuredClone(draft) }); setError(""); setOpen(false);
+      onChange({ viewLayout: structuredClone(draft),
+        ...(component.props.bindings && Object.keys(component.props.bindings).some(target => target.startsWith("viewLayout.panes.")) ? { bindings: remapPaneBindings(component.props.bindings) } : {}),
+        ...(component.props.queryBindings && Object.keys(component.props.queryBindings).some(target => target.startsWith("viewLayout.panes.")) ? { queryBindings: remapPaneBindings(component.props.queryBindings) } : {}),
+      }); setError(""); setOpen(false);
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
   }
   return <section className="property-sheet-group" aria-label="View container properties"><h4>View container</h4>
@@ -39,17 +53,17 @@ export default function ViewContainerProperties({ component, templates, parentTe
     <p className="binding-note">Pane IDs keep forms independent. Changing layout kind starts a new draft. Apply saves one undo step; operator tab, size and visibility changes stay local.</p>
     {error && <p className="property-sheet-error" role="alert">{error}</p>}
     <div className="property-sheet-actions"><button type="button" className="button" onClick={apply}>Apply container</button><button type="button" className="button" onClick={reset}>Cancel</button></div>
-    {open && <PropertyCollectionDialog title="Container panes" onClose={() => setOpen(false)}><p>Each pane references a shared template. Values and private state are independent and retained while its tab or dock is hidden. Parameter overrides use saved text and parent references.</p>
-      {draft.panes.map((pane, index) => { const template = templates.find(item => item.id === pane.templateId); return <fieldset key={index}><legend>Pane {index + 1}</legend>
-        <label htmlFor={`${id}-${index}-id`}>Stable ID</label><input id={`${id}-${index}-id`} aria-label={`Pane ${index + 1} ID`} value={pane.id} maxLength={64} onChange={event => updatePane(index, { id: event.target.value })} />
-        <label>Label<input aria-label={`Pane ${index + 1} label`} value={pane.label} maxLength={120} onChange={event => updatePane(index, { label: event.target.value })} /></label>
-        <label>Template<select aria-label={`Pane ${index + 1} template`} value={pane.templateId} onChange={event => updatePane(index, { templateId: event.target.value, parameters: {} })}><option value="">Choose template…</option>{templates.map(item => <option key={item.id} value={item.id} disabled={Boolean(templatePlacementError(templates, parentTemplateId, item.id))}>{item.name}</option>)}</select></label>
-        {draft.kind === "dock" && <><label>Edge<select aria-label={`Pane ${index + 1} dock edge`} value={pane.edge ?? "right"} onChange={event => updatePane(index, { edge: event.target.value as ViewPane["edge"], ...(event.target.value === "center" ? { size: undefined, initiallyOpen: undefined } : {}) })}>{["center", "left", "right", "top", "bottom"].map(edge => <option key={edge} value={edge}>{edge}</option>)}</select></label>{pane.edge !== "center" && <><label>Initial size (px)<input aria-label={`Pane ${index + 1} size`} type="number" min={80} max={1600} value={pane.size ?? 220} onChange={event => updatePane(index, { size: Number(event.target.value) })} /></label><label><input aria-label={`Pane ${index + 1} initially open`} type="checkbox" checked={pane.initiallyOpen !== false} onChange={event => updatePane(index, { initiallyOpen: event.target.checked })} />Initially open</label></>}</>}
-        {template && Object.entries(template.parameters).map(([name, value]) => { const overridden = Object.hasOwn(pane.parameters ?? {}, name); return <div key={name}><label><input type="checkbox" aria-label={`Pane ${index + 1} override ${name}`} checked={overridden} onChange={event => { const parameters = { ...pane.parameters }; if (event.target.checked) parameters[name] = value; else delete parameters[name]; updatePane(index, { parameters }); }} />Override {name}</label><input aria-label={`Pane ${index + 1} parameter ${name}`} disabled={!overridden} placeholder={value || "Template default"} value={overridden ? pane.parameters![name] : value} onChange={event => updatePane(index, { parameters: { ...pane.parameters, [name]: event.target.value } })} /></div>; })}
+    {open && <PropertyCollectionDialog title="Container panes" onClose={() => setOpen(false)}><div className="view-container-editor"><p className="view-container-help">Each pane references a shared template. Values and private state are independent and retained while its tab or dock is hidden. Parameter overrides use saved text and parent references.</p>
+      {draft.panes.map((pane, index) => { const template = templates.find(item => item.id === pane.templateId); const savedIndex = component.props.viewLayout?.panes.findIndex(item => item.id === pane.id) ?? -1; const target = (field: string) => savedIndex < 0 ? undefined : `viewLayout.panes.${savedIndex}.${field}`; return <fieldset key={index}><legend>Pane {index + 1}</legend>
+        <label htmlFor={`${id}-${index}-id`}>Stable ID (design time)<input id={`${id}-${index}-id`} aria-label={`Pane ${index + 1} ID`} value={pane.id} maxLength={64} onChange={event => updatePane(index, { id: event.target.value })} /></label>
+        <RuntimePropertyRow target={target("label")} label="Label"><input aria-label={`Pane ${index + 1} label`} value={pane.label} maxLength={120} onChange={event => updatePane(index, { label: event.target.value })} /></RuntimePropertyRow>
+        <label className="view-container-wide">Template (design time)<select aria-label={`Pane ${index + 1} template`} value={pane.templateId} onChange={event => updatePane(index, { templateId: event.target.value, parameters: {} })}><option value="">Choose template…</option>{templates.map(item => <option key={item.id} value={item.id} disabled={Boolean(templatePlacementError(templates, parentTemplateId, item.id))}>{item.name}</option>)}</select></label>
+        {draft.kind === "dock" && <><RuntimePropertyRow target={target("edge")} label="Edge"><select aria-label={`Pane ${index + 1} dock edge`} value={pane.edge ?? "right"} onChange={event => updatePane(index, { edge: event.target.value as ViewPane["edge"], ...(event.target.value === "center" ? { size: undefined, initiallyOpen: undefined } : {}) })}>{["center", "left", "right", "top", "bottom"].map(edge => <option key={edge} value={edge}>{edge}</option>)}</select></RuntimePropertyRow>{pane.edge !== "center" && <><RuntimePropertyRow target={target("size")} label="Initial size (px)"><input aria-label={`Pane ${index + 1} size`} type="number" min={80} max={1600} value={pane.size ?? 220} onChange={event => updatePane(index, { size: Number(event.target.value) })} /></RuntimePropertyRow><label className="view-container-check view-container-wide"><input aria-label={`Pane ${index + 1} initially open`} type="checkbox" checked={pane.initiallyOpen !== false} onChange={event => updatePane(index, { initiallyOpen: event.target.checked })} />Initially open</label></>}</>}
+        {template && Object.entries(template.parameters).map(([name, value]) => { const overridden = Object.hasOwn(pane.parameters ?? {}, name); return <div className="view-container-parameter view-container-wide" key={name}><label className="view-container-check"><input type="checkbox" aria-label={`Pane ${index + 1} override ${name}`} checked={overridden} onChange={event => { const parameters = { ...pane.parameters }; if (event.target.checked) parameters[name] = value; else delete parameters[name]; updatePane(index, { parameters }); }} />Override {name}</label><input aria-label={`Pane ${index + 1} parameter ${name}`} disabled={!overridden} placeholder={value || "Template default"} value={overridden ? pane.parameters![name] : value} onChange={event => updatePane(index, { parameters: { ...pane.parameters, [name]: event.target.value } })} /></div>; })}
         {(draft.kind === "tabs" || draft.kind === "dock") && <button type="button" className="button" disabled={draft.panes.length <= 1} onClick={() => setDraft({ ...draft, panes: draft.panes.filter((_, at) => at !== index), ...(draft.initialPaneId === pane.id ? { initialPaneId: undefined } : {}) })}>Remove pane</button>}
       </fieldset>; })}
       {(draft.kind === "tabs" || draft.kind === "dock") && <button type="button" className="button" disabled={draft.panes.length >= (draft.kind === "dock" ? 5 : 16)} onClick={() => { let number = 1; while (draft.panes.some(pane => pane.id === `pane${number}`)) number++; const edge = (["left", "right", "top", "bottom"] as const).find(edge => !draft.panes.some(pane => pane.edge === edge)); setDraft({ ...draft, panes: [...draft.panes, { id: `pane${number}`, label: `Pane ${number}`, templateId: templates[0]?.id ?? "", ...(draft.kind === "dock" ? { edge: edge ?? "center", size: 220 } : {}) }] }); }}>Add pane</button>}
-      {error && <p role="alert">{error}</p>}<div className="binding-actions"><button type="button" className="button" onClick={() => setOpen(false)}>Done editing</button><button type="button" className="button primary" onClick={apply}>Apply container</button></div>
+      {error && <p className="view-container-error" role="alert">{error}</p>}<div className="binding-actions"><button type="button" className="button" onClick={() => setOpen(false)}>Done editing</button><button type="button" className="button primary" onClick={apply}>Apply container</button></div></div>
     </PropertyCollectionDialog>}
   </section>;
 }

@@ -19,6 +19,20 @@ Select a Button, choose **Edit actions & events → On click**, select the **Sen
 
 The payload is literal JSON. Use a browser event when it needs current input or state values. Native message actions are available only on Button components.
 
+The **Message type** field suggests handler types declared in the current project
+for the selected scope. **Message receivers** lists matching definitions, their
+screen or template, component ID, language and authored placement. Potential
+receivers in the sender's scope are separated from other locations. This is an
+authoring directory, not an inventory of connected clients: only mounted instances
+with the exact type and scope receive at runtime. Dynamic script sends can use the
+same types, but the editor does not infer message names from JavaScript or Python.
+
+To find a receiver, open its screen/template and select it in **Layers**. Blank
+captions show the component ID; other captions show the ID on hover. The selected
+component's **General → Component ID** is read-only. Open **Edit actions & events
+→ Messages** to review its handlers. Handler IDs identify individual handlers
+within that component; the sender selects the message type, not a component ID.
+
 ## Send from JavaScript
 
 JavaScript input events, component lifecycle/message handlers and browser startup/screen-open scripts receive `app.sendMessage`. This local helper does not contact other browser tabs. For example, a template input's JavaScript commit event can send its new value to another control in that same template instance:

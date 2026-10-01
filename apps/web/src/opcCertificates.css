@@ -1,14 +1,24 @@
-.opc-certificates { display:grid; gap:16px; padding:16px 0; }
+.opc-certificates { min-width:0; }
+.opc-certificate-surface { display:grid; gap:20px; min-width:0; padding:24px; border:1px solid var(--border); border-radius:7px; background:var(--panel); }
 .opc-certificates p { margin:0; }
+.opc-certificates .page-heading p { margin-top:9px; }
+.opc-certificate-surface > p { color:var(--text-secondary); line-height:1.7; }
 .opc-certificates code { overflow-wrap:anywhere; }
 .opc-certificates label { display:flex; flex-direction:column; gap:6px; }
-.opc-certificates fieldset { display:grid; gap:16px; padding:16px; border:1px solid var(--border); }
-.opc-certificates .opc-certificate-check { flex-direction:row; align-items:center; }
+.opc-certificates label > input:not([type="checkbox"]), .opc-certificates label > select { min-width:0; height:auto; min-height:42px; padding:10px 12px; border:1px solid var(--border); border-radius:5px; background:var(--panel); color:var(--ink); font:inherit; line-height:1.5; }
+.opc-certificates label > input:focus-visible, .opc-certificates label > select:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.opc-certificates fieldset { display:grid; gap:16px; min-width:0; margin:0; padding:20px; border:1px solid var(--border); border-radius:7px; background:var(--surface-subtle); }
+.opc-certificates legend { padding:0 8px; font-weight:600; }
+.opc-certificates .opc-certificate-check { flex-direction:row; align-items:center; line-height:1.5; }
+.opc-certificates .opc-certificate-check > input[type="checkbox"] { width:16px; height:16px; flex:0 0 16px; margin:0; padding:0; accent-color:var(--accent); }
 .opc-certificate-toolbar { display:flex; gap:16px; flex-wrap:wrap; align-items:end; }
 .opc-certificate-toolbar label { flex:1; min-width:180px; }
-.opc-certificate-table { overflow:auto; }
+.opc-certificate-table { overflow:auto; border:1px solid var(--border); border-radius:5px; }
 .opc-certificate-table table { width:100%; border-collapse:collapse; }
 .opc-certificate-table th, .opc-certificate-table td { padding:12px; text-align:left; vertical-align:top; border-bottom:1px solid var(--border); }
+.opc-certificate-table th { background:var(--surface-subtle); }
+.opc-certificate-table tbody tr:last-child td { border-bottom:0; }
 .opc-certificate-table small { display:block; max-width:340px; overflow-wrap:anywhere; margin-top:4px; }
 .opc-certificate-table code { display:block; min-width:150px; max-width:300px; }
 .opc-certificate-table button { display:block; margin-bottom:6px; }
+@media(max-width:650px) { .opc-certificate-surface { padding:16px; } .opc-certificate-toolbar { align-items:stretch; } .opc-certificate-toolbar label { min-width:0; flex-basis:100%; } .opc-certificates fieldset { padding:16px; } }

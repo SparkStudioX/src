@@ -14,6 +14,41 @@
 .component-actions-fields p { font-size: 11px; line-height: 1.6; color: var(--text-secondary); margin: 0; }
 .component-actions-handler-toolbar { grid-template-columns: minmax(140px, 1fr) auto auto; align-items: end; }
 .component-actions-open { width: 100%; justify-content: center; }
+.component-message-receivers { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-subtle); min-width: 0; }
+.component-message-receivers-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.component-message-receivers h4, .component-message-receivers h5 { margin: 0; color: var(--ink); }
+.component-message-receivers h4 { font-size: 12px; }
+.component-message-receivers h5 { font-size: 11px; }
+.component-message-receivers-heading > span { flex-shrink: 0; font-size: 10px; color: var(--muted); }
+.component-message-receiver-list { margin: 0; padding: 0; list-style: none; max-height: 240px; overflow: auto; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); }
+.component-message-receiver-list > li { display: grid; gap: 5px; padding: 10px 12px; overflow-wrap: anywhere; }
+.component-message-receiver-list > li + li { border-top: 1px solid var(--border); }
+.component-message-receiver-name, .component-message-receiver-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 10px; min-width: 0; }
+.component-message-receiver-name strong { color: var(--ink); font-size: 12px; }
+.component-message-receiver-name > span { color: var(--muted); font-size: 10px; }
+.component-message-receiver-name code { font-size: 10px; }
+.component-message-receiver-meta span { color: var(--ink); font-size: 11px; }
+.component-message-receiver-meta small { color: var(--muted); font-size: 10px; }
+.component-actions-fields .component-message-receiver-path { color: var(--muted); font: 10px/1.5 Consolas, monospace; }
+.component-message-receivers-empty { padding: 9px 0; }
+.component-message-receiver-notes { margin: 0; padding-left: 18px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.component-tag-action { display: grid; gap: 16px; padding: 18px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-subtle); }
+.component-tag-target { display: grid; gap: 6px; }
+.component-tag-path { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.component-tag-value-row { display: grid; grid-template-columns: minmax(0, 1fr) 135px; gap: 12px; }
+.component-tag-action .component-tag-confirmation { display: flex; align-items: center; gap: 8px; }
+.component-tag-action .component-tag-confirmation input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.component-tag-browser { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); }
+.component-tag-results { display: grid; max-height: 235px; overflow-y: auto; min-width: 0; }
+.component-tag-results button { display: grid; gap: 5px; padding: 10px; text-align: left; border-radius: 4px; color: var(--ink); }
+.component-tag-results button:hover, .component-tag-results button.selected { background: var(--surface-subtle); }
+.component-tag-results button span { overflow-wrap: anywhere; }
+.component-tag-results button small { color: var(--muted); font-size: 10px; }
+.component-tag-action .component-tag-write-note { padding-top: 10px; border-top: 1px solid var(--border); }
+.component-tag-command-note { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 4px; background: var(--panel); overflow-wrap: anywhere; }
+.component-tag-command-note > dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 12px; margin: 0; font-size: 11px; line-height: 1.6; }
+.component-tag-command-note dt { color: var(--muted); }
+.component-tag-command-note dd { margin: 0; }
 @media (max-width: 1000px) { .component-actions-dialog .input-events-body { grid-template-columns: minmax(0, 1fr); }.component-actions-dialog .input-events-context { border-left: 0; border-top: 1px solid var(--border); } }
 @media (max-width: 600px) { .component-actions-layout { grid-template-columns: 115px minmax(0, 1fr); }.component-actions-nav { padding: 6px 3px; }.component-actions-nav button { padding: 9px 7px; }.component-actions-handler-toolbar { grid-template-columns: 1fr; }.component-actions-dialog .input-events-footer span { display: none; } }
 

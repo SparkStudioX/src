@@ -32,6 +32,18 @@ Viewer pages retain navigation, popups, filtering and table paging while disabli
 
 ## Operator data and links
 
+Open **Gateway Settings → Security**. **Users & access** and **Operator settings**
+are tabs: the first manages accounts and grants, while the second manages the
+public operator URL and each project's readable tag paths. In **Project tag
+access**, search the project list and select a project to edit its multiline
+**Tag-path prefixes** field. Enter one exact path or folder prefix per line.
+Switching projects or Security tabs preserves unsaved operator settings.
+**Save operator settings** applies the URL and all project scopes together;
+**Cancel changes** discards the draft and retrieves the latest saved settings.
+Accounts and Audit update automatically while visible; updates pause while an
+account dialog is open. Operator settings are never replaced by background
+polling. A failed load shows a contextual **Retry** action.
+
 Security settings declare readable tag paths separately for each project. An exact path grants that tag; a prefix ending in `/` grants descendants. `*` explicitly grants every gateway tag. Empty scopes grant no tag data to non-administrator operators. HTTP reads and event streams enforce the same scope; denied explicit reads return 403. Administrators and engineering designers retain engineering tag browsing. Published query/action code is trusted and can access its authored data sources; tag-read scopes are not an operating-system or Python sandbox.
 
 Designer **Operator application** in the workspace sidebar opens the published project in another tab. Copy that tab's address to share a stable project link. Use the gateway's reachable HTTPS address for remote operators; a localhost link only works on the computer opening it. Publishing updates the application at the existing link; it does not create an anonymous access grant. The Designer header no longer contains separate runtime/link buttons.

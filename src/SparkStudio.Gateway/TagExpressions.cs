@@ -59,7 +59,7 @@ public static class TagExpressions
                 throw new ArgumentException("Expression input names must be identifiers of at most 32 characters, excluding true and false.");
             if (pair.Value is not JsonValue scalar || !scalar.TryGetValue<string>(out var path))
                 throw new ArgumentException("Expression inputs must be concrete tag paths.");
-            if (!SamplePath(path)) TagDefinitionValidator.Path(path);
+            TagDefinitionValidator.Path(path);
             result.Add(pair.Key, path);
         }
         return result;
@@ -103,7 +103,7 @@ public static class TagExpressions
         return ordered.ToArray();
     }
 
-    private static bool SamplePath(string path) => path == "[default]Setpoints/TargetSpeed"
+    internal static bool SamplePath(string path) => path == "[default]Setpoints/TargetSpeed"
         || Regex.IsMatch(path, "^\\[default\\]Line/Line[12]/(Speed|Temperature|ProductionCount|Status)$", RegexOptions.CultureInvariant);
 
     public static TagValue Evaluate(Plan plan, IReadOnlyDictionary<string, TagValue> values, DateTimeOffset now, TagValue? previous = null)

@@ -7,6 +7,24 @@ const definitionFields = new Set(["versionColumn", "columns", "script", "batch"]
 const identifier = (value: unknown): value is string => typeof value === "string" && value === value.trim() && /^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(value);
 const columnFields = new Set(["key", "type", "required", "maxLength", "min", "max", "integer"]);
 
+function tableEditColumnError(column: unknown, index: number, rowKey: string, versionColumn: string, batch: boolean, keys: Set<string>): string | null {
+  const prefix = `Editable column ${index + 1}`;
+  if (!record(column) || Object.keys(column).some(field => !columnFields.has(field))) return `${prefix} contains an unsupported definition or property.`;
+  if (!key(column.key) || keys.has(column.key) || column.key === rowKey || column.key === versionColumn) return `${prefix} needs a unique exact source key distinct from the row key and version column.`;
+  const columnName = column.key;
+  if (batch && (!identifier(columnName) || [...keys, rowKey, versionColumn].some(existing => existing.toLowerCase() === columnName.toLowerCase()))) return `${prefix} needs a unique ASCII database identifier distinct from the row key and version.`;
+  keys.add(column.key);
+  if (!["string", "number", "boolean"].includes(column.type as string)) return `${prefix} must have string, number or boolean type.`;
+  for (const field of ["required", "maxLength"]) if (Object.hasOwn(column, field) && column.type !== "string") return `${prefix}: ${field} applies only to string values.`;
+  for (const field of ["min", "max", "integer"]) if (Object.hasOwn(column, field) && column.type !== "number") return `${prefix}: ${field} applies only to number values.`;
+  if (Object.hasOwn(column, "required") && typeof column.required !== "boolean") return `${prefix}: required must be true or false.`;
+  if (Object.hasOwn(column, "maxLength") && (typeof column.maxLength !== "number" || !Number.isInteger(column.maxLength) || column.maxLength < 1 || column.maxLength > 4096)) return `${prefix}: maximum length must be a whole number from 1 to 4,096.`;
+  for (const field of ["min", "max"]) if (Object.hasOwn(column, field) && !boundedNumber(column[field])) return `${prefix}: ${field} must be a finite number within the safe integer range.`;
+  if (typeof column.min === "number" && typeof column.max === "number" && column.min > column.max) return `${prefix}: minimum must not exceed maximum.`;
+  if (Object.hasOwn(column, "integer") && typeof column.integer !== "boolean") return `${prefix}: integer must be true or false.`;
+  return null;
+}
+
 export function validateTableEditDefinition(value: unknown, rowKey: unknown, allowRuntime = false): string | null {
   if (value === undefined) return null;
   if (!record(value) || Object.keys(value).some(field => !definitionFields.has(field))) return "Table editing contains an unsupported definition or property.";
@@ -18,20 +36,8 @@ export function validateTableEditDefinition(value: unknown, rowKey: unknown, all
   if (!Array.isArray(value.columns) || value.columns.length < 1 || value.columns.length > 64) return "Configure 1–64 editable columns.";
   const keys = new Set<string>();
   for (const [index, column] of value.columns.entries()) {
-    const prefix = `Editable column ${index + 1}`;
-    if (!record(column) || Object.keys(column).some(field => !columnFields.has(field))) return `${prefix} contains an unsupported definition or property.`;
-    if (!key(column.key) || keys.has(column.key) || column.key === rowKey || column.key === value.versionColumn) return `${prefix} needs a unique exact source key distinct from the row key and version column.`;
-    const columnName = column.key;
-    if (batch && (!identifier(columnName) || [...keys, rowKey, value.versionColumn].some(existing => existing.toLowerCase() === columnName.toLowerCase()))) return `${prefix} needs a unique ASCII database identifier distinct from the row key and version.`;
-    keys.add(column.key);
-    if (!["string", "number", "boolean"].includes(column.type as string)) return `${prefix} must have string, number or boolean type.`;
-    for (const field of ["required", "maxLength"]) if (Object.hasOwn(column, field) && column.type !== "string") return `${prefix}: ${field} applies only to string values.`;
-    for (const field of ["min", "max", "integer"]) if (Object.hasOwn(column, field) && column.type !== "number") return `${prefix}: ${field} applies only to number values.`;
-    if (Object.hasOwn(column, "required") && typeof column.required !== "boolean") return `${prefix}: required must be true or false.`;
-    if (Object.hasOwn(column, "maxLength") && (typeof column.maxLength !== "number" || !Number.isInteger(column.maxLength) || column.maxLength < 1 || column.maxLength > 4096)) return `${prefix}: maximum length must be a whole number from 1 to 4,096.`;
-    for (const field of ["min", "max"]) if (Object.hasOwn(column, field) && !boundedNumber(column[field])) return `${prefix}: ${field} must be a finite number within the safe integer range.`;
-    if (typeof column.min === "number" && typeof column.max === "number" && column.min > column.max) return `${prefix}: minimum must not exceed maximum.`;
-    if (Object.hasOwn(column, "integer") && typeof column.integer !== "boolean") return `${prefix}: integer must be true or false.`;
+    const error = tableEditColumnError(column, index, rowKey, value.versionColumn, batch, keys);
+    if (error) return error;
   }
   if (!batch && (!allowRuntime || Object.hasOwn(value, "script")) && (typeof value.script !== "string" || !value.script.trim() || value.script.length > 64000)) return "Table editing requires a Python handler of 1–64,000 characters.";
   return null;

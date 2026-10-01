@@ -7,7 +7,8 @@ import ts from 'typescript';
 process.on('uncaughtException',error=>{console.error(error.stack?.split('\n').filter(line=>!line.includes('data:')).join('\n')??error.message);process.exit(1);});
 process.on('unhandledRejection',error=>{console.error(error?.message??error);process.exit(1);});
 const require=createRequire(import.meta.url),cache=new Map();
-function load(name){if(cache.has(name))return cache.get(name);const file=['ts','tsx'].map(ext=>new URL(`src/${name}.${ext}`,import.meta.url)).find(file=>fs.existsSync(file));assert.ok(file,name);
+function load(name){
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');if(cache.has(name))return cache.get(name);const file=['ts','tsx'].map(ext=>new URL(`src/${name}.${ext}`,import.meta.url)).find(file=>fs.existsSync(file));assert.ok(file,name);
   const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText.replace(/import "\.\/[^"\n]+\.css";\r?\n/g,'')
     .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g,(_all,prefix,_quote,dep)=>prefix+JSON.stringify(dep.startsWith('./')?load(dep.slice(2)):pathToFileURL(require.resolve(dep)).href));
   const url='data:text/javascript;base64,'+Buffer.from(code).toString('base64');cache.set(name,url);return url;

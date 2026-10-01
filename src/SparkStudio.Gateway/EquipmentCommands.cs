@@ -78,7 +78,7 @@ public static class EquipmentCommandDefinitions
 public sealed class EquipmentCommands(ConnectorService connectors, TagEngine tags, SecurityStore security, RecoveryQuarantine recovery, TimeProvider? timeProvider = null)
 {
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
-    private sealed record Ticket(string Id, string UserId, long UserRevision, string ProjectId, string PublishedAt, JsonObject Definition, JsonNode Value, JsonNode Expected, string Configuration, DateTimeOffset Expires);
+    private sealed record Ticket(string Id, string UserId, long UserRevision, string ProjectId, string PublishedAt, string Resource, JsonObject Definition, JsonNode Value, JsonNode Expected, string Configuration, DateTimeOffset Expires, Func<CancellationToken, Task<JsonObject>>? Resolver = null, Func<bool>? CurrentSession = null);
     private readonly object gate = new();
     private readonly Dictionary<string, Ticket> tickets = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> paths = new(StringComparer.Ordinal);
@@ -92,7 +92,7 @@ public sealed class EquipmentCommands(ConnectorService connectors, TagEngine tag
     private static JsonObject Tag(ProjectStore store, string path)
     {
         var tag = store.GetRuntimeTagDefinitions().OfType<JsonObject>().SingleOrDefault(item => ProjectStore.Optional(item, "path") == path) ?? throw new ArgumentException("The configured command tag is unavailable.");
-        if (!TagDefinitionValidator.Enabled(tag) || TagDefinitionValidator.Kind(tag) is not ("memory" or "opcua")) throw new ArgumentException("Commands require enabled memory or OPC UA tags.");
+        if (!TagDefinitionValidator.Enabled(tag) || tag["effectiveEnabled"]?.GetValue<bool>() == false || !store.DefaultTagProviderEnabled() || TagDefinitionValidator.Kind(tag) is not ("memory" or "opcua")) throw new ArgumentException("Commands require enabled memory or OPC UA tags.");
         return tag;
     }
     private static string Configuration(ProjectStore store, JsonObject definition)
@@ -117,18 +117,34 @@ public sealed class EquipmentCommands(ConnectorService connectors, TagEngine tag
         return JsonSerializer.SerializeToNode(result.Value) ?? throw new InvalidOperationException("The device value is unavailable.");
     }
     public async Task<object> Review(HttpContext context, ProjectStore store, PublicationStore publication, string id, CommandReviewRequest request, CancellationToken cancellation)
+        => await ReviewDefinition(context, store, id, request.PublishedAt, Definition(publication, id, request.PublishedAt), request.Value, "command:" + id, null, cancellation);
+
+    public async Task<object> ReviewNative(HttpContext context, ProjectStore store, string resource, string stamp,
+        Func<CancellationToken, Task<JsonObject>> resolver, CancellationToken cancellation, Func<bool>? currentSession = null)
+    {
+        if (!GatewayAccess.IsOperator(context) || !security.Can(GatewayAccess.Actor(context), GatewayAccess.ProjectId(context), "command") || currentSession?.Invoke() == false)
+            throw new BadHttpRequestException("Equipment command permission and a current operator session are required.", 403);
+        recovery.EnsureOperationsAllowed();
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation); deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        var definition = await resolver(deadline.Token);
+        return await ReviewDefinition(context, store, ProjectStore.Required(definition, "id"), stamp, definition,
+            JsonSerializer.SerializeToElement(definition["value"]), resource, resolver, deadline.Token, currentSession);
+    }
+
+    private async Task<object> ReviewDefinition(HttpContext context, ProjectStore store, string id, string stamp, JsonObject definition,
+        JsonElement requested, string resource, Func<CancellationToken, Task<JsonObject>>? resolver, CancellationToken cancellation, Func<bool>? currentSession = null)
     {
         recovery.EnsureOperationsAllowed();
-        if (string.IsNullOrWhiteSpace(request.PublishedAt)) throw new ArgumentException("Load the published application before reviewing a command.");
+        if (string.IsNullOrWhiteSpace(stamp)) throw new ArgumentException("Load the published application before reviewing a command.");
         var actor = GatewayAccess.Actor(context);
         if (!GatewayAccess.IsOperator(context) || !security.Can(actor, GatewayAccess.ProjectId(context), "command")) throw new BadHttpRequestException("Equipment command permission is required.", 403);
-        var definition = Definition(publication, id, request.PublishedAt);
         if (!CanReadTargets(context, definition)) throw new BadHttpRequestException("This project's tag access does not include the command target and readback.", 403);
-        var value = EquipmentCommandDefinitions.Value(definition, request.Value);
+        var value = EquipmentCommandDefinitions.Value(definition, requested);
         var configuration = Configuration(store, definition);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation); timeout.CancelAfter(TimeSpan.FromSeconds(10));
         var expected = await Read(store, ProjectStore.Required(definition, "tagPath"), timeout.Token);
-        var ticket = new Ticket(Guid.NewGuid().ToString("N"), actor.Id, actor.Revision, GatewayAccess.ProjectId(context), request.PublishedAt, definition, value, expected, configuration, clock.GetUtcNow().AddSeconds(30));
+        if (currentSession?.Invoke() == false) throw new BadHttpRequestException("The operator session ended before review completed.", 403);
+        var ticket = new Ticket(Guid.NewGuid().ToString("N"), actor.Id, actor.Revision, GatewayAccess.ProjectId(context), stamp, resource, definition, value, expected, configuration, clock.GetUtcNow().AddSeconds(30), resolver, currentSession);
         lock (gate)
         {
             foreach (var expired in tickets.Where(pair => pair.Value.Expires <= clock.GetUtcNow()).Select(pair => pair.Key).ToArray()) tickets.Remove(expired);
@@ -136,16 +152,22 @@ public sealed class EquipmentCommands(ConnectorService connectors, TagEngine tag
             tickets.Add(ticket.Id, ticket);
         }
         security.Audit(actor, "equipment.review", ticket.ProjectId, "Reviewed", resource: ticket.Id + ":" + id);
-        return new { token = ticket.Id, commandId = id, name = ProjectStore.Required(definition, "name"), currentValue = expected, requestedValue = value, confirmation = ProjectStore.Required(definition, "confirmation"), expiresAt = ticket.Expires };
+        return new { token = ticket.Id, commandId = id, name = ProjectStore.Required(definition, "name"), currentValue = expected, requestedValue = value, confirmation = ProjectStore.Optional(definition, "confirmation") ?? "", expiresAt = ticket.Expires };
     }
     public async Task<object> Execute(HttpContext context, ProjectStore store, PublicationStore publication, string id, CommandExecuteRequest request, CancellationToken cancellation)
+        => await ExecuteDefinition(context, store, publication, id, "command:" + id, request, cancellation);
+
+    public async Task<object> ExecuteNative(HttpContext context, ProjectStore store, PublicationStore publication, string resource, CommandExecuteRequest request, CancellationToken cancellation)
+        => await ExecuteDefinition(context, store, publication, null, resource, request, cancellation);
+
+    private async Task<object> ExecuteDefinition(HttpContext context, ProjectStore store, PublicationStore publication, string? id, string resource, CommandExecuteRequest request, CancellationToken cancellation)
     {
         recovery.EnsureOperationsAllowed();
         var actor = GatewayAccess.Actor(context);
         Ticket ticket;
         lock (gate)
         {
-            if (!request.Confirmed || !tickets.TryGetValue(request.Token, out ticket!) || ticket.UserId != actor.Id || ticket.UserRevision != actor.Revision || ticket.ProjectId != GatewayAccess.ProjectId(context) || ProjectStore.Required(ticket.Definition, "id") != id) throw new InvalidOperationException("Review this command and explicitly confirm it before execution.");
+            if (!request.Confirmed || !tickets.TryGetValue(request.Token, out ticket!) || ticket.UserId != actor.Id || ticket.UserRevision != actor.Revision || ticket.ProjectId != GatewayAccess.ProjectId(context) || ticket.Resource != resource) throw new InvalidOperationException("Review this command and explicitly confirm it before execution.");
             tickets.Remove(request.Token); // A reviewed intent can dispatch at most once, including after failure.
         }
         if (ticket.Expires <= clock.GetUtcNow()) throw new InvalidOperationException("This command review expired. Review current equipment state again.");
@@ -156,20 +178,25 @@ public sealed class EquipmentCommands(ConnectorService connectors, TagEngine tag
         var dispatched = false;
         try
         {
-            security.Audit(actor, "equipment.command", ticket.ProjectId, "Started", resource: ticket.Id + ":" + id);
-            var definition = Definition(publication, id, ticket.PublishedAt);
-            if (!JsonNode.DeepEquals(definition, ticket.Definition) || Configuration(store, definition) != ticket.Configuration) throw new InvalidOperationException("Equipment configuration changed. Review the command again.");
+            security.Audit(actor, "equipment.command", ticket.ProjectId, "Started", resource: ticket.Id + ":" + ProjectStore.Required(ticket.Definition, "id"));
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation); timeout.CancelAfter(TimeSpan.FromSeconds(15));
+            var definition = ticket.Resolver is null ? Definition(publication, id!, ticket.PublishedAt) : await ticket.Resolver(timeout.Token);
+            if (!JsonNode.DeepEquals(definition, ticket.Definition) || Configuration(store, definition) != ticket.Configuration) throw new InvalidOperationException("Equipment configuration changed. Review the command again.");
             var current = await Read(store, path, timeout.Token);
             if (!Matches(current, ticket.Expected, 0)) throw new InvalidOperationException("The equipment value changed after review. Review it again.");
             void ValidateDispatch()
             {
                 timeout.Token.ThrowIfCancellationRequested();
                 recovery.EnsureOperationsAllowed();
+                if (ticket.CurrentSession?.Invoke() == false) throw new BadHttpRequestException("The operator session ended before dispatch.", 403);
                 if (!GatewayAccess.IsOperator(context) || !security.Can(actor, ticket.ProjectId, "command")) throw new BadHttpRequestException("Equipment command permission changed. Sign in and review again.", 403);
                 if (!CanReadTargets(context, definition)) throw new BadHttpRequestException("This project's command tag access changed. Review its tag access before commanding equipment.", 403);
                 if (Configuration(store, definition) != ticket.Configuration) throw new InvalidOperationException("Equipment configuration changed before dispatch.");
-                _ = Definition(publication, id, ticket.PublishedAt);
+                // Publication validation is synchronous at the dispatch boundary. The
+                // native resolver has already rechecked instance/query membership above.
+                var active = publication.GetProject();
+                if (ProjectStore.Required(active, "publishedAt") != ticket.PublishedAt) throw new InvalidOperationException("The application changed before dispatch.");
+                if (ticket.Resolver is null) _ = Definition(publication, id!, ticket.PublishedAt);
             }
             ValidateDispatch();
             var tag = Tag(store, path);
@@ -207,7 +234,7 @@ public sealed class EquipmentCommands(ConnectorService connectors, TagEngine tag
         finally { serial.Release(); }
         object Result(string status, string message, JsonNode? observed = null)
         {
-            security.Audit(actor, "equipment.command", ticket.ProjectId, status, resource: ticket.Id + ":" + id);
+            security.Audit(actor, "equipment.command", ticket.ProjectId, status, resource: ticket.Id + ":" + ProjectStore.Required(ticket.Definition, "id"));
             context.Items["spark.actionOutcome"] = status;
             return new { correlationId = ticket.Id, status, message, requestedValue = ticket.Value, observedValue = observed, completedAt = DateTimeOffset.UtcNow };
         }

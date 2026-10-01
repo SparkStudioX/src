@@ -4,6 +4,7 @@ import ts from 'typescript';
 
 const modules = new Map();
 function load(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   if (modules.has(name)) return modules.get(name);
   const source = fs.readFileSync(new URL(`src/${name}.ts`, import.meta.url), 'utf8');
   const code = ts.transpileModule(source, {compilerOptions: {module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022}}).outputText
@@ -192,5 +193,32 @@ test('template wrapper fx metadata contributes before child inspection', () => {
   const fixture = { screen: { ...screen, components: [wrapper] }, templates: [template], tags: [tag('[default]Ready', { value: true, source: 'simulated' })] };
   assert.deepEqual(health(fixture), { badCount: 0, simulated: true });
   assert.deepEqual(health({ ...fixture, tags: [{ ...fixture.tags[0], quality: 'Bad' }] }), { badCount: 1, simulated: false });
+});
+test('nested custom query dependencies remain unknown without inventing failures or descendant health', () => {
+  const source = component('source', 'label', { customProperties: { amount: { type: 'number', value: 1 } },
+    queryBindings: { 'customProperties.amount.value': { queryId: 'amount', column: 'value' } },
+    bindings: { text: { expression: 'amount', references: { amount: { kind: 'custom', key: 'amount' } } } } });
+  const child = { id: 'child', name: 'Child', width: 200, height: 100, parameters: { amount: '1' }, parameterTypes: { amount: 'number' }, components: [component('unobserved-tag', 'value', { tagPath: '[default]Missing' })] };
+  const nested = component('nested', 'template', { templateId: child.id, parameterBindings: { amount: { expression: 'amount', references: { amount: { kind: 'custom', key: 'amount', componentId: source.id } } } } });
+  const parent = { id: 'parent', name: 'Parent', width: 300, height: 200, parameters: {}, components: [source, nested] };
+  const fixture = { screen: { ...screen, components: [component('outer', 'template', { templateId: parent.id })] }, templates: [parent, child], tags: [] };
+  assert.deepEqual(health(fixture), { badCount: 0, simulated: false, unknownCount: 2 });
+  nested.props.bindings = { width: { expression: '"wrong"', references: {} } };
+  assert.deepEqual(health(fixture), { badCount: 1, simulated: false, unknownCount: 2 });
+  delete nested.props.bindings;
+  nested.props.parameterBindings.amount.references.bad = { kind: 'tag', path: '[default]Missing' };
+  assert.deepEqual(health(fixture), { badCount: 1, simulated: false, unknownCount: 1 });
+  delete nested.props.parameterBindings.amount.references.bad;
+  source.props.queryBindings['customProperties.amount.value'].queryId = '';
+  assert.equal(health(fixture).badCount, 2);
+});
+test('observed custom query failures stay errors while ready samples feed template health', () => {
+  const source = component('source', 'label', { customProperties: { amount: { type: 'number', value: 1 } }, queryBindings: { 'customProperties.amount.value': { queryId: 'amount', column: 'value' } } });
+  const template = { id: 'child', name: 'Child', width: 200, height: 100, parameters: { amount: '1' }, parameterTypes: { amount: 'number' }, components: [] };
+  const nested = component('nested', 'template', { templateId: template.id, parameterBindings: { amount: { expression: 'amount', references: { amount: { kind: 'custom', key: 'amount', componentId: source.id } } } } });
+  const document = { ...screen, components: [source, nested] };
+  const samples = status => ({ source: { 'customProperties.amount.value': { status, ...(status === 'ready' ? { value: 3 } : { error: 'Read failed' }) } } });
+  assert.deepEqual(runtimeBindingHealth(document, [template], [], {}, {}, false, undefined, samples('ready')), { badCount: 0, simulated: false, unknownCount: 1 });
+  assert.deepEqual(runtimeBindingHealth(document, [template], [], {}, {}, false, undefined, samples('error')), { badCount: 2, simulated: false });
 });
 console.log(`${passed} runtime quality checks passed.`);

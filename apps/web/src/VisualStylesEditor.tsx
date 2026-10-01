@@ -12,7 +12,7 @@ export function ComponentStyleAssignment({ component, styles = [], onChange, onM
   const style = styles.find(item => item.id === component.props.styleId);
   return <div className="inspector-section visual-style-assignment">
     <h3>Visual style</h3>
-    <div className="property-sheet-row" data-property="styleId"><label htmlFor={fieldId}>Assigned style</label><div className="property-sheet-value"><select id={fieldId} value={component.props.styleId ?? ""} onChange={event => onChange({ styleId: event.target.value || undefined })}>
+    <div className="property-sheet-row" data-property="styleId"><label htmlFor={fieldId}>Assigned style<small className="property-design-time">Design time</small></label><div className="property-sheet-value"><select id={fieldId} value={component.props.styleId ?? ""} onChange={event => onChange({ styleId: event.target.value || undefined })}>
       <option value="">None (local / theme)</option>
       {component.props.styleId && !style && <option value={component.props.styleId}>Missing style</option>}
       {styles.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}

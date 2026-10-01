@@ -1,3 +1,4 @@
+import { createTestModuleFiles } from "./test-module-files.mjs";
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -7,7 +8,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 
 const require = createRequire(import.meta.url), modules = new Map();
-const asModule = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
+const asModule = createTestModuleFiles();
 const realReact = pathToFileURL(require.resolve('react')).href;
 const hooks = asModule(`export * from ${JSON.stringify(realReact)};
 export const useState = initial => [typeof initial === 'function' ? initial() : initial, value => globalThis.__authWrites.push(value)];
@@ -18,6 +19,9 @@ modules.set('Theme', asModule('export const ThemePicker=()=>null;'));
 modules.set('ScriptEditor', asModule('export default function ScriptEditor(){return null;}'));
 modules.set('browserScripts', asModule('export const useBrowserScripts=()=>{};'));
 modules.set('GatewayConfiguration', asModule('export default function GatewayConfiguration(){return null;}'));
+// Native tag review/confirmation is exercised by check-native-tag-actions. Keep
+// these audience/permission checks independent of that hook's state provider.
+modules.set('useTagValueAction', asModule('export const useTagValueAction=()=>({confirmation:null,run:async()=>{throw new Error("Unexpected native tag activation in auth UI checks");}});'));
 
 // Seed named application state without running requests or effects. Real child
 // renderers and callback bodies are used, including the runtime read-only seam.
@@ -40,6 +44,7 @@ function seedState(context) {
   return source => ts.visitNode(source, visit);
 }
 function moduleUrl(name) {
+  if (name.endsWith('.json')) return asModule('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8'));
   if (modules.has(name)) return modules.get(name);
   const file = ['tsx', 'ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(url => fs.existsSync(url));
   assert.ok(file, name);
@@ -234,9 +239,63 @@ await check('gateway sections reflect independent capabilities and forbidden has
     const html=render(GatewayConsole);
     const nav=html.match(/<nav aria-label="Gateway sections">([^]*?)<\/nav>/)?.[1] ?? '';
     assert.ok(nav.includes(`href="#${capability}"`),capability);
+    for (const processSection of ['alarms', 'history']) assert.equal(nav.includes(`href="#${processSection}"`), capability === 'configuration', `${capability} access to ${processSection}`);
+    assert.doesNotMatch(nav, /href="#process-data"|Alarms &amp; history/);
     for(const other of Object.keys(noCapabilities).filter(key=>key!==capability)) assert.ok(!nav.includes(`href="#${other}"`),`${capability} leaked ${other}`);
     assert.doesNotMatch(nav,/href="#security"|href="#recovery"/);
     assert.doesNotMatch(html,/Gateway accounts|New user/);
+  }
+  delete globalThis.window;
+});
+await check('Alarms and History use distinct bookmarkable sections and retain one editor identity', () => {
+  // Preserve authored keys: React.Children.toArray adds traversal keys itself.
+  const rawChildren = node => Array.isArray(node) ? node.flatMap(rawChildren) : !node || typeof node !== 'object' ? [] : [node, ...rawChildren(node.props?.children)];
+  const editor = section => {
+    globalThis.window = { location: { hash: section } };
+    state(identity('engineering', {}, false, { configuration: true }), { data: null, busy: false });
+    const tree = GatewayConsole();
+    const node = rawChildren(tree).find(value => value.type?.name === 'GatewayProcessData');
+    assert.ok(node, `Expected process editor for ${section}`);
+    return { node, html: render(GatewayConsole) };
+  };
+  const alarms = editor('#alarms');
+  assert.equal(alarms.node.props.section, 'alarms');
+  assert.match(alarms.html, /href="#alarms" aria-current="page">Alarms/);
+  const history = editor('#history');
+  assert.equal(history.node.props.section, 'history');
+  assert.match(history.html, /href="#history" aria-current="page">History/);
+  assert.equal(history.node.type, alarms.node.type);
+  assert.equal(history.node.key, alarms.node.key);
+  assert.equal(history.node.key, null, 'Changing sections must not remount the shared draft owner.');
+  history.node.props.onSectionChange('alarms');
+  assert.equal(window.location.hash, '#alarms');
+  const legacy = editor('#process-data');
+  assert.equal(legacy.node.props.section, 'alarms');
+  assert.match(legacy.html, /href="#alarms" aria-current="page">Alarms/);
+  for (const hash of ['#alarms', '#history', '#process-data']) {
+    globalThis.window.location.hash = hash;
+    state(identity('engineering', {}, false, { audit: true }), { data: null, busy: false });
+    assert.equal(descendants(GatewayConsole(), value => value.type?.name === 'GatewayProcessData').length, 0);
+  }
+  delete globalThis.window;
+});
+await check('one Backups entry preserves recovery bookmarks and restricts Restore to administrators', () => {
+  for (const hash of ['#backups', '#backups/schedules', '#backups/destinations', '#backups/restore', '#recovery']) {
+    globalThis.window = { location: { hash } };
+    state(identity('engineering', {}, true), { data: null, busy: false });
+    const tree = GatewayConsole();
+    const panel = descendants(tree, node => node.type?.name === 'GatewayBackups')[0];
+    assert.ok(panel, `Missing consolidated Backups for ${hash}`);
+    assert.equal(panel.props.restoreContent?.type?.name, 'GatewayRecovery');
+    const html = render(GatewayConsole);
+    assert.match(html, /href="#backups" aria-current="page">Backups/);
+    assert.doesNotMatch(html, /href="#recovery"/);
+    state(identity('engineering', {}, false, { backups: true }), { data: null, busy: false });
+    const delegated = descendants(GatewayConsole(), node => node.type?.name === 'GatewayBackups')[0];
+    assert.ok(delegated);
+    assert.equal(delegated.props.restoreContent, undefined, 'Backup access must not grant recovery approval.');
+    state(identity('engineering', {}, false, { audit: true }), { data: null, busy: false });
+    assert.equal(descendants(GatewayConsole(), node => node.type?.name === 'GatewayBackups').length, 0);
   }
   delete globalThis.window;
 });

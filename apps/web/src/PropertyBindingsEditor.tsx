@@ -1,8 +1,8 @@
 import type { RuntimeParameters, RuntimeStateValues } from "./types";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { isInput, isSafeNumber } from "./inputs";
-import { evaluateComponentBindings, isGeometryTarget, processBindingTargets, propertyValue, supportsBindingTarget, validatePropertyBinding } from "./propertyBindings";
+import { bindingReferenceDependencies, evaluateComponentBindings, isGeometryTarget, processBindingTargets, propertyValue, supportsBindingTarget, validatePropertyBinding } from "./propertyBindings";
 import { isProcessDisplay, resolveProcessDisplay } from "./processDisplays";
 import { drawingDefaults, isDrawingComponent } from "./drawingComponents";
 import { InputStateBindingEditor } from "./InputStateBindingEditor";
@@ -12,10 +12,12 @@ import { resolveParameterBindings, validateTemplateParameterBinding } from "./te
 import { resolvePath } from "./api";
 import type { BindingTarget, CanvasComponent, InputValues, PropertyBinding, Tag, Template, NamedQuery } from "./types";
 import "./propertyBindings.css";
+import { RuntimePropertyBindingContext, RuntimePropertyRow } from "./RuntimePropertyRow";
+import { runtimeBindingTargets, runtimePropertyDefinition, runtimePropertyLabel } from "./runtimePropertyCatalog";
 import { BindingReferencesEditor, type ReferenceRow } from "./BindingReferencesEditor";
 import ChartProperties from "./ChartProperties";
 import { DatasetProperties } from "./DatasetProperties";
-import { isChart } from "./chartModel";
+import { defaultChartProps, isChart } from "./chartModel";
 import { QueryPropertyBindingEditor } from "./QueryPropertyBindingEditor";
 
 type Target = BindingTarget;
@@ -27,6 +29,8 @@ type Draft = BindingDraft | CustomDraft | { kind: "query"; target: Target };
 const ownEntry = <T,>(entries: Record<string, T> | undefined, key: string): T | undefined => entries && Object.hasOwn(entries, key) ? entries[key] : undefined;
 
 export interface PropertyBindingsEditorProps {
+  /** Additional component and shared settings, before the final custom-property section. */
+  children?: ReactNode;
   component: CanvasComponent;
   components: CanvasComponent[];
   tags: Tag[];
@@ -78,7 +82,7 @@ const identifier = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 const reserved = new Set(["true", "false", "null", "__proto__", "prototype", "constructor"]);
 function validName(name: string) { return identifier.test(name) && !reserved.has(name); }
 function formatValue(value: unknown): string {
-  return value === undefined ? "Default" : value === null ? "Unavailable" : typeof value === "string" ? JSON.stringify(value) : String(value);
+  return value === undefined ? "Default" : value === null ? "Unavailable" : typeof value === "string" ? JSON.stringify(value) : typeof value === "object" ? JSON.stringify(value) : String(value);
 }
 function componentName(component: CanvasComponent) { return `${component.props.text || component.type} · ${component.id}`; }
 function processDefault(component: CanvasComponent, target: Target): string | number | boolean | undefined {
@@ -126,7 +130,7 @@ export function PropertyBindingsEditor(props: PropertyBindingsEditorProps) {
   return <BindingsPanel key={props.component.id} {...props} />;
 }
 
-function BindingsPanel({ component, components, tags, queries = [], parameters, inputs, state, allowUnresolvedScreenState = false, communicationLost, parameterTemplate, notify = () => {}, onChange, onGeometryChange }: PropertyBindingsEditorProps) {
+function BindingsPanel({ children, component, components, tags, queries = [], parameters, inputs, state, allowUnresolvedScreenState = false, communicationLost, parameterTemplate, notify = () => {}, onChange, onGeometryChange }: PropertyBindingsEditorProps) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [applyError, setApplyError] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
@@ -154,7 +158,15 @@ function BindingsPanel({ component, components, tags, queries = [], parameters, 
   function changeDraft(next: Draft) { setApplyError(""); setDraft(next); }
   function close() { setDraft(null); setApplyError(""); }
   function propertyUse(name: string): string[] {
-    return customComponents.flatMap((owner) => [...Object.entries(owner.props.bindings || {}), ...Object.entries(owner.props.parameterBindings || {}).map(([key, binding]) => [`parameter ${key}`, binding] as const), ...Object.entries(owner.props.queryBindings || {}).flatMap(([target, source]) => Object.entries(source?.parameters || {}).map(([name, binding]) => [`query ${target} / ${name}`, binding] as const)), ...Object.entries(owner.props.dataSource?.parameters ?? {}).map(([name, binding]) => [`dataset / ${name}`, binding] as const)].filter(([, binding]) => Object.values(binding?.references || {}).some((reference) => reference.kind === "custom" && reference.key === name && (reference.componentId || owner.id) === component.id)).map(([property]) => `${owner.props.text || owner.id} · ${property}`));
+    return customComponents.flatMap((owner) => {
+      const bindings = [...Object.entries(owner.props.bindings || {}), ...Object.entries(owner.props.parameterBindings || {}).map(([key, binding]) => [`parameter ${key}`, binding] as const), ...Object.entries(owner.props.queryBindings || {}).flatMap(([target, source]) => Object.entries(source?.parameters || {}).map(([name, binding]) => [`query ${target} / ${name}`, binding] as const)), ...Object.entries(owner.props.dataSource?.parameters ?? {}).map(([name, binding]) => [`dataset / ${name}`, binding] as const)]
+        .filter(([, binding]) => Object.values(binding?.references || {}).some((reference) => reference.kind === "custom" && reference.key === name && (reference.componentId || owner.id) === component.id))
+        .map(([property]) => `${owner.props.text || owner.id} · ${property}`);
+      const reference = owner.props.tagWrite?.valueReference;
+      if (reference?.kind === "property" && (reference.componentId ?? owner.id) === component.id && reference.property === `customProperties.${name}.value`)
+        bindings.push(`${owner.props.text || owner.id} · Set tag value`);
+      return bindings;
+    });
   }
   function bindingFrom(draft: BindingDraft): PropertyBinding {
     return { expression: draft.expression, references: Object.fromEntries(draft.rows.map((row) => [row.name, row.reference])) };
@@ -194,8 +206,10 @@ function BindingsPanel({ component, components, tags, queries = [], parameters, 
   function editBinding(target: Target, mode?: "binding" | "query") {
     if (mode === "query" || mode === undefined && queryBindings[target]) { begin({ kind: "query", target }); return; }
     const binding = bindings[target];
-    const value = propertyValue(component, target) ?? processDefault(component, target) ?? (target === "tagPath" ? "[default]Equipment/Load" : target === "stateValue" ? "idle" : target === "text" ? "Ready" : target === "enabled" || target === "visible" ? true : target.toLowerCase().includes("color") ? "#2563eb" : target === "fontSize" ? 14 : 0);
-    begin({ kind: "binding", target, expression: binding?.expression ?? JSON.stringify(value), rows: Object.entries(binding?.references || {}).map(([name, reference]) => ({ id: referenceId.current++, name, reference: { ...reference } })) });
+    const definition = runtimePropertyDefinition(target, component);
+    const defaults = isChart(component.type) ? defaultChartProps(component.type === "sparkline") : isDrawingComponent(component.type) ? drawingDefaults(component.type) : {};
+    const value = propertyValue(component, target) ?? propertyValue({ ...component, props: defaults }, target) ?? processDefault(component, target) ?? definition?.default ?? (target === "tagPath" ? "[default]Equipment/Load" : target === "stateValue" ? "idle" : target === "text" ? "Ready" : target === "enabled" || target === "visible" ? true : definition?.type === "json" ? [] : definition?.type === "string" ? "" : target.toLowerCase().includes("color") ? "#2563eb" : target === "fontSize" ? 14 : 0);
+    begin({ kind: "binding", target, expression: binding?.expression ?? JSON.stringify(definition?.type === "json" ? JSON.stringify(value) : value), rows: Object.entries(binding?.references || {}).map(([name, reference]) => ({ id: referenceId.current++, name, reference: { ...reference } })) });
   }
   function editParameterBinding(name: string) {
     if (!parameterTemplate) return;
@@ -206,7 +220,9 @@ function BindingsPanel({ component, components, tags, queries = [], parameters, 
   }
   function removeParameterBinding(name: string) { const next = { ...parameterBindings }; delete next[name]; onChange({ parameterBindings: next }); }
   function unresolvedScreenKeys(binding: PropertyBinding): string[] {
-    return allowUnresolvedScreenState ? [...new Set(Object.values(binding.references).flatMap(reference => reference.kind === "screenState" && !Object.hasOwn(screenState, reference.key) ? [reference.key] : []))] : [];
+    if (!allowUnresolvedScreenState) return [];
+    try { return [...new Set(bindingReferenceDependencies(binding, component, context).flatMap(({ reference }) => reference.kind === "screenState" && !Object.hasOwn(screenState, reference.key) ? [reference.key] : []))]; }
+    catch { return []; } // Validation reports invalid references before preview.
   }
   function parameterResult(name: string, binding: PropertyBinding): { value?: string | number | boolean; error?: string } {
     if (!parameterTemplate) return { error: "Choose a template to resolve this parameter." };
@@ -228,10 +244,10 @@ function BindingsPanel({ component, components, tags, queries = [], parameters, 
     } else {
       const name = draft.name.trim();
       if (!validName(name)) { setApplyError("Use 1–64 letters, numbers, and underscores. Start with a letter or underscore; reserved names are unavailable."); return; }
-      if (draft.originalName && name !== draft.originalName && propertyUse(draft.originalName).length) { setApplyError("Update the bindings that reference this property before renaming it."); return; }
+      if (draft.originalName && name !== draft.originalName && propertyUse(draft.originalName).length) { setApplyError("Update the bindings or actions that reference this property before renaming it."); return; }
       if (name !== draft.originalName && Object.hasOwn(custom, name)) { setApplyError("A custom property already uses that name."); return; }
       if (!draft.originalName && Object.keys(custom).length >= 32) { setApplyError("A component can have up to 32 custom properties."); return; }
-      if (draft.originalName && propertyUse(draft.originalName).length && custom[draft.originalName]?.type !== draft.type) { setApplyError("Update the bindings that reference this property before changing its type."); return; }
+      if (draft.originalName && propertyUse(draft.originalName).length && custom[draft.originalName]?.type !== draft.type) { setApplyError("Update the bindings or actions that reference this property before changing its type."); return; }
       if (draft.type === "number" && (!draft.value.trim() || !isSafeNumber(Number(draft.value)))) { setApplyError("Enter a finite number. Whole numbers must be within ±9,007,199,254,740,991 to preserve their exact value."); return; }
       if (draft.type === "string" && draft.value.length > 4096) { setApplyError("Text values can contain up to 4096 characters."); return; }
       const next = { ...custom };
@@ -251,46 +267,95 @@ function BindingsPanel({ component, components, tags, queries = [], parameters, 
   const parameterResults = Object.fromEntries(Object.entries(parameterBindings).map(([name, binding]) => [name, parameterResult(name, binding)]));
   const processResult = isProcessDisplay(component.type) ? resolveProcessDisplay(evaluated.component, parameters) : undefined;
 
-  return <section className="property-bindings-panel inspector-section" aria-label="Component property sheet">
+  const registered = new Set(runtimeBindingTargets(component));
+  const bindingControl = (path: string) => {
+    const target = path as Target;
+    if (!registered.has(target)) return undefined;
+    const query = queryBindings[target];
+    return { bound: Boolean(bindings[target] || query), summary: query ? `Query: ${queries.find(item => item.id === query.queryId)?.name || query.queryId} · ${query.column}` : bindings[target]?.expression, error: evaluated.errors[target], edit: () => editBinding(target) };
+  };
+
+  // Pure render helpers share this hook owner, preserving child keys and edit lifetimes.
+  function renderBindingDialog() {
+    return (draft && createPortal(<dialog ref={dialog} className="property-binding-dialog" aria-labelledby={`${id}-dialog-title`} onCancel={(event) => { event.preventDefault(); close(); }} onClose={close} onKeyDown={(event) => {
+      // Draft shortcuts must not reach canvas history or project Save. Native text undo stays intact.
+      event.stopPropagation();
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); apply(); }
+    }}>
+      <div className="binding-dialog-heading"><div><h2 id={`${id}-dialog-title`}>{draft.kind === "parameter" ? `Bind parameter ${draft.target}` : (draft.kind === "binding" || draft.kind === "query") ? `Bind ${runtimePropertyLabel(draft.target, component)}` : draft.originalName ? "Edit custom property" : "Add custom property"}</h2><p>{componentName(component)}</p></div><button type="button" aria-label="Close property editor" onClick={close}>×</button></div>
+      <div className="binding-dialog-body">
+        {(draft.kind === "binding" || draft.kind === "query") && <label>Binding source<select aria-label="Property binding source" value={draft.kind} onChange={event => editBinding(draft.target, event.target.value as "binding" | "query")}><option value="binding">Expression</option><option value="query">Named query</option></select></label>}
+        {draft.kind === "custom" ? <>
+          <label>Name<input autoFocus aria-label="Custom property name" value={draft.name} maxLength={64} disabled={Boolean(draft.originalName && propertyUse(draft.originalName).length)} onChange={(event) => changeDraft({ ...draft, name: event.target.value })} placeholder="targetCount" /></label>
+          <p className="binding-note">{draft.originalName && propertyUse(draft.originalName).length ? `Name is locked because these references use it: ${propertyUse(draft.originalName).join(", ")}. Update those references before renaming or removing this property.` : "Names are case sensitive, with up to 64 letters, numbers, or underscores."}</p>
+          <label>Type<select aria-label="Custom property type" value={draft.type} onChange={(event) => { const type = event.target.value as CustomType; changeDraft({ ...draft, type, value: type === "boolean" ? "false" : type === "number" ? "0" : "" }); }}><option value="number">Number</option><option value="string">Text</option><option value="boolean">Boolean</option></select></label>
+          <label>Value{draft.type === "boolean" ? <select aria-label="Custom property value" value={draft.value} onChange={(event) => changeDraft({ ...draft, value: event.target.value })}><option value="true">True</option><option value="false">False</option></select> : <input aria-label="Custom property value" inputMode={draft.type === "number" ? "decimal" : "text"} value={draft.value} onChange={(event) => changeDraft({ ...draft, value: event.target.value })} />}</label>
+        </> : draft.kind === "query" ? <QueryPropertyBindingEditor key={`${component.id}:${draft.target}`} component={component} target={draft.target} context={context} queries={queries} allowUnresolvedScreenState={allowUnresolvedScreenState} onCancel={close} onApply={binding => { const nextBindings = { ...bindings }; delete nextBindings[draft.target]; onChange({ bindings: nextBindings, queryBindings: { ...queryBindings, [draft.target]: binding } }); close(); }} onRemove={queryBindings[draft.target] ? () => { const next = { ...queryBindings }; delete next[draft.target]; onChange({ queryBindings: next }); close(); } : undefined} /> : <>
+          <label htmlFor={`${id}-expression`}>Expression</label>
+          <textarea autoFocus id={`${id}-expression`} className="binding-expression" spellCheck={false} rows={3} value={draft.expression} onChange={(event) => changeDraft({ ...draft, expression: event.target.value })} maxLength={2048} />
+          {draft.kind === "parameter" ? <p className="binding-note">Use named references from the containing form: parameters, custom properties, inputs, session state, screen state, or the containing template's private state. Tags support a fixed address or up to 16 parent-parameter placeholders; bad quality blocks the form. Password inputs are unavailable. Supports arithmetic, comparisons, <code>&amp;&amp;</code>, <code>||</code>, <code>!</code>, and expressions such as <code>ready ? 'Running' : 'Stopped'</code>. The result is converted to this parameter's {ownEntry(parameterTemplate?.parameterTypes, draft.target) || "string"} type. Saved or query row values take precedence. The selected child template does not supply its own state, parameters or inputs to this binding.</p>
+            : <p className="binding-note">Use reference names below, such as <code>count &gt; 0</code> or <code>ready ? 'Running' : 'Stopped'</code>. Supports arithmetic, comparisons, <code>&amp;&amp;</code>, <code>||</code>, and <code>!</code>. Text needs quotes; Enabled and Visible require true or false. Colors use quoted hex values, such as <code>'#2563eb'</code> (3, 4, 6, or 8 hex digits). Process values and limits require numbers, decimal places require a whole number from 0 to 6, and display flags require true or false.</p>}
+          {draft.kind === "binding" && runtimePropertyDefinition(draft.target, component)?.type === "json" && <p className="binding-note">This structured property expects JSON text with its declared shape. Use a text reference containing JSON, or a quoted JSON string such as <code>'{"[1,2]"}'</code>. The result is parsed and validated before it is applied. Keep the saved value as the fallback.</p>}
+          {isDrawingComponent(component.type) && <p className="binding-note">Drawing fill also accepts <code>'none'</code>. Stroke width requires a number from 1 to 32, rotation from 0 to 360, and Active, Flowing, and Reverse flow require true or false.</p>}
+          <BindingReferencesEditor rows={draft.rows} onChange={rows => changeDraft({ ...draft, rows })} component={component} components={components} parameters={parameters} inputKeys={inputKeys} tags={tags} state={state} parameterMode={draft.kind === "parameter"} allowTags allowUnresolvedScreenState={allowUnresolvedScreenState} />
+          <div className={`binding-preview${previewError && !deferredScreenPreview ? " has-error" : ""}`} role="status" aria-live="polite"><strong>Live preview</strong><output>{previewError || formatValue(draft.kind === "parameter" ? parameterPreview?.value : preview && propertyValue(preview.component, draft.target))}</output>{!definitionError && previewError && <p>{deferredScreenPreview ? "Apply saves this binding for its containing screen or popup. Each placement must declare compatible screen state before the project can be published." : <>This expression can be saved, but its current result is invalid. Review the expression and source data. {draft.kind === "parameter" ? "The template's controls are unavailable while its parameters cannot be resolved." : "The property uses a safe fallback while evaluation fails."}</>}</p>}</div>
+        </>}
+        {applyError && <p className="binding-apply-error" role="alert">{applyError}</p>}
+      </div>
+      {draft.kind !== "query" && <div className="binding-dialog-footer">{draft.kind === "parameter" && ownEntry(parameterBindings, draft.target) && <button type="button" className="button binding-remove" onClick={() => { removeParameterBinding(draft.target); close(); }}>Remove binding</button>}{draft.kind === "binding" && bindings[draft.target] && <button type="button" className="button binding-remove" onClick={() => { const next = { ...bindings }; delete next[draft.target]; onChange({ bindings: next }); close(); }}>Remove binding</button>}<button type="button" className="button" onClick={close}>Cancel</button><button type="button" className="button primary" onClick={apply}>Apply</button></div>}
+    </dialog>, document.body));
+  }
+
+  function renderPropertyRow(item: (typeof properties)[number]) {
+    const key = item.value;
+    const label = (wrapper || isDrawingComponent(component.type)) && key === "text" ? "Accessible label" : item.label;
+    const queryBinding = queryBindings[key];
+    const bound = Boolean(bindings[key] || queryBinding);
+    const summary = queryBinding ? `Query: ${queries.find(query => query.id === queryBinding.queryId)?.name || queryBinding.queryId} · ${queryBinding.column} · ${queryBinding.refresh?.mode === "poll" ? `${queryBinding.refresh.intervalMs} ms` : "On change"}` : bindings[key]?.expression;
+    const rawValue = propertyValue(bound ? evaluated.component : component, key);
+    const value = bound ? rawValue : rawValue ?? processDefault(component, key) ?? runtimePropertyDefinition(key, component)?.default;
+    const staticError = !bound && item.kind === "color" && value !== undefined && !(key === "fillColor" && value === "none") && (String(value).trim() !== value || !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(String(value))) ? key === "fillColor" ? "Use a hex color or 'none' for an unfilled drawing." : "Use a hex color, or clear for the default." : undefined;
+    const changeValue = (value: string | number | boolean | undefined) => isGeometryTarget(key) ? onGeometryChange({ [key]: value as number }) : onChange({ [key]: value });
+    const inputId = `${id}-property-${key}`;
+    function renderValueControl() {
+      return (<div className="property-sheet-value">
+        {queryBinding ? <span className="property-query-value">Query result · preview to read</span> : item.kind === "boolean" ? <input id={inputId} type="checkbox" checked={(value ?? (!bound && key !== "showPercent")) === true} disabled={bound} onChange={event => changeValue(event.target.checked)} />
+          : item.kind === "orientation" ? <select id={inputId} value={typeof value === "string" ? value : ""} disabled={bound} onChange={event => changeValue(event.target.value)}>
+            {!value && <option value="">Unavailable</option>}<option value="horizontal">Horizontal</option><option value="vertical">Vertical</option>
+          </select>
+            : item.kind === "number" && ((processBindingTargets as readonly string[]).includes(key) || key === "strokeWidth" || key === "rotation") ? <ProcessNumberInput id={inputId} value={value} target={key} disabled={bound} onChange={changeValue} />
+              : item.kind === "color" ? <div className="property-sheet-color"><input type="color" aria-label={`${label} picker`} value={typeof value === "string" && /^#[a-fA-F0-9]{6}$/.test(value) ? value : "#000000"} disabled={bound} onChange={event => changeValue(event.target.value)} /><input id={inputId} value={String(value ?? "")} placeholder={key === "fillColor" ? "none or #64748b" : "Default"} disabled={bound} aria-invalid={Boolean(staticError)} onChange={event => changeValue(event.target.value || undefined)} /></div>
+                : <input id={inputId} type={item.kind === "number" ? "number" : "text"} step="any" min={item.min} max={item.max} maxLength={key === "stateValue" ? 4096 : key === "unit" ? 32 : undefined} placeholder={key === "fontSize" ? "Default" : ""} value={typeof value === "number" || typeof value === "string" ? value : ""} disabled={bound} onChange={event => {
+                  if (item.kind === "text") changeValue(event.target.value);
+                  else if (!event.target.value && !isGeometryTarget(key)) changeValue(undefined);
+                  else if (event.target.value && Number.isFinite(Number(event.target.value))) changeValue(Math.max(item.min ?? -Infinity, Math.min(item.max ?? Infinity, Number(event.target.value))));
+                }} />}
+      </div>);
+    }
+    return <div className={`property-sheet-row${bound ? " is-bound" : ""}`} key={key} data-property={key}>
+      <label htmlFor={inputId}>{label}</label>
+      {renderValueControl()}
+      <button type="button" className="property-bind-button" aria-label={`${bound ? "Edit" : "Add"} ${label} binding`} title={bound ? `${summary}\nClick to edit or remove binding` : `Bind ${label}`} onClick={() => editBinding(key)}>ƒx</button>
+      {bound && <small className={evaluated.errors[key] ? "property-sheet-error" : "property-sheet-expression"} title={summary}>{queryBinding ? `${summary} · Preview in the binding editor` : evaluated.errors[key] || summary}</small>}
+      {key === "tagPath" && <small className="property-sheet-hint">Resolved: {resolvePath(String(value ?? ""), parameters) || "No tag selected"}{tags.find(tag => tag.path === resolvePath(String(value ?? ""), parameters)) ? ` · ${tags.find(tag => tag.path === resolvePath(String(value ?? ""), parameters))!.quality}` : " · unavailable"}</small>}
+      {staticError && <small role="alert" className="property-sheet-error">{staticError}</small>}
+    </div>;
+  }
+
+return <RuntimePropertyBindingContext.Provider value={bindingControl}><section className="property-bindings-panel inspector-section" aria-label="Component property sheet">
     <div className="binding-section-heading"><h3>Property sheet</h3><span>{Object.keys(bindings).length + Object.keys(queryBindings).length + Object.keys(parameterBindings).length + Number(Boolean(component.props.stateBinding))} bound</span></div>
     {wrapper && <p className="binding-note">Wrapper bindings use the containing screen or popup's inputs, parameters, and components. Template parameters and repeated-row inputs stay separate. Appearance supplies defaults for child controls; each child's explicit appearance takes precedence.</p>}
     {isDrawingComponent(component.type) && <p className="binding-note">The accessible label describes this drawing to operators. Stroke width uses pixels; rotation uses degrees. Fill color accepts a hex color or <code>none</code>. {component.type === "pipe" ? "Flowing and Reverse flow show the state you bind; Accent color controls the moving flow marks." : component.type === "equipmentSymbol" ? "Active uses Accent color to show the state you bind." : ""}</p>}
     {processResult && !processResult.available && <p className="property-sheet-error" role="alert">{processResult.diagnostic}</p>}
     <div className="property-sheet-columns"><span>Property</span><span>Value</span><span>Bind</span></div>
-    {["General", "Layout", "Appearance", ...(["value", "gauge", "multiStateIndicator", "pipe", "equipmentSymbol"].includes(component.type) || isProcessDisplay(component.type) ? ["Data"] : [])].map(group => <div className="property-sheet-group" key={group}>
+    {["General", "Layout", "Appearance", ...(["value", "gauge", "multiStateIndicator", "pipe", "equipmentSymbol", "numberInput", "spinner", "slider"].includes(component.type) || isProcessDisplay(component.type) ? ["Data"] : [])].map(group => <div className="property-sheet-group" key={group}>
       <h4>{group}</h4>
-      {properties.filter(item => item.group === group && supportsBindingTarget(component.type, item.value)).map(item => {
-        const key = item.value;
-        const label = (wrapper || isDrawingComponent(component.type)) && key === "text" ? "Accessible label" : item.label;
-        const queryBinding = queryBindings[key];
-        const bound = Boolean(bindings[key] || queryBinding);
-        const summary = queryBinding ? `Query: ${queries.find(query => query.id === queryBinding.queryId)?.name || queryBinding.queryId} · ${queryBinding.column} · ${queryBinding.refresh?.mode === "poll" ? `${queryBinding.refresh.intervalMs} ms` : "On change"}` : bindings[key]?.expression;
-        const rawValue = propertyValue(bound ? evaluated.component : component, key);
-        const value = bound ? rawValue : rawValue ?? processDefault(component, key);
-        const staticError = !bound && item.kind === "color" && value !== undefined && !(key === "fillColor" && value === "none") && (String(value).trim() !== value || !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(String(value))) ? key === "fillColor" ? "Use a hex color or 'none' for an unfilled drawing." : "Use a hex color, or clear for the default." : undefined;
-        const changeValue = (value: string | number | boolean | undefined) => isGeometryTarget(key) ? onGeometryChange({ [key]: value as number }) : onChange({ [key]: value });
-        const inputId = `${id}-property-${key}`;
-        return <div className={`property-sheet-row${bound ? " is-bound" : ""}`} key={key} data-property={key}>
-          <label htmlFor={inputId}>{label}</label>
-          <div className="property-sheet-value">
-            {queryBinding ? <span className="property-query-value">Query result · preview to read</span> : item.kind === "boolean" ? <input id={inputId} type="checkbox" checked={(value ?? (!bound && key !== "showPercent")) === true} disabled={bound} onChange={event => changeValue(event.target.checked)} />
-              : item.kind === "orientation" ? <select id={inputId} value={typeof value === "string" ? value : ""} disabled={bound} onChange={event => changeValue(event.target.value)}>
-                {!value && <option value="">Unavailable</option>}<option value="horizontal">Horizontal</option><option value="vertical">Vertical</option>
-              </select>
-              : item.kind === "number" && ((processBindingTargets as readonly string[]).includes(key) || key === "strokeWidth" || key === "rotation") ? <ProcessNumberInput id={inputId} value={value} target={key} disabled={bound} onChange={changeValue} />
-              : item.kind === "color" ? <div className="property-sheet-color"><input type="color" aria-label={`${label} picker`} value={typeof value === "string" && /^#[a-fA-F0-9]{6}$/.test(value) ? value : "#000000"} disabled={bound} onChange={event => changeValue(event.target.value)} /><input id={inputId} value={String(value ?? "")} placeholder={key === "fillColor" ? "none or #64748b" : "Default"} disabled={bound} aria-invalid={Boolean(staticError)} onChange={event => changeValue(event.target.value || undefined)} /></div>
-              : <input id={inputId} type={item.kind === "number" ? "number" : "text"} step="any" min={item.min} max={item.max} maxLength={key === "stateValue" ? 4096 : key === "unit" ? 32 : undefined} placeholder={key === "fontSize" ? "Default" : ""} value={typeof value === "number" || typeof value === "string" ? value : ""} disabled={bound} onChange={event => {
-                if (item.kind === "text") changeValue(event.target.value);
-                else if (!event.target.value && !isGeometryTarget(key)) changeValue(undefined);
-                else if (event.target.value && Number.isFinite(Number(event.target.value))) changeValue(Math.max(item.min ?? -Infinity, Math.min(item.max ?? Infinity, Number(event.target.value))));
-              }} />}
-          </div>
-          <button type="button" className="property-bind-button" aria-label={`${bound ? "Edit" : "Add"} ${label} binding`} title={bound ? `${summary}\nClick to edit or remove binding` : `Bind ${label}`} onClick={() => editBinding(key)}>ƒx</button>
-          {bound && <small className={evaluated.errors[key] ? "property-sheet-error" : "property-sheet-expression"} title={summary}>{queryBinding ? `${summary} · Preview in the binding editor` : evaluated.errors[key] || summary}</small>}
-          {key === "tagPath" && <small className="property-sheet-hint">Resolved: {resolvePath(String(value ?? ""), parameters) || "No tag selected"}{tags.find(tag => tag.path === resolvePath(String(value ?? ""), parameters)) ? ` · ${tags.find(tag => tag.path === resolvePath(String(value ?? ""), parameters))!.quality}` : " · unavailable"}</small>}
-          {staticError && <small role="alert" className="property-sheet-error">{staticError}</small>}
-        </div>;
-      })}
+      {group === "General" && <div className="property-sheet-row">
+        <label htmlFor={`${id}-component-id`}>Component ID</label>
+        <div className="property-sheet-value"><input id={`${id}-component-id`} aria-label="Component ID" value={component.id} readOnly /><small>Identifies this component in scripts, bindings and message receivers.</small></div>
+        <span />
+      </div>}
+      {properties.filter(item => item.group === group && supportsBindingTarget(component, item.value)).map(renderPropertyRow)}
     </div>)}
     <InputStateBindingEditor key={component.id} component={component} state={state} allowUnresolvedScreenState={allowUnresolvedScreenState} onChange={onChange} />
     {wrapper && <div className="binding-template-parameters">
@@ -301,41 +366,17 @@ function BindingsPanel({ component, components, tags, queries = [], parameters, 
         onEditBinding={editParameterBinding} onRemoveBinding={removeParameterBinding} />
     </div>}
     {isChart(component.type) && <><ChartProperties component={component} onChange={onChange} /><DatasetProperties component={component} context={context} queries={queries} allowUnresolvedScreenState={allowUnresolvedScreenState} onChange={onChange} /></>}
+    {children}
     <div className="binding-section-heading binding-custom-heading"><h3>Custom properties</h3><button type="button" className="button" disabled={Object.keys(custom).length >= 32} onClick={() => begin({ kind: "custom", name: "", type: "number", value: "0" })}>Add property</button></div>
     <p className="binding-note">{wrapper ? "Typed values belong to this wrapper and can drive its bindings. Child controls keep their own custom properties." : "Typed values belong to this component and can drive bindings."}</p>
     <div className="binding-custom-list">
-      {Object.entries(custom).map(([name, property]) => <div className="property-sheet-row binding-custom-property" key={name} data-property={`customProperties.${name}`}>
-        <label>{name}</label><div className="property-sheet-value"><small>{property.type} · {formatValue(property.value)}</small>{propertyUse(name).length > 0 && <small title={propertyUse(name).join("\n")}>Used by {propertyUse(name).length} binding{propertyUse(name).length === 1 ? "" : "s"}</small>}
-        <button type="button" className="button" aria-label={`Edit custom property ${name}`} onClick={() => begin({ kind: "custom", originalName: name, name, type: property.type, value: String(property.value) })}>Edit</button></div>
-        <button type="button" className="binding-remove" aria-label={`Remove custom property ${name}`} disabled={propertyUse(name).length > 0} title={propertyUse(name).length ? "Update bindings that use this property before removing it." : undefined} onClick={() => { if (propertyUse(name).length) return; const next = { ...custom }; delete next[name]; onChange({ customProperties: next }); }}>×</button>
-      </div>)}
+      {Object.entries(custom).map(([name, property]) => <RuntimePropertyRow key={name} target={`customProperties.${name}.value`} label={name} className="binding-custom-property">
+        <small>{property.type} · {formatValue(property.value)}</small>{propertyUse(name).length > 0 && <small title={propertyUse(name).join("\n")}>Used by {propertyUse(name).length} reference{propertyUse(name).length === 1 ? "" : "s"}</small>}
+        <button type="button" className="button" aria-label={`Edit custom property ${name}`} onClick={() => begin({ kind: "custom", originalName: name, name, type: property.type, value: String(property.value) })}>Edit</button>
+        <button type="button" className="binding-remove" aria-label={`Remove custom property ${name}`} disabled={propertyUse(name).length > 0} title={propertyUse(name).length ? "Update bindings or actions that use this property before removing it." : undefined} onClick={() => { if (propertyUse(name).length) return; const next = { ...custom }; delete next[name]; const nextBindings = { ...bindings }; delete nextBindings[`customProperties.${name}.value`]; const nextQueries = { ...queryBindings }; delete nextQueries[`customProperties.${name}.value`]; onChange({ customProperties: next, bindings: nextBindings, queryBindings: nextQueries }); }}>Remove</button>
+      </RuntimePropertyRow>)}
       {!Object.keys(custom).length && <p className="binding-empty">No custom properties yet.</p>}
     </div>
-    {draft && createPortal(<dialog ref={dialog} className="property-binding-dialog" aria-labelledby={`${id}-dialog-title`} onCancel={(event) => { event.preventDefault(); close(); }} onClose={close} onKeyDown={(event) => {
-      // Draft shortcuts must not reach canvas history or project Save. Native text undo stays intact.
-      event.stopPropagation();
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") { event.preventDefault(); apply(); }
-    }}>
-      <div className="binding-dialog-heading"><div><h2 id={`${id}-dialog-title`}>{draft.kind === "parameter" ? `Bind parameter ${draft.target}` : (draft.kind === "binding" || draft.kind === "query") ? `Bind ${draft.target}` : draft.originalName ? "Edit custom property" : "Add custom property"}</h2><p>{componentName(component)}</p></div><button type="button" aria-label="Close property editor" onClick={close}>×</button></div>
-      <div className="binding-dialog-body">
-        {(draft.kind === "binding" || draft.kind === "query") && <label>Binding source<select aria-label="Property binding source" value={draft.kind} onChange={event => editBinding(draft.target, event.target.value as "binding" | "query")}><option value="binding">Expression</option><option value="query">Named query</option></select></label>}
-        {draft.kind === "custom" ? <>
-          <label>Name<input autoFocus aria-label="Custom property name" value={draft.name} maxLength={64} disabled={Boolean(draft.originalName && propertyUse(draft.originalName).length)} onChange={(event) => changeDraft({ ...draft, name: event.target.value })} placeholder="targetCount" /></label>
-          <p className="binding-note">{draft.originalName && propertyUse(draft.originalName).length ? `Name is locked because these bindings use it: ${propertyUse(draft.originalName).join(", ")}. Update those references before renaming or removing this property.` : "Names are case sensitive, with up to 64 letters, numbers, or underscores."}</p>
-          <label>Type<select aria-label="Custom property type" value={draft.type} onChange={(event) => { const type = event.target.value as CustomType; changeDraft({ ...draft, type, value: type === "boolean" ? "false" : type === "number" ? "0" : "" }); }}><option value="number">Number</option><option value="string">Text</option><option value="boolean">Boolean</option></select></label>
-          <label>Value{draft.type === "boolean" ? <select aria-label="Custom property value" value={draft.value} onChange={(event) => changeDraft({ ...draft, value: event.target.value })}><option value="true">True</option><option value="false">False</option></select> : <input aria-label="Custom property value" inputMode={draft.type === "number" ? "decimal" : "text"} value={draft.value} onChange={(event) => changeDraft({ ...draft, value: event.target.value })} />}</label>
-        </> : draft.kind === "query" ? <QueryPropertyBindingEditor key={`${component.id}:${draft.target}`} component={component} target={draft.target} context={context} queries={queries} allowUnresolvedScreenState={allowUnresolvedScreenState} onCancel={close} onApply={binding => { const nextBindings = { ...bindings }; delete nextBindings[draft.target]; onChange({ bindings: nextBindings, queryBindings: { ...queryBindings, [draft.target]: binding } }); close(); }} onRemove={queryBindings[draft.target] ? () => { const next = { ...queryBindings }; delete next[draft.target]; onChange({ queryBindings: next }); close(); } : undefined} /> : <>
-          <label htmlFor={`${id}-expression`}>Expression</label>
-          <textarea autoFocus id={`${id}-expression`} className="binding-expression" spellCheck={false} rows={3} value={draft.expression} onChange={(event) => changeDraft({ ...draft, expression: event.target.value })} maxLength={2048} />
-          {draft.kind === "parameter" ? <p className="binding-note">Use named references from the containing form: parameters, custom properties, inputs, session state, screen state, or the containing template's private state. Tags support a fixed address or up to 16 parent-parameter placeholders; bad quality blocks the form. Password inputs are unavailable. Supports arithmetic, comparisons, <code>&amp;&amp;</code>, <code>||</code>, <code>!</code>, and expressions such as <code>ready ? 'Running' : 'Stopped'</code>. The result is converted to this parameter's {ownEntry(parameterTemplate?.parameterTypes, draft.target) || "string"} type. Saved or query row values take precedence. The selected child template does not supply its own state, parameters or inputs to this binding.</p>
-          : <p className="binding-note">Use reference names below, such as <code>count &gt; 0</code> or <code>ready ? 'Running' : 'Stopped'</code>. Supports arithmetic, comparisons, <code>&amp;&amp;</code>, <code>||</code>, and <code>!</code>. Text needs quotes; Enabled and Visible require true or false. Colors use quoted hex values, such as <code>'#2563eb'</code> (3, 4, 6, or 8 hex digits). Process values and limits require numbers, decimal places require a whole number from 0 to 6, and display flags require true or false.</p>}
-          {isDrawingComponent(component.type) && <p className="binding-note">Drawing fill also accepts <code>'none'</code>. Stroke width requires a number from 1 to 32, rotation from 0 to 360, and Active, Flowing, and Reverse flow require true or false.</p>}
-          <BindingReferencesEditor rows={draft.rows} onChange={rows => changeDraft({ ...draft, rows })} component={component} components={components} parameters={parameters} inputKeys={inputKeys} tags={tags} state={state} parameterMode={draft.kind === "parameter"} allowTags allowUnresolvedScreenState={allowUnresolvedScreenState} />
-          <div className={`binding-preview${previewError && !deferredScreenPreview ? " has-error" : ""}`} role="status" aria-live="polite"><strong>Live preview</strong><output>{previewError || formatValue(draft.kind === "parameter" ? parameterPreview?.value : preview && propertyValue(preview.component, draft.target))}</output>{!definitionError && previewError && <p>{deferredScreenPreview ? "Apply saves this binding for its containing screen or popup. Each placement must declare compatible screen state before the project can be published." : <>This expression can be saved, but its current result is invalid. Review the expression and source data. {draft.kind === "parameter" ? "The template's controls are unavailable while its parameters cannot be resolved." : "The property uses a safe fallback while evaluation fails."}</>}</p>}</div>
-        </>}
-        {applyError && <p className="binding-apply-error" role="alert">{applyError}</p>}
-      </div>
-      {draft.kind !== "query" && <div className="binding-dialog-footer">{draft.kind === "parameter" && ownEntry(parameterBindings, draft.target) && <button type="button" className="button binding-remove" onClick={() => { removeParameterBinding(draft.target); close(); }}>Remove binding</button>}{draft.kind === "binding" && bindings[draft.target] && <button type="button" className="button binding-remove" onClick={() => { const next = { ...bindings }; delete next[draft.target]; onChange({ bindings: next }); close(); }}>Remove binding</button>}<button type="button" className="button" onClick={close}>Cancel</button><button type="button" className="button primary" onClick={apply}>Apply</button></div>}
-    </dialog>, document.body)}
-  </section>;
+    {renderBindingDialog()}
+  </section></RuntimePropertyBindingContext.Provider>;
 }

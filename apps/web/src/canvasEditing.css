@@ -19,6 +19,11 @@
 .canvas-arrange-toolbar > span { margin-left: auto; }
 .screen-canvas.snap-grid { background-image: radial-gradient(var(--grid-dot) .65px, transparent .65px); background-size: var(--edit-grid) var(--edit-grid); }
 .canvas-host:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* Fitting a taller screen must not remove the scrollbar, gain width and grow again. */
+.canvas-host { scrollbar-gutter: stable; }
+/* A transformed child's unscaled layout box must not enlarge the scroll area.
+   Screen content already clips to this frame, including its selection handles. */
+.canvas-scaler { overflow: clip; }
 .screen-canvas:not(.runtime) .canvas-component { touch-action: none; }
 .screen-canvas:not(.runtime) { touch-action: none; }
 .screen-canvas.runtime .canvas-component { touch-action: auto; }

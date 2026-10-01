@@ -1,4 +1,5 @@
 const shapes: Record<string, React.ReactNode> = {
+  camera: <><path d="M8 5 9.5 3h5L16 5h4a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" /><circle cx="12" cy="12" r="4" /></>,
   scan: <><path d="M4 7V4h3m10 0h3v3M4 17v3h3m10 0h3v-3M7 8v8m3-8v8m4-8v8m3-8v8" /></>,
   spark: <path d="m13 2-8 12h7l-1 8 8-12h-7z" />,
   grid: (

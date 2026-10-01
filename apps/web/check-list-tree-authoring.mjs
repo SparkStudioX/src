@@ -7,10 +7,15 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 
 const require = createRequire(import.meta.url), asModule = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
-const hookUrl = asModule(`let values=[],index=0;export const begin=()=>{index=0;};export const clear=()=>{values=[];index=0;};export const useState=initial=>{const at=index++;if(!(at in values))values[at]=typeof initial==='function'?initial():initial;return[values[at],next=>{values[at]=typeof next==='function'?next(values[at]):next;}];};export const useRef=initial=>{const at=index++;return values[at]??={current:initial};};export const useEffect=()=>{};`);
+const hookUrl = asModule(`export {Children,cloneElement,isValidElement} from ${JSON.stringify(pathToFileURL(require.resolve("react")).href)};
+export const createContext=initial=>{const context={value:initial};context.Provider=({value,children})=>{context.value=value;return children;};return context;};
+export const useContext=context=>context.value;
+export const useId=()=>"runtime-property-test";
+let values=[],index=0;export const begin=()=>{index=0;};export const clear=()=>{values=[];index=0;};export const useState=initial=>{const at=index++;if(!(at in values))values[at]=typeof initial==='function'?initial():initial;return[values[at],next=>{values[at]=typeof next==='function'?next(values[at]):next;}];};export const useRef=initial=>{const at=index++;return values[at]??={current:initial};};export const useEffect=()=>{};`);
 function loader(interactive = false) {
   const modules = new Map();
   return function moduleUrl(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
     if (modules.has(name)) return modules.get(name);
     const file = ['tsx', 'ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(url => fs.existsSync(url)); assert.ok(file, name);
     const output = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
@@ -30,7 +35,7 @@ const { iconNames } = await import(modules('Icon'));
 const hooks = await import(hookUrl);
 const noOp = () => {};
 const make = (type = 'treeView') => ({ id: 'choices', type, x: 10, y: 10, width: 260, height: 200, props: { text: 'Equipment', fieldKey: 'equipment', defaultValue: 'child', options: [{ value: 'root', label: 'Plant' }, { value: 'child', label: 'Machine', ...(type === 'treeView' ? { parentValue: 'root' } : {}) }] } });
-const nodes = node => !node || typeof node !== 'object' ? [] : [node, ...React.Children.toArray(node.props?.children).flatMap(nodes)];
+const nodes = node => !node || typeof node !== 'object' ? [] : node.type?.name === 'RuntimePropertyRow' ? nodes(node.type(node.props)) : [node, ...React.Children.toArray(node.props?.children).flatMap(nodes)];
 function drive(Component, props) {
   hooks.clear(); let tree;
   const refresh = () => { hooks.begin(); tree = Component(props); };
@@ -47,7 +52,7 @@ check('list/tree definitions have row editors and plain summaries without raw JS
   for (const type of ['list', 'treeView']) {
     const html = renderToStaticMarkup(React.createElement(ListTreeOptionsEditor, { component: make(type), onChange: noOp, notify: noOp }));
     assert.match(html, /Edit options/); assert.match(html, /stages its exact value/); assert.doesNotMatch(html, /textarea|JSON|<ul|<ol/);
-    assert.match(html, /class="property-sheet-row" data-property="options"/); assert.match(html, /data-property="defaultValue"/);
+    assert.match(html, /class="property-sheet-row[^"]*" data-property="options"/); assert.match(html, /data-property="defaultValue"/);
   }
 });
 
@@ -132,7 +137,7 @@ function authoredExpression(text, selected, updateProps, screen = { components: 
   return new Function('React', 'Field', 'selected', 'queries', 'updateProps', 'screen', 'isInput', script)(React, ({ children }) => children, selected, [{ id: 'read', kind: 'query' }], updateProps, screen, isInput);
 }
 check('actual option-source controls give only tree queries a parent column and retain static options on switch', () => {
-  const sourceExpression = expressions.find(text => text.startsWith('["select", "list", "treeView"].includes(selected.type) && <Field label="Option source"'));
+  const sourceExpression = expressions.find(text => text.startsWith('["select", "list", "treeView"].includes(selected.type) && <Field designTime label="Option source"'));
   assert.ok(sourceExpression);
   for (const type of ['select', 'list', 'treeView']) {
     const component = make(type), patches = [], tree = authoredExpression(sourceExpression, component, patch => patches.push(patch));
@@ -159,7 +164,8 @@ check('query properties expose parent and selection mapping controls in list/tre
 const optionsDeclaration = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'OptionsEditor'); assert.ok(optionsDeclaration);
 const optionsScript = ts.transpileModule(`${optionsDeclaration.getText(ast)}\nreturn OptionsEditor;`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None, jsx: ts.JsxEmit.React } }).outputText;
 const { PropertyCollectionDialog } = await import(interactiveModules('PropertyCollectionEditor'));
-const SelectionOptions = new Function('React', 'useState', 'PropertyCollectionDialog', optionsScript)(React, hooks.useState, PropertyCollectionDialog);
+const { RuntimePropertyRow } = await import(interactiveModules('RuntimePropertyRow'));
+const SelectionOptions = new Function('React', 'useState', 'PropertyCollectionDialog', 'RuntimePropertyRow', optionsScript)(React, hooks.useState, PropertyCollectionDialog, RuntimePropertyRow);
 function selectionOptions(type = 'select', props = {}) {
   const component = make(type); component.props = { ...component.props, ...props }; const before = structuredClone(component), patches = [];
   const ui = drive(SelectionOptions, { component, onChange: patch => patches.push(patch) });

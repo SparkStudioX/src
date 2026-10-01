@@ -7,15 +7,19 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 
 const require = createRequire(import.meta.url), asModule = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
-const hookUrl = asModule(`let scopes=new Map(),current='',index=0;
+const hookUrl = asModule(`export {Children,cloneElement,isValidElement} from ${JSON.stringify(pathToFileURL(require.resolve("react")).href)};
+export const createContext=initial=>{const context={value:initial};context.Provider=({value,children})=>{context.value=value;return children;};return context;};
+export const useContext=context=>context.value;
+let scopes=new Map(),current='',index=0;
 export const begin=scope=>{current=scope;index=0;if(!scopes.has(scope))scopes.set(scope,[]);};export const clear=()=>{scopes=new Map();};
 export const useState=initial=>{const values=scopes.get(current),at=index++;if(!(at in values))values[at]=typeof initial==='function'?initial():initial;return[values[at],next=>{values[at]=typeof next==='function'?next(values[at]):next;}];};
 export const useRef=initial=>{const values=scopes.get(current),at=index++;return values[at]??={current:initial};};export const useId=()=>'drawing-test';export const useEffect=()=>{};export const useMemo=run=>run();`);
-const portalUrl = asModule('export const createPortal=children=>children;');
+const portalUrl = asModule('export const createPortal=(children,container)=>{if(container!==globalThis.document?.body)throw Error("Modal portal must target document.body");return children;};');
 const scriptUrl = asModule('export default function ScriptEditor(){return null;}');
 function loader(interactive = false) {
   const modules = new Map();
   return function url(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
     if (modules.has(name)) return modules.get(name);
     const file = ['tsx', 'ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(file => fs.existsSync(file)); assert.ok(file, name);
     const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
@@ -48,7 +52,13 @@ function drive(component, Component = Editor, commit = noOp, extra = {}) {
     if (typeof node.type === 'function') { hooks.begin(`${path}:${node.type.name}:${node.key || ''}`); return expand(node.type(node.props), `${path}:${node.type.name}`); }
     return { ...node, props: { ...node.props, children: React.Children.toArray(node.props?.children).map((child, index) => expand(child, `${path}:${child?.key || index}`)) } };
   }
-  const refresh = () => { tree = expand(React.createElement(Component, props)); };
+  const refresh = () => {
+    const nativeDocument = globalThis.document;
+    // Traverse detached modal contents without changing the production portal.
+    if (!nativeDocument) globalThis.document = { body: {} };
+    try { tree = expand(React.createElement(Component, props)); }
+    finally { if (nativeDocument === undefined) delete globalThis.document; else globalThis.document = nativeDocument; }
+  };
   const find = predicate => { const node = nodes(tree).find(predicate); assert.ok(node, 'Expected drawing authoring control'); return node; };
   const field = label => find(node => node.props?.['aria-label'] === label);
   const input = key => find(node => node.props?.id?.endsWith(`-property-${key}`));
@@ -62,7 +72,11 @@ const declarations = new Map(), expressions = [], inspectorEditors = new Map();
 function visit(node) {
   if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) declarations.set(node.name.text, node.initializer.getText(ast));
   if (ts.isJsxExpression(node) && node.expression) expressions.push(node.expression.getText(ast));
-  if (ts.isJsxSelfClosingElement(node) && ['PropertyBindingsEditor', 'DrawingEditor'].includes(node.tagName.getText(ast))) inspectorEditors.set(node.tagName.getText(ast), node.getText(ast));
+  if ((ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && ['PropertyBindingsEditor', 'DrawingEditor'].includes(node.tagName.getText(ast))) {
+    // Extract each editor's actual props once; children are inspected separately.
+    const editor = ts.isJsxOpeningElement(node) ? `${node.getText(ast).slice(0, -1)} />` : node.getText(ast);
+    inspectorEditors.set(node.tagName.getText(ast), editor);
+  }
   ts.forEachChild(node, visit);
 }
 visit(ast);
@@ -81,13 +95,13 @@ check('drawing collection rows open an accessible dialog and native Escape disca
   }
 });
 
-check('actual sibling inspector editors have distinct stable identities through Apply, Undo and reselection', () => {
+check('actual inspector editors have distinct stable identities through Apply, Undo and reselection', () => {
   assert.equal(inspectorEditors.size, 2);
   const code = ts.transpileModule(`return [${inspectorEditors.get('PropertyBindingsEditor')}, ${inspectorEditors.get('DrawingEditor')}];`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None, jsx: ts.JsxEmit.React } }).outputText;
   const render = new Function('React', 'PropertyBindingsEditor', 'DrawingEditor', 'selected', 'screen', 'tags', 'editorParameters', 'currentPreviewInputs', 'connected', 'updateProps', 'updateComponent', 'notify', 'applicationState', 'editingTemplate', 'project', 'queries', code);
   const keys = component => render(React, 'bindings-editor', 'drawing-editor', component, { components: [component] }, [], {}, {}, true, noOp, noOp, noOp, { values: { session: {}, screen: {} } }, false, { templates: [] }, []).map(editor => editor.key);
   const original = make(), selectedKeys = keys(original);
-  assert.equal(new Set(selectedKeys).size, 2, 'Sibling editors must not share a React key');
+  assert.equal(new Set(selectedKeys).size, 2, 'Each inspector editor has an independent React identity');
   const applied = { ...original, props: { ...original.props, points: [{ x: 0, y: 25 }, { x: 100, y: 75 }] } };
   assert.deepEqual(keys(applied), selectedKeys); assert.deepEqual(keys(structuredClone(original)), selectedKeys);
   const otherKeys = keys({ ...original, id: 'another-drawing' }); assert.equal(new Set(otherKeys).size, 2);

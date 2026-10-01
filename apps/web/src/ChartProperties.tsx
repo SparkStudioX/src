@@ -1,3 +1,4 @@
+import { RuntimePropertyRow } from "./RuntimePropertyRow";
 import { useEffect, useId, useState } from "react";
 import type { ReactNode } from "react";
 import type { CanvasComponent } from "./types";
@@ -6,7 +7,7 @@ import { validateDataset } from "./datasets";
 import type { ChartDefinition } from "./chartModel";
 
 function ChartRow({ name, label, id, children }: { name: string; label: string; id?: string; children: ReactNode }) {
-  return <div className="property-sheet-row" data-property={`chart.${name}`}><label htmlFor={id}>{label}</label><div className="property-sheet-value">{children}</div><span aria-hidden="true" /></div>;
+  return <RuntimePropertyRow target={name === "data" ? "data" : `chart.${name}`} label={label} id={id}>{children}</RuntimePropertyRow>;
 }
 
 export default function ChartProperties({ component, onChange }: { component: CanvasComponent; onChange: (props: Partial<CanvasComponent["props"]>) => void }) {
@@ -31,7 +32,7 @@ export default function ChartProperties({ component, onChange }: { component: Ca
   return <div className="property-sheet-group chart-properties"><h4>Chart</h4>
     <ChartRow name="kind" label="Chart type" id={id + "-kind"}><select id={id + "-kind"} value={draft.kind} onChange={event => setDraft({ ...draft, kind: event.target.value as ChartDefinition["kind"] })}>{chartKinds.map(kind => <option key={kind} value={kind}>{({ timeSeries: "Time series", box: "Box and whisker" } as Record<string, string>)[kind] ?? kind.charAt(0).toUpperCase() + kind.slice(1)}</option>)}</select></ChartRow>
     <ChartRow name="xKey" label="X / category column" id={id + "-x"}><input id={id + "-x"} value={draft.xKey} maxLength={128} onChange={event => setDraft({ ...draft, xKey: event.target.value })} /></ChartRow>
-    {draft.kind === "gantt" && <ChartRow name="endKey" label="Finish column" id={id + "-end"}><input id={id + "-end"} value={draft.endKey ?? ""} maxLength={128} onChange={event => setDraft({ ...draft, endKey: event.target.value || undefined })} /></ChartRow>}
+    <ChartRow name="endKey" label="Finish column" id={id + "-end"}><input id={id + "-end"} value={draft.endKey ?? ""} maxLength={128} onChange={event => setDraft({ ...draft, endKey: event.target.value || undefined })} /></ChartRow>
     <ChartRow name="qualityKey" label="Quality column" id={id + "-quality"}><input id={id + "-quality"} placeholder="None" value={draft.qualityKey ?? ""} maxLength={128} onChange={event => setDraft({ ...draft, qualityKey: event.target.value || undefined })} /></ChartRow>
     <ChartRow name="yMin" label="Y minimum" id={id + "-min"}><input id={id + "-min"} type="number" step="any" placeholder="Automatic" value={draft.yMin ?? ""} onChange={event => setDraft({ ...draft, yMin: event.target.value === "" ? undefined : Number(event.target.value) })} /></ChartRow>
     <ChartRow name="yMax" label="Y maximum" id={id + "-max"}><input id={id + "-max"} type="number" step="any" placeholder="Automatic" value={draft.yMax ?? ""} onChange={event => setDraft({ ...draft, yMax: event.target.value === "" ? undefined : Number(event.target.value) })} /></ChartRow>

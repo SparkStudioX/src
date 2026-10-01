@@ -137,7 +137,13 @@ internal static class TagCapacityChecks
                 var reviewed = await httpPreview.Content.ReadFromJsonAsync<TagImportPreview>(ProjectStore.Json) ?? throw new InvalidOperationException("Preview was empty.");
                 using var httpApply = await client.PostAsJsonAsync("/api/tag-engineering/apply", new TagImportRequest(package, reviewed.Revision, reviewed.PreviewToken), ProjectStore.Json);
                 Check(httpApply.IsSuccessStatusCode && tags.Snapshot().Length == 10_000, "tag apply accepts its large wrapped request and populates10000 live memory tags");
-                using var ordinary = await client.PostAsJsonAsync("/ordinary", package, ProjectStore.Json);
+                // Advertise the known length and wait for the server's admission
+                // response. A streamed upload can race the deliberate 413 close
+                // and report a transport reset while still sending its body.
+                using var oversizedRequest = new HttpRequestMessage(HttpMethod.Post, "/ordinary") { Content = new ByteArrayContent(bytes) };
+                oversizedRequest.Content.Headers.ContentType = new("application/json");
+                oversizedRequest.Headers.ExpectContinue = true;
+                using var ordinary = await client.SendAsync(oversizedRequest);
                 Check((int)ordinary.StatusCode == 413, "ordinary routes retain the global1MiB request-body limit");
             }
             finally { await app.StopAsync(); }

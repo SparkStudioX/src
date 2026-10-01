@@ -7,6 +7,7 @@ const asModule = code => `data:text/javascript;base64,${Buffer.from(code).toStri
 const compile = code => ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
 const modules = new Map();
 function moduleUrl(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   if (modules.has(name)) return modules.get(name);
   const code = compile(source(name)).replace(/from "\.\/([^"\n]+)"/g, (_match, dependency) => `from ${JSON.stringify(moduleUrl(dependency))}`);
   const url = asModule(code); modules.set(name, url); return url;

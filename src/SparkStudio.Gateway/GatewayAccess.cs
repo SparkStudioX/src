@@ -73,7 +73,7 @@ public static class GatewayAccess
             if (!permitted)
             {
                 var denialAction = $"denied {context.Request.Method} {route}";
-                store.Audit(actor, denialAction[..Math.Min(denialAction.Length, 100)], projectId, "denied", resource: Resource(context));
+                store.Audit(actor, AuditAction(denialAction), projectId, "denied", resource: Resource(context));
                 await Reject(context, 403, "Your account does not have permission for this operation."); return;
             }
             if (policy.Permission is "design" or "publish" or "read" or "view" or "operate" or "command"
@@ -92,23 +92,28 @@ public static class GatewayAccess
                 ? new PythonExecutionAccess(path => TagAllowed(path, false), path => TagAllowed(path, true)) : null);
             // Do not cache authenticated assets or project data after sign-out.
             if (!policy.Audit) { await next(); return; }
+            var auditAction = AuditAction(context.Request.Method + " " + route);
             // Persist an attempt before allowing a side effect. A failed final append
             // cannot make the entire operation disappear from the local trail.
-            store.Audit(actor, context.Request.Method + " " + route, projectId, "Started", resource: Resource(context));
+            store.Audit(actor, auditAction, projectId, "Started", resource: Resource(context));
             try
             {
                 await next();
-                store.Audit(actor, context.Request.Method + " " + route, projectId,
+                store.Audit(actor, auditAction, projectId,
                     context.Items["spark.actionOutcome"]?.ToString() ?? $"HTTP {context.Response.StatusCode}", resource: Resource(context));
             }
             catch (Exception exception)
             {
-                store.Audit(actor, context.Request.Method + " " + route, projectId,
+                store.Audit(actor, auditAction, projectId,
                     exception is OperationCanceledException ? "Cancelled" : "Failed", resource: Resource(context));
                 throw;
             }
         });
     }
+
+    // Retain both the operation prefix and route suffix so long component API
+    // routes still distinguish review from execution. Resource carries the path.
+    internal static string AuditAction(string action) => action.Length <= 100 ? action : action[..64] + "..." + action[^33..];
 
     private static string Audience(HttpContext context) =>
         context.Request.Headers["X-SPARK-AUDIENCE"].FirstOrDefault()

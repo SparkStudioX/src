@@ -8,6 +8,18 @@ const color = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})
 const object = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const fail = (message: string): never => { throw new Error(message); };
 
+/** Native controls must follow their resolved opaque surface, including in the opposite app theme. */
+export function nativeControlColorScheme(background: string | undefined): "light" | "dark" | undefined {
+  if (!background || !color.test(background)) return undefined;
+  let hex = background.slice(1);
+  if (hex.length <= 4) hex = [...hex].map(digit => digit + digit).join("");
+  if (hex.length === 8 && hex.slice(6).toLowerCase() !== "ff") return undefined;
+  const channels = [0, 2, 4].map(index => parseInt(hex.slice(index, index + 2), 16) / 255)
+    .map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+  const luminance = .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
+  return luminance > .179 ? "light" : "dark";
+}
+
 export function validateVisualStyles(styles: unknown): asserts styles is VisualStyle[] | undefined {
   if (styles === undefined) return;
   if (!Array.isArray(styles) || styles.length > 100) fail("A project can contain at most 100 visual styles.");

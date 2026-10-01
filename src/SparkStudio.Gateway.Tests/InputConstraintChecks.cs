@@ -59,6 +59,35 @@ internal static class InputConstraintChecks
                 await RejectAsync(() => actions.ExecuteAsync("main", "save", null, new() { ["scan"] = JsonSerializer.SerializeToElement(invalid) }, stamp, CancellationToken.None), "invalid direct barcode submission");
             result = await actions.ExecuteAsync("main", "save", null, new() { ["scan"] = JsonSerializer.SerializeToElement("000123") }, stamp, CancellationToken.None);
             Check(result["success"]!.GetValue<bool>() && result["result"]!.GetValue<string>() == "000123", "barcode preserves leading zeroes through Python");
+            var cameraProject = JsonNode.Parse("""
+            {"id":"camera-form","name":"Camera form","revision":0,"parameters":{},"screens":[{"id":"welcome","name":"Welcome","width":800,"height":600,
+              "state":{"photoUrl":{"type":"string","value":""}},"components":[
+              {"id":"camera","type":"computerCamera","x":0,"y":0,"width":320,"height":380,"props":{"text":"Visitor photo","fieldKey":"visitorPhoto","defaultValue":"","stateBinding":{"scope":"screen","key":"photoUrl"},"validation":{"required":true,"message":"Capture your photo first."}}},
+              {"id":"submit","type":"button","x":0,"y":420,"width":250,"height":50,"props":{"text":"Submit","action":"script","script":"result = inputs['visitorPhoto']"}}
+            ]}]}
+            """)!.AsObject();
+            var cameraWorkspace = catalog.Create("Camera form", cameraProject);
+            Check(cameraWorkspace.Store.GetProject()["screens"]![0]!["components"]![0]!["type"]!.GetValue<string>() == "computerCamera", "computer camera saves as a supported input component");
+            void InvalidCamera(Action<JsonObject> change, string label)
+            {
+                var invalid = cameraWorkspace.Store.GetProject(); change(invalid); Reject(() => cameraWorkspace.Store.SaveProject(invalid), label);
+            }
+            InvalidCamera(draft => draft["screens"]![0]!["components"]![0]!["props"]!["defaultValue"] = "blob:http://localhost/photo", "camera cannot save a captured image as its default");
+            InvalidCamera(draft => draft["screens"]![0]!["components"]![0]!["props"]!["tagPath"] = "", "camera cannot read a tag");
+            InvalidCamera(draft => draft["screens"]![0]!["state"]!["photoUrl"]!["value"] = "blob:http://localhost/photo", "camera's saved state default must be empty");
+            InvalidCamera(draft => draft["screens"]![0]!["state"]!["photoUrl"] = JsonNode.Parse("""{"type":"number","value":0}"""), "camera state binding requires a string");
+            stamp = cameraWorkspace.Publication.Publish(cameraWorkspace.Store, cameraWorkspace.Store.GetProject()["revision"]!.GetValue<int>())["publishedAt"]!.GetValue<string>();
+            var cameraAction = cameraWorkspace.Publication.GetAction("welcome", "submit", stamp);
+            Check(cameraAction["inputs"]![0]!["type"]!.GetValue<string>() == "computerCamera" && cameraAction["inputs"]![0]!["validation"]!["required"]!.GetValue<bool>(), "publication captures camera input and required photo rule");
+            var cameraActions = new RuntimeActions(cameraWorkspace.Publication, runner, queries);
+            foreach (var invalid in new object[] { 1, "", "https://example.com/photo.png", "data:image/png;base64,photo", "blob:null/photo", "blob:javascript:bad", "blob:http://user:secret@localhost/photo", "blob:http://localhost/photo?query", "blob:http://localhost/", "blob:http://localhost/photo#fragment" })
+                await RejectAsync(() => cameraActions.ExecuteAsync("welcome", "submit", null, new() { ["visitorPhoto"] = JsonSerializer.SerializeToElement(invalid) }, stamp, CancellationToken.None), "camera submission rejects absent or unsupported photo references");
+            result = await cameraActions.ExecuteAsync("welcome", "submit", null, new() { ["visitorPhoto"] = JsonSerializer.SerializeToElement("blob:http://localhost/photo") }, stamp, CancellationToken.None);
+            Check(result["success"]!.GetValue<bool>() && result["result"]!.GetValue<string>() == "blob:http://localhost/photo", "a camera submits only its transient browser URL without uploading PNG bytes");
+            var cameraPackage = SparkProjectPackage.Export(cameraWorkspace);
+            var cameraImported = SparkProjectPackage.Import(catalog, cameraPackage, "Camera round trip");
+            Check(cameraImported.Store.GetProject()["screens"]![0]!["state"]!["photoUrl"]!["value"]!.GetValue<string>() == "", "camera package round trip retains empty photo state");
+            Check(cameraImported.Publication.Publish(cameraImported.Store, cameraImported.Store.GetProject()["revision"]!.GetValue<int>())["published"]!.GetValue<bool>() && SparkProjectPackage.Export(cameraImported).Length > 0, "camera project imports, explicitly publishes and re-exports");
         }
         finally
         {

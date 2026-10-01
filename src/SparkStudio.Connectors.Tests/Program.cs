@@ -4,6 +4,25 @@ using Microsoft.Data.SqlClient;
 using Opc.Ua;
 using SparkStudio.Connectors;
 
+var nativeFixtureArgument = Array.IndexOf(args, "--opc-native-fixture");
+if (nativeFixtureArgument >= 0)
+{
+    if (nativeFixtureArgument + 1 >= args.Length) throw new ArgumentException("Pass a disposable fixture metadata file after --opc-native-fixture.");
+    var metadataPath = Path.GetFullPath(args[nativeFixtureArgument + 1]);
+    if (File.Exists(metadataPath) || File.Exists(metadataPath + ".stop")) throw new ArgumentException("The disposable fixture metadata and stop files must not already exist.");
+    Directory.CreateDirectory(Path.GetDirectoryName(metadataPath)!);
+    try
+    {
+        await OpcSubscriptionIntegration.RunAsync((value, message) => { if (!value) throw new Exception(message); }, nativeFixture: async (endpoint, writable, readOnly, cancellation) => {
+            await File.WriteAllTextAsync(metadataPath, JsonSerializer.Serialize(new { endpoint, writable, readOnly }), cancellation);
+            Console.WriteLine("Isolated native-action fixture metadata written. Create its .stop file to finish; maximum lifetime is 120 seconds.");
+            while (!File.Exists(metadataPath + ".stop")) await Task.Delay(100, cancellation);
+        });
+    }
+    catch (Exception error) { Console.Error.WriteLine($"Native-action OPC fixture failed: {error.GetType().Name}: {error.Message}"); Environment.ExitCode = 1; }
+    return;
+}
+
 var suites = new List<(string Name, Func<Task<int>> Run)> { ("Connector guards and pooling", RunModelChecks) };
 if (args.Contains("--sqlite-integration")) suites.Add(("SQLite integration", async () => {
     var passed = 0;

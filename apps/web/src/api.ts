@@ -133,63 +133,82 @@ export function scriptFailureMessage(stderr: string): string {
 }
 
 
-/** Validate render-critical API documents before they can replace a working view. */
-export function validateApiPayload(path: string, value: unknown): void {
-  const route = path.split("?")[0];
-  const record = (item: unknown): item is Record<string, unknown> => item !== null && typeof item === "object" && !Array.isArray(item);
-  const text = (item: unknown) => typeof item === "string" && item.length <= 65536;
-  const finite = (item: unknown) => typeof item === "number" && Number.isFinite(item);
-  const invalid = (): never => { throw new Error("The gateway returned an invalid application document. Retry or ask an administrator to inspect the project."); };
-  if (!/(?:^|\/)(?:project|publication)$/.test(route)) return;
-  if (!record(value)) invalid();
-  const document = value as Record<string, unknown>;
-  if (route.endsWith("/publication")) {
-    if (typeof document.published !== "boolean" || document.revision !== undefined && (!finite(document.revision) || !Number.isInteger(document.revision))
-      || document.published && (typeof document.publishedAt !== "string" || !Number.isFinite(Date.parse(document.publishedAt)))) invalid();
-    return;
+const apiDocumentRecord = (item: unknown): item is Record<string, unknown> => item !== null && typeof item === "object" && !Array.isArray(item);
+const apiDocumentText = (item: unknown) => typeof item === "string" && item.length <= 65536;
+const apiDocumentFinite = (item: unknown) => typeof item === "number" && Number.isFinite(item);
+const invalidApiDocument = (): never => { throw new Error("The gateway returned an invalid application document. Retry or ask an administrator to inspect the project."); };
+
+function validatePublicationDocument(document: Record<string, unknown>): void {
+  if (typeof document.published !== "boolean" || document.revision !== undefined && (!apiDocumentFinite(document.revision) || !Number.isInteger(document.revision))
+    || document.published && (typeof document.publishedAt !== "string" || !Number.isFinite(Date.parse(document.publishedAt)))) invalidApiDocument();
+}
+
+function validateApiView(item: unknown): Record<string, unknown> {
+  if (!apiDocumentRecord(item) || !apiDocumentText(item.id) || !apiDocumentText(item.name) || !apiDocumentFinite(item.width) || !apiDocumentFinite(item.height)
+    || (item.width as number) <= 0 || (item.height as number) <= 0 || !Array.isArray(item.components) || item.components.length > 10000) invalidApiDocument();
+  return item as Record<string, unknown>;
+}
+
+function validateApiViewComponents(view: Record<string, unknown>): void {
+  const componentIds = new Set<string>();
+  for (const control of view.components as unknown[]) {
+    if (!apiDocumentRecord(control) || !apiDocumentText(control.id) || !apiDocumentText(control.type) || !apiDocumentRecord(control.props)
+      || ![control.x, control.y, control.width, control.height].every(apiDocumentFinite) || (control.width as number) <= 0 || (control.height as number) <= 0) invalidApiDocument();
+    const component = control as Record<string, unknown>;
+    if (componentIds.has(component.id as string)) invalidApiDocument();
+    componentIds.add(component.id as string);
   }
-  if (!text(document.id) || !text(document.name) || !finite(document.revision) || !Number.isInteger(document.revision)
-    || !record(document.parameters) || !Object.values(document.parameters).every(item => typeof item === "string")
-    || !Array.isArray(document.screens) || document.screens.length > 4096) invalid();
-  if (document.templates !== undefined && (!Array.isArray(document.templates) || document.templates.length > 4096)) invalid();
-  const documents = [...document.screens as unknown[], ...(document.templates as unknown[] | undefined ?? [])];
-  const ids = new Set<string>();
-  for (const [documentIndex, item] of documents.entries()) {
-    if (!record(item) || !text(item.id) || !text(item.name) || !finite(item.width) || !finite(item.height)
-      || (item.width as number) <= 0 || (item.height as number) <= 0 || !Array.isArray(item.components) || item.components.length > 10000) invalid();
-    const view = item as Record<string, unknown>;
-    const viewKey = `${documentIndex < (document.screens as unknown[]).length ? "screen" : "template"}:${view.id}`;
-    if (ids.has(viewKey)) invalid(); ids.add(viewKey);
-    const componentIds = new Set<string>();
-    for (const control of view.components as unknown[]) {
-      if (!record(control) || !text(control.id) || !text(control.type) || !record(control.props)
-        || ![control.x, control.y, control.width, control.height].every(finite) || (control.width as number) <= 0 || (control.height as number) <= 0) invalid();
-      const component = control as Record<string, unknown>;
-      if (componentIds.has(component.id as string)) invalid(); componentIds.add(component.id as string);
-    }
-  }
+}
+
+function validateApiProjectMetadata(document: Record<string, unknown>): void {
   if (document.navigation !== undefined) {
     const navigation = document.navigation;
-    if (!record(navigation) || !text(navigation.startupScreenId) || !["menu", "none"].includes(String(navigation.mode))
-      || !Array.isArray(navigation.items) || !navigation.items.every(item => record(item) && text(item.screenId) && text(item.label))) invalid();
+    if (!apiDocumentRecord(navigation) || !apiDocumentText(navigation.startupScreenId) || !["menu", "none"].includes(String(navigation.mode))
+      || !Array.isArray(navigation.items) || !navigation.items.every(item => apiDocumentRecord(item) && apiDocumentText(item.screenId) && apiDocumentText(item.label))) invalidApiDocument();
   }
-  if (document.styles !== undefined && (!Array.isArray(document.styles) || !document.styles.every(item => record(item) && text(item.id) && record(item.properties)))) invalid();
-  if (document.commands !== undefined && !Array.isArray(document.commands)) invalid();
+  if (document.styles !== undefined && (!Array.isArray(document.styles) || !document.styles.every(item => apiDocumentRecord(item) && apiDocumentText(item.id) && apiDocumentRecord(item.properties)))) invalidApiDocument();
+  if (document.commands !== undefined && !Array.isArray(document.commands)) invalidApiDocument();
   if (document.localization !== undefined) {
     const catalog = document.localization;
-    if (!record(catalog) || !text(catalog.defaultLocale) || !Array.isArray(catalog.locales) || !catalog.locales.every(text)
-      || !record(catalog.messages) || !Object.values(catalog.messages).every(translations => record(translations) && Object.values(translations).every(text))) invalid();
+    if (!apiDocumentRecord(catalog) || !apiDocumentText(catalog.defaultLocale) || !Array.isArray(catalog.locales) || !catalog.locales.every(apiDocumentText)
+      || !apiDocumentRecord(catalog.messages) || !Object.values(catalog.messages).every(translations => apiDocumentRecord(translations) && Object.values(translations).every(apiDocumentText))) invalidApiDocument();
   }
+}
+
+function validateApiDocumentTree(document: Record<string, unknown>): void {
   let nodes = 0;
   const inspect = (item: unknown, depth: number): void => {
-    if (++nodes > 1000000 || depth > 64) invalid();
+    if (++nodes > 1000000 || depth > 64) invalidApiDocument();
     if (Array.isArray(item)) { item.forEach(child => inspect(child, depth + 1)); return; }
-    if (record(item)) for (const [key, child] of Object.entries(item)) {
-      if (["__proto__", "constructor", "prototype"].includes(key)) invalid();
+    if (apiDocumentRecord(item)) for (const [key, child] of Object.entries(item)) {
+      if (["__proto__", "constructor", "prototype"].includes(key)) invalidApiDocument();
       inspect(child, depth + 1);
     }
   };
   inspect(document, 0);
+}
+
+/** Validate render-critical API documents before they can replace a working view. */
+export function validateApiPayload(path: string, value: unknown): void {
+  const route = path.split("?")[0];
+  if (!/(?:^|\/)(?:project|publication)$/.test(route)) return;
+  if (!apiDocumentRecord(value)) invalidApiDocument();
+  const document = value as Record<string, unknown>;
+  if (route.endsWith("/publication")) { validatePublicationDocument(document); return; }
+  if (!apiDocumentText(document.id) || !apiDocumentText(document.name) || !apiDocumentFinite(document.revision) || !Number.isInteger(document.revision)
+    || !apiDocumentRecord(document.parameters) || !Object.values(document.parameters).every(item => typeof item === "string")
+    || !Array.isArray(document.screens) || document.screens.length > 4096) invalidApiDocument();
+  if (document.templates !== undefined && (!Array.isArray(document.templates) || document.templates.length > 4096)) invalidApiDocument();
+  const documents = [...document.screens as unknown[], ...(document.templates as unknown[] | undefined ?? [])], ids = new Set<string>();
+  for (const [documentIndex, item] of documents.entries()) {
+    const view = validateApiView(item);
+    const viewKey = `${documentIndex < (document.screens as unknown[]).length ? "screen" : "template"}:${view.id}`;
+    if (ids.has(viewKey)) invalidApiDocument();
+    ids.add(viewKey);
+    validateApiViewComponents(view);
+  }
+  validateApiProjectMetadata(document);
+  validateApiDocumentTree(document);
 }
 
 const tagIndexes = new WeakMap<import("./types").Tag[], Map<string, import("./types").Tag>>();

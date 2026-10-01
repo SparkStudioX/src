@@ -11,6 +11,7 @@ function loader(fakeHooks = false) {
   const modules = new Map();
   const hooks = `data:text/javascript;base64,${Buffer.from(`export * from ${JSON.stringify(pathToFileURL(require.resolve("react")).href)}; export const useId = () => "input-test"; export const useRef = value => ({current:value}); export const useState = value => [value,()=>{}]; export const useEffect = () => {};`).toString('base64')}`;
   return function moduleUrl(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
     if (modules.has(name)) return modules.get(name);
     const file = ['tsx', 'ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(url => fs.existsSync(url));
     assert.ok(file, name);

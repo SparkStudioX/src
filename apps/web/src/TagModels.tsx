@@ -106,7 +106,7 @@ export default function TagModels({ onClose, onApplied }: { onClose: () => void;
           <small>OPC UA requests this interval. Expressions use a 100 ms scheduler resolution.</small>
         </>}
         {tab === "provider" && <p>The built-in [default] provider owns all configured tags and sample tags. Disabling it marks values unavailable and stops configured OPC UA subscriptions. Re-enabling restarts acquisition. Connection settings remain separate.</p>}
-        {tab !== "definitions" && <label className="checkbox-field"><input type="checkbox" checked={enabled} onChange={event => { change(); setEnabled(event.target.checked); }} />{tab === "provider" ? "Provider" : tab === "groups" ? "Scan group" : "Instance"} enabled</label>}
+        {tab !== "definitions" && <label className="checkbox-field"><input type="checkbox" checked={enabled} onChange={event => { change(); setEnabled(event.target.checked); }} /><span>{tab === "provider" ? "Provider" : tab === "groups" ? "Scan group" : "Instance"} enabled</span></label>}
       </fieldset>}
       <div style={{ display: "flex", gap: 8 }}><button className="button" disabled={busy || !model} onClick={() => void run(() => preview())}>Preview changes</button>
         {selected && tab !== "provider" && <button className="button danger" disabled={busy} onClick={() => void run(() => preview(true))}>Preview removal</button>}</div>

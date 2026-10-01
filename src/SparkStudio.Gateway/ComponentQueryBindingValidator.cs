@@ -22,8 +22,8 @@ internal static class ComponentQueryBindingValidator
             {
                 RejectMisplaced(component);
                 if (component["props"] is not JsonObject props || !props.ContainsKey("queryBindings")) continue;
-                if (props["queryBindings"] is not JsonObject bindings || bindings.Count > 32)
-                    throw new ArgumentException("Query bindings must be an object with at most 32 supported scalar targets.");
+                if (props["queryBindings"] is not JsonObject bindings || bindings.Count > RuntimePropertyCatalog.MaximumBindings)
+                    throw new ArgumentException($"Query bindings must be an object with at most {RuntimePropertyCatalog.MaximumBindings} supported targets.");
                 var constants = new Dictionary<string, object>(StringComparer.Ordinal);
                 if (props["bindings"] is JsonObject propertyExpressions)
                     foreach (var (target, raw) in propertyExpressions)
@@ -35,8 +35,10 @@ internal static class ComponentQueryBindingValidator
                 foreach (var (target, raw) in bindings)
                 {
                     var type = ProjectStore.Required(component, "type");
-                    if (!ComponentBindingValidator.SupportsTarget(type, target))
+                    if (!ComponentBindingValidator.SupportsTarget(component, target))
                         throw new ArgumentException($"The {target} query binding is not supported on {type}.");
+                    if (target == "data" && type == "table" && props.ContainsKey("tableEdit"))
+                        throw new ArgumentException("A table with a data binding cannot expose query-backed table edits.");
                     if (props["bindings"] is JsonObject expressions && expressions.ContainsKey(target))
                         throw new ArgumentException("A property cannot have both an expression binding and a query binding.");
                     if (raw is not JsonObject binding || binding.Any(pair => pair.Key is not ("queryId" or "column" or "parameters" or "refresh" or "transform")))
@@ -47,7 +49,6 @@ internal static class ComponentQueryBindingValidator
                         var transform = ComponentBindingValidator.ValidateExpression(Text(binding, "transform", 2048), ["value"]);
                         if (transform.Constant)
                         {
-                            ComponentBindingValidator.ValidateScalarTarget(target, transform.Value!);
                             constants[target] = transform.Value!;
                         }
                     }
@@ -73,7 +74,7 @@ internal static class ComponentQueryBindingValidator
                         ComponentBindingValidator.ValidatePropertyExpression(expression, component, context);
                     }
                 }
-                ProcessDisplayValidator.ValidateConstantRange(ProjectStore.Required(component, "type"), props, constants);
+                RuntimePropertyCatalog.ValidateConstants(component, constants);
             }
         }
     }
@@ -121,7 +122,7 @@ internal static class ComponentQueryBindingValidator
         }
     }
 
-    private static void ValidateMappedValue(string type, JsonElement value)
+    internal static void ValidateMappedValue(string type, JsonElement value)
     {
         var number = value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var numeric) ? numeric : double.NaN;
         var safe = double.IsFinite(number) && (number != Math.Truncate(number) || Math.Abs(number) <= 9007199254740991);

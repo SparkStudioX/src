@@ -13,8 +13,9 @@ import { ApplicationStateProvider, useApplicationState } from "./applicationStat
 import { useFormInputs } from "./inputStateBindings";
 import { ComponentEventDiagnostics } from "./ComponentEvents";
 import { applyPythonUiResult, pythonUiRequest } from "./pythonUiModel";
-import { runSavedPythonEvent } from "./pythonComponentEvents";
+import { runSavedPythonEvent, withoutPasswordInputs } from "./pythonComponentEvents";
 import { useRuntimeSessionMessaging } from "./useRuntimeSessionMessaging";
+import { useTagValueAction } from "./useTagValueAction";
 import {
   actionKey,
   componentContexts,
@@ -240,6 +241,8 @@ export default function OperatorRuntime() {
   }, message => applicationState.store.componentEvents.report("Gateway messaging", message, "error"), receiveDelta);
   const menuItems = project ? runtimeMenuItems(project) : [];
   const activeParameters = useMemo(() => screen ? screenParameters(screen, parameters) : parameters, [screen, parameters]);
+  const tagAction = useTagValueAction(JSON.stringify([project?.id, project?.publishedAt, screen?.id, parameters]),
+    Boolean(project && screen && connected && canOperate && permissions.commands));
   useBrowserScripts(project, screen, setNotice, target => {
     if (actionBusyId || popup) return;
     if (project?.screens.some(item => item.id === target && item.kind !== "popup")) {
@@ -272,6 +275,23 @@ export default function OperatorRuntime() {
     uiAction?: PythonUiAction,
   ) => {
     if (!canOperate || !screen || !project || actionBusyId || instance?.isCurrent?.() === false) return;
+    if (component.props.action === "setTagValue") {
+      if (!connected || !permissions.commands) { setActionStatus({ success: false, message: "Commands permission and a gateway connection are required to set a tag." }); return; }
+      const isCurrent = () => currentProject.current === project && applicationState.isCurrent() && instance?.isCurrent?.() !== false && uiAction?.isCurrent() !== false;
+      setActionBusyId(actionKey(component.id, instance)); setActionStatus(null);
+      try {
+        const receipt = await tagAction.run(`/runtime/screens/${encodeURIComponent(screen.id)}/components/${encodeURIComponent(component.id)}/tag-action`,
+          { parameters, publishedAt: project.publishedAt!, ...instanceRequestScope(instance),
+            inputs: withoutPasswordInputs(instance?.template.components ?? screen.components, instance?.inputs ?? currentInputs),
+            ...pythonUiRequest(uiAction) }, isCurrent);
+        if (receipt && isCurrent()) {
+          if (receipt.status === "confirmed") window.dispatchEvent(new Event("sparkstudio:refresh-data"));
+          setActionStatus({ success: receipt.status === "confirmed", message: receipt.message });
+        }
+      } catch (reason) { if (isCurrent()) setActionStatus({ success: false, message: errorMessage(reason) }); }
+      finally { if (currentProject.current === project) setActionBusyId(""); }
+      return;
+    }
     const localInputs = instance?.inputs || currentInputs;
     const invalid = validateInputs(
       instance?.template || screen,
@@ -409,114 +429,114 @@ export default function OperatorRuntime() {
   ), [screen, project?.templates, tags, activeParameters, inputsByScreen, connected, applicationState.values, queryProperties]);
   const contextOptions = useMemo(() => Object.fromEntries(Object.keys(parameters).map(key => [key, project ? contextChoices(project, tags, parameters, key) : []])), [project, tagStore.paths(), parameters]);
 
-  return (
-    <ApplicationStateProvider value={applicationState}>
-    <LocalizationProvider catalog={project?.localization} locale={projectLocale.locale}><VisualStyleProvider styles={project?.styles}><QueryPropertyProvider value={queryProperties}>
-    <div lang={projectLocale.locale} className={`operator-app${showRuntimeControls ? "" : " operator-application-only"}`}>
-      {showRuntimeControls && <header className="operator-header">
-        <div className="operator-brand">
-          <span className="brand-mark">
-            <Icon name="spark" size={22} />
-          </span>
-          <div>
-            <strong>{project?.name || "SparkStudio"}</strong>
-            <span>OPERATIONS</span>
-          </div>
+  // Pure render helpers share this hook owner, preserving child keys and edit lifetimes.
+  function renderOperatorHeader() {
+    return (<header className="operator-header">
+      <div className="operator-brand">
+        <span className="brand-mark">
+          <Icon name="spark" size={22} />
+        </span>
+        <div>
+          <strong>{project?.name || "SparkStudio"}</strong>
+          <span>OPERATIONS</span>
         </div>
-        <div className="operator-header-center">
-          <ThemePicker />
-          <LocaleSelector catalog={project?.localization} locale={projectLocale.locale} onChange={projectLocale.setLocale} />
-          <span
-            className={`operator-status ${connected ? "" : "disconnected"}`}
-          >
-            <span className={`status-dot ${connected ? "" : "offline"}`} />
-            {connected ? t("connected", "Gateway connected") : t("communicationLost", "Communication lost")}
-          </span>
-          <span className="operator-clock">
-            {now.toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-            })}
-            <strong>{now.toLocaleTimeString()}</strong>
-          </span>
-        </div>
-        <SessionIdentity operator />
-        <button
-          className="operator-fullscreen"
-          onClick={() => void toggleFullscreen()}
-          aria-label={fullscreen ? t("exitFullscreen", "Exit fullscreen") : t("fullscreen", "Enter fullscreen")}
+      </div>
+      <div className="operator-header-center">
+        <ThemePicker />
+        <LocaleSelector catalog={project?.localization} locale={projectLocale.locale} onChange={projectLocale.setLocale} />
+        <span
+          className={`operator-status ${connected ? "" : "disconnected"}`}
         >
-          <Icon name={fullscreen ? "close" : "external"} size={17} />
-          <span>{fullscreen ? "Exit fullscreen" : "Fullscreen"}</span>
-        </button>
-      </header>}
+          <span className={`status-dot ${connected ? "" : "offline"}`} />
+          {connected ? t("connected", "Gateway connected") : t("communicationLost", "Communication lost")}
+        </span>
+        <span className="operator-clock">
+          {now.toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          })}
+          <strong>{now.toLocaleTimeString()}</strong>
+        </span>
+      </div>
+      <SessionIdentity operator />
+      <button
+        className="operator-fullscreen"
+        onClick={() => void toggleFullscreen()}
+        aria-label={fullscreen ? t("exitFullscreen", "Exit fullscreen") : t("fullscreen", "Enter fullscreen")}
+      >
+        <Icon name={fullscreen ? "close" : "external"} size={17} />
+        <span>{fullscreen ? "Exit fullscreen" : "Fullscreen"}</span>
+      </button>
+    </header>);
+  }
 
-      {showRuntimeControls && project && (
-        <div className="operator-context">
-          <div className="operator-screen-heading">
-            <span>APPLICATION</span>
-            <h1>{screen?.name || "Overview"}</h1>
-          </div>
-          <div className="operator-context-controls">
-            {menuItems.length > 0 && <label className="operator-navigation-menu">
-              <span>{t("goToScreen", "Go to screen")}</span>
-              <select aria-label={t("goToScreen", "Go to screen")} value={menuItems.some(item => item.screenId === screen?.id) ? screen?.id : ""}
-                disabled={Boolean(actionBusyId) || Boolean(popup)} onChange={event => {
-                  setScreenId(event.target.value);
-                  setActionStatus(null);
-                }}>
-                {!menuItems.some(item => item.screenId === screen?.id) && <option value="" disabled>Choose a screen…</option>}
-                {menuItems.map(item => <option key={item.screenId} value={item.screenId}>{item.label}</option>)}
-              </select>
-            </label>}
-            {Object.entries(parameters).map(([key, value]) => {
-              const choices = contextOptions[key] ?? [];
-              return (
-                <label key={key}>
-                  <span>{key.replace(/([A-Z])/g, " $1")}</span>
-                  {choices.length > 1 ? (
-                    <select
-                      aria-label={`${key} context`}
-                      value={value}
-                      disabled={Boolean(actionBusyId)}
-                      onChange={(event) =>
-                        changeContext(key, event.target.value)
-                      }
-                    >
-                      {choices.map((choice) => (
-                        <option key={choice}>{choice}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      aria-label={`${key} context`}
-                      value={value}
-                      disabled={Boolean(actionBusyId)}
-                      onChange={(event) =>
-                        changeContext(key, event.target.value)
-                      }
-                    />
-                  )}
-                </label>
-              );
-            })}
-          </div>
-          <div className="operator-screen-health">
-            <span
-              className={`quality-dot ${badCount || !connected ? "bad" : unknownCount ? "neutral" : ""}`}
-            />
-            {!connected
-              ? t("staleValues", "Values may be stale")
-              : badCount
-                ? `${badCount} binding${badCount > 1 ? "s need" : " needs"} attention`
-                : unknownCount
-                  ? "Check live values inside reusable panels"
-                  : t("healthy", "Live data healthy")}
-          </div>
-        </div>
-      )}
+  function renderOperatorContext() {
+    return (<div className="operator-context">
+      <div className="operator-screen-heading">
+        <span>APPLICATION</span>
+        <h1>{screen?.name || "Overview"}</h1>
+      </div>
+      <div className="operator-context-controls">
+        {menuItems.length > 0 && <label className="operator-navigation-menu">
+          <span>{t("goToScreen", "Go to screen")}</span>
+          <select aria-label={t("goToScreen", "Go to screen")} value={menuItems.some(item => item.screenId === screen?.id) ? screen?.id : ""}
+            disabled={Boolean(actionBusyId) || Boolean(popup)} onChange={event => {
+              setScreenId(event.target.value);
+              setActionStatus(null);
+            }}>
+            {!menuItems.some(item => item.screenId === screen?.id) && <option value="" disabled>Choose a screen…</option>}
+            {menuItems.map(item => <option key={item.screenId} value={item.screenId}>{item.label}</option>)}
+          </select>
+        </label>}
+        {Object.entries(parameters).map(([key, value]) => {
+          const choices = contextOptions[key] ?? [];
+          return (
+            <label key={key}>
+              <span>{key.replace(/([A-Z])/g, " $1")}</span>
+              {choices.length > 1 ? (
+                <select
+                  aria-label={`${key} context`}
+                  value={value}
+                  disabled={Boolean(actionBusyId)}
+                  onChange={(event) =>
+                    changeContext(key, event.target.value)
+                  }
+                >
+                  {choices.map((choice) => (
+                    <option key={choice}>{choice}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  aria-label={`${key} context`}
+                  value={value}
+                  disabled={Boolean(actionBusyId)}
+                  onChange={(event) =>
+                    changeContext(key, event.target.value)
+                  }
+                />
+              )}
+            </label>
+          );
+        })}
+      </div>
+      <div className="operator-screen-health">
+        <span
+          className={`quality-dot ${badCount || !connected ? "bad" : unknownCount ? "neutral" : ""}`}
+        />
+        {!connected
+          ? t("staleValues", "Values may be stale")
+          : badCount
+            ? `${badCount} binding${badCount > 1 ? "s need" : " needs"} attention`
+            : unknownCount
+              ? "Check live values inside reusable panels"
+              : t("healthy", "Live data healthy")}
+      </div>
+    </div>);
+  }
 
-      <div className="operator-notifications">
+  function renderOperatorNotifications() {
+    return (<div className="operator-notifications">
       {nextPublication && (
         <div className="operator-notification update">
           <Icon name="info" size={17} />
@@ -574,7 +594,20 @@ export default function OperatorRuntime() {
       {project && error && <div className="operator-notification connection" role="alert">
         <Icon name="info" size={16} /><span>Unable to load the new version: {error}. Your current version remains open.</span>
       </div>}
-      </div>
+    </div>);
+  }
+
+  return (
+    <ApplicationStateProvider value={applicationState}>
+    <LocalizationProvider catalog={project?.localization} locale={projectLocale.locale}><VisualStyleProvider styles={project?.styles}><QueryPropertyProvider value={queryProperties}>
+    <div lang={projectLocale.locale} className={`operator-app${showRuntimeControls ? "" : " operator-application-only"}`}>
+      {showRuntimeControls && renderOperatorHeader()}
+
+      {showRuntimeControls && project && (
+        renderOperatorContext()
+      )}
+
+      {renderOperatorNotifications()}
       {!project ? (
         <main className="operator-empty">
           {loading ? (
@@ -767,6 +800,7 @@ export default function OperatorRuntime() {
         />
       )}
       <ComponentEventDiagnostics state={applicationState} />
+      {tagAction.confirmation}
       {showRuntimeControls && <footer className="operator-footer">
         {(gatewayAdmin || permissions.design) && <span className="operator-project-links"><a href={projectPage("designer")} title="Open a separate engineering session">Engineering sign-in</a></span>}
         <span>

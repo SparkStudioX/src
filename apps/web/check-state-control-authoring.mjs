@@ -8,7 +8,10 @@ import ts from 'typescript';
 
 const require = createRequire(import.meta.url);
 const asModule = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
-const hookUrl = asModule(`let values=[],index=0;
+const hookUrl = asModule(`export {Children,cloneElement,isValidElement} from ${JSON.stringify(pathToFileURL(require.resolve("react")).href)};
+export const createContext=initial=>{const context={value:initial};context.Provider=({value,children})=>{context.value=value;return children;};return context;};
+export const useContext=context=>context.value;
+let values=[],index=0;
 export const begin=()=>{index=0;}; export const clear=()=>{values=[];index=0;};
 export const useState=initial=>{const at=index++;if(!(at in values))values[at]=typeof initial==='function'?initial():initial;return [values[at],next=>{values[at]=typeof next==='function'?next(values[at]):next;}];};
 export const useRef=initial=>{const at=index++;return values[at]??={current:initial};};
@@ -17,6 +20,7 @@ const portalUrl = asModule('export const createPortal=children=>children;');
 function loader(interactive = false) {
   const modules = new Map();
   return function moduleUrl(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
     if (modules.has(name)) return modules.get(name);
     const file = ['tsx', 'ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(url => fs.existsSync(url));
     assert.ok(file, name);
@@ -41,7 +45,7 @@ const make = (type = 'multiStateIndicator') => ({ id: 'state-control', type, x: 
   : { text: 'Mode', fieldKey: 'mode', defaultValue: 'auto', options: [{ value: 'auto', label: 'Automatic' }, { value: 'manual', label: 'Manual' }] } });
 const noOp = () => {};
 const context = component => ({ component, components: [component], tags: [], parameters: {}, inputs: {}, onChange: noOp, onGeometryChange: noOp });
-const nodes = node => !node || typeof node !== 'object' ? [] : [node, ...React.Children.toArray(node.props?.children).flatMap(nodes)];
+const nodes = node => !node || typeof node !== 'object' ? [] : node.type?.name === 'RuntimePropertyRow' ? nodes(node.type(node.props)) : [node, ...React.Children.toArray(node.props?.children).flatMap(nodes)];
 function drive(Component, props, unwrap = false) {
   hooks.clear(); let tree;
   const refresh = () => { hooks.begin(); const outer = Component(props); tree = unwrap ? outer.type(outer.props) : outer; };

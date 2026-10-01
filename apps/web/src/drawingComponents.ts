@@ -28,6 +28,31 @@ const color = (value: unknown) => typeof value === "string" && value.trim() === 
 const object = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const fields = [...drawingBindingTargets, "points", "symbol", "cornerRadius"];
 
+function drawingPointsError(type: string, value: unknown): string | null {
+  if (!Array.isArray(value) || value.length < 2 || value.length > (type === "line" ? 2 : 64)) return type === "line" ? "A line needs exactly two points." : "A path needs 2–64 points.";
+  for (let index = 0; index < value.length; index++) {
+    const point: unknown = value[index];
+    if (!object(point) || Object.keys(point).length !== 2 || !Object.hasOwn(point, "x") || !Object.hasOwn(point, "y") || !finite(point.x, 0, 100) || !finite(point.y, 0, 100)) return `Point ${index + 1} must contain only finite X/Y percentages from 0 to 100.`;
+    if (index && point.x === value[index - 1].x && point.y === value[index - 1].y) return "Consecutive points must be different.";
+  }
+  return null;
+}
+
+const drawingScalarValidators: Record<string, (value: unknown) => string | null> = {
+  strokeColor: value => color(value) ? null : "Stroke color must be a hex color.",
+  fillColor: value => value === "none" || color(value) ? null : "Fill must be a hex color or 'none'.",
+  strokeWidth: value => finite(value, 1, 32) ? null : "Stroke width must be a finite number from 1 to 32.",
+  rotation: value => finite(value, 0, 360) ? null : "Rotation must be a finite number from 0 to 360 degrees.",
+  cornerRadius: value => finite(value, 0, 50) ? null : "Corner radius must be a finite percentage from 0 to 50.",
+  symbol: value => ["pump", "valve", "motor"].includes(value as string) ? null : "Choose a pump, valve or motor symbol.",
+};
+
+function drawingFieldError(type: string, field: string, value: unknown): string | null {
+  if (["flowing", "flowReverse", "active"].includes(field) && typeof value !== "boolean") return `${field} must be true or false.`;
+  if (field === "points") return drawingPointsError(type, value);
+  return drawingScalarValidators[field]?.(value) ?? null;
+}
+
 /** A property is structural unless it has an explicitly supported scalar binding. */
 export function validateDrawingProps(type: string, props: Record<string, unknown>, resolved = false): string | null {
   if (!isDrawingComponent(type)) return null;
@@ -40,22 +65,8 @@ export function validateDrawingProps(type: string, props: Record<string, unknown
       continue;
     }
     if (!supportsDrawingProperty(type, field)) return `${field} is not supported on ${type}.`;
-    const value = props[field];
-    if (field === "strokeColor" && !color(value)) return "Stroke color must be a hex color.";
-    if (field === "fillColor" && value !== "none" && !color(value)) return "Fill must be a hex color or 'none'.";
-    if (field === "strokeWidth" && !finite(value, 1, 32)) return "Stroke width must be a finite number from 1 to 32.";
-    if (field === "rotation" && !finite(value, 0, 360)) return "Rotation must be a finite number from 0 to 360 degrees.";
-    if (field === "cornerRadius" && !finite(value, 0, 50)) return "Corner radius must be a finite percentage from 0 to 50.";
-    if (["flowing", "flowReverse", "active"].includes(field) && typeof value !== "boolean") return `${field} must be true or false.`;
-    if (field === "symbol" && !["pump", "valve", "motor"].includes(value as string)) return "Choose a pump, valve or motor symbol.";
-    if (field === "points") {
-      if (!Array.isArray(value) || value.length < 2 || value.length > (type === "line" ? 2 : 64)) return type === "line" ? "A line needs exactly two points." : "A path needs 2–64 points.";
-      for (let index = 0; index < value.length; index++) {
-        const point: unknown = value[index];
-        if (!object(point) || Object.keys(point).length !== 2 || !Object.hasOwn(point, "x") || !Object.hasOwn(point, "y") || !finite(point.x, 0, 100) || !finite(point.y, 0, 100)) return `Point ${index + 1} must contain only finite X/Y percentages from 0 to 100.`;
-        if (index && point.x === value[index - 1].x && point.y === value[index - 1].y) return "Consecutive points must be different.";
-      }
-    }
+    const error = drawingFieldError(type, field, props[field]);
+    if (error) return error;
   }
   if (props.action !== undefined && (type !== "equipmentSymbol" || !["navigate", "openPopup"].includes(props.action as string))) return "Only equipment symbols support navigation or popup actions.";
   if (props.action !== undefined && (typeof props.targetScreenId !== "string" || !props.targetScreenId.trim())) return "Choose a destination screen for this symbol.";

@@ -1,6 +1,6 @@
 # Gateway backup and recovery
 
-Gateway recovery supports **online configuration backups** and **offline full data backups**, separate from portable `.sparkproj` files and publication history. Both use passphrase-encrypted `.sparkbak` archives and restore into a new isolated directory. Use Gateway Settings → Recovery to create a configuration backup, manage its daily remote-copy schedule, inspect a restored gateway's isolation state, and approve resuming after review. The [scheduled configuration backup guide](SCHEDULED_BACKUPS.md) covers Backup now, authenticated downloads, SMB/FTP/FTPS destinations and retention.
+Gateway recovery supports **online configuration backups** and **offline full data backups**, separate from portable `.sparkproj` files and publication history. Both use passphrase-encrypted `.sparkbak` archives and restore into a new isolated directory. **Gateway Settings → Backups** contains Schedules, Destinations and Restore. Restore provides the offline guide, the restored gateway's isolation state and administrator approval. The [scheduled configuration backup guide](SCHEDULED_BACKUPS.md) covers authenticated downloads, multiple schedules, SMB/FTP/FTPS/S3 destinations and independent retention. Existing Recovery bookmarks open the consolidated page.
 
 ## Coverage and limits
 
@@ -29,7 +29,7 @@ older reader. Preserve a full pre-upgrade backup for rollback; do not lower the
 version marker manually. Online configuration backups include the format marker
 and alarm/history rule configuration, but not recorded process samples.
 
-Daily scheduled configuration copies, manual configuration backups and managed remote retention are available now. Live database quiescence, automatic service switching, gateway replication/failover, and an atomic release combining project and script publication remain open G03 work.
+Scheduled configuration copies, manual configuration backups and managed remote retention are available now. Live database quiescence, automatic service switching and gateway replication/failover remain open G03 work. Whole-application publication is described in [Unified publication](UNIFIED_PUBLICATION.md).
 
 ## Commands
 

@@ -6,10 +6,10 @@
     "id": "scheduled-backups", "name": "Backup checkpoint", "width": 1080, "height": 780,
     "components": [
       { "id": "title", "type": "label", "x": 32, "y": 24, "width": 1016, "height": 60, "props": { "text": "Scheduled backup workshop", "fontSize": 30 } },
-      { "id": "scope", "type": "label", "x": 32, "y": 104, "width": 1016, "height": 100, "props": { "text": "Use a disposable gateway and a dedicated test destination. Configure backups in Gateway Settings → Recovery. Start with a manual backup before enabling the daily schedule.", "fontSize": 20 } },
+      { "id": "scope", "type": "label", "x": 32, "y": 104, "width": 1016, "height": 100, "props": { "text": "Use a disposable gateway and dedicated test targets. Open Gateway Settings → Backups: Destinations defines SMB, FTP/FTPS or S3 targets; Schedules chooses where and when to copy.", "fontSize": 20 } },
       { "id": "checkpoint", "type": "label", "x": 32, "y": 234, "width": 1016, "height": 65, "props": { "text": "Published checkpoint: SCHEDULE-LAB-A", "fontSize": 26 } },
       { "id": "draft", "type": "label", "x": 32, "y": 335, "width": 1016, "height": 100, "props": { "text": "Publish this checkpoint, then change the heading in Designer and save without publishing. A configuration backup should retain both the published screen and its newer draft.", "fontSize": 20 } },
-      { "id": "test", "type": "label", "x": 32, "y": 470, "width": 1016, "height": 100, "props": { "text": "Select Create download and inspect the recorded result. Review the gateway time zone, next scheduled run and retention period. Use a test-only share or FTP destination that contains no unrelated archives.", "fontSize": 20 } },
+      { "id": "test", "type": "label", "x": 32, "y": 470, "width": 1016, "height": 100, "props": { "text": "Create a local download. Add nightly and weekly schedules with different targets and retention. Verify each manual delivery before enabling it. Check independent next-run times and results.", "fontSize": 20 } },
       { "id": "restore", "type": "label", "x": 32, "y": 610, "width": 1016, "height": 110, "props": { "text": "Keep the archive passphrase separately. Restore an archive only into an isolated new directory, compare draft and publication, and review the recovery state before resuming external work. Back up database contents separately.", "fontSize": 20 } }
     ]
   }]

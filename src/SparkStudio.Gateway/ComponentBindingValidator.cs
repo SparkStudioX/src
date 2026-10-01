@@ -22,11 +22,13 @@ internal static class ComponentBindingValidator
     private static readonly Regex Identifier = new(@"\A[A-Za-z_][A-Za-z0-9_]{0,63}\z", RegexOptions.CultureInvariant);
     private static readonly Regex TagParameter = new(@"\{([^{}]+)\}", RegexOptions.CultureInvariant);
 
-    internal static bool SupportsTarget(string type, string target) => Targets.Contains(target)
+    internal static bool SupportsLegacyScalarTarget(string type, string target) => Targets.Contains(target)
         && (!ProcessDisplayValidator.Targets.Contains(target) || ProcessDisplayValidator.Supports(type, target))
         && (!DrawingComponentValidator.Targets.Contains(target) || DrawingComponentValidator.Supports(type, target))
         && (target != "stateValue" || type == "multiStateIndicator")
         && (target != "tagPath" || type is "value" or "gauge");
+
+    internal static bool SupportsTarget(JsonObject component, string target) => RuntimePropertyCatalog.Definition(component, target) is not null;
 
     public static void ValidateDocument(JsonObject document, JsonObject? projectParameters, JsonObject? sessionState, bool template)
     {
@@ -51,25 +53,24 @@ internal static class ComponentBindingValidator
         foreach (var component in components.Values)
         {
             if (component["props"] is not JsonObject props || !props.ContainsKey("bindings")) continue;
-            if (props["bindings"] is not JsonObject bindings || bindings.Count > Targets.Count)
-                throw new ArgumentException($"Component bindings must be an object with up to {Targets.Count} supported targets.");
+            if (props["bindings"] is not JsonObject bindings || bindings.Count > RuntimePropertyCatalog.MaximumBindings)
+                throw new ArgumentException($"Component bindings must be an object with up to {RuntimePropertyCatalog.MaximumBindings} supported targets.");
             var type = Text(component, "type", 64);
             var constants = new Dictionary<string, object>(StringComparer.Ordinal);
             foreach (var (target, raw) in bindings)
             {
-                if (!SupportsTarget(type, target))
+                if (!SupportsTarget(component, target))
                     throw new ArgumentException($"The {target} binding is not supported on {type}.");
+                if (target == "data" && type == "table" && props.ContainsKey("tableEdit"))
+                    throw new ArgumentException("A table with a data binding cannot expose query-backed table edits.");
                 var result = ValidatePropertyExpression(raw, component, context);
-                if (ProcessDisplayValidator.Targets.Contains(target) && result.Constant)
-                {
-                    ProcessDisplayValidator.ValidateResult(target, result.Value!);
-                    constants.Add(target, result.Value!);
-                }
-                if ((DrawingComponentValidator.Targets.Contains(target) || target == "color" && DrawingComponentValidator.Types.Contains(type)) && result.Constant)
-                    DrawingComponentValidator.ValidateResult(target, result.Value!);
+                if (result.Constant) constants.Add(target, result.Value!);
             }
-            ProcessDisplayValidator.ValidateConstantRange(type, props, constants);
+            // Query transforms are merged by their validator before family checks.
+            if (props["queryBindings"] is not JsonObject queries || queries.Count == 0) RuntimePropertyCatalog.ValidateConstants(component, constants);
+            else foreach (var (target, value) in constants) RuntimePropertyCatalog.ValidateTargetValue(component, target, value);
         }
+        RuntimeCustomBindings.ValidateCycles(components);
     }
 
     // Query parameter expressions share the exact bounded grammar and scoped
@@ -140,6 +141,7 @@ internal static class ComponentBindingValidator
                 default: throw new ArgumentException("References support custom properties, inputs, parameters, tags, session state, screen state and private instance state.");
             }
         }
+        if (context.QueryParameter) RuntimeCustomBindings.ValidateRestrictedSources(component, binding, context.Components, allowTags: false);
         return ValidateExpression(expression, references.Select(pair => pair.Key));
     }
 

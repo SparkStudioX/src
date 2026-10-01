@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { ApiError, resolvePath, scriptFailureMessage } from "./api";
+import { useAuth } from "./Auth";
+import { useTagValueAction } from "./useTagValueAction";
+import { instanceRequestScope } from "./templateModel";
 import Icon from "./Icon";
 import { validateInputs } from "./inputs";
 import { useFormInputs } from "./inputStateBindings";
 import { ComponentEventDiagnostics } from "./ComponentEvents";
-import { applyPythonUiResult } from "./pythonUiModel";
-import { isPythonUnmount, runSavedPythonEvent } from "./pythonComponentEvents";
+import { applyPythonUiResult, pythonUiRequest } from "./pythonUiModel";
+import { isPythonUnmount, runSavedPythonEvent, withoutPasswordInputs } from "./pythonComponentEvents";
 import { actionKey, ProjectComponentView } from "./templates";
 import { componentGeometry } from "./propertyBindings";
 import { QueryPropertyProvider, useQueryPropertyBindings } from "./useQueryPropertyBindings";
@@ -69,6 +72,9 @@ export default function Popup({
   const applicationState = usePopupApplicationState(parentApplicationState, popup.id, screen?.state);
   const sourceState = usePopupSource(project, popup, tags, queryScope, communicationLost, queryScope === "runtime" ? project.publishedAt : undefined);
   const sourceLocked = Boolean(invalidSource) || !sourceState.ready;
+  const { permissions } = useAuth();
+  const tagAction = useTagValueAction(JSON.stringify([project.id, project.publishedAt, popup.id, popup.parameters]),
+    Boolean(queryScope === "runtime" && !readOnly && !communicationLost && !sourceLocked && permissions.commands));
   const sourceMessage = invalidSource || sourceState.message;
   useEffect(() => {
     // An old form stays invalid even if a record with the same key appears later.
@@ -126,6 +132,24 @@ export default function Popup({
   };
   const run = async (component: CanvasComponent, instance?: InstanceAction, uiAction?: PythonUiAction) => {
     if (busy || sourceLocked || readOnly || instance?.isCurrent?.() === false) return;
+    if (component.props.action === "setTagValue") {
+      if (queryScope !== "runtime") { setFeedback({ success: false, message: "Publish the application and open its operator link to run Set tag value." }); return; }
+      if (communicationLost || !permissions.commands) return;
+      const isCurrent = () => active.current && applicationState?.isCurrent() !== false && instance?.isCurrent?.() !== false && uiAction?.isCurrent() !== false;
+      setBusy(actionKey(component.id, instance)); onBusyChange(true); setFeedback(null);
+      try {
+        const receipt = await tagAction.run(`/runtime/screens/${encodeURIComponent(screen.id)}/components/${encodeURIComponent(component.id)}/tag-action`,
+          { parameters: popup.rootParameters, publishedAt: project.publishedAt!, popupOrigin: popup.origin, ...instanceRequestScope(instance),
+            inputs: withoutPasswordInputs(instance?.template.components ?? screen.components, instance?.inputs ?? inputs),
+            ...pythonUiRequest(uiAction) }, isCurrent);
+        if (receipt && isCurrent()) {
+          if (receipt.status === "confirmed") window.dispatchEvent(new Event("sparkstudio:refresh-data"));
+          setFeedback({ success: receipt.status === "confirmed", message: receipt.message });
+        }
+      } catch (reason) { if (isCurrent()) setFeedback({ success: false, message: reason instanceof Error ? reason.message : String(reason) }); }
+      finally { if (active.current) { setBusy(""); onBusyChange(false); } }
+      return;
+    }
     const values = instance?.inputs || inputs;
     const invalid = validateInputs(
       instance?.template || screen,
@@ -388,6 +412,7 @@ export default function Popup({
           {screen.width} × {screen.height}
         </span>
       </footer>
+      {tagAction.confirmation}
     </dialog>
     </QueryPropertyProvider></ApplicationStateProvider>
   );

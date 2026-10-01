@@ -1,3 +1,4 @@
+import { RuntimePropertyRow } from "./RuntimePropertyRow";
 import { useRef, useState } from "react";
 import { drawingDefaults, validateDrawingProps } from "./drawingComponents";
 import type { CanvasComponent } from "./types";
@@ -67,7 +68,7 @@ export function DrawingEditor({ component, onChange, notify }: {
       : rectangle ? "Round the corners from 0 to 50% of the shorter side."
         : "Choose an authored pump, valve, or motor. Active and Accent color in the property sheet control its status appearance.";
   return <section className="property-sheet-group property-collection-group" aria-label={title}><h4>Drawing</h4>
-    <div className="property-sheet-row" data-property={path ? "points" : rectangle ? "cornerRadius" : "symbol"}><label title={help}>{path ? "Points" : rectangle ? "Corner radius" : "Symbol"}</label><div className="property-sheet-value property-collection-value"><span>{path ? `${source.length} points` : rectangle ? `${component.props.cornerRadius ?? defaults.cornerRadius ?? 0}%` : component.props.symbol ?? defaults.symbol ?? "pump"}</span><button type="button" className="button small" onClick={edit}>{path ? "Edit points" : rectangle ? "Edit corners" : "Choose symbol"}</button></div><span aria-hidden="true" /></div>
+    <RuntimePropertyRow title={help} target={path ? "points" : rectangle ? "cornerRadius" : "symbol"} label={path ? "Points" : rectangle ? "Corner radius" : "Symbol"}><span>{path ? `${source.length} points` : rectangle ? `${component.props.cornerRadius ?? defaults.cornerRadius ?? 0}%` : component.props.symbol ?? defaults.symbol ?? "pump"}</span><button type="button" className="button small" onClick={edit}>{path ? "Edit points" : rectangle ? "Edit corners" : "Choose symbol"}</button></RuntimePropertyRow>
     {!draft && error && <p className="drawing-editor-error" role="alert">{error}</p>}
     {draft && <PropertyCollectionDialog title={title} onClose={() => setDraft(null)}><p className="drawing-editor-help">{help}</p><div className="drawing-editor-draft" role="group" aria-label={`Edit ${title.toLowerCase()}`} onKeyDown={event => {
       event.stopPropagation();

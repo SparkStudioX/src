@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url), asModule = code => `data:text/ja
 const hookUrl = asModule(`let values=[],index=0,effects=[],context;export const begin=()=>{index=0};export const clear=()=>{for(const v of values)v?.cleanup?.();values=[];effects=[];index=0};export const setContext=v=>{context=v};export const createContext=v=>({Provider:()=>null});export const useContext=()=>context;export const useState=initial=>{const at=index++;if(!(at in values))values[at]={value:typeof initial==='function'?initial():initial};return[values[at].value,next=>{values[at].value=typeof next==='function'?next(values[at].value):next}]};export const useRef=initial=>{const at=index++;return values[at]??={current:initial}};export const useMemo=(fn,deps)=>{const at=index++;if(!values[at]||deps.some((v,i)=>!Object.is(values[at].deps[i],v)))values[at]={deps,value:fn()};return values[at].value};export const useCallback=(fn,deps)=>useMemo(()=>fn,deps);export const useEffect=(fn,deps)=>{const at=index++;if(!values[at]||deps.some((v,i)=>!Object.is(values[at].deps[i],v))){values[at]?.cleanup?.();values[at]={deps};effects.push(()=>{values[at].cleanup=fn()})}};export const flush=()=>{const next=effects;effects=[];next.forEach(fn=>fn())};export const useLayoutEffect=useEffect;export const useId=()=>"auth-test";`);
 const modules = new Map();
 function moduleUrl(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   if (modules.has(name)) return modules.get(name);
   const file = ['tsx','ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(url => fs.existsSync(url));
   let source = fs.readFileSync(file, 'utf8');
@@ -144,8 +145,11 @@ try {
     const ui=drive(UserEditor,{user:null,projects:[],onClose(){},onSaved:async()=>{}});const field=ui.find(node=>node.type==='input'&&node.props.pattern);const pattern=new RegExp(`^(?:${field.props.pattern})$`,'v');assert.ok(pattern.test('ops-user_1.2'));assert.equal(pattern.test('two words'),false);
   });
   await check('settings updates retain undisplayed project scopes and revision and normalize blank base URL',async()=>{
-    configure();let body;globalThis.fetch=async(_url,init)=>{body=JSON.parse(init.body);return response({ok:true})};const settings={revision:4,publicBaseUrl:null,projectTagPrefixes:{archived:['[default]Archived/'],plant:['[default]Plant/']}};
-    const ui=drive(GatewaySettingsEditor,{settings,projects:[{id:'plant',name:'Plant'}],onSaved:async()=>{}});ui.find(node=>node.type==='form').props.onSubmit({preventDefault(){}});await settle();assert.equal(body.revision,4);assert.equal(body.publicBaseUrl,null);assert.deepEqual(body.projectTagPrefixes,settings.projectTagPrefixes);
+    configure();let body;const calls=[];globalThis.fetch=async(url,init)=>{calls.push([url,init.method]);body=JSON.parse(init.body);return response({...body,revision:5})};const settings={revision:4,publicBaseUrl:'https://operators.example.com',projectTagPrefixes:{archived:['[default]Archived/'],plant:['[default]Plant/']}};
+    const ui=drive(GatewaySettingsEditor,{settings,projects:[{id:'plant',name:'Plant'}],reloading:false,onReload:async()=>true,onStateChange(){},onSaved:async()=>{}});hooks.flush();ui.render();
+    ui.find(node=>node.type==='input'&&node.props.type==='url').props.onChange({target:{value:'  '}});ui.render();
+    assert.equal(ui.find(node=>node.type==='button'&&node.props.type==='submit').props.disabled,false);
+    ui.find(node=>node.type==='form').props.onSubmit({preventDefault(){}});await settle();assert.deepEqual(calls,[['/api/security/settings','PUT']]);assert.equal(body.revision,4);assert.equal(body.publicBaseUrl,null);assert.deepEqual(body.projectTagPrefixes,settings.projectTagPrefixes);
   });
 } finally {hooks.clear();globalThis.fetch=nativeFetch;if(nativeWindow===undefined)delete globalThis.window;else globalThis.window=nativeWindow;globalThis.BroadcastChannel=nativeChannel;}
 console.log(`${passed} authentication/session/admin checks passed.`);

@@ -91,7 +91,8 @@ Seed(); delivered = NewName();
 await Reject(() => BackupDestinations.DeliverAsync(Target("ftps"), archive, delivered, owner), "untrusted FTPS certificate");
 Check(!ftp.Commands.Any(value => value.StartsWith("USER ") || value.StartsWith("PASS ") || value.StartsWith("STOR ") || value.StartsWith("DELE ")), "FTPS sent credentials/data after certificate rejection.");
 Console.WriteLine("PASS explicit FTPS fails closed before credentials for untrusted fixture certificate");
-Console.WriteLine("8 backup destination groups passed.");
+await BackupS3Checks.RunAsync(archive, payload, owner, old, fresh, foreign, badDate);
+Console.WriteLine("Backup destination and S3 fixture groups passed.");
 
 sealed class FtpFixture : IAsyncDisposable
 {

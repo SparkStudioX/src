@@ -1,4 +1,4 @@
-import { constantPropertyBinding, evaluatePropertyBinding, validatePropertyBinding, validateTagAddress } from "./propertyBindings";
+import { bindingReferenceDependencies, constantPropertyBinding, evaluatePropertyBinding, validatePropertyBinding, validateTagAddress } from "./propertyBindings";
 import type { BindingContext } from "./propertyBindings";
 import { coerceTemplateParameter } from "./templateModel";
 import { isInput, validateInputs } from "./inputs";
@@ -25,14 +25,14 @@ export function validateTemplateParameterBinding(binding: PropertyBinding, compo
   try {
     const error = validatePropertyBinding(binding);
     if (error) throw new Error(error);
-    for (const reference of Object.values(binding.references)) {
+    for (const { reference, component: ownerComponent } of bindingReferenceDependencies(binding, component, { components })) {
       if (reference.kind === "parameter") {
         if (!own(parentParameters, reference.key)) throw new Error(`Parent parameter '${reference.key}' is not declared.`);
       } else if (reference.kind === "input") {
         const input = components.find(item => isInput(item.type) && (item.props.fieldKey || item.id) === reference.key);
         if (!input || input.type === "passwordInput") throw new Error(`Input '${reference.key}' must be a non-password input in the containing form.`);
       } else if (reference.kind === "custom") {
-        const owner = reference.componentId === undefined || reference.componentId === component.id ? component : components.find(item => item.id === reference.componentId);
+        const owner = reference.componentId === undefined || reference.componentId === ownerComponent.id ? ownerComponent : components.find(item => item.id === reference.componentId);
         if (!owner?.props.customProperties || !own(owner.props.customProperties, reference.key)) throw new Error(`Custom property '${reference.key}' was not found in the containing form.`);
       } else if (reference.kind === "sessionState" || reference.kind === "screenState" || reference.kind === "instanceState") {
         const scope = stateScopes[reference.kind];
@@ -51,10 +51,10 @@ export function validateTemplateParameterBinding(binding: PropertyBinding, compo
 }
 
 /** Send only declared source fields, never the entire parent form or computed parameters. */
-export function parameterBindingInputs(component: CanvasComponent, inputs: InputValues): InputValues {
+export function parameterBindingInputs(component: CanvasComponent, inputs: InputValues, components: CanvasComponent[] = [component]): InputValues {
   const values: InputValues = {};
   for (const binding of Object.values(component.props.parameterBindings ?? {})) {
-    for (const reference of Object.values(binding.references)) if (reference.kind === "input") {
+    for (const { reference } of bindingReferenceDependencies(binding, component, { components })) if (reference.kind === "input") {
       if (!own(inputs, reference.key)) throw new Error(`Parent input '${reference.key}' is unavailable.`);
       values[reference.key] = inputs[reference.key];
     }
@@ -63,11 +63,11 @@ export function parameterBindingInputs(component: CanvasComponent, inputs: Input
 }
 
 /** Capture the containing scopes before a child introduces its own private state. */
-export function parameterBindingState(component: CanvasComponent, state?: Partial<RuntimeStateValues>): ParameterBindingState {
+export function parameterBindingState(component: CanvasComponent, state?: Partial<RuntimeStateValues>, components: CanvasComponent[] = [component]): ParameterBindingState {
   const result: ParameterBindingState = {};
   for (const binding of Object.values(component.props.parameterBindings ?? {})) {
     const error = validatePropertyBinding(binding); if (error) throw new Error(error);
-    for (const reference of Object.values(binding.references)) {
+    for (const { reference } of bindingReferenceDependencies(binding, component, { components })) {
       if (reference.kind !== "sessionState" && reference.kind !== "screenState" && reference.kind !== "instanceState") continue;
       const scope = stateScopes[reference.kind];
       (result[scope] ??= {})[reference.key] = sourceStateValue(state, scope, reference.key);
@@ -78,9 +78,9 @@ export function parameterBindingState(component: CanvasComponent, state?: Partia
 
 /** Validate a frozen source snapshot without filling absent keys from defaults. */
 export function parameterBindingStateContext(component: CanvasComponent, snapshot: ParameterBindingState | undefined,
-  definitions?: Partial<Record<keyof RuntimeStateValues, StateDefinitions>>): RuntimeStateValues {
+  definitions?: Partial<Record<keyof RuntimeStateValues, StateDefinitions>>, components: CanvasComponent[] = [component]): RuntimeStateValues {
   if (snapshot !== undefined && !object(snapshot)) throw new Error("The source state binding context must be an object.");
-  const expected = parameterBindingState(component, snapshot);
+  const expected = parameterBindingState(component, snapshot, components);
   if (Object.keys(snapshot ?? {}).length !== Object.keys(expected).length)
     throw new Error("The source state binding context contains an unreferenced scope.");
   for (const [scope, values] of Object.entries(snapshot ?? {})) {
@@ -109,11 +109,12 @@ export function resolveParameterBindings(component: CanvasComponent, template: T
     const error = validateTemplateParameterBinding(binding, component, context.components, context.parameters, name, type, context.state);
     if (error) throw new Error(`${name}: ${error}`);
     // Tag quality is required even for an unused alias or a short-circuited expression.
-    for (const [alias, reference] of Object.entries(binding.references)) if (reference.kind === "tag")
-      evaluatePropertyBinding({ expression: alias, references: { [alias]: reference } }, component, context);
+    const dependencies = bindingReferenceDependencies(binding, component, context);
+    for (const { reference, component: owner } of dependencies) if (reference.kind === "tag" || reference.kind === "custom")
+      evaluatePropertyBinding({ expression: "source", references: { source: reference } }, owner, context);
     // Reject invalid intermediate edits even when an expression would mask them.
     // Other, unrelated parent inputs need not be valid to operate this child.
-    for (const reference of Object.values(binding.references)) if (reference.kind === "input") {
+    for (const { reference } of dependencies) if (reference.kind === "input") {
       const input = context.components.find(item => isInput(item.type) && (item.props.fieldKey || item.id) === reference.key)!;
       if (!own(context.inputs, reference.key)) throw new Error(`Parent input '${reference.key}' is unavailable.`);
       const inputError = validateInputs({ id: "binding-source", name: "Binding source", width: 1, height: 1, components: [input] }, context.inputs, context.parameters);

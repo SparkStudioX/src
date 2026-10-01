@@ -2,6 +2,7 @@ import type { RuntimeParameters } from "./types";
 import { validateListTreeOptions } from "./listTreeModel";
 import { resolvePath, tagByPath } from "./api";
 import { inputConstraintError } from "./inputValidation";
+import { cameraInputValue } from "./computerCameraModel";
 import type {
   CanvasComponent,
   ComponentType,
@@ -15,6 +16,7 @@ import type {
 export function isInput(type: ComponentType): boolean {
   return (
     type === "textInput" ||
+    type === "computerCamera" ||
     type === "formattedInput" ||
     type === "barcodeInput" ||
     type === "passwordInput" ||
@@ -198,6 +200,7 @@ export function initialInput(
       : null;
   }
   const initial = !bound && value === undefined ? "" : value;
+  if (component.type === "computerCamera") return initial === "" ? "" : null;
   if (component.type === "dateTimeInput")
     return isLocalDateTime(initial) ? initial : null;
   return typeof initial === "string" && initial.length <= 4096 ? initial : null;
@@ -262,6 +265,7 @@ export function validateInputs(
     if (constraint) return `${label}: ${constraint}`;
     if (value === null)
       return `${label}: the initial value is unavailable. Enter a value before running this action.`;
+    if (component.type === "computerCamera" && !cameraInputValue(value)) return `${label}: capture a photo with this computer's camera.`;
     if (isNumericInput(component.type)) {
       if (!validNumericDefinition(component))
         return `${label}: the configured numeric limits or increment are invalid.`;

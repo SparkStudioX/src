@@ -10,13 +10,75 @@
   },
   "workshops": [
     {
+      "id": "visitor-checkin",
+      "title": "Visitor check-in and photo badges",
+      "summary": "A camera-equipped welcome form renders a visitor badge through Labelary, then resets for the next visitor.",
+      "source": "examples/visitor-checkin.json",
+      "distribution": "portable",
+      "features": [
+        "computer camera capture",
+        "browser HTTP integration",
+        "transient image bindings",
+        "static host choices",
+        "screen state",
+        "component message handlers"
+      ],
+      "prerequisites": [
+        "Use the source build containing Computer camera and transient Image URL support, or its later compatible release. Older preview.10 installers do not include these components.",
+        "A browser with camera access on HTTPS or localhost, a webcam, and internet access to https://api.labelary.com.",
+        "Publish as a gateway administrator and open the operator application with Operate permission, or explicitly enable live actions in Designer Preview.",
+        "Use synthetic visitor details while learning: name, email, host and photo are sent to the external Labelary service. No database or tags are required."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "welcome",
+      "guide": "docs/architecture/VISITOR_CHECKIN.md",
+      "walkthrough": [
+        "Import visitor-checkin.sparkproj from artifacts/sparkproj. On Welcome select visitor-controller in Layers; General shows its component ID, and Actions & Events → Messages contains check-in and dismiss handlers. Create badge's Send message action lists its matching receiver.",
+        "Publish the application and open its operator link. Enter a synthetic name and email, then choose a host.",
+        "Click Start camera, allow browser camera access, then Capture photo. Retake if needed. Camera access begins only after the visitor clicks Start camera.",
+        "Click Create badge. A PNG label from Labelary replaces the form and includes the visitor’s captured photo.",
+        "Click Dismiss. The badge and all local visitor values clear and the blank Welcome form returns. Start camera again for the next visitor.",
+        "Try an empty form or disconnect the internet: validation/error messages keep the form available, with no automatic retry or duplicate requests."
+      ]
+    },
+    {
+      "id": "runtime-property-bindings",
+      "title": "Runtime property bindings",
+      "summary": "Live chart settings, bound custom values, typed datasets and reusable layout bindings.",
+      "source": "examples/runtime-property-bindings.json",
+      "distribution": "portable",
+      "features": [
+        "Component-specific fx bindings",
+        "Custom-property dependencies",
+        "Typed JSON datasets",
+        "Bound split and repeater layout"
+      ],
+      "prerequisites": [
+        "Requires the source build containing runtime property bindings; preview.10 does not include this feature.",
+        "Import, review and explicitly publish. No tags, connections, Python scripts or equipment writes are required."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "runtime-bindings",
+      "guide": "docs/architecture/RUNTIME_PROPERTY_BINDINGS.md",
+      "walkthrough": [
+        "Change Chart maximum and confirm the chart axis follows its bound custom property.",
+        "Toggle Show chart legend: the legend, table row count and repeater columns change.",
+        "Change Repeater gap and Split position. The bound split handle is controlled by its source.",
+        "Write different notes in each form and change layout settings; unrelated note values remain independent.",
+        "Open a second operator tab and verify its session starts with independent defaults.",
+        "In Designer inspect fx on chart, dataset, split and repeater rows; inspect the bound custom property at the bottom."
+      ]
+    },
+    {
       "id": "process-data-workshop",
       "title": "Alarms and retained history",
-      "summary": "Synthetic temperature alarms, acknowledgement, deadband, persistent journal and historical trend.",
+      "summary": "Synthetic temperature alarms, selected-rule configuration, acknowledgement, persistent journal and historical trend.",
       "source": "examples/process-data-workshop.json",
       "distribution": "setup-required",
       "features": [
         "High/low alarm conditions",
+        "Separate Alarms and History lists with selected-rule property forms",
+        "Searchable configured tag browser for alarm and history paths",
         "Acknowledgement and alarm journal",
         "Absolute deadband history",
         "Retained local historical trend",
@@ -31,7 +93,7 @@
       "entryScreenId": "process-data",
       "guide": "docs/architecture/PROCESS_DATA.md",
       "walkthrough": [
-        "Inspect Gateway Settings > Alarms & history, cancel a staged edit and verify no configuration changes.",
+        "In Gateway Settings > Alarms, select the high-temperature rule, inspect Browse beside Tag path and stage a deadband change. Switch to History, select the workshop tag and stage a retention change; Cancel changes restores both tabs without saving.",
         "Publish and open the workshop. Review and confirm 90 as the synthetic temperature, then acknowledge the high alarm.",
         "Set 78 and confirm the alarm remains active; set 74 and confirm it clears.",
         "Set 10 to activate low, then 23 to clear. Compare journal events and historical values in two operator tabs.",
@@ -45,12 +107,28 @@
       "summary": "Reusable forms in embedded, tab, split and dock layouts with independent retained pane state.",
       "source": "examples/view-containers.json",
       "distribution": "portable",
-      "features": ["Keyboard tab navigation", "Pointer and keyboard split sizing", "Dock visibility and resize", "Retained private form state", "Scoped Python and popup actions"],
-      "prerequisites": ["Use the companion application-workflows source build or later compatible release.", "Import the package, review and explicitly publish. Synthetic form actions and events require Operate permission and the bundled Python runtime. No connections or tags are needed."],
+      "features": [
+        "Keyboard tab navigation",
+        "Pointer and keyboard split sizing",
+        "Dock visibility and resize",
+        "Retained private form state",
+        "Scoped Python and popup actions"
+      ],
+      "prerequisites": [
+        "Use preview.10 or later compatible release.",
+        "Import the package, review and explicitly publish. Synthetic form actions and events require Operate permission and the bundled Python runtime. No connections or tags are needed."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "tabs",
       "guide": "docs/architecture/VIEW_CONTAINERS.md",
-      "walkthrough": ["Edit a form in one tab, switch tabs and return to verify its draft is retained.", "Use arrow keys, Home and End on the tab strip to navigate.", "Open the split screen and resize with the pointer and keyboard.", "Hide and reopen a dock to verify its private values remain.", "Run a pane action and open its contextual popup; compare another pane and another operator tab."]
+      "walkthrough": [
+        "In Designer, select the container, open View container → Edit panes, and inspect each pane's shared template and parameter overrides. Edit the form itself under Project → Templates.",
+        "Edit a form in one tab, switch tabs and return to verify its draft is retained.",
+        "Use arrow keys, Home and End on the tab strip to navigate.",
+        "Open the split screen and resize with the pointer and keyboard.",
+        "Hide and reopen a dock to verify its private values remain.",
+        "Run a pane action and open its contextual popup; compare another pane and another operator tab."
+      ]
     },
     {
       "id": "validated-inputs",
@@ -58,12 +136,25 @@
       "summary": "Formatted part codes, inline validation and repeat barcode scans with session-local Python feedback.",
       "source": "examples/validated-inputs.json",
       "distribution": "portable",
-      "features": ["Formatted input masks", "Required and text validation", "Keyboard barcode scans", "Python commit handlers"],
-      "prerequisites": ["Use preview.10 or later for these controls.", "The bundled Python runtime and operator Operate permission are required."],
+      "features": [
+        "Formatted input masks",
+        "Required and text validation",
+        "Keyboard barcode scans",
+        "Python commit handlers"
+      ],
+      "prerequisites": [
+        "Use preview.10 or later for these controls.",
+        "The bundled Python runtime and operator Operate permission are required."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "validated-inputs",
       "guide": "docs/architecture/VALIDATED_INPUTS.md",
-      "walkthrough": ["Enter ab0012 and Tab to format the part as AB-0012.", "Enter an invalid email, then operator@example.test, observing inline messages.", "Scan 000123 plus Enter twice and confirm both commits while retaining leading zeroes.", "Validate an incomplete form, then a complete form. Compare independent state in another operator tab."]
+      "walkthrough": [
+        "Enter ab0012 and Tab to format the part as AB-0012.",
+        "Enter an invalid email, then operator@example.test, observing inline messages.",
+        "Scan 000123 plus Enter twice and confirm both commits while retaining leading zeroes.",
+        "Validate an incomplete form, then a complete form. Compare independent state in another operator tab."
+      ]
     },
     {
       "id": "component-interactions",
@@ -71,12 +162,26 @@
       "summary": "Keyboard, focus and pointer handlers in Python and JavaScript with independent template forms.",
       "source": "examples/component-interactions.json",
       "distribution": "portable",
-      "features": ["Focus and blur events", "Keyboard and pointer events", "Double-click handlers", "Password key redaction", "Template event isolation"],
-      "prerequisites": ["Use preview.10 or later for these events.", "Python handlers require the bundled runtime and operator Operate permission."],
+      "features": [
+        "Focus and blur events",
+        "Keyboard and pointer events",
+        "Double-click handlers",
+        "Password key redaction",
+        "Template event isolation"
+      ],
+      "prerequisites": [
+        "Use preview.10 or later for these events.",
+        "Python handlers require the bundled runtime and operator Operate permission."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "interaction-lab",
       "guide": "docs/architecture/COMPONENT_INTERACTIONS.md",
-      "walkthrough": ["Focus and type into fields, then use arrow keys and Tab to inspect their event details.", "Type slowly into the password field and confirm the counter changes without revealing keys.", "Press, release and double-click the pad, then compare disabled and hidden behavior.", "Compare independent station A and B forms and a second operator tab."]
+      "walkthrough": [
+        "Focus and type into fields, then use arrow keys and Tab to inspect their event details.",
+        "Type slowly into the password field and confirm the counter changes without revealing keys.",
+        "Press, release and double-click the pad, then compare disabled and hidden behavior.",
+        "Compare independent station A and B forms and a second operator tab."
+      ]
     },
     {
       "id": "table-batch-workflow",
@@ -84,12 +189,26 @@
       "summary": "Select several synthetic work orders, stage cell changes and save them in one SQLite transaction.",
       "source": "examples/table-batch-workflow.json",
       "distribution": "setup-required",
-      "features": ["Typed multiple row selection", "Staged batch Apply and Cancel", "Optimistic row versions", "Atomic SQLite and SQL Server batch contract"],
-      "prerequisites": ["Use the companion application-workflows source build or a later compatible release.", "Run tools/load-table-batch-example.mjs on an isolated gateway to create its synthetic SQLite database and project; --publish explicitly publishes.", "Operators need Operate permission to apply changes. SQL Server uses the same transaction contract but this workshop exercises SQLite."],
+      "features": [
+        "Typed multiple row selection",
+        "Staged batch Apply and Cancel",
+        "Optimistic row versions",
+        "Atomic SQLite and SQL Server batch contract"
+      ],
+      "prerequisites": [
+        "Use the companion application-workflows source build or a later compatible release.",
+        "Run tools/load-table-batch-example.mjs on an isolated gateway to create its synthetic SQLite database and project; --publish explicitly publishes.",
+        "Operators need Operate permission to apply changes. SQL Server uses the same transaction contract but this workshop exercises SQLite."
+      ],
       "gatewayWrites": "sqlite-setup",
       "entryScreenId": "table-batch",
       "guide": "docs/architecture/TABLE_BATCH_EDITING.md",
-      "walkthrough": ["Load and explicitly publish the synthetic workshop.", "Select multiple rows, open the batch editor and stage changes; Cancel must leave records unchanged.", "Apply changes and confirm the affected row versions advance once each.", "Use two operator tabs to stage conflicting edits; the losing batch must update no rows."]
+      "walkthrough": [
+        "Load and explicitly publish the synthetic workshop.",
+        "Select multiple rows, open the batch editor and stage changes; Cancel must leave records unchanged.",
+        "Apply changes and confirm the affected row versions advance once each.",
+        "Use two operator tabs to stage conflicting edits; the losing batch must update no rows."
+      ]
     },
     {
       "id": "access-permissions-workshop",
@@ -101,6 +220,7 @@
         "View and Operate grants",
         "Explicit Commands permission",
         "Delegated gateway capabilities",
+        "Selected-project tag access form",
         "Negative authorization checks"
       ],
       "prerequisites": [
@@ -112,6 +232,7 @@
       "guide": "docs/architecture/FINE_GRAINED_ACCESS.md",
       "walkthrough": [
         "Load and publish the workshop on an isolated gateway.",
+        "In Security → Operator settings, select the workshop's project tag access entry and verify its narrow multiline prefix; compare another project's draft without granting extra access.",
         "Compare Viewer, Operator and Command operator profiles.",
         "Exercise the five delegated gateway profiles and confirm other operations are denied.",
         "Disable a disposable account and verify its sessions lose access."
@@ -120,16 +241,19 @@
     {
       "id": "equipment-commands",
       "title": "Equipment commands workshop",
-      "summary": "Review, confirmation, typed bounds, readback and audit for three synthetic memory-tag commands.",
+      "summary": "Reviewed equipment controls and simple fixed/property-sourced tag buttons using synthetic memory tags.",
       "source": "examples/equipment-commands.json",
       "distribution": "setup-required",
       "features": [
         "Explicit Commands permission",
         "Single-use confirmations",
         "Current-state conflict checks",
-        "Readback receipts and audit"
+        "Readback receipts and audit",
+        "Native Set tag value buttons",
+        "Current input and parent-property value sources"
       ],
       "prerequisites": [
+        "Native buttons require the source build containing Set tag value actions; preview.10 does not include them.",
         "Run tools/load-equipment-commands-example.mjs on an isolated gateway; --publish explicitly publishes.",
         "No equipment connection is configured. Non-admin operators need explicit Commands and tag-read access."
       ],
@@ -140,7 +264,10 @@
         "Review and confirm a speed, run flag and note.",
         "Cancel a review and reject an out-of-range speed.",
         "Change the target from another session after review; confirm stale requests are rejected.",
-        "Compare Operate-only and Commands accounts and inspect audit references."
+        "Compare Operate-only and Commands accounts and inspect audit references.",
+        "Open Native tag actions, edit the numeric, Boolean and text fields, then activate their buttons. Confirm the exact reviewed input values.",
+        "Use Quick write: 25 and Write parent screen height to change the separate synthetic quick tag without a confirmation dialog.",
+        "In Designer inspect Edit actions & events → On click → Set tag value. Choose a fixed value or a component property; Apply is one undo step."
       ]
     },
     {
@@ -427,22 +554,24 @@
     {
       "id": "scheduled-backups",
       "title": "Scheduled backup workshop",
-      "summary": "A read-only checkpoint for encrypted configuration downloads, daily SMB/FTP/FTPS delivery, gateway-specific age retention and isolated restore.",
+      "summary": "A read-only checkpoint for encrypted downloads, multiple SMB/FTP/FTPS/S3 destinations and schedules, independent age retention and isolated restore.",
       "source": "examples/scheduled-backups.json",
       "distribution": "setup-required",
       "features": [
         "online saved-configuration snapshot",
         "passphrase-encrypted archives",
-        "daily destination delivery",
-        "verified atomic promotion",
-        "gateway-owned age retention",
+        "multiple named destinations and schedules",
+        "daily or selected-weekday delivery",
+        "destination-specific SMB, FTP/FTPS and S3 forms",
+        "verified delivery",
+        "independent schedule-owned age retention",
         "quarantined restore"
       ],
       "prerequisites": [
-        "Use the companion scheduling build and an engineering administrator on a disposable gateway; preview.5 predates this feature.",
+        "Use the companion multi-schedule source build and an engineering administrator on a disposable gateway. The preview.10 installer has the earlier single-destination model.",
         "Run tools/load-backup-example.mjs with SPARKSTUDIO_ADMIN_AUTH_FILE to create a new unpublished checkpoint project; --publish is an explicit option. The loader does not change gateway backup settings.",
-        "Choose an archive passphrase and a dedicated writable test SMB share or FTP/FTPS directory for the remote exercise. No credentials, remote folders or certificate material are included.",
-        "The daily schedule defaults to disabled, 02:00 in the gateway time zone, seven-day retention and a 300-second transfer deadline. Save and verify a manual delivery before enabling it.",
+        "Choose an archive passphrase and dedicated writable test targets: SMB share, FTP/FTPS directory or S3 bucket/prefix. No credentials, remote folders or certificate material are included.",
+        "New schedules default to disabled, 02:00 in the gateway time zone and seven-day retention; destinations default to a 300-second transfer deadline. Save and verify each manual delivery before enabling its schedule.",
         "Configuration archives exclude live databases, history and audit data. Keep separate database backups and use the offline full-backup procedure when complete stopped-gateway data is needed."
       ],
       "gatewayWrites": "none",
@@ -450,10 +579,11 @@
       "guide": "docs/architecture/SCHEDULED_BACKUPS.md",
       "walkthrough": [
         "Load the checkpoint screen into the disposable gateway, review and publish SCHEDULE-LAB-A, then save an unpublished SCHEDULE-LAB-B draft.",
-        "Open Gateway Settings → Recovery, save an archive passphrase with scheduling disabled, create a download and inspect its configuration scope.",
-        "Configure the dedicated destination, deliver a manual backup and verify its success before enabling the daily schedule. Observe an unavailable-destination failure without older-archive deletion.",
-        "Review the default 02:00 daily time in the gateway time zone and seven-day retention. Confirm the next run before enabling; change the time deliberately for an isolated scheduled-run exercise.",
-        "Restore to a fresh isolated directory, review quarantine and exclusions, and compare published A with draft B before permitting external activity."
+        "Open Gateway Settings → Backups, save an archive passphrase with all schedules disabled, create a download and inspect its configuration scope.",
+        "In Destinations, configure two dedicated test targets with their own type-specific fields. Use an S3 bucket and prefix for the optional object-storage exercise.",
+        "In Schedules, add Nightly and Weekly copies referencing different targets, with separate weekdays, time zones and retention. Save both, run each manually and verify their results before enabling them.",
+        "Observe an unavailable-target failure without older-archive deletion. On a disposable gateway, use two schedules in one test folder to confirm the shorter retention does not prune the other schedule's archives.",
+        "Open Restore, restore to a fresh isolated directory, review quarantine and exclusions, and compare published A with draft B before permitting external activity."
       ]
     },
     {
@@ -766,11 +896,11 @@
       "entryScreenId": "gateway-lab",
       "guide": "docs/architecture/GATEWAY_CONSOLE.md",
       "walkthrough": [
-        "Import and publish the named workshop. Open Gateway Settings and locate its Designer/operator links.",
+        "Import and publish the named workshop. Locate its Designer/operator links in Projects, then open Gateway Settings to inspect resource counts.",
         "Compare engineering and operator sessions. If testing revocation, identify and revoke only a disposable session, leaving the current and other sessions active.",
-        "Open Diagnostics and refresh twice at least one second apart. Inspect CPU, memory, disk and bounded route observations.",
-        "Wait over 30 seconds to verify the stale snapshot indicator, then refresh.",
-        "Open Deployment. Compare actual listeners, startup values and saved settings. Edit a loopback HTTP port, Validate draft, then Discard draft and reload. Verify the saved revision and actual listeners remain unchanged. Saving/restart/recovery requires the separate disposable-gateway exercise in the guide.",
+        "Open Diagnostics and compare automatic observations approximately 15 seconds apart. Inspect CPU, memory, disk and bounded route records.",
+        "Verify the observation timestamp advances while visible without a Refresh button. Failed observations retain the last data with a warning and contextual Retry.",
+        "Open Deployment. Compare actual listeners, startup values and saved settings. Edit a loopback HTTP port, Validate draft, then Cancel changes. Verify the latest saved revision is retrieved and actual listeners remain unchanged. Saving/restart/recovery requires the separate disposable-gateway exercise in the guide.",
         "Download and inspect the local support snapshot; it excludes credentials, identities, authored project content and tag values. Ordinary Designer/operator users cannot open the console."
       ]
     },

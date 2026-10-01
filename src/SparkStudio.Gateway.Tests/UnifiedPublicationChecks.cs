@@ -138,6 +138,7 @@ internal static class UnifiedPublicationChecks
             var oldSaved = legacyScripts.SaveDraft(oldDraft); legacyScripts.Publish(ScriptResourceStore.Revision(oldSaved));
             var legacyPublication = new PublicationStore(legacyDirectory, new LocalAssetStore(legacyDirectory)); legacyPublication.AttachScripts(legacyScripts); legacyScripts.AttachApplication(legacyPublication);
             Check(legacyPublication.Metadata()["warnings"]!.AsArray().Any(w => w!.GetValue<string>().Contains("Legacy snapshot")), "legacy application exposes explicit compatibility warning");
+            Check(!legacyPublication.Review(legacyStore)["warnings"]!.AsArray().Any(w => w!.GetValue<string>().Contains("Legacy snapshot")), "new complete publication review omits the active legacy snapshot restore warning");
             legacyPublication.Publish(legacyStore, legacyStore.GetProject()["revision"]!.GetValue<int>());
             var oldEntry = legacyPublication.History()["entries"]!.AsArray().OfType<JsonObject>().Single(entry => !entry["complete"]!.GetValue<bool>());
             var current = legacyPublication.Metadata()["publishedAt"]!.GetValue<string>();

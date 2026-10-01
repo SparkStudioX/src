@@ -17,6 +17,7 @@ const leafUrl = url(`import React from ${JSON.stringify(reactUrl)}; export defau
 const stateUrl = url('export const useApplicationStateContext=()=>globalThis.__nestedState; export const useInstanceApplicationState=parent=>parent; export const ApplicationStateProvider=({children})=>children;');
 const queryUrl = url('export const useQueryRepeater=(source)=>source ? globalThis.__nestedQuery : {rows:[],key:"none",loading:false,error:""};');
 function load(name, harness = false) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   const key = `${harness}:${name}`;
   if (modules.has(key)) return modules.get(key);
   const file = ['tsx', 'ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(file => fs.existsSync(file));

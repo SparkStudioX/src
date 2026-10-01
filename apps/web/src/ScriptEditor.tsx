@@ -123,8 +123,15 @@ export default function ScriptEditor({ value, language, onChange, onRun, onSave,
       {syntaxError && <span role="alert" className="syntax-invalid">Syntax check unavailable: {syntaxError}</span>}
       {!syntaxResult && !syntaxError && !checking && <span>Compile only · no script execution</span>}
     </div>
-    {language === "javascript" && <p className="script-trust-notice">Trusted browser code: scripts have this application’s browser privileges. Synchronous loops cannot be interrupted by a timeout and can freeze the tab. Use bounded work; publishing executable changes requires a gateway administrator.</p>}
     <div className="source-editor-host" ref={host} />
     <div className="source-editor-status"><span>{language === "python" ? "Python 3" : "JavaScript"} · Ln {position.line}, Col {position.column}</span><span id={keyboardHelpId}>Ctrl+F find · Ctrl+Space complete · Tab indent · Esc, Tab leaves editor</span></div>
+    {language === "javascript" && <details className="script-execution-notes">
+      <summary>JavaScript runs in the browser</summary>
+      <div>
+        <p>Scripts can access the same browser resources as this application.</p>
+        <p>Keep loops bounded. Timeouts cannot stop synchronous JavaScript, which can freeze the tab.</p>
+        <p>Publishing script changes requires a gateway administrator.</p>
+      </div>
+    </details>}
   </div>;
 }

@@ -9,8 +9,8 @@
 .visual-styles-body nav > button { padding: 8px; text-align: left; overflow-wrap: anywhere; }
 .visual-styles-body nav > button[aria-pressed="true"] { outline: 2px solid var(--accent); }
 .visual-styles-body section { padding: 18px; min-width: 0; }
-.visual-styles-dialog label, .visual-style-assignment label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
-.visual-styles-dialog input, .visual-style-assignment select { padding: 8px; width: 100%; min-width: 0; color: var(--ink); background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 5px; }
+.visual-styles-dialog label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+.visual-styles-dialog input { padding: 8px; width: 100%; min-width: 0; color: var(--ink); background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 5px; }
 .visual-styles-dialog small { color: var(--muted); }
 .visual-style-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
 .visual-style-preview { border: 1px solid var(--border); padding: 15px; border-radius: 5px; }

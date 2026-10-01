@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import ts from 'typescript';
 const modules = new Map();
 function load(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   if (modules.has(name)) return modules.get(name);
   const code = fs.readFileSync(new URL(`./src/${name}.ts`, import.meta.url), 'utf8');
   const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText

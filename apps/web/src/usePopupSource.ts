@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { validatePopupSource, type PopupSourceStatus } from "./popupModel";
+import { bindingReferenceDependencies } from "./propertyBindings";
 import type { PopupState, Project, Tag } from "./types";
 
 export function usePopupSource(project: Project, popup: PopupState, tags: Tag[], scope: "designer" | "runtime", offline: boolean, publishedAt?: string): PopupSourceStatus {
@@ -9,8 +10,11 @@ export function usePopupSource(project: Project, popup: PopupState, tags: Tag[],
   const relevantPaths: string[] = [];
   for (const step of path) {
     const instance = document?.components.find(component => component.id === step.instanceId);
-    for (const binding of Object.values(instance?.props.parameterBindings ?? {})) for (const reference of Object.values(binding.references))
-      if (reference.kind === "tag") relevantPaths.push(reference.path);
+    if (instance) try {
+      for (const binding of Object.values(instance.props.parameterBindings ?? {}))
+        for (const { reference } of bindingReferenceDependencies(binding, instance, { components: document?.components ?? [] }))
+          if (reference.kind === "tag") relevantPaths.push(reference.path);
+    } catch { /* Source validation presents malformed definitions as unavailable. */ }
     document = project.templates?.find(item => item.id === instance?.props.templateId);
   }
   const patterns = relevantPaths.map(address => new RegExp("^" + address.split(/\{[^{}]+\}/).map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*") + "$"));

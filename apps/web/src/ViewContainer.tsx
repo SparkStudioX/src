@@ -29,20 +29,32 @@ function ResizeHandle({ label, vertical, value, min, max, onChange, disabled = f
 }
 
 /** Layout owns only local presentation state. Form state lives in each retained pane. */
-export default function ViewContainer({ layout, interactive, renderPane }: { layout: ViewLayout; interactive: boolean; renderPane: (pane: ViewPane, active: boolean) => ReactNode }) {
+export default function ViewContainer({ layout, interactive, renderPane, boundProperties = [] }: { layout: ViewLayout; interactive: boolean; renderPane: (pane: ViewPane, active: boolean) => ReactNode; boundProperties?: readonly string[] }) {
   const id = useId(), host = useRef<HTMLDivElement>(null);
-  const signature = JSON.stringify(layout);
+  const paneIdentity = JSON.stringify([layout.kind, layout.panes.map(pane => pane.id)]);
   const first = layout.initialPaneId ?? layout.panes[0]?.id ?? "";
   const [selected, setSelected] = useState(first), [ratio, setRatio] = useState(layout.ratio ?? 50);
   const [open, setOpen] = useState<Record<string, boolean>>(() => Object.fromEntries(layout.panes.map(pane => [pane.id, pane.initiallyOpen !== false])));
   const [sizes, setSizes] = useState<Record<string, number>>(() => Object.fromEntries(layout.panes.map(pane => [pane.id, pane.size ?? 220])));
-  useEffect(() => { setSelected(first); setRatio(layout.ratio ?? 50); setOpen(Object.fromEntries(layout.panes.map(pane => [pane.id, pane.initiallyOpen !== false]))); setSizes(Object.fromEntries(layout.panes.map(pane => [pane.id, pane.size ?? 220]))); }, [signature]);
+  const openSignature = JSON.stringify(layout.panes.map(pane => [pane.id, pane.initiallyOpen]));
+  const sizeSignature = JSON.stringify(layout.panes.map(pane => [pane.id, pane.size]));
+  // A live label/color update must not reset the operator's selected tab or
+  // resize. Bindings on size/ratio remain authoritative while unbound controls
+  // retain their ordinary local interaction state.
+  useEffect(() => { setSelected(first); }, [paneIdentity, first]);
+  useEffect(() => { setRatio(layout.ratio ?? 50); }, [paneIdentity, layout.ratio]);
+  useEffect(() => { setOpen(Object.fromEntries(layout.panes.map(pane => [pane.id, pane.initiallyOpen !== false]))); }, [paneIdentity, openSignature]);
+  useEffect(() => { setSizes(Object.fromEntries(layout.panes.map(pane => [pane.id, pane.size ?? 220]))); }, [paneIdentity, sizeSignature]);
+  const ratioBound = boundProperties.includes("viewLayout.ratio");
+  const displayedRatio = ratioBound ? layout.ratio ?? 50 : ratio;
+  const sizeBound = (pane: ViewPane) => boundProperties.includes(`viewLayout.panes.${layout.panes.indexOf(pane)}.size`);
+  const displayedSize = (pane: ViewPane) => sizeBound(pane) ? pane.size ?? 220 : sizes[pane.id] ?? 220;
   const selectedId = layout.panes.some(pane => pane.id === selected) ? selected : first;
   const measuredExtent = (vertical: boolean) => { const element = host.current; return element ? vertical ? element.getBoundingClientRect().height : element.getBoundingClientRect().width : 1; };
   const viewportScale = (vertical: boolean) => measuredExtent(vertical) / Math.max(1, vertical ? host.current?.clientHeight ?? 1 : host.current?.clientWidth ?? 1);
   function selectTab(index: number) { const pane = layout.panes[(index + layout.panes.length) % layout.panes.length]; setSelected(pane.id); host.current?.querySelector<HTMLButtonElement>(`[data-tab-index="${(index + layout.panes.length) % layout.panes.length}"]`)?.focus(); }
-  const dockSize = (edge: string) => { const pane = layout.panes.find(item => item.edge === edge); return pane && open[pane.id] !== false ? `min(${sizes[pane.id] ?? 220}px, 35%)` : "0px"; };
-  const style: CSSProperties = layout.kind === "split" ? { gridTemplateColumns: layout.orientation === "vertical" ? "minmax(0,1fr)" : `minmax(0,${ratio}fr) 6px minmax(0,${100 - ratio}fr)`, gridTemplateRows: layout.orientation === "vertical" ? `minmax(0,${ratio}fr) 6px minmax(0,${100 - ratio}fr)` : "minmax(0,1fr)" }
+  const dockSize = (edge: string) => { const pane = layout.panes.find(item => item.edge === edge); return pane && open[pane.id] !== false ? `min(${displayedSize(pane)}px, 35%)` : "0px"; };
+  const style: CSSProperties = layout.kind === "split" ? { gridTemplateColumns: layout.orientation === "vertical" ? "minmax(0,1fr)" : `minmax(0,${displayedRatio}fr) 6px minmax(0,${100 - displayedRatio}fr)`, gridTemplateRows: layout.orientation === "vertical" ? `minmax(0,${displayedRatio}fr) 6px minmax(0,${100 - displayedRatio}fr)` : "minmax(0,1fr)" }
     : layout.kind === "dock" ? { gridTemplateColumns: `${dockSize("left")} minmax(0,1fr) ${dockSize("right")}`, gridTemplateRows: `auto ${dockSize("top")} minmax(0,1fr) ${dockSize("bottom")}` } : {};
   return <div ref={host} className={`view-container view-container-${layout.kind}`} style={style}>
     {layout.kind === "tabs" && <div className="view-tab-list" role="tablist" aria-label="Embedded views">{layout.panes.map((pane, index) => <button key={pane.id} type="button" role="tab" id={`${id}-tab-${pane.id}`} aria-controls={`${id}-pane-${pane.id}`} aria-selected={pane.id === selectedId} tabIndex={pane.id === selectedId ? 0 : -1} disabled={!interactive} data-tab-index={index}
@@ -54,9 +66,9 @@ export default function ViewContainer({ layout, interactive, renderPane }: { lay
       return <div key={pane.id} className={`view-pane ${layout.kind === "dock" ? `view-dock-${pane.edge}` : ""}`} id={`${id}-pane-${pane.id}`} role={layout.kind === "tabs" ? "tabpanel" : "region"} aria-labelledby={layout.kind === "tabs" ? `${id}-tab-${pane.id}` : undefined} aria-label={layout.kind === "tabs" ? undefined : pane.label} hidden={!shown} inert={!shown || !interactive} style={placement}>
         {layout.kind === "dock" && pane.edge !== "center" && <header><span>{pane.label}</span><button type="button" disabled={!interactive} aria-label={`Close ${pane.label} dock`} onClick={() => setOpen(previous => ({ ...previous, [pane.id]: false }))}>×</button></header>}
         <div className="view-pane-content">{renderPane(pane, shown)}</div>
-        {layout.kind === "dock" && pane.edge !== "center" && <ResizeHandle label={`Resize ${pane.label} dock`} vertical={pane.edge === "top" || pane.edge === "bottom"} reverse={pane.edge === "right" || pane.edge === "bottom"} value={sizes[pane.id] ?? 220} min={80} max={1600} extent={() => viewportScale(pane.edge === "top" || pane.edge === "bottom")} disabled={!interactive} onChange={value => setSizes(previous => ({ ...previous, [pane.id]: value }))} />}
+        {layout.kind === "dock" && pane.edge !== "center" && <ResizeHandle label={`Resize ${pane.label} dock`} vertical={pane.edge === "top" || pane.edge === "bottom"} reverse={pane.edge === "right" || pane.edge === "bottom"} value={displayedSize(pane)} min={80} max={1600} extent={() => viewportScale(pane.edge === "top" || pane.edge === "bottom")} disabled={!interactive || sizeBound(pane)} onChange={value => setSizes(previous => ({ ...previous, [pane.id]: value }))} />}
       </div>;
     })}
-    {layout.kind === "split" && <div className="view-split-separator" style={layout.orientation === "vertical" ? { gridRow: 2, gridColumn: 1 } : { gridColumn: 2, gridRow: 1 }}><ResizeHandle label="Resize split panes" vertical={layout.orientation === "vertical"} value={ratio} min={10} max={90} disabled={!interactive} extent={() => measuredExtent(layout.orientation === "vertical") / 100} onChange={setRatio} /></div>}
+    {layout.kind === "split" && <div className="view-split-separator" style={layout.orientation === "vertical" ? { gridRow: 2, gridColumn: 1 } : { gridColumn: 2, gridRow: 1 }}><ResizeHandle label="Resize split panes" vertical={layout.orientation === "vertical"} value={displayedRatio} min={10} max={90} disabled={!interactive || ratioBound} extent={() => measuredExtent(layout.orientation === "vertical") / 100} onChange={setRatio} /></div>}
   </div>;
 }

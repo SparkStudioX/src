@@ -9,7 +9,8 @@ using SparkStudio.Connectors;
 
 internal static class OpcSubscriptionIntegration
 {
-    public static async Task RunAsync(Action<bool, string> check, Uri? gateway = null)
+    public static async Task RunAsync(Action<bool, string> check, Uri? gateway = null,
+        Func<string, string, string, CancellationToken, Task>? nativeFixture = null)
     {
         // Only this disposable loopback server is stopped/restarted. No installed gateway or PLC is accessed.
         using var portReservation = new TcpListener(IPAddress.Loopback, 0);
@@ -50,7 +51,7 @@ internal static class OpcSubscriptionIntegration
         await application.CheckApplicationInstanceCertificatesAsync(true);
         StandardServer? server = new TestServer();
         using var connector = new ConnectorService(Path.Combine(directory, "client"));
-        using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+        using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(nativeFixture is null ? 45 : 120));
         Task? watch = null;
         var statuses = new ConcurrentQueue<string>();
         var values = new ConcurrentQueue<ConnectorValue>();
@@ -59,13 +60,18 @@ internal static class OpcSubscriptionIntegration
         {
             await server.StartAsync(configuration, lifetime.Token);
             Console.WriteLine("Isolated OPC UA subscription test server started.");
+            var writable = ((TestServer)server).Writes!.Writable.ToString();
+            var readOnly = ((TestServer)server).Writes!.ReadOnly.ToString();
+            if (nativeFixture is not null)
+            {
+                await nativeFixture(endpoint, writable, readOnly, lifetime.Token);
+                return;
+            }
             if (gateway is not null)
             {
                 await GatewaySubscriptionLifecycle.RunAsync(gateway, endpoint, check);
                 return;
             }
-            var writable = ((TestServer)server).Writes!.Writable.ToString();
-            var readOnly = ((TestServer)server).Writes!.ReadOnly.ToString();
             var dispatches = 0;
             var write = await connector.WriteValueAsync(connection, writable, "Int32", JsonSerializer.SerializeToElement(42), lifetime.Token, () => dispatches++);
             check(write.StartsWith("Good", StringComparison.Ordinal) && dispatches == 1, "isolated OPC UA scalar command dispatches exactly once and receives Good");

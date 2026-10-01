@@ -411,7 +411,12 @@ export function duplicateSelected(
   });
   const copiedIds = new Map(selected.map((component, index) => [component.id, copies[index].id]));
   for (const copy of copies) {
-    for (const binding of [...Object.values(copy.props.bindings || {}), ...Object.values(copy.props.parameterBindings || {})]) {
+    const tagSource = copy.props.tagWrite?.valueReference;
+    if (tagSource?.kind === "property" && tagSource.componentId && copiedIds.has(tagSource.componentId))
+      tagSource.componentId = copiedIds.get(tagSource.componentId)!;
+    for (const binding of [...Object.values(copy.props.bindings || {}), ...Object.values(copy.props.parameterBindings || {}),
+      ...Object.values(copy.props.queryBindings ?? {}).flatMap(source => Object.values(source?.parameters ?? {})),
+      ...Object.values(copy.props.dataSource?.parameters ?? {})]) {
       for (const reference of Object.values(binding?.references || {})) {
         if (reference.kind === "custom" && reference.componentId && copiedIds.has(reference.componentId))
           reference.componentId = copiedIds.get(reference.componentId)!;

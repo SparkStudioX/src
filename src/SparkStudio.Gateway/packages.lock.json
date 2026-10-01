@@ -2,6 +2,15 @@
   "version": 1,
   "dependencies": {
     "net10.0": {
+      "AWSSDK.S3": {
+        "type": "Direct",
+        "requested": "[4.0.104, )",
+        "resolved": "4.0.104",
+        "contentHash": "azHSmQV9wPfPIy7WvaiHIlU4/Gw/u4QZGV2xFiys9LX10eYbX/F9oxklMLjh8RKRyeKsookPp15v3g2ab8GvpQ==",
+        "dependencies": {
+          "AWSSDK.Core": "[4.0.102.8, 5.0.0)"
+        }
+      },
       "Microsoft.Extensions.Hosting.WindowsServices": {
         "type": "Direct",
         "requested": "[10.0.9, )",
@@ -10,6 +19,11 @@
         "dependencies": {
           "System.ServiceProcess.ServiceController": "10.0.9"
         }
+      },
+      "AWSSDK.Core": {
+        "type": "Transitive",
+        "resolved": "4.0.102.8",
+        "contentHash": "90B9Skhl+ORbtWNXrrmGdGhGvAfZiPmZafRYrB/xHelZjePIwPvXioqz9UiiF1vo21eDLzTnXh5EC4RjbNWsFQ=="
       },
       "Azure.Core": {
         "type": "Transitive",

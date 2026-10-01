@@ -21,8 +21,6 @@ public static class TagDefinitionValidator
         var segments = relative.Split('/');
         if (segments.Any(segment => string.IsNullOrWhiteSpace(segment) || segment is "." or ".."))
             throw new ArgumentException("Tag paths cannot contain empty, dot or parent segments.");
-        if (segments[0] is "Line" or "Setpoints")
-            throw new ArgumentException("The sample tag namespace is reserved.");
         return path;
     }
 

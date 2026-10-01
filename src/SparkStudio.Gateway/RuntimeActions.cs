@@ -141,7 +141,20 @@ public sealed partial class RuntimeActions(PublicationStore publications, Python
         await ValidateBindingInputsAsync(scope, bindingInputs, context, capturedQueries, cancellation);
         // Every result is validated even when a saved/query row later overrides
         // that key. An invalid expression must never leave an actionable row.
-        var boundParameters = TemplateParameterBindings.Evaluate(scope, context, bindingInputs, bindingState, readBindingTag)
+        var evaluated = await RuntimeCustomBindings.EvaluateAsync(scope, context, bindingInputs, bindingState, readBindingTag, async (queryId, mappings) =>
+        {
+            var definition = capturedQueries.FirstOrDefault(query => ProjectStore.Optional(query, "id") == queryId)
+                ?? throw new ArgumentException("A bound custom-property query is missing from this publication.");
+            if (ProjectStore.Optional(definition, "kind") == "update") throw new ArgumentException("Custom-property sources require read queries.");
+            foreach (var (name, value) in mappings)
+            {
+                var parameter = (definition["parameters"] as JsonArray ?? []).OfType<JsonObject>().FirstOrDefault(item => ProjectStore.Optional(item, "name") == name)
+                    ?? throw new ArgumentException("A custom query binding supplied an undeclared parameter.");
+                ComponentQueryBindingValidator.ValidateMappedValue(ProjectStore.Required(parameter, "type"), value);
+            }
+            return await queries.ExecuteDefinitionAsync(definition, mappings, cancellation);
+        });
+        var boundParameters = evaluated
             .ToDictionary(pair => pair.Key, pair => TemplateParameterTypes.Coerce(pair.Key, pair.Value, parameterTypes), StringComparer.Ordinal);
         Dictionary<string, JsonElement>? rowParameters = null;
         if (scope["rowsSource"] is JsonObject rowsSource)

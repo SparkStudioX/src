@@ -53,6 +53,21 @@ let passed = 0;
 function check(name, run) { run(); passed++; console.log(`PASS ${name}`); }
 const at = (kind, id, componentId, property) => entries.find(entry => entry.target.kind === kind && entry.target.id === id && entry.target.componentId === componentId && entry.target.property === property);
 
+check('native tag references index actual tags and same-form source components, including inactive definitions', () => {
+  const authored=structuredClone(project),components=authored.screens[0].components;
+  components.push(component('tag-write','button',{action:'setTagValue',tagWrite:{tagPath:'[default]Workshop/Setpoint',dataType:'Double',valueReference:{kind:'property',componentId:'qty',property:'value'}}}),
+    component('tag-self','button',{action:'setTagValue',tagWrite:{tagPath:'[default]Workshop/Height',dataType:'Double',valueReference:{kind:'property',property:'height'}}}),
+    component('tag-parent','button',{action:'setTagValue',tagWrite:{tagPath:'[default]Workshop/Width',dataType:'Double',valueReference:{kind:'parentProperty',property:'width'}}}),
+    component('tag-missing','button',{action:'navigate',tagWrite:{tagPath:'[default]Workshop/Setpoint',dataType:'Double',valueReference:{kind:'property',componentId:'retired-input',property:'value'}}}));
+  const indexed=buildProjectSearch(authored,queries,scripts),source=indexed.find(entry=>entry.target.componentId==='tag-write'&&entry.target.property==='props.tagWrite.valueReference');
+  assert.equal(source.category,'binding');assert.deepEqual(source.reference,{kind:'component',id:'qty',ownerKind:'screen',ownerId:'home'});assert.equal(source.missing,false);
+  assert.equal(findProjectReferences(indexed,{kind:'component',id:'qty',ownerKind:'template',ownerId:'machine-card'}).some(entry=>entry.target.componentId==='tag-write'),false);
+  assert.equal(findProjectReferences(indexed,{kind:'component',id:'tag-self',ownerKind:'screen',ownerId:'home'}).length,1);
+  assert.equal(indexed.find(entry=>entry.target.componentId==='tag-parent'&&entry.target.property==='props.tagWrite.valueReference').reference,undefined);
+  assert.equal(indexed.find(entry=>entry.target.componentId==='tag-missing'&&entry.target.property==='props.tagWrite.valueReference').missing,true);
+  assert.equal(findProjectReferences(indexed,{kind:'tag',id:'[default]Workshop/Setpoint'}).length,2);
+});
+
 check('resource roots navigate by stable IDs and contain readable locations', () => {
   assert.equal(at('screen', 'home').label, 'Production home');
   assert.equal(at('template', 'machine-card').category, 'template');

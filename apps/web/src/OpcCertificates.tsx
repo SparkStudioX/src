@@ -9,14 +9,22 @@ export default function OpcCertificates() {
   const [upload, setUpload] = useState<PublicCertificateUpload>(), [fingerprint, setFingerprint] = useState(""), [verified, setVerified] = useState(false);
   const [review, setReview] = useState<"trust" | OpcCertificateSummary>(), [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
-  const current = useRef(true), generation = useRef(0), uploadGeneration = useRef(0), inFlight = useRef(false), dialog = useRef<HTMLDialogElement>(null);
+  const [loadError, setLoadError] = useState("");
+  const current = useRef(true), generation = useRef(0), uploadGeneration = useRef(0), inFlight = useRef(false), loadPending = useRef(false), pollBlocked = useRef(false), dialog = useRef<HTMLDialogElement>(null);
+  pollBlocked.current = busy || Boolean(upload) || Boolean(review);
   const alive = () => current.current;
-  async function load() {
-    const run = ++generation.current; setError("");
-    try { const result = certificateListing(await api("/gateway/opcua/certificates")); if (alive() && generation.current === run) setListing(result); }
-    catch (reason) { if (alive() && generation.current === run) setError(reason instanceof Error ? reason.message : String(reason)); }
+  async function load(quiet = false) {
+    if (quiet && (loadPending.current || inFlight.current || pollBlocked.current)) return;
+    const run = ++generation.current; loadPending.current = true;
+    try { const result = certificateListing(await api("/gateway/opcua/certificates")); if (alive() && generation.current === run) { setListing(result); setLoadError(""); } }
+    catch (reason) { if (alive() && generation.current === run) setLoadError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { if (alive() && generation.current === run) loadPending.current = false; }
   }
-  useEffect(() => { current.current = true; void load(); return () => { current.current = false; generation.current++; uploadGeneration.current++; }; }, []);
+  useEffect(() => {
+    current.current = true; void load();
+    const timer = window.setInterval(() => { if (document.visibilityState !== "hidden") void load(true); }, 30_000);
+    return () => { current.current = false; generation.current++; uploadGeneration.current++; loadPending.current = false; window.clearInterval(timer); };
+  }, []);
   useEffect(() => { if (review) dialog.current?.showModal(); return () => dialog.current?.close(); }, [review]);
   async function choose(file?: File) {
     const run = ++uploadGeneration.current; setUpload(undefined); setFingerprint(""); setVerified(false); setError("");
@@ -41,7 +49,7 @@ export default function OpcCertificates() {
     try {
       const result = await api<{ restartRequired: boolean }>(path, "POST", body);
       if (!alive()) return;
-      if (result.restartRequired !== true) throw new Error("The gateway did not confirm the certificate-store change. Refresh before retrying.");
+      if (result.restartRequired !== true) throw new Error("The gateway did not confirm the certificate-store change. Review the current certificate list before retrying.");
       setNotice("Public certificate store updated. Restart the gateway to apply the change to OPC UA sessions. Existing connection-specific pins must also be removed when revoking trust.");
       setReview(undefined); setUpload(undefined); setFingerprint(""); setVerified(false); setConfirmation(""); await load();
     } catch (reason) { if (alive()) setError(reason instanceof Error ? reason.message : String(reason)); }
@@ -64,13 +72,16 @@ export default function OpcCertificates() {
   const visible = listing?.certificates.filter(certificate => (store === "all" || certificate.store === store) && `${certificate.subject} ${certificate.issuer} ${certificate.sha256}`.toLowerCase().includes(search.toLowerCase())) ?? [];
   let trustReady = false; try { if (upload) { certificateTrustRequest(upload, fingerprint, verified); trustReady = true; } } catch { /* Inputs explain what is required. */ }
   let removalReady = false; try { if (review && review !== "trust") { certificateRemovalRequest(review, confirmation); removalReady = true; } } catch { /* Keep confirmation disabled until exact. */ }
-  return <section className="opc-certificates" aria-labelledby="opc-certificates-title">
-    <h2 id="opc-certificates-title">Public OPC certificates</h2>
+  return <section className="management-page opc-certificates" aria-labelledby="opc-certificates-title">
+    <div className="page-heading"><div><h1 id="opc-certificates-title">Public OPC certificates</h1><p>Manage the gateway’s OPC UA client certificate and trusted servers.</p></div></div>
+    <div className="opc-certificate-surface">
     <p>Download SparkStudio’s <strong>own</strong> public certificate to trust this client in your OPC UA server. Import a server’s public DER certificate only after verifying its SHA-256 fingerprint through an independent source. Private keys never appear on this page.</p>
     {notice && <p className="gateway-observation" role="status">{notice}</p>}{error && !review && <p className="gateway-error" role="alert">{error}</p>}
-    <div className="opc-certificate-toolbar"><label>Store<select value={store} onChange={event => setStore(event.target.value)}><option value="all">All public stores</option>{opcCertificateStores.map(value => <option key={value}>{value}</option>)}</select></label><label>Filter<input value={search} onChange={event => setSearch(event.target.value)} placeholder="Subject, issuer or fingerprint" /></label><button type="button" className="button" disabled={busy} onClick={() => void load()}>Refresh certificates</button></div>
+    {loadError && <p className="gateway-error" role="alert">{loadError} <button type="button" className="button" disabled={busy} onClick={() => void load()}>Retry</button></p>}
+    <div className="opc-certificate-toolbar"><label>Store<select value={store} onChange={event => setStore(event.target.value)}><option value="all">All public stores</option>{opcCertificateStores.map(value => <option key={value}>{value}</option>)}</select></label><label>Filter<input value={search} onChange={event => setSearch(event.target.value)} placeholder="Subject, issuer or fingerprint" /></label></div>
     {listing && <><p>{listing.note}</p>{listing.invalidFiles > 0 && <p role="status">{listing.invalidFiles} unreadable public certificate file(s) were omitted. Inspect the gateway’s public certificate folders locally.</p>}<div className="opc-certificate-table"><table><thead><tr><th>Store / subject</th><th>SHA-256 fingerprint</th><th>Validity / issuer</th><th>Actions</th></tr></thead><tbody>{visible.map(certificate => <tr key={`${certificate.store}:${certificate.sha256}`}><td><strong>{certificate.store}</strong><small>{certificate.subject}</small></td><td><code>{certificate.sha256}</code></td><td><span>{new Date(certificate.notBefore).toLocaleString()} – {new Date(certificate.notAfter).toLocaleString()}</span><small>{certificate.issuer}</small></td><td><button type="button" className="button" disabled={busy} onClick={() => void download(certificate)}>Download public DER</button>{certificate.store === "trusted" && <button type="button" className="button" disabled={busy} onClick={() => { setReview(certificate); setConfirmation(""); setError(""); }}>Remove trust…</button>}</td></tr>)}</tbody></table></div>{!visible.length && <p>No matching public certificates. An own client certificate is created when the OPC UA client initializes.</p>}</>}
     <fieldset disabled={busy}><legend>Trust a server public certificate</legend><label>DER certificate<input type="file" accept=".der,.cer,application/pkix-cert" onChange={event => void choose(event.target.files?.[0])} /></label>{upload && <p>{upload.name} · {upload.bytes} bytes<br />Calculated SHA-256: <code>{upload.sha256}</code></p>}<label>Independently verified SHA-256<input value={fingerprint} onChange={event => setFingerprint(event.target.value)} autoComplete="off" spellCheck={false} placeholder="Enter the fingerprint obtained from the OPC UA server administrator" /></label><label className="opc-certificate-check"><input type="checkbox" checked={verified} onChange={event => setVerified(event.target.checked)} />I verified this fingerprint through an independent trusted source.</label><button type="button" className="button" disabled={!trustReady} onClick={openTrust}>Review certificate trust</button></fieldset>
+    </div>
     {review && <dialog ref={dialog} className="project-dialog" aria-labelledby="opc-certificate-review-title" onCancel={event => { event.preventDefault(); if (!busy) setReview(undefined); }}><header><h2 id="opc-certificate-review-title">{review === "trust" ? "Trust this public certificate?" : "Remove certificate trust?"}</h2></header><div className="project-dialog-body"><p>{review === "trust" ? upload?.name : review.subject}</p><code>{review === "trust" ? upload?.sha256 : review.sha256}</code><p>{review === "trust" ? "The gateway checks certificate validity and strength before adding trust." : "A gateway restart is required to revoke existing sessions. Remove any connection-specific certificate pins as well."}</p>{review !== "trust" && <label>Confirm the exact SHA-256 fingerprint<input value={confirmation} onChange={event => setConfirmation(event.target.value)} spellCheck={false} autoComplete="off" disabled={busy} /></label>}{error && <p className="gateway-error" role="alert">{error}</p>}</div><footer><button type="button" className="button" disabled={busy} onClick={() => setReview(undefined)}>Cancel</button><button type="button" className="button primary" disabled={busy || (review === "trust" ? !trustReady : !removalReady)} onClick={() => void apply()}>{busy ? "Applying…" : review === "trust" ? "Confirm trust" : "Confirm removal"}</button></footer></dialog>}
   </section>;
 }

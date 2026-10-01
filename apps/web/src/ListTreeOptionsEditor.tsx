@@ -1,3 +1,4 @@
+import { RuntimePropertyRow } from "./RuntimePropertyRow";
 import { useEffect, useRef, useState } from "react";
 import { validateListTreeOptions } from "./listTreeModel";
 import type { CanvasComponent } from "./types";
@@ -51,8 +52,8 @@ export function ListTreeOptionsEditor({ component, onChange, notify }: {
   const label = tree ? "Tree options" : "List options";
   const help = (tree ? "Define up to 100 choices with parent links, at most 16 levels deep. Roots have no parent. " : "Define up to 100 choices in display order. ") + "Selecting a choice stages its exact value in this form.";
   return <section className="property-sheet-group property-collection-group" aria-label={label}><h4>{label}</h4>
-    <div className="property-sheet-row" data-property="options"><label title={help}>Options</label><div className="property-sheet-value property-collection-value"><span>{source.length} defined</span><button type="button" className="button small" onClick={edit}>Edit options</button></div><span aria-hidden="true" /></div>
-    <div className="property-sheet-row" data-property="defaultValue"><label>Default selection</label><div className="property-sheet-value"><span className="property-sheet-summary">{source.find(row => row.value === String(component.props.defaultValue ?? source[0]?.value ?? ""))?.label ?? "Unavailable"}</span></div><span aria-hidden="true" /></div>
+    <RuntimePropertyRow title={help} target="options" label="Options"><span>{source.length} defined</span><button type="button" className="button small" onClick={edit}>Edit options</button></RuntimePropertyRow>
+    <RuntimePropertyRow designTime target="defaultValue" label="Default selection"><span className="property-sheet-summary">{source.find(row => row.value === String(component.props.defaultValue ?? source[0]?.value ?? ""))?.label ?? "Unavailable"}</span></RuntimePropertyRow>
     {!source.length && <p className="list-tree-error" role="alert">Add at least one option.</p>}
     {draft && <PropertyCollectionDialog title={label} onClose={() => setDraft(null)}><p className="list-tree-help">{help}</p><div className="list-tree-draft" role="group" aria-label={`Edit ${tree ? "tree" : "list"} options`} onKeyDown={event => {
       event.stopPropagation();

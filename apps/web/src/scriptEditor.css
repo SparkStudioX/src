@@ -46,6 +46,12 @@
 .source-editor .cm-tooltip { background: var(--panel); color: var(--ink); border: 1px solid var(--border-strong); }
 .source-editor .cm-tooltip-autocomplete > ul > li[aria-selected] { background: var(--accent); color: var(--on-accent); }
 .source-editor-status { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; color: var(--muted); background: var(--surface-subtle); font-size: 9px; padding: 7px 12px; border-top: 1px solid var(--border); }
+.script-execution-notes { padding: 9px 12px; border-top: 1px solid var(--border); background: var(--surface-subtle); color: var(--text-secondary); font-size: 11px; line-height: 1.6; }
+.script-execution-notes > summary { cursor: pointer; }
+.script-execution-notes > summary:hover { color: var(--accent); }
+.script-execution-notes > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+.script-execution-notes > div { display: grid; gap: 6px; margin-top: 8px; }
+.script-execution-notes p { margin: 0; }
 .scripting-output { border-top: 1px solid var(--border); }
 .scripting-output .console { min-height: 140px; max-height: 290px; overflow: auto; margin: 0; }
 .script-event-output { padding: 14px; max-height: 350px; overflow: auto; font-size: 11px; background: var(--surface-subtle); }

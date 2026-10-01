@@ -1,3 +1,4 @@
+import { RuntimePropertyRow } from "./RuntimePropertyRow";
 import { useRef, useState } from "react";
 import type { CanvasComponent } from "./types";
 import { PropertyCollectionDialog } from "./PropertyCollectionEditor";
@@ -54,8 +55,8 @@ export function StateControlEditor({ component, onChange, notify }: {
       ? "Each exact state value selects its label and color. Use the State value binding to read a tag, parameter, or form input."
       : "Segments stage a selection in this form. Input events can respond; selecting a segment does not write to a device.";
   return <section className="property-sheet-group property-collection-group" aria-label={label}><h4>{label}</h4>
-    <div className="property-sheet-row" data-property={indicator ? "states" : "options"}><label title={help}>{indicator ? "States" : "Options"}</label><div className="property-sheet-value property-collection-value"><span>{source.length} defined</span><button type="button" className="button small" onClick={edit}>Edit {indicator ? "states" : "options"}</button></div><span aria-hidden="true" /></div>
-    {!indicator && <div className="property-sheet-row" data-property="defaultValue"><label>Default selection</label><div className="property-sheet-value"><span className="property-sheet-summary">{source.find(row => row.value === String(component.props.defaultValue ?? source[0]?.value ?? ""))?.label ?? "Unavailable"}</span></div><span aria-hidden="true" /></div>}
+    <RuntimePropertyRow title={help} target={indicator ? "states" : "options"} label={indicator ? "States" : "Options"}><span>{source.length} defined</span><button type="button" className="button small" onClick={edit}>Edit {indicator ? "states" : "options"}</button></RuntimePropertyRow>
+    {!indicator && <RuntimePropertyRow designTime target="defaultValue" label="Default selection"><span className="property-sheet-summary">{source.find(row => row.value === String(component.props.defaultValue ?? source[0]?.value ?? ""))?.label ?? "Unavailable"}</span></RuntimePropertyRow>}
     {!source.length && <p className="state-control-error" role="alert">No {indicator ? "states" : "options"} configured.</p>}
     {draft && <PropertyCollectionDialog title={label} onClose={() => setDraft(null)}><p className="state-control-help">{help}</p><div className="state-control-draft" role="group" aria-label={`Edit ${label.toLowerCase()}`} onKeyDown={event => {
       event.stopPropagation();

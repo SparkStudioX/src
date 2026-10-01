@@ -1,6 +1,7 @@
 import type { BindingTarget, Project, PropertyBinding, Screen } from "./types";
 import type { SearchTarget } from "./projectSearch";
 import { navigationLabelError } from "./runtimeNavigation";
+import { runtimePropertyDefinition } from "./runtimePropertyCatalog";
 
 export interface BulkReplaceRequest {
   find: string;
@@ -31,33 +32,13 @@ type Validator = (value: string) => string[];
 type Writer = (next: Project, value: string) => void;
 const controls = /[\u0000-\u001f\u007f-\u009f]/;
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
-const knownTypes = new Set(["viewContainer", "formattedInput", "barcodeInput", "equipmentCommand", "chart", "sparkline", "label", "value", "gauge", "button", "table", "list", "treeView", "textInput", "passwordInput", "multiStateButton",
+const knownTypes = new Set(["alarmStatusTable", "alarmJournalTable", "historicalTrend", "viewContainer", "formattedInput", "barcodeInput", "equipmentCommand", "chart", "sparkline", "label", "value", "gauge", "button", "table", "list", "treeView", "textInput", "passwordInput", "multiStateButton",
   "multiStateIndicator", "ledDisplay", "progressBar", "cylindricalTank", "levelIndicator", "thermometer", "textArea", "numberInput", "spinner",
-  "slider", "checkbox", "toggle", "select", "radioGroup", "dateTimeInput", "template", "repeater", "image", "icon", "line", "rectangle", "ellipse", "polyline", "pipe", "equipmentSymbol"]);
+  "slider", "checkbox", "toggle", "select", "radioGroup", "dateTimeInput", "template", "repeater", "image", "computerCamera", "icon", "line", "rectangle", "ellipse", "polyline", "pipe", "equipmentSymbol"]);
 const unitTypes = new Set(["value", "gauge", "slider", "ledDisplay", "progressBar", "cylindricalTank", "levelIndicator", "thermometer"]);
 const choiceTypes = new Set(["select", "radioGroup", "multiStateButton", "list", "treeView"]);
 const tagInputTypes = new Set(["textInput", "formattedInput", "barcodeInput", "multiStateButton", "list", "treeView", "textArea", "numberInput", "spinner", "slider", "checkbox", "toggle", "select", "radioGroup", "dateTimeInput"]);
-const commonBindingTargets = new Set(["text", "enabled", "visible", "color", "x", "y", "width", "height", "fontSize", "backgroundColor", "foregroundColor", "borderColor", "borderWidth"]);
 const processTypes = new Set(["ledDisplay", "progressBar", "cylindricalTank", "levelIndicator", "thermometer"]);
-const drawingTypes = new Set(["line", "rectangle", "ellipse", "polyline", "pipe", "equipmentSymbol"]);
-
-function supportsBinding(type: string, target: string): boolean {
-  if (commonBindingTargets.has(target)) return true;
-  if (target === "tagPath") return type === "value" || type === "gauge";
-  if (target === "stateValue") return type === "multiStateIndicator";
-  if (processTypes.has(type)) {
-    if (["value", "decimals", "unit"].includes(target)) return true;
-    if (["min", "max", "showValue", "showPercent"].includes(target)) return type !== "ledDisplay";
-    if (target === "orientation") return type === "progressBar" || type === "levelIndicator";
-  }
-  if (drawingTypes.has(type)) {
-    if (["strokeColor", "strokeWidth", "rotation"].includes(target)) return true;
-    if (target === "fillColor") return ["rectangle", "ellipse", "pipe", "equipmentSymbol"].includes(type);
-    if (target === "flowing" || target === "flowReverse") return type === "pipe";
-    if (target === "active") return type === "equipmentSymbol";
-  }
-  return false;
-}
 
 function boundedText(label: string, maximum: number, nonblank = true, rejectControls = true): Validator {
   return value => [
@@ -213,13 +194,13 @@ function build(project: Project, request: BulkReplaceRequest): { plan: BulkRepla
         }
       }
       if (record(props.bindings)) for (const [key, binding] of Object.entries(props.bindings)) {
-        if (supportsBinding(component.type, key)) bindingReferences(binding, ["props", "bindings", key], next => nextComponent(next).props.bindings![key as BindingTarget]!);
+        if (runtimePropertyDefinition(key, component)) bindingReferences(binding, ["props", "bindings", key], next => nextComponent(next).props.bindings![key as BindingTarget]!);
       }
       if ((component.type === "template" || component.type === "repeater") && record(props.parameterBindings)) {
         for (const [key, binding] of Object.entries(props.parameterBindings)) bindingReferences(binding, ["props", "parameterBindings", key], next => nextComponent(next).props.parameterBindings![key]);
       }
       // Query parameters do not support live tag references. Query expressions,
-      // scripts, custom properties and arbitrary metadata are never traversed.
+      // scripts, literal custom values and arbitrary metadata are never traversed.
     });
   }
   if (savedRequest.scope !== "templates") project.screens.forEach((item, index) => document(item, "screen", index));

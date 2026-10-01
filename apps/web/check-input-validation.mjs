@@ -7,12 +7,16 @@ import ts from 'typescript';
 process.on('uncaughtException', error => { console.error(error.message); process.exit(1); });
 process.on('unhandledRejection', error => { console.error(error?.message ?? error); process.exit(1); });
 const require = createRequire(import.meta.url), moduleUrl = code => 'data:text/javascript;base64,' + Buffer.from(code).toString('base64');
-const hooksUrl = moduleUrl(`export * from ${JSON.stringify(pathToFileURL(require.resolve('react')).href)};
+const hooksUrl = moduleUrl(`export {Children,cloneElement,isValidElement} from ${JSON.stringify(pathToFileURL(require.resolve("react")).href)};
+export const createContext=initial=>{const context={value:initial};context.Provider=({value,children})=>{context.value=value;return children;};return context;};
+export const useContext=context=>context.value;
+export * from ${JSON.stringify(pathToFileURL(require.resolve('react')).href)};
 let slots=[],index=0;export const begin=()=>{index=0;};export const clear=()=>{slots=[];index=0;};
 export const useState=initial=>{const at=index++;if(!(at in slots))slots[at]=typeof initial==='function'?initial():initial;return[slots[at],next=>{slots[at]=typeof next==='function'?next(slots[at]):next;}];};
 export const useRef=value=>{const at=index++;return slots[at]??={current:value};};export const useEffect=()=>{};export const useId=()=>{index++;return'validation-field';};`);
 const cache = new Map();
 function load(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   if (cache.has(name)) return cache.get(name);
   const file = ['ts', 'tsx'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(file => fs.existsSync(file)); assert.ok(file, name);
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText

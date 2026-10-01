@@ -29,6 +29,22 @@ check('local and expression-bound values override styles in the real wrapper', (
   const html = render(component({ backgroundColor: '#111111', bindings: { foregroundColor: { expression: '"#222222"', references: {} } } }), [style]);
   assert.match(html, /background-color:#111111/); assert.match(html, /--component-text-color:#222222/); assert.doesNotMatch(html, /--component-text-color:#abcdef/);
 });
+check('native input schemes follow authored, styled, bound and inherited opaque backgrounds', () => {
+  for (const [backgroundColor, scheme] of [['#ffffff', 'light'], ['#fff', 'light'], ['#ffffffff', 'light'], ['#111722', 'dark'], ['#000f', 'dark']]) {
+    const html = render(component({ backgroundColor, fieldKey: 'note', defaultValue: '' }, 'textInput'), [style]);
+    assert.match(html, new RegExp(`color-scheme:${scheme}`));
+    assert.match(html, /value=""/);
+  }
+  assert.match(render(component({ fieldKey: 'note' }, 'textInput'), [style]), /color-scheme:dark/);
+  assert.match(render(component({ fieldKey: 'note', bindings: { backgroundColor: { expression: '"#ffffff"', references: {} } } }, 'textInput'), [style]), /color-scheme:light/);
+  for (const backgroundColor of [undefined, '#ffffff80', '#fff0']) {
+    const html = render(component({ styleId: undefined, backgroundColor, fieldKey: 'note' }, 'textInput'), []);
+    assert.doesNotMatch(html, /color-scheme:/, 'unconfigured and translucent controls inherit their surrounding theme');
+  }
+  const leaf = component({ styleId: undefined, fieldKey: 'note' }, 'textInput');
+  const template = { id: 'light-form', name: 'Light form', width: 320, height: 100, parameters: {}, components: [leaf] };
+  assert.match(render(component({ styleId: undefined, backgroundColor: '#fff', templateId: template.id }, 'template'), [], { templates: [template] }), /color-scheme:light/);
+});
 check('read-only and explicit disabled inputs stay disabled with an assigned style', () => {
   for (const extra of [{ readOnly: true }, { interactionLocked: true }]) assert.match(render(component({}, 'textInput'), [style], extra), /disabled=""/);
   assert.match(render(component({ enabled: false }), [style]), /aria-disabled="true"/);

@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { isInput } from "./inputs";
 import { BindingReferencesEditor, expressionBinding, expressionDraft, referenceRowsError, type ExpressionDraft } from "./BindingReferencesEditor";
-import type { BindingContext } from "./propertyBindings";
+import { bindingReferenceDependencies, type BindingContext } from "./propertyBindings";
 import { loadQueryProperty, resolveQueryPropertyParameters, validateQueryPropertyBinding } from "./queryPropertyModel";
 import { loadDataset } from "./datasets";
-import type { BindingTarget, CanvasComponent, NamedQuery, QueryPropertyBinding } from "./types";
+import type { BindingTarget, CanvasComponent, NamedQuery, PropertyBinding, QueryPropertyBinding } from "./types";
 
 interface Props {
   datasetMode?: boolean;
@@ -20,6 +20,32 @@ interface Props {
 }
 const own = <T,>(map: Record<string, T> | undefined, key: string) => map && Object.hasOwn(map, key) ? map[key] : undefined;
 const describe = (value: unknown) => value === undefined ? "Not run" : JSON.stringify(value);
+
+/** Resolve query-backed aliases only for this explicit preview, with the same cancellation as its final read. */
+async function resolvePreviewContext(binding: QueryPropertyBinding, component: CanvasComponent, context: BindingContext, signal: AbortSignal): Promise<BindingContext> {
+  const previewContext: BindingContext = { ...context, queryProperties: { ...context.queryProperties } };
+  const completed = new Set<string>(), visiting = new Set<string>();
+  const resolve = async (expression: PropertyBinding, containingComponent: CanvasComponent): Promise<void> => {
+    for (const { reference, component: owner } of bindingReferenceDependencies(expression, containingComponent, context)) {
+      if (reference.kind !== "custom") continue;
+      const source = reference.componentId && reference.componentId !== owner.id ? context.components.find(item => item.id === reference.componentId) : owner;
+      const target = `customProperties.${reference.key}.value` as BindingTarget, query = source?.props.queryBindings?.[target];
+      if (!source || !query) continue;
+      const key = `${source.id}:${target}`;
+      if (completed.has(key)) continue;
+      if (visiting.has(key)) throw new Error(`Custom property dependency cycle at '${reference.key}'.`);
+      if (completed.size + visiting.size >= 128) throw new Error("A custom-property preview supports at most 128 query dependencies.");
+      visiting.add(key); signal.throwIfAborted();
+      for (const parameter of Object.values(query.parameters || {})) await resolve(parameter, source);
+      const value = await loadQueryProperty(query, target, source, previewContext, "designer", api, undefined, signal);
+      signal.throwIfAborted();
+      previewContext.queryProperties![source.id] = { ...previewContext.queryProperties![source.id], [target]: { status: "ready", value } };
+      visiting.delete(key); completed.add(key);
+    }
+  };
+  for (const parameter of Object.values(binding.parameters || {})) await resolve(parameter, component);
+  return previewContext;
+}
 
 /** A draft query never executes until Run preview. Apply commits one parent history entry. */
 export function QueryPropertyBindingEditor({ component, target, context, queries, allowUnresolvedScreenState = false, onApply, onRemove, onCancel, datasetMode = false }: Props) {
@@ -36,13 +62,18 @@ export function QueryPropertyBindingEditor({ component, target, context, queries
   const draftComponent = { ...component, props: { ...component.props, bindings: expressionBindings } };
   const rowError = Object.entries(mappings).map(([name, draft]) => { const error = referenceRowsError(draft.rows); return error ? `${name}: ${error}` : undefined; }).find(Boolean);
   const definitionError = rowError || (datasetMode && !source.queryId ? "Choose a saved read query for this dataset." : validateQueryPropertyBinding(binding, target, draftComponent, context, queries, allowUnresolvedScreenState));
-  const deferred = allowUnresolvedScreenState && Object.values(binding.parameters || {}).some(parameter => Object.values(parameter.references || {}).some(reference => reference.kind === "screenState" && !Object.hasOwn(context.state?.screen || {}, reference.key)));
+  const references = Object.values(binding.parameters || {}).flatMap(parameter => {
+    try { return bindingReferenceDependencies(parameter, draftComponent, context); }
+    catch { return []; } // The definition error reports malformed or cyclic references.
+  });
+  const deferred = allowUnresolvedScreenState && references.some(({ reference }) => reference.kind === "screenState" && !Object.hasOwn(context.state?.screen || {}, reference.key));
   // Only declared mapping sources affect this read. Gateway tag samples and
   // unrelated form edits must not abort or erase an explicit preview.
-  const dependencies = Object.values(binding.parameters || {}).flatMap(parameter => Object.values(parameter.references || {}).map(reference => {
+  const dependencies = references.map(({ reference, component: containingComponent }) => {
     if (reference.kind === "custom") {
-      const owner = reference.componentId && reference.componentId !== component.id ? context.components.find(item => item.id === reference.componentId) : component;
-      return [reference, Boolean(owner), own(owner?.props.customProperties, reference.key)];
+      const owner = reference.componentId && reference.componentId !== containingComponent.id ? context.components.find(item => item.id === reference.componentId) : containingComponent;
+      const customTarget = `customProperties.${reference.key}.value` as BindingTarget;
+      return [reference, owner?.id, own(owner?.props.customProperties, reference.key), owner?.props.bindings?.[customTarget], owner?.props.queryBindings?.[customTarget], queries.find(item => item.id === owner?.props.queryBindings?.[customTarget]?.queryId), owner && context.queryProperties?.[owner.id]?.[customTarget]];
     }
     if (reference.kind === "input") return [reference, own(context.inputs, reference.key), context.components.filter(item => isInput(item.type) && (item.props.fieldKey || item.id) === reference.key)];
     if (reference.kind === "parameter") return [reference, own(context.parameters, reference.key)];
@@ -51,7 +82,7 @@ export function QueryPropertyBindingEditor({ component, target, context, queries
       return [reference, own(scope, reference.key)];
     }
     return [reference]; // Unsupported sources are reported by definitionError.
-  }));
+  });
   const key = JSON.stringify([binding, target, component.id, component.type, query, definitionError, deferred, Boolean(context.communicationLost), dependencies,
     component.props.min, component.props.max, component.props.bindings?.min, component.props.bindings?.max, component.props.queryBindings?.min, component.props.queryBindings?.max]);
   currentKey.current = key;
@@ -67,10 +98,11 @@ export function QueryPropertyBindingEditor({ component, target, context, queries
     const run = ++generation.current, requestedKey = key, started = performance.now();
     setPreview({ key, busy: true });
     try {
-      const parameters = resolveQueryPropertyParameters(binding, draftComponent, context);
+      const previewContext = await resolvePreviewContext(binding, draftComponent, context, request.signal);
+      const parameters = resolveQueryPropertyParameters(binding, draftComponent, previewContext);
       const value = datasetMode
-        ? JSON.stringify(await loadDataset({ queryId: binding.queryId, parameters: binding.parameters, refresh: binding.refresh }, draftComponent, context, "designer", api, undefined, request.signal))
-        : await loadQueryProperty(binding, target, draftComponent, context, "designer", api, undefined, request.signal);
+        ? JSON.stringify(await loadDataset({ queryId: binding.queryId, parameters: binding.parameters, refresh: binding.refresh }, draftComponent, previewContext, "designer", api, undefined, request.signal))
+        : await loadQueryProperty(binding, target, draftComponent, previewContext, "designer", api, undefined, request.signal);
       if (!request.signal.aborted && generation.current === run && currentKey.current === requestedKey)
         setPreview({ key: requestedKey, value, parameters, durationMs: Math.round(performance.now() - started) });
     } catch (reason) {
@@ -117,7 +149,7 @@ export function QueryPropertyBindingEditor({ component, target, context, queries
         </>}
       </fieldset>;
     })}
-    {parameterNames.length > 0 && <p className="binding-note">Omitted mappings use the saved query defaults. Expressions read the immediately containing form's parameters, non-password inputs, custom properties and declared state. Tags and other query results cannot be references. Values are query data, never identity or permissions.</p>}
+    {parameterNames.length > 0 && <p className="binding-note">Omitted mappings use the saved query defaults. Expressions read the immediately containing form's parameters, non-password inputs, custom properties and declared state. Tags cannot be referenced, including through custom properties. Values are query data, never identity or permissions.</p>}
     <div className={`binding-preview${definitionError || visiblePreview?.error ? " has-error" : ""}`} role="status" aria-live="polite">
       <strong>Query preview</strong><output>{definitionError || (deferred ? "Preview unavailable until a containing screen supplies the referenced state." : visiblePreview?.busy ? "Running query…" : visiblePreview?.error || (visiblePreview ? `${typeof visiblePreview.value} · ${describe(visiblePreview.value)}` : "Choose Run preview to read the query."))}</output>
       {visiblePreview?.parameters && <small>Mapped parameters: {JSON.stringify(visiblePreview.parameters)} · {visiblePreview.durationMs} ms</small>}

@@ -933,17 +933,6 @@ button svg {
   margin: 0 16px;
   white-space: nowrap;
 }
-.canvas-toolbar {
-  height: 49px;
-  min-height: 49px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 17px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
-  gap: 10px;
-}
 .toolbar-group {
   display: flex;
   align-items: center;
@@ -960,34 +949,6 @@ button svg {
   width: 1px;
   background: var(--surface-hover);
   margin: 0 1px;
-}
-.toolbar-caption {
-  font-size: 9px;
-  color: var(--muted);
-}
-.parameter-toolbar {
-  gap: 9px;
-}
-.parameter-toolbar label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 9px;
-}
-.parameter-toolbar label > span {
-  color: var(--muted);
-  font-family: Consolas, monospace;
-}
-.parameter-toolbar select,
-.parameter-toolbar input {
-  height: 27px;
-  font-size: 9px;
-  color: var(--ink);
-  border-color: var(--border);
-  border-radius: 4px;
-  background: var(--surface-subtle);
-  width: 87px;
-  padding: 0 7px;
 }
 .canvas-host {
   flex: 1;
@@ -1620,10 +1581,14 @@ button svg {
   border-radius: 6px;
   background: var(--info-bg);
   color: var(--info);
-  margin-bottom: 11px;
+  flex: 0 0 auto;
 }
-.inspector-tip > strong {
-  display: block;
+.inspector-tip-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.inspector-tip-heading > strong {
   font-size: 10px;
   color: var(--info);
   font-weight: 550;
@@ -1644,16 +1609,18 @@ button svg {
   gap: 6px;
 }
 .statusbar {
-  height: 27px;
-  min-height: 27px;
+  min-height: 34px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 18px;
-  padding: 0 17px;
+  row-gap: 6px;
+  padding: 4px 17px;
   background: var(--panel);
   border-top: 1px solid var(--border);
   color: var(--muted);
-  font-size: 8px;
+  font-size: 10px;
 }
 .statusbar > span {
   display: flex;
@@ -1667,6 +1634,9 @@ button svg {
 }
 .statusbar-spacer {
   flex: 1;
+}
+.statusbar-screen-size {
+  font-variant-numeric: tabular-nums;
 }
 .statusbar > span:nth-last-child(2) {
   font-size: 7px;
@@ -1709,10 +1679,12 @@ button svg {
   color: var(--toast-text);
 }
 .toast.error {
+  --toast-text: #ffffff;
   background: var(--toast-error-bg);
 }
-.toast.error > svg {
-  color: var(--component-foreground);
+.toast.error .icon-button:hover:not(:disabled) {
+  color: var(--toast-text);
+  background: #ffffff1f;
 }
 .gateway-error {
   margin: 30px;
@@ -2079,6 +2051,10 @@ button svg {
   line-height: 1.8;
   margin-top: 9px;
 }
+.connection-diagnostics-status.is-stale { color: var(--warning); }
+.connection-diagnostics-error p { margin: 0; color: inherit; }
+.connection-diagnostics-error > .button { margin-top: 12px; }
+
 .browse-section {
   padding: 23px 25px;
   border-top: 1px solid var(--border);
@@ -2653,12 +2629,6 @@ button svg {
   .save-state {
     display: none;
   }
-  .canvas-toolbar {
-    padding: 0 11px;
-  }
-  .toolbar-caption {
-    display: none;
-  }
   .screen-tabs-mode {
     display: none;
   }
@@ -2747,17 +2717,8 @@ button svg {
   .canvas-host {
     padding: 22px;
   }
-  .canvas-toolbar {
-    gap: 3px;
-  }
   .toolbar-group {
     gap: 5px;
-  }
-  .parameter-toolbar {
-    gap: 4px;
-  }
-  .parameter-toolbar label > span {
-    display: none;
   }
   .toolbar-group > .toolbar-divider {
     margin: 0 3px;
@@ -2876,18 +2837,11 @@ button svg {
   .toolbar-group > span:not(.toolbar-divider) {
     display: none;
   }
-  .parameter-toolbar select {
-    width: 72px;
-  }
   .canvas-host {
     padding: 18px;
   }
-  .canvas-toolbar {
-    height: 42px;
-    min-height: 42px;
-  }
   .statusbar {
-    font-size: 7px;
+    font-size: 9px;
     gap: 10px;
   }
   .statusbar > span:nth-last-child(2) {

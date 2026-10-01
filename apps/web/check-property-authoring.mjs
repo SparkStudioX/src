@@ -10,7 +10,10 @@ const require = createRequire(import.meta.url);
 const asModule = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
 // The interaction harness keeps hook state across explicit renders. It invokes
 // authored controls without mounting a browser or changing application files.
-const hookUrl = asModule(`let values = [], index = 0;
+const hookUrl = asModule(`export {Children,cloneElement,isValidElement} from ${JSON.stringify(pathToFileURL(require.resolve("react")).href)};
+export const createContext=initial=>{const context={value:initial};context.Provider=({value,children})=>{context.value=value;return children;};return context;};
+export const useContext=context=>context.value;
+let values = [], index = 0;
 export const begin = () => { index = 0; };
 export const clear = () => { values = []; index = 0; };
 export const useState = initial => { const at = index++; if (!(at in values)) values[at] = initial; return [values[at], next => { values[at] = typeof next === 'function' ? next(values[at]) : next; }]; };
@@ -21,6 +24,7 @@ const portalUrl = asModule('export const createPortal = children => children;');
 function loader(interactive = false) {
   const modules = new Map();
   return function moduleUrl(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
     if (modules.has(name)) return modules.get(name);
     const file = ['tsx', 'ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(url => fs.existsSync(url));
     assert.ok(file, name);
@@ -46,15 +50,15 @@ const make = (type = 'template') => ({ id: 'wrapper', type, x: 20, y: 30, width:
 const context = component => ({ component, components: [component, { id: 'quantity-input', type: 'numberInput', x: 0, y: 0, width: 100, height: 50, props: { fieldKey: 'quantity', defaultValue: 3 } }, { id: 'parent-layout', type: 'label', x: 0, y: 0, width: 100, height: 30, props: { customProperties: { available: { type: 'number', value: 480 } } } }], tags: [], parameters: { title: 'Parent caption' }, inputs: { quantity: 3 }, onChange() {}, onGeometryChange() {} });
 const render = component => renderToStaticMarkup(React.createElement(PropertyBindingsEditor, context(component)));
 const common = ['text', 'enabled', 'visible', 'x', 'y', 'width', 'height', 'fontSize', 'color', 'foregroundColor', 'backgroundColor', 'borderColor', 'borderWidth'];
-const nodes = node => !node || typeof node !== 'object' ? [] : [node, ...React.Children.toArray(node.props?.children).flatMap(nodes)];
+const nodes = node => !node || typeof node !== 'object' ? [] : node.type?.name === 'RuntimePropertyRow' ? nodes(node.type(node.props)) : [node, ...React.Children.toArray(node.props?.children).flatMap(nodes)];
 let passed = 0;
 function check(name, run) { run(); passed++; console.log(`PASS ${name}`); }
 
 check('template and repeater wrappers expose all thirteen common property rows and fx buttons', () => {
   for (const type of ['template', 'repeater']) {
     const html = render(make(type));
-    assert.deepEqual([...html.matchAll(/data-property="([^"]+)"/g)].map(match => match[1]), [...common, 'parameters.title', 'parameters.quantity', 'customProperties.minimum']);
-    assert.equal((html.match(/class="property-bind-button"/g) || []).length, 13);
+    assert.deepEqual([...html.matchAll(/data-property="([^"]+)"/g)].map(match => match[1]), [...common, 'parameters.title', 'parameters.quantity', 'customProperties.minimum.value']);
+    assert.equal((html.match(/class="property-bind-button"/g) || []).length, 14);
     assert.match(html, /Accessible label/); assert.match(html, /Typed values belong to this wrapper/);
     assert.doesNotMatch(html, /data-property="(?:tagPath|templateId|parameters|rows|rowsSource|columns|gap)"/);
   }
@@ -72,10 +76,10 @@ check('wrapper-only labels do not change leaf text editing or numeric-display ta
   const value = make(); value.type = 'value'; assert.match(render(value), /data-property="tagPath"/);
 });
 
-function drive(component) {
+function drive(component, extra = {}) {
   hooks.clear();
   const patches = [], geometry = [];
-  const props = { ...context(component), onChange: patch => patches.push(patch), onGeometryChange: patch => geometry.push(patch) };
+  const props = { ...context(component), ...extra, onChange: patch => patches.push(patch), onGeometryChange: patch => geometry.push(patch) };
   let tree;
   const refresh = () => { hooks.begin(); const outer = InteractiveEditor(props); tree = outer.type(outer.props); const expand = node => !node || typeof node !== "object" ? node : typeof node.type === "function" && node.type.name === "BindingReferencesEditor" ? expand(node.type(node.props)) : ({ ...node, props: { ...node.props, children: React.Children.toArray(node.props?.children).map(expand) } }); tree = expand(tree); return tree; };
   const find = predicate => { const node = nodes(tree).find(predicate); assert.ok(node, 'Expected authoring control'); return node; };
@@ -115,6 +119,15 @@ try {
     ui.byLabel('Custom property value').props.onChange({ target: { value: '7' } }); ui.refresh();
     ui.button('Apply').props.onClick(); ui.refresh();
     assert.deepEqual(ui.patches, [{ customProperties: { minimum: { type: 'number', value: 2 }, instanceLimit: { type: 'number', value: 7 } } }]); assert.deepEqual(wrapper, before);
+  });
+  check('native tag actions protect referenced custom property names, types and removal in self and sibling scopes', () => {
+    for(const self of [true,false]) {
+      const owner={...make('button'),props:{text:'Source',customProperties:{minimum:{type:'number',value:2}}}},action={...owner,id:self?owner.id:'write',props:{...owner.props,action:'setTagValue',tagWrite:{tagPath:'[default]Workshop/Minimum',dataType:'Double',valueReference:{kind:'property',...(self?{}:{componentId:owner.id}),property:'customProperties.minimum.value'}}}};
+      const selected=self?action:owner,ui=drive(selected,{components:self?[action]:[owner,action]});assert.equal(ui.byLabel('Remove custom property minimum').props.disabled,true);
+      ui.byLabel('Remove custom property minimum').props.onClick();assert.deepEqual(ui.patches,[]);
+      ui.byLabel('Edit custom property minimum').props.onClick();ui.refresh();assert.equal(ui.byLabel('Custom property name').props.disabled,true);
+      ui.byLabel('Custom property name').props.onChange({target:{value:'renamed'}});ui.refresh();ui.button('Apply').props.onClick();ui.refresh();assert.deepEqual(ui.patches,[]);assert.ok(ui.all().some(node=>node.props?.role==='alert'&&String(node.props.children).includes('bindings or actions')));
+    }
   });
 } finally {
   if (previousDocument === undefined) delete globalThis.document; else globalThis.document = previousDocument;

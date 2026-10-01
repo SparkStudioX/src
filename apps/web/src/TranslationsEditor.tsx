@@ -15,7 +15,7 @@ export function ComponentTranslationAssignment({ component, catalog, onChange, o
   }
   const bound = Boolean(component.props.bindings?.text || component.props.queryBindings?.text);
   return <div className="inspector-section visual-style-assignment"><h3>Caption translation</h3>
-    <div className="property-sheet-row" data-property="textKey"><label htmlFor={fieldId}>Translation key</label><div className="property-sheet-value"><select id={fieldId} value={component.props.textKey ?? ""} onChange={event => onChange({ textKey: event.target.value || undefined })}>
+    <div className="property-sheet-row" data-property="textKey"><label htmlFor={fieldId}>Translation key<small className="property-design-time">Design time</small></label><div className="property-sheet-value"><select id={fieldId} value={component.props.textKey ?? ""} onChange={event => onChange({ textKey: event.target.value || undefined })}>
       <option value="">Authored text</option>
       {component.props.textKey && (!catalog || !Object.hasOwn(catalog.messages, component.props.textKey)) && <option value={component.props.textKey}>Missing translation</option>}
       {Object.keys(catalog?.messages ?? {}).map(key => <option key={key} value={key} disabled={!compatible(key)}>{key}{compatible(key) ? "" : " (parameter mismatch)"}</option>)}

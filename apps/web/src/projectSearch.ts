@@ -44,6 +44,46 @@ const record = (value: unknown): value is Record<string, unknown> => value !== n
 const leafText = (value: unknown): string => value === null ? "null" : String(value);
 const title = (value: string) => value.replace(/\s+/g, " ").trim().slice(0, 120);
 const inputTypes = new Set(["textInput", "formattedInput", "barcodeInput", "passwordInput", "textArea", "numberInput", "spinner", "slider", "checkbox", "toggle", "select", "radioGroup", "dateTimeInput", "multiStateButton", "list", "treeView"]);
+type SearchSource = { document: Screen; kind: "screen" | "template"; component?: CanvasComponent };
+const directReferenceKinds: Record<string, SearchReference["kind"]> = { queryId: "query", templateId: "template", targetScreenId: "screen", assetId: "asset", tagPath: "tag" };
+
+function componentReference(id: string, source: SearchSource): SearchReference {
+  return { kind: "component", id, ownerKind: source.kind, ownerId: source.document.id };
+}
+function bindingReferencePath(path: string[]): boolean {
+  return path[0] === "props" && path.at(-2) === "references"
+    && ((path.length === 5 && ["bindings", "parameterBindings"].includes(path[1]))
+      || (path.length === 7 && path[1] === "queryBindings" && path[3] === "parameters")
+      || (path.length === 6 && path[1] === "dataSource" && path[2] === "parameters"));
+}
+function bindingSourceReference(value: Record<string, unknown>, source?: SearchSource): SearchReference | undefined {
+  if (value.kind === "tag" && typeof value.path === "string" && value.path) return { kind: "tag", id: value.path };
+  if (value.kind === "custom" && source?.component) return componentReference(typeof value.componentId === "string" ? value.componentId : source.component.id, source);
+  if (value.kind === "input" && typeof value.key === "string" && source) {
+    const owner = source.document.components.find(component => inputTypes.has(component.type) && (component.props.fieldKey || component.id) === value.key);
+    if (owner) return componentReference(owner.id, source);
+  }
+  return undefined;
+}
+function scalarSourceReference(value: string, path: string[], target: SearchTarget, source?: SearchSource): SearchReference | undefined {
+  if (path[0] === "props") {
+    if (path.length === 2 && own(directReferenceKinds, path[1])) return { kind: directReferenceKinds[path[1]], id: value };
+    if (path.length === 3 && path[1] === "tagWrite" && path[2] === "tagPath") return { kind: "tag", id: value };
+    if (path.at(-1) === "queryId" && ((path.length === 3 && ["optionsSource", "rowsSource", "dataSource"].includes(path[1])) || (path.length === 4 && path[1] === "queryBindings"))) return { kind: "query", id: value };
+    if (source?.component?.type === "viewContainer" && path.length === 5 && path[1] === "viewLayout" && path[2] === "panes" && path[4] === "templateId") return { kind: "template", id: value };
+    if (path.length === 3 && path[1] === "selectionFields" && source?.component && ["table", "select", "list", "treeView"].includes(source.component.type)) {
+      const input = source.document.components.find(component => inputTypes.has(component.type) && (component.props.fieldKey || component.id) === path[2]);
+      if (input) return componentReference(input.id, source);
+    }
+  }
+  if (target.kind === "project" && path[0] === "navigation" && ((path.length === 4 && path[1] === "items" && path[3] === "screenId") || (path.length === 2 && path[1] === "startupScreenId"))) return { kind: "screen", id: value };
+  return undefined;
+}
+function isCodeSource(path: string[], target: SearchTarget): boolean {
+  if (target.kind === "script" && path[0] === "code" || target.kind === "query" && path[0] === "sql") return true;
+  return path[0] === "props" && ((path[1] === "script" && path.length === 2) || (path[1] === "tableEdit" && path[2] === "script")
+    || (["events", "componentEvents", "messageHandlers"].includes(path[1]) && path.at(-1) === "code"));
+}
 
 /** Build from the current authoring snapshot. No network, query, expression or script execution. */
 export function buildProjectSearch(project: Project, queries: NamedQuery[], scripts: ScriptSearchResource[], options: SearchIndexOptions = {}): SearchEntry[] {
@@ -66,25 +106,17 @@ export function buildProjectSearch(project: Project, queries: NamedQuery[], scri
       target, category, label, location, text, ...extra });
   }
   function walk(value: unknown, path: string[], target: SearchTarget, location: string, category: SearchEntry["category"],
-    source?: { document: Screen; kind: "screen" | "template"; component?: CanvasComponent }) {
+    source?: SearchSource) {
     const property = path.join(".");
     const nextTarget = { ...target, property };
+    if (path.length === 3 && path[0] === "props" && path[1] === "tagWrite" && path[2] === "valueReference" && record(value) && source?.component) {
+      const reference = value.kind === "property" ? componentReference(typeof value.componentId === "string" ? value.componentId : source.component.id, source) : undefined;
+      add(nextTarget, "binding", property, location, `${property} ${JSON.stringify(value)}`, reference ? { reference, missing: knownMissing(reference, source.document) } : {});
+      return;
+    }
     // Binding reference objects are indexed once, preserving alias and source kind.
-    const bindingReferencePath = path[0] === "props" && path.at(-2) === "references"
-      && ((path.length === 5 && ["bindings", "parameterBindings"].includes(path[1]))
-        || (path.length === 7 && path[1] === "queryBindings" && path[3] === "parameters")
-        || (path.length === 6 && path[1] === "dataSource" && path[2] === "parameters"));
-    if (bindingReferencePath && record(value) && typeof value.kind === "string") {
-      let reference: SearchReference | undefined;
-      if (value.kind === "tag" && typeof value.path === "string" && value.path) reference = { kind: "tag", id: value.path };
-      if (value.kind === "custom" && source?.component) {
-        reference = { kind: "component", id: typeof value.componentId === "string" ? value.componentId : source.component.id,
-          ownerKind: source.kind, ownerId: source.document.id };
-      }
-      if (value.kind === "input" && typeof value.key === "string" && source) {
-        const owner = source.document.components.find(component => inputTypes.has(component.type) && (component.props.fieldKey || component.id) === value.key);
-        if (owner) reference = { kind: "component", id: owner.id, ownerKind: source.kind, ownerId: source.document.id };
-      }
+    if (bindingReferencePath(path) && record(value) && typeof value.kind === "string") {
+      const reference = bindingSourceReference(value, source);
       add(nextTarget, "binding", property, location, `${property} ${JSON.stringify(value)}`, reference ? { reference, missing: knownMissing(reference, source?.document) } : {});
       return;
     }
@@ -97,28 +129,10 @@ export function buildProjectSearch(project: Project, queries: NamedQuery[], scri
       return;
     }
     if (value === undefined || typeof value === "function" || typeof value === "symbol") return;
-    let reference: SearchReference | undefined;
     const componentProperty = path[0] === "props";
-    if (typeof value === "string" && value) {
-      if (componentProperty && path.length === 2) {
-        const kinds: Record<string, SearchReference["kind"]> = { queryId: "query", templateId: "template", targetScreenId: "screen", assetId: "asset", tagPath: "tag" };
-        if (own(kinds, path[1])) reference = { kind: kinds[path[1]], id: value };
-      }
-      if (componentProperty && path.at(-1) === "queryId" && ((path.length === 3 && (path[1] === "optionsSource" || path[1] === "rowsSource" || path[1] === "dataSource")) || (path.length === 4 && path[1] === "queryBindings")))
-        reference = { kind: "query", id: value };
-      if (componentProperty && source?.component?.type === "viewContainer" && path.length === 5 && path[1] === "viewLayout" && path[2] === "panes" && path[4] === "templateId") reference = { kind: "template", id: value };
-      if (componentProperty && path.length === 3 && path[1] === "selectionFields" && source?.component
-        && ["table", "select", "list", "treeView"].includes(source.component.type)) {
-        const input = source.document.components.find(component => inputTypes.has(component.type) && (component.props.fieldKey || component.id) === path[2]);
-        if (input) reference = { kind: "component", id: input.id, ownerKind: source.kind, ownerId: source.document.id };
-      }
-      if (target.kind === "project" && path[0] === "navigation" && ((path.length === 4 && path[1] === "items" && path[3] === "screenId") || (path.length === 2 && path[1] === "startupScreenId")))
-        reference = { kind: "screen", id: value };
-    }
+    const reference = typeof value === "string" && value ? scalarSourceReference(value, path, target, source) : undefined;
     const binding = componentProperty && ["bindings", "queryBindings", "dataSource", "parameterBindings", "stateBinding"].includes(path[1]);
-    const code = (target.kind === "script" && path[0] === "code") || (target.kind === "query" && path[0] === "sql")
-      || (componentProperty && ((path[1] === "script" && path.length === 2) || (path[1] === "tableEdit" && path[2] === "script")
-        || (["events", "componentEvents", "messageHandlers"].includes(path[1]) && path.at(-1) === "code")));
+    const code = isCodeSource(path, target);
     add(nextTarget, code && componentProperty ? "script" : binding ? "binding" : category, property, location,
       `${property} ${leafText(value)}`, { ...(code ? { textOnly: true } : {}), ...(reference ? { reference, missing: knownMissing(reference, source?.document) } : {}) });
   }

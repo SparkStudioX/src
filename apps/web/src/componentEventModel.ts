@@ -1,6 +1,6 @@
 import { resolvePath } from "./api";
 import { previewScriptsAllowed, requirePreviewScriptPermission } from "./previewRequest";
-import { bindingTargets, propertyValue, supportsBindingTarget } from "./propertyBindings";
+import { legacyBindingTargets, processBindingTargets, propertyValue, supportsBindingTarget } from "./propertyBindings";
 import { isInput } from "./inputs";
 import { inputAssignmentError } from "./inputEvents";
 import { createComponentMessageSender, type ComponentMessageBus, type ComponentMessageSender, type MessageContext } from "./componentMessageModel";
@@ -33,7 +33,9 @@ export function componentInteractionEvent(type: ComponentInteractionEventType, c
 }
 
 export function componentEventProperties(component: CanvasComponent, language: "javascript" | "python" = "javascript"): ComponentEventProperty[] {
-  return [...new Set([...bindingTargets.filter(target => supportsBindingTarget(component.type, target) && !(component.type === "passwordInput" && language === "python" && target === "text")),
+  return [...new Set([...legacyBindingTargets.filter(target => supportsBindingTarget(component.type, target)
+    && (!(processBindingTargets as readonly string[]).includes(target) || ["ledDisplay", "progressBar", "cylindricalTank", "levelIndicator", "thermometer"].includes(component.type))
+    && !(component.type === "passwordInput" && language === "python" && target === "text")),
     ...(isInput(component.type) && component.type !== "passwordInput" ? ["value" as const] : [])])];
 }
 export interface ComponentPropertySample { value: InputValue | null; available: boolean; error: string }

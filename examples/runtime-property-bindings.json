@@ -1,0 +1,441 @@
+{
+  "name": "Runtime bindings workshop",
+  "parameters": {},
+  "sessionState": {
+    "legend": {
+      "type": "boolean",
+      "value": true
+    },
+    "ceiling": {
+      "type": "number",
+      "value": 120
+    },
+    "spacing": {
+      "type": "number",
+      "value": 16
+    },
+    "split": {
+      "type": "number",
+      "value": 55
+    }
+  },
+  "screens": [
+    {
+      "id": "runtime-bindings",
+      "name": "Runtime property bindings",
+      "width": 1400,
+      "height": 1000,
+      "components": [
+        {
+          "id": "heading",
+          "type": "label",
+          "x": 28,
+          "y": 20,
+          "width": 1340,
+          "height": 50,
+          "props": {
+            "text": "Runtime properties use the same binding editor",
+            "fontSize": 20
+          }
+        },
+        {
+          "id": "intro",
+          "type": "label",
+          "x": 28,
+          "y": 76,
+          "width": 1340,
+          "height": 64,
+          "props": {
+            "text": "Change the controls. Chart settings, a bound custom value, the dataset and reusable layouts update in this session.",
+            "fontSize": 20
+          }
+        },
+        {
+          "id": "legend-control",
+          "type": "checkbox",
+          "x": 28,
+          "y": 160,
+          "width": 280,
+          "height": 64,
+          "props": {
+            "text": "Show chart legend",
+            "fieldKey": "legend",
+            "defaultValue": true,
+            "stateBinding": {
+              "scope": "session",
+              "key": "legend"
+            }
+          }
+        },
+        {
+          "id": "ceiling-control",
+          "type": "numberInput",
+          "x": 332,
+          "y": 160,
+          "width": 300,
+          "height": 64,
+          "props": {
+            "text": "Chart maximum",
+            "fieldKey": "ceiling",
+            "defaultValue": 120,
+            "min": 10,
+            "max": 300,
+            "step": 10,
+            "stateBinding": {
+              "scope": "session",
+              "key": "ceiling"
+            }
+          }
+        },
+        {
+          "id": "gap-control",
+          "type": "numberInput",
+          "x": 656,
+          "y": 160,
+          "width": 300,
+          "height": 64,
+          "props": {
+            "text": "Repeater gap",
+            "fieldKey": "spacing",
+            "defaultValue": 16,
+            "min": 0,
+            "max": 48,
+            "step": 4,
+            "stateBinding": {
+              "scope": "session",
+              "key": "spacing"
+            }
+          }
+        },
+        {
+          "id": "split-control",
+          "type": "slider",
+          "x": 980,
+          "y": 160,
+          "width": 380,
+          "height": 64,
+          "props": {
+            "text": "Split position",
+            "fieldKey": "split",
+            "defaultValue": 55,
+            "min": 10,
+            "max": 90,
+            "step": 1,
+            "stateBinding": {
+              "scope": "session",
+              "key": "split"
+            }
+          }
+        },
+        {
+          "id": "bound-chart",
+          "type": "chart",
+          "x": 28,
+          "y": 260,
+          "width": 648,
+          "height": 320,
+          "props": {
+            "text": "Chart axes and legend",
+            "chart": {
+              "kind": "bar",
+              "xKey": "station",
+              "series": [
+                {
+                  "key": "produced",
+                  "label": "Produced",
+                  "color": "#5276cf"
+                }
+              ],
+              "showLegend": true,
+              "yMin": 0,
+              "yMax": 120
+            },
+            "data": {
+              "columns": [
+                "station",
+                "produced"
+              ],
+              "rows": [
+                {
+                  "station": "Assembly",
+                  "produced": 42
+                },
+                {
+                  "station": "Packaging",
+                  "produced": 63
+                }
+              ]
+            },
+            "customProperties": {
+              "ceiling": {
+                "type": "number",
+                "value": 120
+              }
+            },
+            "bindings": {
+              "customProperties.ceiling.value": {
+                "expression": "limit",
+                "references": {
+                  "limit": {
+                    "kind": "sessionState",
+                    "key": "ceiling"
+                  }
+                }
+              },
+              "chart.yMax": {
+                "expression": "maximum",
+                "references": {
+                  "maximum": {
+                    "kind": "custom",
+                    "key": "ceiling"
+                  }
+                }
+              },
+              "chart.showLegend": {
+                "expression": "show",
+                "references": {
+                  "show": {
+                    "kind": "sessionState",
+                    "key": "legend"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "bound-table",
+          "type": "table",
+          "x": 704,
+          "y": 260,
+          "width": 656,
+          "height": 320,
+          "props": {
+            "text": "Typed JSON dataset",
+            "pageSize": 5,
+            "tableColumns": [
+              {
+                "key": "station",
+                "label": "Station"
+              },
+              {
+                "key": "produced",
+                "label": "Produced"
+              }
+            ],
+            "data": {
+              "columns": [
+                "station",
+                "produced"
+              ],
+              "rows": [
+                {
+                  "station": "Assembly",
+                  "produced": 42
+                },
+                {
+                  "station": "Packaging",
+                  "produced": 63
+                }
+              ]
+            },
+            "bindings": {
+              "data": {
+                "expression": "show ? detailed : compact",
+                "references": {
+                  "show": {
+                    "kind": "sessionState",
+                    "key": "legend"
+                  },
+                  "detailed": {
+                    "kind": "custom",
+                    "key": "detailed"
+                  },
+                  "compact": {
+                    "kind": "custom",
+                    "key": "compact"
+                  }
+                }
+              }
+            },
+            "customProperties": {
+              "detailed": {
+                "type": "string",
+                "value": "{\"columns\":[\"station\",\"produced\"],\"rows\":[{\"station\":\"Assembly\",\"produced\":42},{\"station\":\"Packaging\",\"produced\":63}]}"
+              },
+              "compact": {
+                "type": "string",
+                "value": "{\"columns\":[\"station\",\"produced\"],\"rows\":[{\"station\":\"Assembly\",\"produced\":42}]}"
+              }
+            }
+          }
+        },
+        {
+          "id": "bound-split",
+          "type": "viewContainer",
+          "x": 28,
+          "y": 612,
+          "width": 648,
+          "height": 244,
+          "props": {
+            "text": "Live split presentation",
+            "viewLayout": {
+              "kind": "split",
+              "orientation": "horizontal",
+              "ratio": 55,
+              "panes": [
+                {
+                  "id": "first",
+                  "label": "Left form",
+                  "templateId": "binding-card",
+                  "parameters": {
+                    "title": "First form"
+                  }
+                },
+                {
+                  "id": "second",
+                  "label": "Right form",
+                  "templateId": "binding-card",
+                  "parameters": {
+                    "title": "Second form"
+                  }
+                }
+              ]
+            },
+            "bindings": {
+              "viewLayout.ratio": {
+                "expression": "position",
+                "references": {
+                  "position": {
+                    "kind": "sessionState",
+                    "key": "split"
+                  }
+                }
+              },
+              "viewLayout.panes.0.label": {
+                "expression": "show ? 'Detailed form' : 'Compact form'",
+                "references": {
+                  "show": {
+                    "kind": "sessionState",
+                    "key": "legend"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "bound-repeater",
+          "type": "repeater",
+          "x": 704,
+          "y": 612,
+          "width": 656,
+          "height": 244,
+          "props": {
+            "text": "Bound columns and spacing",
+            "templateId": "binding-card",
+            "parameters": {},
+            "rows": [
+              {
+                "id": "assembly",
+                "parameters": {
+                  "title": "Assembly"
+                }
+              },
+              {
+                "id": "packaging",
+                "parameters": {
+                  "title": "Packaging"
+                }
+              }
+            ],
+            "columns": 2,
+            "gap": 16,
+            "bindings": {
+              "gap": {
+                "expression": "spacing",
+                "references": {
+                  "spacing": {
+                    "kind": "sessionState",
+                    "key": "spacing"
+                  }
+                }
+              },
+              "columns": {
+                "expression": "show ? 2 : 1",
+                "references": {
+                  "show": {
+                    "kind": "sessionState",
+                    "key": "legend"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "instructions",
+          "type": "label",
+          "x": 28,
+          "y": 886,
+          "width": 1340,
+          "height": 66,
+          "props": {
+            "text": "In Designer: select a component → its specific section → ƒx. Custom properties are last; their values can now have their own bindings.",
+            "fontSize": 20
+          }
+        }
+      ]
+    }
+  ],
+  "templates": [
+    {
+      "id": "binding-card",
+      "name": "Binding card",
+      "width": 300,
+      "height": 200,
+      "parameters": {
+        "title": "Form"
+      },
+      "components": [
+        {
+          "id": "card-title",
+          "type": "label",
+          "x": 12,
+          "y": 12,
+          "width": 276,
+          "height": 40,
+          "props": {
+            "text": "{title}",
+            "fontSize": 20
+          }
+        },
+        {
+          "id": "card-note",
+          "type": "textInput",
+          "x": 12,
+          "y": 68,
+          "width": 276,
+          "height": 64,
+          "props": {
+            "text": "Independent note",
+            "fieldKey": "note",
+            "defaultValue": ""
+          }
+        },
+        {
+          "id": "card-help",
+          "type": "label",
+          "x": 12,
+          "y": 142,
+          "width": 276,
+          "height": 48,
+          "props": {
+            "text": "Notes stay local to each instance.",
+            "fontSize": 20
+          }
+        }
+      ]
+    }
+  ]
+}

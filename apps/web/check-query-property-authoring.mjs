@@ -6,7 +6,10 @@ import React from 'react';
 import ts from 'typescript';
 
 const require = createRequire(import.meta.url), asModule = code => `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
-const hookUrl = asModule(`let scopes=new Map(),current='',index=0,alive=new Set(),pending=[];
+const hookUrl = asModule(`export {Children,cloneElement,isValidElement} from ${JSON.stringify(pathToFileURL(require.resolve("react")).href)};
+export const createContext=initial=>{const context={value:initial};context.Provider=({value,children})=>{context.value=value;return children;};return context;};
+export const useContext=context=>context.value;
+let scopes=new Map(),current='',index=0,alive=new Set(),pending=[];
 export const beginRender=()=>{alive=new Set();pending=[];};
 export const begin=scope=>{current=scope;index=0;alive.add(scope);if(!scopes.has(scope))scopes.set(scope,[]);};
 export const clear=()=>{for(const values of scopes.values())for(const value of values)value?.cleanup?.();scopes=new Map();pending=[];};
@@ -17,6 +20,7 @@ export const useId=()=>'query-authoring';export const useEffect=(callback,deps)=
 const apiUrl = asModule('export const api=(...args)=>globalThis.__queryRequest(...args); export const resolvePath=(value,parameters)=>value.replace(/\\{([^{}]+)\\}/g,(all,key)=>Object.hasOwn(parameters,key)?String(parameters[key]):all); export const tagByPath=(tags,path)=>tags.find(tag=>tag.path===path); export const displayValue=value=>String(value ?? "");');
 const portalUrl = asModule('export const createPortal=children=>children;'), modules = new Map();
 function url(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   if (modules.has(name)) return modules.get(name);
   const file = ['tsx', 'ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(file => fs.existsSync(file)); assert.ok(file, name);
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
@@ -148,7 +152,7 @@ await check('query mappings protect nested screen/session/private declarations a
 });
 await check('Designer supplies the named-query catalog and template parameter fx remains expression-only', () => {
   const ast = ts.createSourceFile('App.tsx', fs.readFileSync(new URL('src/App.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX); let catalog;
-  function visit(node) { if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(ast) === 'PropertyBindingsEditor') catalog = node.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.text === 'queries')?.initializer.expression.getText(ast); ts.forEachChild(node, visit); } visit(ast); assert.equal(catalog, 'queries');
+  function visit(node) { if ((ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && node.tagName.getText(ast) === 'PropertyBindingsEditor') catalog = node.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.text === 'queries')?.initializer.expression.getText(ast); ts.forEachChild(node, visit); } visit(ast); assert.equal(catalog, 'queries');
   const template = { id: 't', name: 'T', width: 100, height: 100, parameters: { text: '' }, components: [] }, ui = editor(c('wrapper', 'template', { templateId: 't' }), { parameterTemplate: template }); ui.field('Add parameter text binding').props.onClick(); ui.refresh(); assert.ok(!ui.all().some(node => node.props?.['aria-label'] === 'Property binding source'));
 });
 await check('dataset fx opens the styled binding dialog and isolates title-bar shortcuts while native cancel discards drafts', () => {
@@ -172,6 +176,97 @@ await check('closing the dataset title bar aborts its explicit preview and late 
   ui.field('Close dataset binding').props.onClick(); ui.refresh(); assert.equal(signal.aborted, true); complete(); await flush(ui);
   assert.deepEqual(ui.patches, []); assert.ok(!ui.all().some(node => node.type === 'dialog')); assert.doesNotMatch(ui.content(), /999/);
   ui.field('Edit dataset binding').props.onClick(); ui.refresh(); ui.click('Remove binding'); assert.deepEqual(ui.patches, [{ dataSource: undefined }]);
+});
+await check('chart rows open nested targets, seed typed JSON and preserve saved values when binding', () => {
+  const chart = c('chart', 'chart', { chart: { kind: 'line', xKey: 'time', series: [{ key: 'value', label: 'Value' }] }, data: { columns: ['time', 'value'], rows: [{ time: 1, value: 2 }] } });
+  for (const [label, target] of [['Chart type', 'chart.kind'], ['Series', 'chart.series'], ['Saved dataset', 'data']]) {
+    const ui = editor(chart); ui.field('Add ' + label + ' binding').props.onClick(); ui.refresh();
+    const expression = ui.find(node => node.type === 'textarea' && node.props.className === 'binding-expression');
+    if (target !== 'chart.kind') assert.deepEqual(JSON.parse(JSON.parse(expression.props.value)), target === 'data' ? chart.props.data : chart.props.chart.series);
+    ui.click('Apply'); assert.equal(ui.patches.length, 1); assert.ok(ui.patches[0].bindings[target]);
+    assert.equal(ui.patches[0].chart, undefined); assert.equal(ui.patches[0].data, undefined);
+  }
+});
+await check('custom property values have real fx editing, query switching and removal', () => {
+  const ui = editor(); ui.field('Add limit binding').props.onClick(); ui.refresh(); ui.click('Apply');
+  assert.equal(ui.patches[0].bindings['customProperties.limit.value'].expression, '3');
+  const queryCustom = editor(); queryCustom.field('Add limit binding').props.onClick(); queryCustom.refresh(); queryCustom.change('Property binding source', 'query'); queryCustom.choose(); queryCustom.click('Apply');
+  assert.equal(queryCustom.patches[0].queryBindings['customProperties.limit.value'].queryId, 'summary');
+  const bound = { ...label, props: { ...label.props, bindings: { 'customProperties.limit.value': { expression: '7', references: {} } } } };
+  const saved = editor(bound), row = saved.find(node => node.props?.['data-property'] === 'customProperties.limit.value');
+  assert.equal(nodes(row).find(node => node.type === 'fieldset').props.disabled, true);
+  assert.ok(nodes(row).some(node => node.type === 'button' && node.props['aria-label'] === 'Edit limit binding'));
+  saved.field('Edit limit binding').props.onClick(); saved.refresh(); saved.click('Remove binding');
+  assert.deepEqual(saved.patches, [{ bindings: {} }]); assert.equal(bound.props.customProperties.limit.value, 3);
+});
+await check('chart static Apply keeps dynamic bindings and nested runtime rule controls share the binding dialog', async () => {
+  const { defaultChartProps } = await import(url('chartModel'));
+  const original = c('plot', 'chart', { ...defaultChartProps(), bindings: { 'chart.showLegend': { expression: 'false', references: {} } } });
+  const ui = editor(original); ui.click('Apply chart'); assert.equal(ui.patches.length, 1);
+  assert.ok(original.props.bindings['chart.showLegend']); assert.equal(ui.patches[0].bindings, undefined);
+  const { InputValidationEditor } = await import(url('InputValidationEditor'));
+  const input = c('text', 'formattedInput', { formatMask: 'AA-####', validation: { required: false } });
+  const rules = editor(input, { children: React.createElement(InputValidationEditor, { component: input, onChange: noOp }) });
+  rules.click('Edit rules'); rules.field('Add Required binding').props.onClick(); rules.refresh(); rules.click('Apply');
+  assert.equal(rules.patches[0].bindings['validation.required'].expression, 'false');
+});
+await check('query previews invalidate on transitive custom inputs, state, parameters and definition changes', async () => {
+  for (const source of ['input', 'screenState', 'sessionState', 'parameter', 'definition']) {
+    for (const completed of [false, true]) {
+      let complete, signal; globalThis.__queryRequest = async (path, method, body, incoming) => path === '/queries' ? [query] : (signal = incoming, await new Promise(resolve => { complete = () => resolve({ columns: ['total'], rows: [{ total: 123 }] }); }));
+      const component = saved({ parameters: { amount: binding('custom', 'limit') } });
+      component.props.bindings = { 'customProperties.limit.value': binding(source === 'definition' ? 'input' : source, 'amount') };
+      const ui = editor(component); ui.open(); ui.click('Run preview'); await flush(ui); assert.ok(complete);
+      if (completed) { complete(); await flush(ui); assert.match(ui.output(), /123/); }
+      if (source === 'input') ui.props.inputs = { ...ui.props.inputs, amount: 8 };
+      else if (source === 'parameter') ui.props.parameters = { amount: 8 };
+      else if (source.endsWith('State')) { const scope = source === 'screenState' ? 'screen' : 'session'; ui.props.state = { ...state, [scope]: { amount: 8 } }; }
+      else ui.props.component = { ...component, props: { ...component.props, bindings: { 'customProperties.limit.value': { ...binding('input', 'amount'), expression: 'value + 1' } } } };
+      ui.refresh(); assert.equal(signal.aborted, true); assert.match(ui.output(), /Choose Run preview/);
+      if (!completed) { complete(); await flush(ui); assert.doesNotMatch(ui.output(), /123/); }
+    }
+  }
+});
+await check('query and template previews defer missing screen state behind custom aliases', () => {
+  const component = saved({ parameters: { amount: binding('custom', 'limit') } });
+  component.props.bindings = { 'customProperties.limit.value': binding('screenState', 'caller') };
+  const ui = editor(component, { allowUnresolvedScreenState: true, state: { session: {}, screen: {} } });
+  ui.open(); assert.match(ui.output(), /containing screen/); assert.equal(ui.button('Run preview').props.disabled, true); ui.click('Apply'); assert.equal(ui.patches.length, 1);
+  const wrapper = c('wrapper', 'template', { templateId: 't', customProperties: component.props.customProperties, bindings: component.props.bindings, parameterBindings: { amount: binding('custom', 'limit') } });
+  const form = editor(wrapper, { allowUnresolvedScreenState: true, state: { session: {}, screen: {} }, parameterTemplate: { id: 't', name: 'T', width: 200, height: 100, parameters: { amount: '1' }, parameterTypes: { amount: 'number' }, components: [] } });
+  form.field('Edit parameter amount binding').props.onClick(); form.refresh(); assert.match(form.output(), /containing screen.*caller/); form.click('Apply'); assert.equal(form.patches.length, 1);
+});
+await check('a chained custom query sample change invalidates the explicit downstream preview', async () => {
+  const { QueryPropertyBindingEditor } = await import(url('QueryPropertyBindingEditor'));
+  const component = saved({ parameters: { amount: binding('custom', 'limit') } });
+  component.props.queryBindings['customProperties.limit.value'] = { queryId: 'upstream', column: 'value' };
+  const upstream = { ...query, id: 'upstream' }, props = { component, target: 'text', queries: [query, upstream], context: { components: [component], parameters: {}, inputs: {}, tags: [], queryProperties: { label: { 'customProperties.limit.value': { status: 'ready', value: 1 } } } }, onApply: noOp, onCancel: noOp };
+  let complete, signal; globalThis.__queryRequest = async (path, method, body, incoming) => path === '/queries' ? [query, upstream] : path.includes('/upstream/') ? { columns: ['value'], rows: [{ value: 1 }] } : (signal = incoming, await new Promise(resolve => { complete = () => resolve({ columns: ['total'], rows: [{ total: 123 }] }); }));
+  const ui = drive(QueryPropertyBindingEditor, props); ui.click('Run preview'); await flush(ui); assert.ok(complete);
+  props.context = { ...props.context, queryProperties: { label: { 'customProperties.limit.value': { status: 'ready', value: 2 } } } }; ui.refresh(); assert.equal(signal.aborted, true);
+  complete(); await flush(ui); assert.doesNotMatch(ui.content(), /123/);
+});
+await check('explicit preview resolves and deduplicates query-backed custom aliases without persisted runtime samples', async () => {
+  const component = saved({ parameters: { amount: { expression: 'value + duplicate', references: { value: { kind: 'custom', key: 'limit' }, duplicate: { kind: 'custom', key: 'limit' } } } } });
+  component.props.customProperties = { ...component.props.customProperties, seed: { type: 'number', value: 0 } };
+  component.props.queryBindings['customProperties.limit.value'] = { queryId: 'upstream', column: 'total', parameters: { amount: binding('custom', 'seed') } };
+  component.props.queryBindings['customProperties.seed.value'] = { queryId: 'seed', column: 'total', parameters: { amount: binding('screenState', 'amount') } };
+  const catalog = [query, { ...query, id: 'upstream' }, { ...query, id: 'seed' }], requests = [];
+  globalThis.__queryRequest = async (path, method, body, signal) => { requests.push({ path, body, signal }); return path === '/queries' ? catalog : { columns: ['total'], rows: [{ total: body.parameters.amount + 1 }] }; };
+  const ui = editor(component, { queries: catalog }); ui.open(); assert.equal(requests.length, 0); ui.click('Run preview'); await flush(ui);
+  const executions = requests.filter(request => request.body);
+  assert.deepEqual(executions.map(request => request.path), ['/queries/seed/execute', '/queries/upstream/execute', '/queries/summary/execute']);
+  assert.deepEqual(executions.map(request => request.body.parameters), [{ amount: 4 }, { amount: 5 }, { amount: 12 }]);
+  assert.equal(ui.output(), 'string · "13"'); assert.deepEqual(ui.patches, []); assert.equal(ui.props.queryProperties, undefined);
+});
+await check('canceling a prerequisite preview prevents the destination query and discards late results', async () => {
+  const component = saved({ parameters: { amount: binding('custom', 'limit') } });
+  component.props.queryBindings['customProperties.limit.value'] = { queryId: 'upstream', column: 'total' };
+  const catalog = [query, { ...query, id: 'upstream' }], requests = []; let complete, signal;
+  globalThis.__queryRequest = async (path, method, body, incoming) => { requests.push(path); return path === '/queries' ? catalog : (signal = incoming, await new Promise(resolve => { complete = () => resolve({ columns: ['total'], rows: [{ total: 99 }] }); })); };
+  const ui = editor(component, { queries: catalog }); ui.open(); ui.click('Run preview'); await flush(ui); assert.ok(complete);
+  ui.click('Cancel'); assert.equal(signal.aborted, true); complete(); await flush(ui);
+  assert.ok(!requests.includes('/queries/summary/execute')); assert.deepEqual(ui.patches, []); assert.ok(!ui.all().some(node => node.type === 'dialog'));
 });
 hooks.clear(); delete globalThis.document; delete globalThis.__queryRequest;
 console.log(`${passed}/${passed} query property authoring checks passed.`);

@@ -13,7 +13,12 @@ const hooks = moduleUrl(`export { createContext } from ${JSON.stringify(pathToFi
 const rows = moduleUrl('export const useQueryRepeater=(...args)=>{globalThis.__popupQueryCalls.push(args); return globalThis.__popupRows;};');
 const icon = moduleUrl('export default function Icon(){return null;}');
 const cache = new Map();
+// This suite checks source verification and script dispatch. Native tag action
+// review/confirmation has its own hook suite and must not alter these hook slots.
+cache.set('Auth', moduleUrl('export const useAuth=()=>({permissions:{commands:false}});'));
+cache.set('useTagValueAction', moduleUrl('export const useTagValueAction=()=>({confirmation:null,run:async()=>{throw new Error("Unexpected native tag activation in popup source checks");}});'));
 function url(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   if (cache.has(name)) return cache.get(name);
   const file = ['ts', 'tsx'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(file => fs.existsSync(file));
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText

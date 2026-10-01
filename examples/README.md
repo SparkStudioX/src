@@ -2,7 +2,7 @@
 
 Each major user-facing feature should ship with an independently authored workshop project, a short exercise guide, compatibility information and a verified import/publish/runtime check. Workshops serve as both learning material and reproducible acceptance examples. Use synthetic data and make any gateway setup or writes explicit.
 
-[catalog.json](catalog.json) is the machine-readable inventory of all 53 source examples. 35 are portable project workshops; 18 require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
+[catalog.json](catalog.json) is the machine-readable inventory of all 55 source examples. 37 are portable project workshops; 18 require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
 
 ## Use a downloaded workshop
 
@@ -12,7 +12,7 @@ Each major user-facing feature should ship with an independently authored worksh
 4. Publish the project, grant the intended user View access and, where Python buttons or component events are part of the exercise, Operate access. Open its operator application and complete the exercise there too. Engineering and operator sign-in are separate sessions.
 5. Repeat an exercise by reopening the application or importing a fresh copy. Browser session values are not saved in the package. Examples that write memory tags need their explicitly declared gateway values reset separately.
 
-The portable collection needs no OPC UA server, SQL Server, external database or internet connection during use. Query properties uses the gateway's built-in synthetic sample provider. Process displays and process graphics use deliberately undefined synthetic tag paths for their unavailable-data exercises; leave those paths undefined as their guides specify. Read-only Python preview buttons need the Python runtime shipped with the matching gateway package. Browser-only workshops do not depend on Python actions.
+The portable collection needs no OPC UA server, SQL Server or external database. Visitor check-in requires a webcam, HTTPS or localhost camera access, and internet access to Labelary; the other portable exercises work offline. Query properties uses the gateway's built-in synthetic sample provider. Process displays and process graphics use deliberately undefined synthetic tag paths for their unavailable-data exercises; leave those paths undefined as their guides specify. Read-only Python preview buttons need the Python runtime shipped with the matching gateway package. Browser-only workshops do not depend on Python actions.
 
 Project packages carry saved screens, templates, queries, script drafts, styles, translations, authoring defaults and referenced local images. They do not contain accounts, grants, credentials, connection configuration, tag definitions or values, databases, active publications/history or live browser state. See [project packages](../docs/architecture/PROJECTS.md) for the complete format and import rules.
 
@@ -21,6 +21,13 @@ The Gateway events workshop includes seven disabled Python resources. Import lea
 The Python UI workshop keeps its core exercise local to the calling browser form: property overrides and declared state are returned by Python without changing the project or other operator tabs. Its optional shared-title display begins unavailable. The [Python UI guide](../docs/architecture/PYTHON_UI.md) explains how to create a separate String memory tag and add a deliberate shared write action; neither gateway setup nor that write action is included in the portable package.
 
 ## Portable collection
+
+The [Visitor check-in workshop](../docs/architecture/VISITOR_CHECKIN.md) combines
+name/email inputs, static host choices, Computer camera capture and a returned
+Labelary badge image. Its maintained package is
+`artifacts/sparkproj/visitor-checkin.sparkproj`. Dismiss clears local visitor data
+and returns to the welcome form. It requires the current source additions or a
+later compatible release; earlier preview.10 installers do not support it.
 
 | Workshop | What to try | Python actions |
 | --- | --- | --- |
@@ -62,7 +69,7 @@ These remain useful authored source fixtures, but are excluded from the standalo
 
 | Source example | Additional setup | Runtime writes |
 | --- | --- | --- |
-| [Scheduled backups](scheduled-backups.json) | Disposable gateway and optional dedicated SMB/FTP/FTPS destination; disabled by default, 02:00 gateway-local daily time and seven-day retention. See the [backup schedule guide](../docs/architecture/SCHEDULED_BACKUPS.md). | None from the screen; administrator actions create and copy encrypted archives. |
+| [Scheduled backups](scheduled-backups.json) | Disposable gateway and dedicated SMB, FTP/FTPS or S3 test targets; multiple schedules start disabled with 02:00 gateway-local time and seven-day retention. See the [backup schedule guide](../docs/architecture/SCHEDULED_BACKUPS.md). | None from the screen; administrator actions create and copy encrypted archives. |
 | [Gateway recovery](gateway-recovery.json) | Disposable gateway, offline CLI backup/restore and explicit review; see the [recovery guide](../docs/architecture/GATEWAY_RECOVERY.md). | None from the screen; the administrative exercise creates archive/restored files. |
 | [Gateway network access](gateway-network.json) | Disposable installation, matching DNS certificate and client trust; see the [network guide](../docs/architecture/NETWORK_ACCESS.md). | None from the screen; deployment changes are deliberate administrator actions. |
 | [Gateway tag engineering](tag-engineering.json) | Synthetic memory/expression tags initialized by its dedicated loader; see the [tag guide](../docs/architecture/TAG_ENGINEERING.md). | Explicit Save actions update synthetic memory tags. |

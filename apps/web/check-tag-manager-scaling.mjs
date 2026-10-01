@@ -16,6 +16,7 @@ export const useRef=value=>({current:value});export const useId=()=>':scaling:';
 const apiUrl = url(`export function api(...args){return globalThis.__tagApi(...args)};export const displayValue=value=>String(value??'');`);
 const stubUrl = url('export const Field=()=>null;export default ()=>null;');
 function load(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   const source = fs.readFileSync(new URL(`src/${name}.tsx`, import.meta.url), 'utf8');
   return url(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
     .replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')

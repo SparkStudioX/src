@@ -104,13 +104,17 @@ public sealed partial class PublicationStore
                     ProjectInteractions.ValidateButton(props, screenIds);
                 if (type == "image")
                 {
-                    if (!assets.Contains(ProjectStore.Required(props, "assetId"))) throw new ArgumentException("Every published image must reference an uploaded local asset.");
+                    var assetId = ProjectStore.Optional(props, "assetId");
+                    if (!string.IsNullOrEmpty(assetId) && !assets.Contains(assetId)) throw new ArgumentException("Every stored image must reference an uploaded local asset.");
+                    if (string.IsNullOrEmpty(assetId) && props["bindings"]?["imageUrl"] is null && props["queryBindings"]?["imageUrl"] is null)
+                        throw new ArgumentException("Every published image needs an uploaded local asset or a generated image URL binding.");
                     if ((ProjectStore.Optional(props, "fit") ?? "contain") is not ("contain" or "cover" or "fill")) throw new ArgumentException("Image fit must be contain, cover or fill.");
                     if ((ProjectStore.Optional(props, "alt") ?? "").Length > 4096) throw new ArgumentException("Image alternate text is limited to 4096 characters.");
                     if (props.ContainsKey("src") || props.ContainsKey("url")) throw new ArgumentException("Images use local asset IDs; remote URLs are not supported.");
                 }
                 if (type == "icon" && !ProjectInteractions.Icons.Contains(ProjectStore.Required(props, "icon"))) throw new ArgumentException("Choose one of the built-in icon names.");
-                if (type == "table") ProjectStore.Required(props, "queryId");
+                if (type == "table" && !props.ContainsKey("data") && props["bindings"]?["data"] is null && props["queryBindings"]?["data"] is null)
+                    ProjectStore.Required(props, "queryId");
             }
         }
         if (project["parameters"] is not JsonObject parameters || parameters.Any(pair => pair.Value is not JsonValue value || !value.TryGetValue<string>(out _)))
@@ -157,7 +161,10 @@ public sealed partial class PublicationStore
     public JsonObject GetTableEdit(string screenId, string componentId, string publishedAt, string? instanceId = null, string? rowId = null, PopupOrigin? popupOrigin = null, IReadOnlyList<InstancePathStep>? instancePath = null)
         => GetExecutable(true, screenId, componentId, publishedAt, instanceId, rowId, popupOrigin, instancePath);
 
-    private JsonObject GetExecutable(bool tableEdit, string screenId, string componentId, string publishedAt, string? instanceId, string? rowId, PopupOrigin? popupOrigin, IReadOnlyList<InstancePathStep>? instancePath)
+    public JsonObject GetTagAction(string screenId, string componentId, string publishedAt, string? instanceId = null, string? rowId = null, PopupOrigin? popupOrigin = null, IReadOnlyList<InstancePathStep>? instancePath = null)
+        => GetExecutable(false, screenId, componentId, publishedAt, instanceId, rowId, popupOrigin, instancePath, tagAction: true);
+
+    private JsonObject GetExecutable(bool tableEdit, string screenId, string componentId, string publishedAt, string? instanceId, string? rowId, PopupOrigin? popupOrigin, IReadOnlyList<InstancePathStep>? instancePath, bool tagAction = false)
     {
         lock (gate)
         {
@@ -190,7 +197,7 @@ public sealed partial class PublicationStore
             var (component, scope, templateScopes) = ProjectInteractions.ResolveLeaf(project, screen, componentId, instanceId, rowId, instancePath);
             if (component["props"] is not JsonObject props || (tableEdit
                 ? ProjectStore.Optional(component, "type") != "table" || props["tableEdit"] is not JsonObject
-                : ProjectStore.Optional(component, "type") != "button" || ProjectStore.Optional(props, "action") != "script"))
+                : ProjectStore.Optional(component, "type") != "button" || ProjectStore.Optional(props, "action") != (tagAction ? "setTagValue" : "script")))
                 throw new KeyNotFoundException("This published component has no executable action.");
             var inputs = scope["components"]!.AsArray().OfType<JsonObject>().Where(item => !tableEdit && InputDefinitionValidator.IsInput(ProjectStore.Required(item, "type")))
                 .Select(item =>
@@ -208,7 +215,15 @@ public sealed partial class PublicationStore
                 ["screenParameters"] = ProjectTemplates.ScreenParameters(screen).DeepClone(), ["popupOrigin"] = opener,
                 ["templateScopes"] = templateScopes, ["inputs"] = new JsonArray(inputs),
                 ["queries"] = (current["scriptQueries"] ?? current["queries"])!.DeepClone(), ["libraries"] = CaptureLibraries(current) };
-            if (!tableEdit) result["uiContext"] = PythonUiContext.Describe(project, screen, scope, componentId, templateScopes.Count > 0);
+            if (!tableEdit && !tagAction) result["uiContext"] = PythonUiContext.Describe(project, screen, scope, componentId, templateScopes.Count > 0);
+            if (tagAction)
+            {
+                result["tagWrite"] = NativeTagActionDefinitions.Validate(props["tagWrite"]).DeepClone();
+                result["commands"] = project["commands"]?.DeepClone() ?? new JsonArray();
+                result["nativeContext"] = PythonUiContext.Describe(project, screen, scope, componentId, templateScopes.Count > 0);
+                result["nativeParent"] = new JsonObject { ["name"] = scope["name"]?.DeepClone(), ["width"] = scope["width"]?.DeepClone(), ["height"] = scope["height"]?.DeepClone() };
+                result["nativeStyles"] = project["styles"]?.DeepClone() ?? new JsonArray();
+            }
             if (tableEdit)
             {
                 result["table"] = props.DeepClone();

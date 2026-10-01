@@ -1,3 +1,4 @@
+import { RuntimePropertyRow } from "./RuntimePropertyRow";
 import { useRef, useState } from "react";
 import { validateTableColumns } from "./tableColumns";
 import type { CanvasComponent, TableColumnDefinition } from "./types";
@@ -50,7 +51,7 @@ export function TableColumnsEditor({ component, onChange, notify }: {
   }
   const help = "Use exact query column names as source keys. Labels change headings. Hidden and unlisted columns remain in the query data for row selection; hiding is presentation only.";
   return <section className="property-sheet-group property-collection-group" aria-label="Table columns"><h4>Table columns</h4>
-    <div className="property-sheet-row" data-property="tableColumns"><label title={help}>Columns</label><div className="property-sheet-value property-collection-value"><span>{source?.length ? `${source.length} defined` : "Automatic"}</span><button type="button" className="button small" onClick={edit}>Edit columns</button></div><span aria-hidden="true" /></div>
+    <RuntimePropertyRow title={help} target="tableColumns" label="Columns"><span>{source?.length ? `${source.length} defined` : "Automatic"}</span><button type="button" className="button small" onClick={edit}>Edit columns</button></RuntimePropertyRow>
     {draft === null && error && <p className="table-columns-error" role="alert">{error}</p>}
     {draft !== null && <PropertyCollectionDialog title="Table columns" onClose={() => setDraft(null)}><p className="table-columns-help">{help}</p><div className="table-columns-draft" role="group" aria-label="Edit table columns" onKeyDown={event => {
       event.stopPropagation();

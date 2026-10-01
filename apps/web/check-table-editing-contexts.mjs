@@ -1,3 +1,4 @@
+import { createTestModuleFiles } from "./test-module-files.mjs";
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -8,7 +9,7 @@ import ts from 'typescript';
 // Exercise the actual component wiring with deterministic hooks. Network/effects
 // are the boundary; template resolution, bindings and edit callbacks stay real.
 const require = createRequire(import.meta.url);
-const moduleSource = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
+const moduleSource = createTestModuleFiles();
 const hooksUrl = moduleSource(`
 export * from ${JSON.stringify(pathToFileURL(require.resolve('react')).href)};
 let scopes=new Map(),values=[],index=0;
@@ -29,7 +30,12 @@ export const setRows=value=>{state=value};
 export const useQueryRepeater=source=>source?state:{key:'none',rows:[],loading:false,error:''};
 `);
 const modules = new Map();
+// These fixtures exercise table edit scope, not authentication or native tag
+// confirmation. Unexpected native activation must fail rather than make a request.
+modules.set('Auth', moduleSource('export const useAuth=()=>({permissions:{commands:false}});'));
+modules.set('useTagValueAction', moduleSource('export const useTagValueAction=()=>({confirmation:null,run:async()=>{throw new Error("Unexpected native tag activation in table context checks");}});'));
 function moduleUrl(name) {
+  if (name.endsWith('.json')) return moduleSource('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8'));
   if (modules.has(name)) return modules.get(name);
   const file = ['tsx', 'ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(file => fs.existsSync(file));
   assert.ok(file, name);

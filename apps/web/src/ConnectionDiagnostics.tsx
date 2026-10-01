@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import type { Connection } from "./types";
 
@@ -13,34 +13,36 @@ export default function ConnectionDiagnostics({ connection }: { connection: Conn
   const [snapshot, setSnapshot] = useState<Diagnostics | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [receivedAt, setReceivedAt] = useState(0), [now, setNow] = useState(Date.now());
-  const request = useRef(0);
-  const refresh = async () => {
+  const request = useRef(0), mounted = useRef(false), pending = useRef(false);
+  const refresh = useCallback(async (showLoading = false) => {
+    if (!mounted.current || pending.current) return;
+    pending.current = true;
     const serial = ++request.current;
-    setBusy(true); setError("");
+    if (showLoading) setBusy(true);
     try {
       const result = await api<Diagnostics>(`/connections/${encodeURIComponent(connection.id)}/diagnostics`);
-      if (serial !== request.current) return;
+      if (!mounted.current || serial !== request.current) return;
       if (result.revision !== (connection.revision ?? 0)) {
-        setSnapshot(null); setError("The saved connection changed. Reload its configuration before refreshing diagnostics."); return;
+        setError("These diagnostics no longer match the selected saved connection. Select its updated configuration before relying on this status."); return;
       }
-      setSnapshot(result); setReceivedAt(Date.now()); setNow(Date.now());
+      setSnapshot(result); setReceivedAt(Date.now()); setNow(Date.now()); setError("");
     } catch (cause) {
-      if (serial === request.current) { setSnapshot(null); setError(cause instanceof Error ? cause.message : String(cause)); }
-    } finally { if (serial === request.current) setBusy(false); }
-  };
+      if (mounted.current && serial === request.current) setError(cause instanceof Error ? cause.message : String(cause));
+    } finally { if (mounted.current && serial === request.current) { pending.current = false; setBusy(false); } }
+  }, [connection.id, connection.revision]);
   useEffect(() => {
-    void refresh();
+    mounted.current = true; void refresh(true);
     const interval = window.setInterval(() => setNow(Date.now()), 5000);
-    return () => { request.current++; window.clearInterval(interval); };
-    // The parent remounts this panel for every selected ID or saved revision.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const polling = window.setInterval(() => { if (document.visibilityState !== "hidden") void refresh(); }, 15_000);
+    return () => { mounted.current = false; pending.current = false; request.current++; window.clearInterval(interval); window.clearInterval(polling); };
+  }, [refresh]);
+  const stale = Boolean(error) || now - receivedAt > 30_000;
   return <section className="browse-section" aria-label="Connection diagnostics">
-    <div className="browse-section-heading"><div><h3>Dependencies and tag values</h3><p>Read-only snapshots of this connection's references and OPC UA subscription state.</p></div>
-      <button className="button" disabled={busy} onClick={() => void refresh()}>{busy ? "Refreshing…" : "Refresh diagnostics"}</button></div>
-    {error && <p className="inline-error" role="alert">{error}</p>}
+    <div className="browse-section-heading"><div><h3>Dependencies and tag values</h3><p>Read-only snapshots of this connection's references and OPC UA subscription state. Diagnostics update automatically.</p></div></div>
+    {error && <div className="inline-error connection-diagnostics-error" role="alert"><p>{error}</p><button type="button" className="button" disabled={busy} onClick={() => void refresh(true)}>Retry diagnostics</button></div>}
+    {!snapshot && !error && <p role="status">Loading connection diagnostics…</p>}
     {snapshot && <>
-      <p>{snapshot.enabled ? "Enabled" : "Disabled"} · Revision {snapshot.revision} · {now - receivedAt > 30000 ? "Stale snapshot — refresh to update" : "Snapshot"} · {new Date(snapshot.capturedAt).toLocaleString()}</p>
+      <p className={`connection-diagnostics-status${stale ? " is-stale" : ""}`} role="status">{snapshot.enabled ? "Enabled" : "Disabled"} · Revision {snapshot.revision} · <strong>{stale ? "Last snapshot may be outdated" : "Snapshot"}</strong> · {new Date(snapshot.capturedAt).toLocaleString()}</p>
       <h4>{snapshot.dependencyCount} references</h4>
       <p>{snapshot.note}</p>
       {snapshot.dependencies.length > 0 ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Scope</th><th>Project</th><th>Resource</th></tr></thead><tbody>
@@ -50,7 +52,7 @@ export default function ConnectionDiagnostics({ connection }: { connection: Conn
       {connection.type === "opcua" && <>
         <h4>Subscription state</h4>
         {snapshot.subscriptions.length ? snapshot.subscriptions.map((item, index) => <p key={index}>{item.state} · {item.tagCount} tags · {item.publishingIntervalMs} ms · Last notification {item.lastNotificationAt ? new Date(item.lastNotificationAt).toLocaleString() : "not received"}</p>) : <p>No active subscription groups.</p>}
-        <h4>Tag quick watch</h4><p>Source timestamps describe the last value notification, not the time of this snapshot. Unchanged values can retain an older timestamp. Refresh to see new data.</p>
+        <h4>Tag quick watch</h4><p>Source timestamps describe the last value notification, not the time of this snapshot. Unchanged values can retain an older timestamp. This watch updates automatically.</p>
         {snapshot.values.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Tag</th><th>Value</th><th>Quality</th><th>Type</th><th>Source timestamp</th></tr></thead><tbody>
           {snapshot.values.map(value => <tr key={value.path}><td style={{overflowWrap: "anywhere"}}>{value.path}</td><td style={{overflowWrap: "anywhere", maxWidth: 300}}>{value.displayValue}</td><td>{value.quality}</td><td>{value.dataType}</td><td>{new Date(value.timestamp).toLocaleString()}</td></tr>)}
         </tbody></table></div> : <p>Add OPC UA tag definitions to see their current values here.</p>}

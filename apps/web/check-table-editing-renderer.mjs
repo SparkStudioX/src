@@ -13,6 +13,7 @@ const asModule=code=>'data:text/javascript;base64,'+Buffer.from(code).toString('
 const hooks=asModule('export const useState=v=>globalThis.__editHooks.useState(v); export const useEffect=(run,deps)=>globalThis.__editHooks.useEffect(run,deps); export const useRef=v=>globalThis.__editHooks.useRef(v);');
 const api=asModule('export const api=(...args)=>globalThis.__editApi(...args); export const scriptFailureMessage=value=>value;');
 function load(name){
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   if(modules.has(name))return modules.get(name);
   const file=['tsx','ts'].map(ext=>new URL(`src/${name}.${ext}`,import.meta.url)).find(file=>fs.existsSync(file));
   assert.ok(file,name);

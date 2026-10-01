@@ -8,7 +8,7 @@ This page describes the current source tree as reviewed on September 30, 2026, i
 
 | Area | Current implementation |
 | --- | --- |
-| Application building | Fixed X/Y canvas, 44 component types including sixteen inputs, multiple selection, flat groups, resizing, snapping, alignment/distribution, size matching and Undo/Redo. Embedded, tab, split and dock containers retain independent pane state. |
+| Application building | Fixed X/Y canvas, 45 component types including seventeen inputs and browser camera capture, multiple selection, flat groups, resizing, snapping, alignment/distribution, size matching and Undo/Redo. Embedded, tab, split and dock containers retain independent pane state. |
 | Projects | Catalog, create/rename/duplicate, archive/restore, draft-only `.sparkproj` import/export and reviewed operator publication history. |
 | Gateway | ASP.NET Core/.NET 10, Windows self-contained distribution and service tooling, Linux container recipe. |
 | Browser | React/TypeScript Designer and operator; bundled editor/assets with no required application CDN. |

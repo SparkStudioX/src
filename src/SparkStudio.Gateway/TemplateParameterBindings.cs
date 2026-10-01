@@ -86,6 +86,7 @@ internal static class TemplateParameterBindings
                             default: throw new ArgumentException("Parameter bindings support parent parameters, custom properties, non-password inputs and declared browser state.");
                         }
                     }
+                    RuntimeCustomBindings.ValidateRestrictedSources(component, binding, components, allowTags: true);
                     var (constant, _) = ComponentBindingValidator.ValidateExpression(expression, references.Select(pair => pair.Key));
                     if (constant)
                     {
@@ -93,6 +94,7 @@ internal static class TemplateParameterBindings
                         TemplateParameterTypes.Coerce(key, value, template["parameterTypes"] as JsonObject);
                     }
                 }
+                RuntimeCustomBindings.References(component, bindings.Select(pair => pair.Value).OfType<JsonObject>(), components);
             }
         }
     }
@@ -109,9 +111,9 @@ internal static class TemplateParameterBindings
         var bindings = instance["props"]?["parameterBindings"] as JsonObject ?? [];
         result["parameterBindings"] = bindings.DeepClone();
         var components = parent["components"]!.AsArray().OfType<JsonObject>().ToArray();
-        var inputKeys = bindings.SelectMany(pair => pair.Value!["references"]!.AsObject())
-            .Where(pair => ProjectStore.Optional(pair.Value!.AsObject(), "kind") == "input")
-            .Select(pair => ProjectStore.Required(pair.Value!.AsObject(), "key")).ToHashSet(StringComparer.Ordinal);
+        var references = RuntimeCustomBindings.Capture(result, instance, components.ToDictionary(item => ProjectStore.Required(item, "id"), StringComparer.Ordinal));
+        var inputKeys = references.Where(reference => ProjectStore.Optional(reference.Definition, "kind") == "input")
+            .Select(reference => ProjectStore.Required(reference.Definition, "key")).ToHashSet(StringComparer.Ordinal);
         result["bindingInputDefinitions"] = new JsonArray(components.Where(item => InputDefinitionValidator.IsInput(ProjectStore.Required(item, "type")) &&
             inputKeys.Contains(ProjectStore.Required(item["props"]!.AsObject(), "fieldKey"))).Select(item =>
             {
@@ -120,23 +122,8 @@ internal static class TemplateParameterBindings
                     if (item["props"]![key] is { } value) definition[key] = value.DeepClone();
                 return (JsonNode)definition;
             }).ToArray());
-        var customValues = new JsonObject();
-        foreach (var (parameter, node) in bindings)
-        {
-            var values = new JsonObject();
-            foreach (var (alias, referenceNode) in node!["references"]!.AsObject())
-            {
-                var reference = referenceNode!.AsObject();
-                if (ProjectStore.Optional(reference, "kind") != "custom") continue;
-                var owner = reference.ContainsKey("componentId")
-                    ? components.First(item => ProjectStore.Required(item, "id") == ProjectStore.Required(reference, "componentId")) : instance;
-                values[alias] = owner["props"]!["customProperties"]![ProjectStore.Required(reference, "key")]!["value"]!.DeepClone();
-            }
-            customValues[parameter] = values;
-        }
-        result["bindingCustomValues"] = customValues;
         var stateDefinitions = new JsonObject();
-        foreach (var reference in bindings.SelectMany(pair => pair.Value!["references"]!.AsObject()).Select(pair => pair.Value!.AsObject()))
+        foreach (var reference in references.Select(source => source.Definition))
         {
             var kind = ProjectStore.Required(reference, "kind");
             var stateScope = StateScope(kind);
@@ -157,41 +144,6 @@ internal static class TemplateParameterBindings
             definitions[key] = ProjectStore.Required(declaration, "type");
         }
         result["bindingStateDefinitions"] = stateDefinitions;
-    }
-
-    public static Dictionary<string, JsonElement> Evaluate(JsonObject scope, IReadOnlyDictionary<string, JsonElement> parentParameters,
-        IReadOnlyDictionary<string, JsonElement>? inputs, ParameterBindingState? state, Func<string, JsonElement>? readTag = null)
-    {
-        var resolved = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-        foreach (var (parameter, node) in scope["parameterBindings"] as JsonObject ?? [])
-        {
-            var binding = node!.AsObject();
-            var references = binding["references"]!.AsObject();
-            var tags = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-            foreach (var (alias, raw) in references)
-                if (ProjectStore.Required(raw!.AsObject(), "kind") == "tag")
-                {
-                    var path = TagBindingAddress.Resolve(ProjectStore.Required(raw.AsObject(), "path"), parentParameters);
-                    tags[alias] = readTag?.Invoke(path) ?? throw new ArgumentException("The gateway tag source is unavailable.");
-                    // Validate unused tag aliases too, matching the browser's complete-source check.
-                    ComponentBindingValidator.EvaluateExpression(alias, [alias], _ => tags[alias]);
-                }
-            resolved[parameter] = ComponentBindingValidator.EvaluateExpression(ProjectStore.Required(binding, "expression"), references.Select(pair => pair.Key), alias =>
-            {
-                var reference = references[alias]!.AsObject();
-                if (ProjectStore.Required(reference, "kind") == "tag") return tags[alias];
-                var key = ProjectStore.Required(reference, "key");
-                return ProjectStore.Required(reference, "kind") switch
-                {
-                    "custom" => JsonSerializer.SerializeToElement(scope["bindingCustomValues"]![parameter]![alias]),
-                    "parameter" when parentParameters.TryGetValue(key, out var value) => value,
-                    "input" when inputs is not null && inputs.TryGetValue(key, out var value) => value,
-                    var kind when StateScope(kind) is { } stateScope && state is not null && state.TryGetValue(stateScope, out var values) && values.TryGetValue(key, out var value) => value,
-                    _ => throw new ArgumentException("A parameter binding source is missing from its parent context.")
-                };
-            });
-        }
-        return resolved;
     }
 
     private static string? StateScope(string kind) => kind switch

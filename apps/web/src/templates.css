@@ -13,6 +13,11 @@
   /* Embedded forms fit their frame; clipping must not create another scroll container. */
   overflow: clip;
 }
+.template-instance-host.is-repeater {
+  /* Row height depends on the available width. Reserve the gutter so a row
+     cannot alternate between fitting and overflowing as its scrollbar toggles. */
+  scrollbar-gutter: stable;
+}
 .template-instance-grid {
   display: grid;
   align-items: start;

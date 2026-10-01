@@ -3,11 +3,11 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { stripTypeScriptTypes } from 'node:module';
+import { webModelModule } from './web-model-module.mjs';
 const url = source => `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString('base64')}`;
 const source = name => readFile(new URL(`../apps/web/src/${name}.ts`, import.meta.url), 'utf8');
 const { validateVisualStyles, validateProjectStyles, applyVisualStyle, applyStyleCatalog, styleReferences, visualStyleSource } = await import(url(await source('visualStyles')));
-const drawing = url(await source('drawingComponents'));
-const { evaluateComponentBindings } = await import(url((await source('propertyBindings')).replace('from "./drawingComponents"', `from "${drawing}"`)));
+const { evaluateComponentBindings } = await import(await webModelModule('propertyBindings'));
 const style = () => ({ id: 'station', name: 'Station', properties: { backgroundColor: '#14263b', foregroundColor: '#f4f7fa', borderColor: '#506c90', borderWidth: 2, fontSize: 18, color: '#587ccc' } });
 const component = props => ({ id: 'note', type: 'textInput', x: 10, y: 20, width: 200, height: 80, props: { text: 'Note', fieldKey: 'note', defaultValue: 'unchanged', styleId: 'station', ...props } });
 const project = () => ({ id: 'style-test', name: 'Visual styles', revision: 4, parameters: {}, styles: [style()], screens: [{ id: 'home', name: 'Home', width: 800, height: 600, components: [component({})] }], templates: [{ id: 'card', name: 'Card', parameters: {}, width: 300, height: 180, components: [component({})] }] });

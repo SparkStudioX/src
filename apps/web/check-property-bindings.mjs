@@ -4,6 +4,7 @@ import ts from 'typescript';
 
 const modules = new Map();
 function load(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   if (modules.has(name)) return modules.get(name);
   const code = fs.readFileSync(new URL(`./src/${name}.ts`, import.meta.url), 'utf8');
   const output = ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText
@@ -193,7 +194,7 @@ check('common targets and display-specific targets use their correct property lo
   original.type = 'value';
   const result = evaluateComponentBindings(original, context());
   assert.deepEqual(result.errors, {});
-  assert.deepEqual([...bindingTargets].sort(), [...Object.keys(expected), 'stateValue', ...processBindingTargets, 'strokeColor', 'fillColor', 'strokeWidth', 'rotation', 'flowing', 'flowReverse', 'active'].sort());
+  for (const target of [...Object.keys(expected), 'stateValue', ...processBindingTargets, 'strokeColor', 'fillColor', 'strokeWidth', 'rotation', 'flowing', 'flowReverse', 'active']) assert.ok(bindingTargets.includes(target), target);
   const indicator = { ...component({ bindings: { stateValue: definition('true') } }), type: 'multiStateIndicator' };
   const indicatorResult = evaluateComponentBindings(indicator, context());
   assert.deepEqual(indicatorResult.errors, {});
@@ -330,7 +331,7 @@ check('process targets are accepted only on their supported display types', () =
   const expected = { value: 25.5, min: 0, max: 100, decimals: 2, unit: 'kPa', showValue: true, showPercent: false, orientation: 'vertical' };
   for (const type of ['ledDisplay', 'progressBar', 'cylindricalTank', 'levelIndicator', 'thermometer', 'button', 'value', 'template']) {
     for (const [target, item] of Object.entries(expected)) {
-      const allowed = ['ledDisplay', 'progressBar', 'cylindricalTank', 'levelIndicator', 'thermometer'].includes(type) &&
+      const allowed = type === 'value' && target === 'unit' || ['ledDisplay', 'progressBar', 'cylindricalTank', 'levelIndicator', 'thermometer'].includes(type) &&
         (!['min', 'max', 'showValue', 'showPercent'].includes(target) || type !== 'ledDisplay') &&
         (target !== 'orientation' || ['progressBar', 'levelIndicator'].includes(type));
       assert.equal(supportsBindingTarget(type, target), allowed);

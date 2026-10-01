@@ -6,13 +6,17 @@ import React from 'react';
 import ts from 'typescript';
 
 const require = createRequire(import.meta.url), asModule = text => `data:text/javascript;base64,${Buffer.from(text).toString('base64')}`;
-const hookUrl = asModule(`let values=[],index=0,effects=[];
+const hookUrl = asModule(`export {Children,cloneElement,isValidElement} from ${JSON.stringify(pathToFileURL(require.resolve("react")).href)};
+export const createContext=initial=>{const context={value:initial};context.Provider=({value,children})=>{context.value=value;return children;};return context;};
+export const useContext=context=>context.value;
+let values=[],index=0,effects=[];
 export const begin=()=>{index=0;};export const clear=()=>{values=[];index=0;effects=[];};
 export const useState=initial=>{const at=index++;if(!(at in values))values[at]=typeof initial==='function'?initial():initial;return[values[at],next=>{values[at]=typeof next==='function'?next(values[at]):next;}];};
 export const useId=()=>'chart-editor';export const useEffect=(run,deps)=>{const at=index++,previous=values[at];if(!previous||deps.some((value,i)=>!Object.is(value,previous[i]))){values[at]=deps;effects.push(run);}};
 export const flush=()=>{const pending=effects.splice(0);pending.forEach(run=>run());return pending.length;};`);
 const modules = new Map();
 function url(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   if (modules.has(name)) return modules.get(name);
   const file = ['tsx', 'ts'].map(extension => new URL(`src/${name}.${extension}`, import.meta.url)).find(file => fs.existsSync(file)); assert.ok(file, name);
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
@@ -40,9 +44,9 @@ let checks = 0; const check = (name, run) => { run(); checks++; console.log(`PAS
 check('chart types and structured collections live in consistent three-cell property rows', () => {
   const ui = drive(); assert.deepEqual(nodes(ui.field('kind')).filter(node => node.type === 'option').map(node => node.props.value), chartKinds);
   for (const row of ui.all().filter(node => node.props?.['data-property']?.startsWith('chart.'))) {
-    assert.equal(row.props.className, 'property-sheet-row'); const cells = React.Children.toArray(row.props.children); assert.equal(cells.length, 3); assert.equal(cells[1].props.className, 'property-sheet-value');
+    assert.ok(row.props.className.split(' ').includes('property-sheet-row')); const cells = React.Children.toArray(row.props.children); assert.equal(cells.length, 3); assert.equal(cells[1].props.className, 'property-sheet-value');
   }
-  for (const property of ['series', 'data']) { const row = ui.find(node => node.props?.['data-property'] === `chart.${property}`); assert.ok(nodes(row).some(node => node.type === 'details')); }
+  for (const property of ['series', 'data']) { const row = ui.find(node => node.props?.['data-property'] === (property === 'data' ? 'data' : `chart.${property}`)); assert.ok(nodes(row).some(node => node.type === 'details')); }
 });
 check('chart configuration stages edits until one validated Apply without replacing the query binding', () => {
   const component = make(), before = structuredClone(component); component.props.dataSource = { queryId: 'live' };

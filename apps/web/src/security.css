@@ -20,10 +20,13 @@
 .security-header p, .security-panel p { color: var(--muted); line-height: 1.6; }
 .security-back { color: var(--accent); font-weight: 600; }
 .security-header-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-.security-tabs { display: flex; gap: 6px; align-items: center; margin: 22px 0; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
-.security-tabs > button:not(.button) { background: none; border: 0; padding: 10px 14px; border-radius: 7px; color: var(--muted); font-weight: 600; }
-.security-tabs > button.is-active { background: var(--accent-soft); color: var(--accent); }
-.security-tabs > .button { margin-left: auto; }
+.security-tab-header { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 22px 0; border-bottom: 1px solid var(--border); }
+.security-tabs { display: flex; align-items: stretch; gap: 4px; }
+.security-tabs > button { background: transparent; border: 0; border-bottom: 3px solid transparent; padding: 13px 18px; border-radius: 0; color: var(--muted); font: inherit; cursor: pointer; }
+.security-tabs > button[aria-selected=true] { border-bottom-color: var(--accent); color: var(--ink); font-weight: 600; }
+.security-tabs > button:hover { background: var(--surface-subtle); }
+.security-tabs > button:focus-visible,.security-project-list button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.security-tab-header > .button { margin: 0 0 6px; }
 .security-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
 .security-panel h2 { margin: 0 0 8px; font-size: 18px; }
 .security-section-heading { margin-bottom: 20px; }
@@ -39,8 +42,9 @@
 .security-form fieldset p { margin: 0; font-size: 12px; line-height: 1.6; }
 .security-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
 .security-check-row { display: flex; flex-wrap: wrap; gap: 22px; }
-.security-check-row label, .security-form .security-checkbox { display: flex; align-items: center; gap: 8px; }
-.security-form input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); }
+.security-check-row label, .security-form .security-checkbox, .security-form .checkbox-field { display: flex; align-items: center; gap: 8px; line-height: 1.5; }
+.security-form input[type=checkbox] { width: 16px; height: 16px; flex: 0 0 16px; margin: 0; padding: 0; vertical-align: middle; accent-color: var(--accent); }
+.security-check-row label > span, .security-form .security-checkbox > span, .security-form .checkbox-field > span { min-width: 0; }
 .security-error, .security-notice { padding: 12px 14px; border-radius: 7px; line-height: 1.6; overflow-wrap: anywhere; margin: 0 0 16px; }
 .security-error { color: var(--danger); background: var(--danger-bg); border: 1px solid var(--danger-border); }
 .security-notice { color: var(--info); background: var(--info-bg); border: 1px solid var(--info-border); }
@@ -62,6 +66,131 @@
 .security-dialog-body { display: grid; gap: 18px; padding: 22px 26px; }
 .security-dialog-body > p { margin: 0; line-height: 1.6; }
 .security-dialog footer { display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border); padding: 16px 26px; }
-.security-form-actions { display: flex; justify-content: flex-start; }
+.security-form-actions { display: flex; justify-content: flex-start; align-items: center; gap: 10px; flex-wrap: wrap; }
+.security-operator-settings { min-width: 0; }
+.security-operator-settings .security-section-heading { margin: 0; }
+.security-operator-settings h2 { margin: 0 0 8px; font-size: 22px; }
+.security-operator-settings .security-section-heading p { color: var(--muted); line-height: 1.6; }
+.security-operator-settings h3 { margin: 0; font-size: 16px; }
+.security-operator-settings .security-panel { min-width: 0; border-radius: 8px; padding: 22px; }
+.security-operator-settings .security-form label { font-size: 13px; }
+.security-operator-settings input,.security-operator-settings textarea { box-sizing: border-box; font: inherit; }
+.security-operator-settings .security-form textarea { min-height: 270px; resize: vertical; font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; line-height: 1.65; }
+.security-draft-status { color: var(--muted); font-size: 13px; margin: 0; }
+.security-operator-url { display: grid; gap: 18px; }
+.security-project-access-workspace { display: grid; grid-template-columns: minmax(265px, .85fr) minmax(0, 1.65fr); gap: 20px; align-items: start; }
+.security-project-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+.security-project-panel-heading > span { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+.security-project-panel-heading > div { min-width: 0; }
+.security-project-panel-heading h3 { overflow-wrap: anywhere; }
+.security-project-panel-heading p { margin: 6px 0 0; font-size: 12px; overflow-wrap: anywhere; }
+.security-project-list { list-style: none; padding: 0 4px; margin: 16px -8px; max-height: 520px; overflow: auto; }
+.security-project-list li { margin: 0 0 6px; padding: 0; }
+.security-project-list button { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 5px; width: 100%; min-width: 0; padding: 13px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.security-project-list button:hover { background: var(--surface-subtle); }
+.security-project-list button[aria-pressed=true] { border-color: var(--accent); background: var(--surface-subtle); }
+.security-project-list span,.security-project-list small { color: var(--muted); font-size: 12px; font-weight: 400; }
+.security-project-pagination { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; border-top: 1px solid var(--border); padding-top: 15px; color: var(--muted); font-size: 12px; }
+.security-project-pagination > div { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.security-empty { color: var(--muted); line-height: 1.6; padding: 14px 0; }
+.security-project-editor-panel .security-prefix-help { margin: 18px 0 12px; color: var(--muted); font-size: 13px; }
+.security-project-editor-panel .security-prefix-summary { margin: 0; padding: 12px 14px; background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 6px; color: var(--ink); font-size: 13px; }
+.security-error > .button { margin-left: 12px; }
+.security-save-help { display:block; margin-top:6px; font-size:12px; }
 .security-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-@media (max-width: 700px) { .security-page { padding: 20px 14px; } .security-header, .security-section-heading { align-items: flex-start; flex-direction: column; } .security-header-actions { gap: 10px; } .security-tabs { flex-wrap: wrap; } .security-tabs > button:not(.button) { padding: 9px; } .security-panel { padding: 18px 14px; } .security-form-grid { grid-template-columns: 1fr; } .security-dialog-body { padding: 20px; } .auth-card { padding: 26px; } }
+
+/* Gateway views share the configuration and process-data panel layout. Account
+   dialogs and the standalone sign-in forms keep their own presentation. */
+.gateway-console .security-embedded { min-width:0; line-height:1.5; }
+.gateway-console .security-embedded .security-tab-header { margin:0 0 24px; }
+.gateway-console .security-embedded .security-tabs { gap:0; }
+.gateway-console .security-embedded .security-tabs > button { padding:13px 20px; font-size:13px; }
+.gateway-console .security-embedded .security-tabs > button[aria-selected=true] { background:var(--surface-subtle); }
+.gateway-console .security-embedded .security-page-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; margin:0 0 22px; }
+.gateway-console .security-embedded .security-page-heading > div:first-child { min-width:0; max-width:640px; }
+.gateway-console .security-embedded .security-page-heading h2 { margin:0; color:var(--ink); font-size:25px; font-weight:600; line-height:1.25; letter-spacing:-.5px; }
+.gateway-console .security-embedded .security-page-heading p { margin:9px 0 0; color:var(--text-secondary); font-size:13px; line-height:1.6; }
+.gateway-console .security-embedded .security-page-heading .security-form-actions { justify-content:flex-end; gap:8px; flex-shrink:0; padding-top:2px; }
+.gateway-console .security-embedded .security-page-heading .button,
+.gateway-console .security-embedded > [role=tabpanel] .button,
+.gateway-console .security-embedded > .security-panel .button { min-height:36px; font-size:12px; }
+.gateway-console .security-embedded > [role=tabpanel] .security-panel,
+.gateway-console .security-embedded > .security-panel { min-width:0; overflow:hidden; padding:0; border:1px solid var(--border); border-radius:8px; background:var(--panel); }
+.gateway-console .security-embedded .security-panel-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:75px; margin:0; padding:18px 20px; border-bottom:1px solid var(--border); }
+.gateway-console .security-embedded .security-panel-heading > div { min-width:0; }
+.gateway-console .security-embedded .security-panel-heading h3 { margin:0; color:var(--ink); font-size:16px; font-weight:600; line-height:1.4; overflow-wrap:anywhere; }
+.gateway-console .security-embedded .security-panel-heading p { margin:4px 0 0; color:var(--text-secondary); font-size:12px; line-height:1.5; }
+.gateway-console .security-embedded .security-panel-heading > span { flex-shrink:0; color:var(--muted); font-size:12px; }
+.gateway-console .security-embedded .security-panel-body { padding:20px; }
+.gateway-console .security-embedded .security-accounts-panel > .muted,
+.gateway-console .security-embedded .security-audit-panel > .muted { margin:0; padding:22px 20px; color:var(--text-secondary); font-size:12px; }
+.gateway-console .security-embedded .security-accounts-panel .security-table th,
+.gateway-console .security-embedded .security-audit-panel .security-table th { padding:12px 20px; color:var(--text-secondary); font-size:11px; line-height:1.5; }
+.gateway-console .security-embedded .security-accounts-panel .security-table td,
+.gateway-console .security-embedded .security-audit-panel .security-table td { padding:14px 20px; color:var(--ink); font-size:12px; line-height:1.5; }
+.gateway-console .security-embedded .security-accounts-panel .security-table tr:last-child td,
+.gateway-console .security-embedded .security-audit-panel .security-table tr:last-child td { border-bottom:0; }
+.gateway-console .security-embedded .security-accounts-panel .security-table td strong { font-weight:600; }
+.gateway-console .security-embedded .security-accounts-panel .security-table td small,
+.gateway-console .security-embedded .security-audit-panel .security-table td small { font-size:11px; }
+.gateway-console .security-embedded .security-accounts-panel .security-table .button { min-height:30px; padding:5px 10px; font-size:11px; }
+.gateway-console .security-embedded .security-accounts-panel .security-badge { padding:2px 7px; border:1px solid var(--success-border); border-radius:4px; font-size:10px; font-weight:600; }
+.gateway-console .security-embedded .security-accounts-panel .security-badge.is-disabled { border-color:var(--border); }
+
+.gateway-console .security-embedded .security-operator-settings > .security-form { gap:20px; }
+.gateway-console .security-embedded .security-operator-settings .security-page-heading { margin:0; }
+.gateway-console .security-embedded .security-draft-status { display:flex; flex-wrap:wrap; align-items:center; min-width:0; margin:0; padding:12px 16px; border:1px solid var(--border); border-radius:7px; background:var(--panel); color:var(--text-secondary); font-size:12px; }
+.gateway-console .security-embedded .security-operator-url { gap:0; }
+.gateway-console .security-embedded .security-operator-settings .security-form label { display:flex; flex-direction:column; gap:7px; min-width:0; color:var(--text-secondary); font-size:12px; font-weight:500; line-height:1.5; }
+.gateway-console .security-embedded .security-operator-settings .security-form input { height:42px; padding:8px 11px; border-color:var(--border); border-radius:5px; background:var(--panel); color:var(--ink); font-size:13px; font-weight:400; line-height:1.5; }
+.gateway-console .security-embedded .security-operator-settings .security-form small { color:var(--muted); font-size:11px; font-weight:400; line-height:1.5; }
+.gateway-console .security-embedded .security-operator-settings .security-form textarea { min-height:270px; padding:10px 11px; border-color:var(--border); border-radius:5px; font-size:13px; font-weight:400; }
+.gateway-console .security-embedded .security-project-access-workspace { grid-template-columns:minmax(270px,.42fr) minmax(0,1fr); gap:20px; }
+.gateway-console .security-embedded .security-project-search-panel { padding:16px 20px; border-bottom:1px solid var(--border); background:var(--surface-subtle); }
+.gateway-console .security-embedded .security-project-list { min-height:200px; max-height:460px; margin:0; padding:0; overscroll-behavior:contain; scrollbar-gutter:stable; }
+.gateway-console .security-embedded .security-project-list li { margin:0; padding:0; border-bottom:1px solid var(--border); }
+.gateway-console .security-embedded .security-project-list li:last-child { border-bottom:0; }
+.gateway-console .security-embedded .security-project-list button { gap:7px; padding:15px 20px; border:0; border-radius:0; background:transparent; line-height:1.5; }
+.gateway-console .security-embedded .security-project-list button:hover:not(:disabled) { background:var(--surface-hover); }
+.gateway-console .security-embedded .security-project-list button[aria-pressed=true] { background:var(--accent-soft); box-shadow:inset 3px 0 0 var(--accent); }
+.gateway-console .security-embedded .security-project-list button:focus-visible { position:relative; z-index:1; outline-offset:-3px; }
+.gateway-console .security-embedded .security-project-list strong { font-size:13px; font-weight:600; }
+.gateway-console .security-embedded .security-project-list span,
+.gateway-console .security-embedded .security-project-list small { color:var(--text-secondary); font-size:11px; }
+.gateway-console .security-embedded .security-project-pagination { flex-direction:row; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:12px 16px; background:var(--surface-subtle); color:var(--text-secondary); font-size:11px; }
+.gateway-console .security-embedded .security-project-pagination > div { gap:8px; }
+.gateway-console .security-embedded .security-project-pagination .button { min-height:30px; padding:5px 8px; font-size:11px; }
+.gateway-console .security-embedded .security-project-list-panel > .security-empty { min-height:200px; margin:0; padding:22px 20px; font-size:12px; }
+.gateway-console .security-embedded .security-project-editor-panel .security-prefix-help { margin:16px 0 12px; color:var(--text-secondary); font-size:12px; line-height:1.6; }
+.gateway-console .security-embedded .security-project-editor-panel .security-prefix-summary { padding:12px 14px; font-size:12px; }
+.gateway-console .security-embedded > .security-error,
+.gateway-console .security-embedded > .security-notice,
+.gateway-console .security-embedded > [role=tabpanel] > .security-error,
+.gateway-console .security-embedded > [role=tabpanel] > .security-notice,
+.gateway-console .security-embedded .security-operator-settings .security-error,
+.gateway-console .security-embedded .security-operator-settings .security-notice { font-size:12px; }
+
+@media (max-width:1050px) {
+  .gateway-console .security-embedded .security-page-heading { flex-direction:column; gap:16px; }
+  .gateway-console .security-embedded .security-page-heading .security-form-actions { justify-content:flex-start; }
+}
+@media (max-width:820px) {
+  .gateway-console .security-embedded .security-project-access-workspace { grid-template-columns:minmax(0,1fr); }
+  .gateway-console .security-embedded .security-project-list { min-height:0; max-height:300px; }
+}
+@media (max-width:520px) {
+  .gateway-console .security-embedded.management-page,
+  .gateway-console .security-embedded > .management-page { padding:20px 14px; }
+  .gateway-console .security-embedded .security-tabs > button { padding:12px 14px; }
+  .gateway-console .security-embedded .security-panel-heading,
+  .gateway-console .security-embedded .security-panel-body,
+  .gateway-console .security-embedded .security-project-search-panel { padding:16px; }
+  .gateway-console .security-embedded .security-project-list button { padding:14px 16px; }
+  .gateway-console .security-embedded .security-accounts-panel .security-table th,
+  .gateway-console .security-embedded .security-accounts-panel .security-table td,
+  .gateway-console .security-embedded .security-audit-panel .security-table th,
+  .gateway-console .security-embedded .security-audit-panel .security-table td { padding:12px 16px; }
+}
+@media (max-width: 1000px) { .security-operator-settings .security-section-heading { flex-wrap: wrap; } .security-project-access-workspace { grid-template-columns: minmax(240px, .85fr) minmax(0, 1.4fr); gap: 14px; } .security-operator-settings .security-panel { padding: 18px; } }
+@media (max-width: 800px) { .security-project-access-workspace { grid-template-columns: 1fr; } .security-project-list { max-height: 280px; } }
+@media (max-width: 700px) { .security-page { padding: 20px 14px; } .security-header, .security-section-heading { align-items: flex-start; flex-direction: column; } .security-header-actions { gap: 10px; } .security-tab-header { gap: 8px; } .security-tabs > button { padding: 12px 10px; } .security-panel { padding: 18px 14px; } .security-form-grid { grid-template-columns: 1fr; } .security-dialog-body { padding: 20px; } .auth-card { padding: 26px; } }

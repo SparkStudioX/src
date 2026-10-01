@@ -199,7 +199,7 @@ internal static class ComponentEventValidator
             {
                 if (property is not JsonValue value || !value.TryGetValue<string>(out var target) || !seen.Add(target) ||
                     type == "passwordInput" && (target == "value" || languageName == "python" && target == "text") ||
-                    !(ComponentBindingValidator.SupportsTarget(type, target) ||
+                    !(ComponentBindingValidator.SupportsLegacyScalarTarget(type, target) ||
                         target == "value" && type != "passwordInput" && InputDefinitionValidator.IsInput(type)))
                     throw new ArgumentException($"Watched properties must be unique scalar targets supported on {type}; password values cannot be watched.");
             }

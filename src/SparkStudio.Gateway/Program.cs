@@ -150,6 +150,7 @@ routes.MapPreviewEndpoints();
 routes.MapPythonComponentEventEndpoints();
 routes.MapRuntimeSessionMessageEndpoints();
 routes.MapEquipmentCommandEndpoints();
+routes.MapNativeTagActionEndpoints();
 routes.MapProcessDataRuntime();
 routes.MapGet("/health", (PythonRunner python, TagEngine tags, IHostEnvironment environment) => new { status = "ok", version = typeof(PythonRunner).Assembly
     .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)

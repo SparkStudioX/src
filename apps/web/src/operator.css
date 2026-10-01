@@ -724,7 +724,19 @@
 }
 .tag-editor .checkbox-field {
   font-size: 10px;
+  line-height: 1.5;
   margin: 16px 0 0;
+}
+.tag-editor .checkbox-field > input[type="checkbox"] {
+  flex: 0 0 14px;
+  margin: 0;
+}
+.resource-editor .checkbox-field {
+  line-height: 1.5;
+}
+.resource-editor .checkbox-field > input[type="checkbox"] {
+  flex: 0 0 14px;
+  margin: 0;
 }
 .tag-live-preview > strong {
   display: block;

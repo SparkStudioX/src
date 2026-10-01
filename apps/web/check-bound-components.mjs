@@ -9,6 +9,7 @@ import ts from 'typescript';
 // Render real components and their binding evaluator, without a DOM or gateway.
 const require = createRequire(import.meta.url), modules = new Map();
 function moduleUrl(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   if (modules.has(name)) return modules.get(name);
   const filename = ['tsx', 'ts'].map(ext => new URL(`src/${name}.${ext}`, import.meta.url)).find(url => fs.existsSync(url));
   assert.ok(filename, name);
@@ -51,6 +52,21 @@ check('tile memoization ignores unrelated tag ticks but honors removed props and
   assert.equal(projectComponentPropsEqual({...previous, communicationLost: true}, previous), false);
   assert.equal(projectComponentPropsEqual({...previous, readOnly: true}, previous), false);
 });
+check('tile memoization follows transitive sibling custom bindings and removed indirect tag samples', () => {
+  const source = component('source', 'label', { customProperties: { reading: { type: 'number', value: 0 } }, bindings: {
+    'customProperties.reading.value': binding('tag', { tag: { kind: 'tag', path: '[default]{machine}/Reading' } }),
+  } });
+  const middle = component('middle', 'label', { customProperties: { doubled: { type: 'number', value: 0 } }, bindings: {
+    'customProperties.doubled.value': binding('reading * 2', { reading: { kind: 'custom', componentId: 'source', key: 'reading' } }),
+  } });
+  const sink = component('sink', 'label', { bindings: { text: binding('reading', { reading: { kind: 'custom', componentId: 'middle', key: 'doubled' } }) } });
+  const used = { path: '[default]Press01/Reading', value: 1, quality: 'Good' }, unrelated = { path: '[default]Other', value: 1, quality: 'Good' };
+  const previous = { component: sink, components: [source, middle, sink], tags: [used, unrelated], parameters: { machine: 'Press01' }, templates: [], onNavigate() {} };
+  assert.equal(projectComponentPropsEqual(previous, { ...previous, tags: [{ ...used, value: 2 }, unrelated] }), false);
+  assert.equal(projectComponentPropsEqual(previous, { ...previous, tags: [used, { ...unrelated, value: 2 }] }), true);
+  assert.equal(projectComponentPropsEqual(previous, { ...previous, tags: [unrelated] }), false);
+  assert.equal(projectComponentPropsEqual(previous, { ...previous, tags: [{ ...used, quality: 'Bad' }, unrelated] }), false);
+});
 check('bound Enabled controls native button state', () => {
   assert.doesNotMatch(render(button), /disabled=""/);
   assert.match(render(button, { inputs: { quantity: 0 } }), /disabled=""/);
@@ -62,6 +78,18 @@ check('hidden runtime controls expose no focus or click target but stay editable
   assert.doesNotMatch(render(hidden), /<button/);
   assert.match(render(hidden, { preview: false }), /Hidden in runtime/);
   assert.match(render(hidden, { preview: false }), /Apply/);
+});
+check('hidden project controls retain a marker through the render boundary and design keeps its selection target', () => {
+  for (const type of ['image', 'button', 'textInput']) {
+    const hidden = component('hidden-' + type, type, { text: 'Hidden ' + type, visible: false, assetId: 'a'.repeat(64), fieldKey: 'name', defaultValue: '' });
+    const props = { component: hidden, components: [hidden], templates: [], screenId: 'main', tags: [], parameters: {}, preview: true, onNavigate() {} };
+    const runtime = renderToStaticMarkup(React.createElement(ProjectComponentView, props));
+    assert.match(runtime, /^<div class="render-boundary-contents"><span class="bound-component-hidden" hidden=""><\/span><\/div>$/);
+    assert.doesNotMatch(runtime, /<img|<button|<input|tabindex=/);
+    const design = renderToStaticMarkup(React.createElement(ProjectComponentView, { ...props, preview: false }));
+    assert.match(design, /design-hidden/); assert.match(design, /Hidden in runtime/);
+    assert.doesNotMatch(design, /class="bound-component-hidden" hidden=/);
+  }
 });
 check('bad tag quality and lost communication show an error and disable action controls', () => {
   const tagButton = structuredClone(button);
@@ -229,5 +257,70 @@ check('authored interaction workshop renders every state binding without diagnos
   assert.doesNotMatch(html, /component-binding-error|Binding error:/);
   assert.match(html, /Focus the station note/); assert.match(html, /No key yet/);
   assert.match(html, /data-component-id="masked-status"/); assert.match(html, /Redacted Python key releases:/);
+});
+check('runtime property workshop renders bound chart, supplied table and containers without query infrastructure', () => {
+  const fixture = JSON.parse(fs.readFileSync(new URL('../../examples/runtime-property-bindings.json', import.meta.url), 'utf8'));
+  const document = fixture.screens[0];
+  const store = new ApplicationStateStore(); store.configure('runtime-workshop', fixture.sessionState);
+  const owner = store.activateScreen(document.id, document.state);
+  const html = renderToStaticMarkup(React.createElement(ApplicationStateProvider, { value: { ...store.context(owner), store } },
+    document.components.map(component => React.createElement(ProjectComponentView, { key: component.id, component, components: document.components,
+      templates: fixture.templates, screenId: document.id, tags: [], parameters: {}, preview: true, onNavigate() {} }))));
+  assert.doesNotMatch(html, /component-binding-error|Binding error:|Choose a named query|No named query/);
+  assert.match(html, />42</); assert.match(html, />63</);
+  assert.match(html, /view-container-split/);
+});
+check('image and icon bound alternate text remains literal', () => {
+  for (const type of ['image', 'icon']) {
+    const html = render(component('media', type, { assetId: 'a'.repeat(64), icon: 'spark', bindings: { alt: binding('"{station}"') } }), { parameters: { station: 'replaced' } });
+    assert.match(html, /(?:alt|aria-label)="\{station\}"/);
+    assert.doesNotMatch(html, /(?:alt|aria-label)="replaced"/);
+  }
+});
+check('generated images use same-origin blobs and empty sources retain stored-asset rendering', () => {
+  const previousWindow = globalThis.window;
+  try {
+    globalThis.window = { location: { origin: 'http://127.0.0.1:6090' } };
+    const url = 'blob:http://127.0.0.1:6090/visitor-badge';
+    const image = component('badge', 'image', { imageUrl: url, assetId: 'a'.repeat(64), fit: 'contain', alt: 'Visitor badge' });
+    const html = render(image);
+    assert.match(html, /src="blob:http:\/\/127\.0\.0\.1:6090\/visitor-badge"/);
+    assert.match(html, /alt="Visitor badge"/); assert.doesNotMatch(html, /assets\//);
+    image.props.imageUrl = '';
+    assert.match(render(image), /src="[^\"]*\/assets\/a{64}"/);
+  } finally { if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow; }
+});
+check('invalid generated image sources never request a remote URL or reuse a stored fallback', () => {
+  const previousWindow = globalThis.window;
+  try {
+    globalThis.window = { location: { origin: 'http://127.0.0.1:6090' } };
+    const image = component('badge', 'image', { assetId: 'a'.repeat(64) });
+    for (const imageUrl of ['https://example.com/badge.png', 'blob:http://127.0.0.1:5090/badge', 'data:image/png;base64,AA==']) {
+      image.props.imageUrl = imageUrl;
+      const html = render(image);
+      assert.doesNotMatch(html, /<img|assets\//); assert.match(html, /local browser blob URL/);
+    }
+    image.props.imageUrl = '';
+    image.props.bindings = { imageUrl: binding('"https://example.com/badge.png"') };
+    const html = render(image);
+    assert.match(html, /Binding error: imageUrl/); assert.doesNotMatch(html, /<img|assets\//);
+  } finally { if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow; }
+});
+check('supplied table data renders and malformed binding is diagnosed', () => {
+  const data = { columns: ['station'], rows: [{ station: 'Live cell' }] };
+  const c = component('data-table', 'table', { data, bindings: { data: binding(JSON.stringify(JSON.stringify(data))) } });
+  assert.match(render(c), /Live cell/);
+  c.props.bindings.data = binding('"bad json"');
+  assert.match(render(c), /Binding error:/);
+});
+check('bound chart data overrides an authored query source and a failed binding never falls back', () => {
+  const live = { columns: ['station', 'count'], rows: [{ station: 'Bound station', count: 42 }] };
+  const c = component('chart-data', 'chart', { chart: { kind: 'line', xKey: 'station', series: [{ key: 'count' }] },
+    dataSource: { queryId: 'unused-authored-query' }, data: { columns: ['station', 'count'], rows: [{ station: 'Authored fallback', count: 999 }] },
+    bindings: { data: binding(JSON.stringify(JSON.stringify(live))) } });
+  const html = render(c);
+  assert.match(html, /Bound station/); assert.doesNotMatch(html, /Authored fallback|Loading dataset|Dataset is loading/);
+  c.props.bindings.data = binding('"invalid json"');
+  const failed = render(c); assert.match(failed, /Binding error:/); assert.doesNotMatch(failed, /Authored fallback|Bound station/);
 });
 console.log(`${passed} bound-component renderer checks passed.`);

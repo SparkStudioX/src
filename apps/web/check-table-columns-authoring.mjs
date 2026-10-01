@@ -7,10 +7,15 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 
 const require = createRequire(import.meta.url), asModule = code=>`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
-const hookUrl = asModule(`let values=[],index=0;export const begin=()=>{index=0;};export const clear=()=>{values=[];index=0;};export const useState=initial=>{const at=index++;if(!(at in values))values[at]=typeof initial==='function'?initial():initial;return[values[at],next=>{values[at]=typeof next==='function'?next(values[at]):next;}];};export const useRef=initial=>{const at=index++;return values[at]??={current:initial};};export const useEffect=()=>{};`);
+const hookUrl = asModule(`export {Children,cloneElement,isValidElement} from ${JSON.stringify(pathToFileURL(require.resolve("react")).href)};
+export const createContext=initial=>{const context={value:initial};context.Provider=({value,children})=>{context.value=value;return children;};return context;};
+export const useContext=context=>context.value;
+export const useId=()=>"runtime-property-test";
+let values=[],index=0;export const begin=()=>{index=0;};export const clear=()=>{values=[];index=0;};export const useState=initial=>{const at=index++;if(!(at in values))values[at]=typeof initial==='function'?initial():initial;return[values[at],next=>{values[at]=typeof next==='function'?next(values[at]):next;}];};export const useRef=initial=>{const at=index++;return values[at]??={current:initial};};export const useEffect=()=>{};`);
 function loader(interactive=false) {
   const modules=new Map();
   return function url(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
     if(modules.has(name)) return modules.get(name);
     const file=['tsx','ts'].map(ext=>new URL(`src/${name}.${ext}`,import.meta.url)).find(file=>fs.existsSync(file)); assert.ok(file,name);
     const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText
@@ -42,7 +47,7 @@ check('automatic and configured summaries use ordinary fields and explain source
   for(const columns of [undefined,[],[{key:'part_number',label:'Part'},{key:'id',visible:false}]]) {
     const html=renderToStaticMarkup(React.createElement(TableColumnsEditor,{component:make(columns),onChange(){},notify(){}}));
     assert.match(html,/Edit columns/);assert.match(html,/exact query column names/);assert.match(html,/presentation only/);
-    assert.doesNotMatch(html,/<textarea|JSON|<ul|<ol/);assert.match(html,/class="property-sheet-row" data-property="tableColumns"/);
+    assert.doesNotMatch(html,/<textarea|JSON|<ul|<ol/);assert.match(html,/class="property-sheet-row[^"]*" data-property="tableColumns"/);
   }
 });
 check('table column row opens a staged dialog and title-bar dismissal preserves saved columns',()=>{

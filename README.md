@@ -6,14 +6,14 @@ SparkStudio is an early-preview industrial application builder with a browser de
 
 The current source includes **local accounts, separate engineering/operator sessions, server-enforced project permissions and a bounded audit trail**. First run requires administrator setup on the gateway computer. Remote account/API access requires HTTPS; network deployment and service lifecycle acceptance remain separate gates. Python scripts run with the gateway account's operating-system access; worker processes are not a security sandbox. See the [security guide](docs/architecture/SECURITY.md).
 
-Preview.10 packages the roadmap and reliability increments below. Exact-package verification and remaining acceptance limitations are recorded in the release notes.
+The feature list below describes the current source, including additions after preview.10. Consult each feature guide and the release notes for installer compatibility, exact-package verification and remaining acceptance limitations.
 
 ## What works today
 
 - Administrator account setup, user/grant management, separate engineering/operator sign-in, read-only viewers, session revocation, project tag-read scopes, audit and copyable published operator links.
 - Projects home and Designer project navigation, with create, rename, duplicate, archive/restore and portable `.sparkproj` import/export. Each project has its own screens, queries, scripts, assets and operator URL; gateway connections and tags are shared.
 - Fixed-canvas screen editing with explicit X/Y positions, marquee/multiple selection, persistent flat groups, group resizing, a bounded custom grid, selection by type, matching dimensions, alignment, distribution, duplication and Undo/Redo. Project authoring defaults apply to new screens/templates without resizing existing documents.
-- Forty-four component types, including sixteen inputs, formatted fields and barcode entry, state controls, numeric LED, process displays, drawings, ten chart modes, sparkline and explicit equipment commands.
+- Forty-five component types, including seventeen inputs and browser camera capture, formatted fields and barcode entry, state controls, numeric LED, process displays, drawings, ten chart modes, sparkline and explicit equipment commands.
 - Optional embedded, tab, split and dock containers with retained independent pane forms and pointer/keyboard layout controls. See [view containers](docs/architecture/VIEW_CONTAINERS.md).
 - Focus/blur, keyboard, double-click and pointer handlers in the shared Actions & Events editor, in Python or JavaScript. See [interaction events](docs/architecture/COMPONENT_INTERACTIONS.md).
 - Inline input rules and formatted/barcode commits, plus typed table multiple selection and staged atomic database batches. See [validated inputs](docs/architecture/VALIDATED_INPUTS.md) and [table batch editing](docs/architecture/TABLE_BATCH_EDITING.md).
@@ -35,7 +35,7 @@ Preview.10 packages the roadmap and reliability increments below. Exact-package 
 - Reviewed atomic application publishing and rollback capture screens, queries, Python libraries and gateway/browser events in one immutable release. See [unified publication](docs/architecture/UNIFIED_PUBLICATION.md).
 - Explicit equipment commands add fresh confirmation, type/range checks, matching readback and audited receipts for configured memory/OPC UA tags. Operate alone does not grant Commands.
 - An administrator gateway overview, revocable session inventory, process/API diagnostics and a redacted support download. Checked operator publication history restores a prior application while preserving its Designer draft.
-- Encrypted online configuration backup downloads, daily SMB/FTP/FTPS delivery and gateway-owned age retention in **Gateway Settings → Recovery**. Offline full-data archives restore into a new directory under enforced recovery quarantine. See [scheduled backups](docs/architecture/SCHEDULED_BACKUPS.md) and [offline recovery](docs/architecture/GATEWAY_RECOVERY.md) for scope and secret portability.
+- Encrypted online configuration backup downloads and multiple named schedules targeting SMB, FTP/FTPS or S3 in **Gateway Settings → Backups**. Each schedule has its own days, time zone and age retention; **Restore** contains the offline full-data guide and recovery review. See [scheduled backups](docs/architecture/SCHEDULED_BACKUPS.md) and [offline recovery](docs/architecture/GATEWAY_RECOVERY.md) for scope and secret portability.
 - Versioned UDT definitions and pinned instances, member overrides, named scan groups, default-provider lifecycle, scalar expression tags and reviewed tag-model imports; see [tag engineering](docs/architecture/TAG_ENGINEERING.md).
 - Installer selection of local-only access or HTTPS on all IPv4 interfaces with a separate loopback management port, a DNS hostname or specific IPv4 operator address, and either a generated self-signed certificate or protected PEM certificate/key import. Generated certificates need no supplied files; operator computers must explicitly trust the exported public certificate. IP access uses an exact iPAddress certificate SAN without requiring DNS. See [network access](docs/architecture/NETWORK_ACCESS.md).
 - OPC UA discovery, browse/read and monitored-item subscriptions; managed local SQLite databases and SQL Server connections with parameterized named reads and explicit updates.
@@ -205,7 +205,7 @@ Compose publishes host loopback only and retains a named data volume. Stop any o
 
 ## Feature workshops
 
-The [workshop catalog](examples/README.md) covers 53 authored examples. 35 build into independent, importable `.sparkproj` projects; 18 require gateway tags, databases, administrative exercises or local image assignment and are clearly listed separately. Each major feature includes a workshop, walkthrough, prerequisites and verification. The portable collection uses synthetic data and works without external servers or Internet access.
+The [workshop catalog](examples/README.md) covers 55 authored examples. 37 build into independent, importable `.sparkproj` projects; 18 require gateway tags, databases, administrative exercises or local image assignment and are clearly listed separately. Each major feature includes a workshop, walkthrough, prerequisites and verification. The portable collection uses synthetic data. Visitor check-in requires a webcam and internet access to Labelary; the other exercises work offline.
 
 Designer **Search project** (Ctrl+Shift+F / Cmd+Shift+F) finds draft resources, properties, bindings, queries and scripts, with direct navigation and structured-reference views. See [project search](docs/architecture/PROJECT_SEARCH.md) and its portable workshop. Run `node tools/test-project-search.mjs` with Node 22.17 or newer to check the pure index and reference contracts offline.
 
@@ -215,7 +215,7 @@ Screen/template renames and canvas-resource deletions have [change previews](doc
 
 The newest workshops cover the following authoring and gateway increments:
 
-- [Scheduled backups](docs/architecture/SCHEDULED_BACKUPS.md): encrypted configuration downloads, daily destination delivery, seven-day retention and published/draft restore checkpoints. Its dedicated loader creates a new project; schedules start disabled with a 02:00 gateway-local default.
+- [Scheduled backups](docs/architecture/SCHEDULED_BACKUPS.md): multiple destinations and schedules, encrypted downloads, independent retention and published/draft restore checkpoints. Its dedicated loader creates a new project; new schedules start disabled with a 02:00 gateway-local default and seven-day retention.
 - [Gateway recovery](docs/architecture/GATEWAY_RECOVERY.md), [tag engineering](docs/architecture/TAG_ENGINEERING.md) and [network access](docs/architecture/NETWORK_ACCESS.md): offline full-data recovery, derived tags/reviewed imports and HTTPS listener setup. These exercises require deliberate gateway setup.
 
 - [Canvas precision](docs/architecture/CANVAS_PRECISION.md) and [authoring defaults](docs/architecture/AUTHORING_DEFAULTS.md): matching geometry, custom grids and starting dimensions for new resources.
@@ -265,6 +265,20 @@ Python lifecycle and session messaging use one **Actions & Events** editor. Impo
 
 
 ## Aggregate offline verification
+
+Web complexity reports use the existing TypeScript compiler to inspect every
+executable function in `apps/web/src`, including JSX callbacks. Run
+`node tools/analyze-web-complexity.mjs --label before` before a refactor, then
+`node tools/analyze-web-complexity.mjs --label after --compare .data/complexity/before.json`.
+The ignored `.data/complexity/` folder receives JSON with every function, source
+hashes and decision counts, plus Markdown rankings and before/after comparisons.
+Each function starts at 1; branches, loops, catches, conditional expressions,
+non-default switch cases and `&&`, `||`, `??` add decisions. Nested functions
+are measured separately. This syntax-based metric is a maintainability signal:
+extracting a helper lowers its caller's score while preserving its decisions,
+and adds another function base. Review maximum scores and decision totals together.
+`node tools/test-web-complexity.mjs` verifies the metric and report comparisons;
+the aggregate offline runner includes these checks.
 
 Install dependencies once with `npm ci --prefix apps/web` and restore both test
 projects with `dotnet restore src/SparkStudio.Gateway.Tests --artifacts-path .data/test-build --locked-mode --configfile NuGet.Config`

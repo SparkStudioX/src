@@ -9,3 +9,6 @@
 .property-collection-dialog > header h2 { margin: 0; font-size: 15px; }
 .property-collection-dialog > header button { color: var(--muted); font-size: 24px; }
 .property-collection-body { padding: 16px 18px; overflow-y: auto; min-height: 0; }
+.property-collection-body .field:has(> input[type=checkbox]) { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+.property-collection-body .field:has(> input[type=checkbox]) > span { margin: 0; }
+.property-collection-body input[type=checkbox] { width: 16px; height: 16px; margin: 0; flex: 0 0 16px; accent-color: var(--accent); }

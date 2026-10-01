@@ -4,9 +4,19 @@
 .property-sheet-columns span:last-child { text-align: center; }
 .property-sheet-group h4 { margin: 0; padding: 7px 8px; font-size: 10px; font-weight: 650; background: var(--surface-subtle); border-block: 1px solid var(--border); }
 .property-sheet-row { min-height: 30px; border-bottom: 1px solid var(--border); gap: 0; }
-.property-sheet-row > label { padding: 6px 7px; font-size: 10px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.property-sheet-row > label, .property-sheet-row > span:first-child { padding: 6px 7px; font-size: 10px; line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; }
 .property-sheet-value { min-width: 0; border-left: 1px solid var(--border); padding: 2px 4px; }
-.property-sheet-value > input, .property-sheet-value > select, .property-sheet-color > input:not([type=color]) { width: 100%; min-width: 0; height: 25px; padding: 3px 5px; font-size: 11px; border: 1px solid transparent; border-radius: 2px; background: transparent; color: var(--ink); }
+.runtime-property-row > fieldset.property-sheet-value { margin: 0; border: 0; border-left: 1px solid var(--border); min-inline-size: 0; }
+.runtime-property-row > fieldset:disabled { opacity: .72; }
+.property-sheet-row .property-design-time { display: block; font-size: 8px; color: var(--muted); font-weight: normal; }
+.property-collection-body .runtime-property-row { grid-template-columns: minmax(110px, 35%) minmax(0, 1fr) 28px; }
+.property-collection-body .runtime-property-row > .property-sheet-value { min-width: 0; }
+.property-sheet-value > input, .property-sheet-value > select, .property-sheet-color > input:not([type=color]) { width: 100%; min-width: 0; height: 28px; padding: 3px 5px; font-size: 11px; line-height: 1.4; border: 1px solid transparent; border-radius: 2px; background: transparent; color: var(--ink); }
+.property-sheet-value > textarea { display: block; width: 100%; min-width: 0; max-width: 100%; padding: 6px; font-size: 11px; line-height: 1.5; resize: vertical; }
+.property-sheet-value > small { display: block; margin-top: 4px; font-size: 10px; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }
+/* Non-bindable editors use the entire value column, including the unused binding cell. */
+.property-sheet-row:has(> .property-sheet-value + span:empty):not(:has(.property-structured-editor[open])) > .property-sheet-value { grid-column: 2 / -1; }
+.property-sheet-row > .property-sheet-value + span:empty { display: none; }
 .property-sheet-value input:focus, .property-sheet-value select:focus { background: var(--panel); border-color: var(--accent); }
 .property-bindings-panel > p.property-sheet-error, .property-sheet-value > small.property-sheet-error { display: block; white-space: normal; overflow-wrap: anywhere; }
 .property-sheet-value > input[type=checkbox] { width: 14px; height: 14px; margin: 4px; accent-color: var(--accent); }
@@ -107,15 +117,22 @@
 .component-property-grid { padding: 0 12px 12px; }
 .property-sheet-inspector .component-property-grid .inspector-section { padding: 0; border: 0; margin: 0; }
 .component-property-grid .inspector-section > h3 { margin: 0; padding: 7px 8px; font-size: 10px; font-weight: 650; background: var(--surface-subtle); border-block: 1px solid var(--border); }
-.component-property-grid .field { display: grid; grid-template-columns: minmax(85px, 38%) minmax(0, 1fr) 28px; align-items: center; gap: 0; padding: 0; min-height: 30px; border-bottom: 1px solid var(--border); }
+.component-property-grid .field { display: grid; grid-template-columns: minmax(85px, 38%) minmax(0, 1fr); align-items: center; gap: 0; padding: 0; min-height: 30px; border-bottom: 1px solid var(--border); }
 .component-property-grid .field > span { grid-column: 1; padding: 6px 7px; font-size: 10px; color: var(--text-secondary); overflow-wrap: anywhere; }
 .component-property-grid .field > :not(span):not(small) { grid-column: 2; margin: 2px 4px; width: calc(100% - 8px); min-width: 0; }
-.component-property-grid .field > input, .component-property-grid .field > select { height: 25px; padding: 3px 5px; border: 1px solid transparent; border-radius: 2px; background: transparent; color: var(--ink); font-size: 11px; }
+.component-property-grid .field > input, .component-property-grid .field > select { height: 28px; padding: 3px 5px; border: 1px solid transparent; border-radius: 2px; background: transparent; color: var(--ink); font-size: 11px; line-height: 1.4; }
+.component-property-grid .field > textarea { max-width: calc(100% - 8px); padding: 6px; font-size: 11px; line-height: 1.5; resize: vertical; }
 .component-property-grid .field > input:focus, .component-property-grid .field > select:focus { background: var(--panel); border-color: var(--accent); }
 .component-property-grid .field > small { grid-column: 2 / -1; font-size: 10px; margin: 0; padding: 2px 5px 5px; }
 .component-property-grid .field-grid { display: block; }
-.component-property-grid .inspector-section > p, .component-property-grid .inspector-section > small { display: block; margin: 0; padding: 6px 8px; font-size: 10px; }
-.component-property-grid .button { min-height: 26px; padding: 4px 6px; font-size: 10px; }
+.component-property-grid .inspector-section > p, .component-property-grid .inspector-section > small,
+.component-property-grid .property-sheet-group > small, .component-property-grid .property-sheet-group > p { display: block; margin: 0; padding: 8px; font-size: 10px; line-height: 1.6; color: var(--text-secondary); overflow-wrap: anywhere; }
+.component-property-grid .button, .property-sheet-value > .button { min-height: 28px; max-width: 100%; min-width: 0; height: auto; padding: 5px 7px; font-size: 10px; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.component-property-grid .property-collection-value { flex-wrap: wrap; }
+.component-property-grid .property-collection-value > span { flex: 1 1 55px; white-space: normal; overflow-wrap: anywhere; }
+.component-property-grid .property-collection-value > .button { flex: 0 1 auto; }
 .component-property-grid .visual-style-assignment { display: block; }
 .component-property-grid .visual-style-assignment > details { font-size: 10px; padding: 6px 8px; }
 .component-property-grid .asset-preview { margin: 6px 8px; }
+.component-property-grid .property-sheet-group > [role=alert],
+.property-sheet-value > small.property-sheet-error { color: var(--danger); white-space: normal; overflow-wrap: anywhere; }

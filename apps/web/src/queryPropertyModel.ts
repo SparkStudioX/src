@@ -1,4 +1,4 @@
-import { bindingTargets, constantPropertyBinding, evaluatePropertyBinding, supportsBindingTarget, validateBindingTargetValue, validateComponentBindingRange, validatePropertyBinding } from "./propertyBindings";
+import { bindingReferenceDependencies, constantPropertyBinding, evaluatePropertyBinding, supportsBindingTarget, validateBindingTargetValue, validateComponentBindingConstants, validatePropertyBinding } from "./propertyBindings";
 import type { BindingContext } from "./propertyBindings";
 import { validateTemplateParameterBinding } from "./templateParameterBindings";
 import { isInput, validateInputs } from "./inputs";
@@ -28,14 +28,14 @@ export function validateQueryPropertyBinding(binding: QueryPropertyBinding, targ
   try {
     if (!object(binding) || Object.keys(binding).some(key => !["queryId", "column", "transform", "parameters", "refresh"].includes(key))
       || !name(binding.queryId, 256) || !name(binding.column, 128)) fail("Choose a query and a nonempty result column of up to 128 characters.");
-    if (!bindingTargets.includes(target) || !supportsBindingTarget(component.type, target)) fail(`Query bindings are not supported for ${target} on ${component.type}.`);
+    if (!supportsBindingTarget(component.type, target, component)) fail(`Query bindings are not supported for ${target} on ${component.type}.`);
     if (Object.hasOwn(component.props.bindings ?? {}, target)) fail("Choose an expression or a query for this property, not both.");
     if (binding.transform !== undefined) {
       const expression = { expression: binding.transform, references: { value: { kind: "custom" as const, key: "value" } } };
       const error = validatePropertyBinding(expression); if (error) fail(error);
-      const constant = constantPropertyBinding(expression); if (constant.constant) validateBindingTargetValue(target, constant.value);
+      const constant = constantPropertyBinding(expression); if (constant.constant) validateBindingTargetValue(target, constant.value, component);
     }
-    if (target === "min" || target === "max") validateComponentBindingRange({ ...component,
+    validateComponentBindingConstants({ ...component,
       props: { ...component.props, queryBindings: { ...component.props.queryBindings, [target]: binding } } });
     if (binding.refresh !== undefined && (!object(binding.refresh) || !["onChange", "poll"].includes(binding.refresh.mode)
       || Object.keys(binding.refresh).some(key => !["mode", "intervalMs"].includes(key))
@@ -48,7 +48,7 @@ export function validateQueryPropertyBinding(binding: QueryPropertyBinding, targ
     if (query) for (const parameter of query.parameters) if (!Object.hasOwn(binding.parameters ?? {}, parameter.name) && !Object.hasOwn(parameter, "defaultValue"))
       fail(`Query parameter '${parameter.name}' needs a mapping or a saved default.`);
     for (const [key, expression] of Object.entries(binding.parameters ?? {})) {
-      if (Object.values(expression.references ?? {}).some(reference => reference.kind === "tag")) fail("Query parameter expressions cannot reference tags.");
+      if (bindingReferenceDependencies(expression, component, context).some(item => item.reference.kind === "tag")) fail("Query parameter expressions cannot reference tags, including through custom properties.");
       if (!/^@?[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(key) || key.length > 129) fail(`Query parameter '${key}' has an invalid name.`);
       const error = validateTemplateParameterBinding(expression, component, context.components, context.parameters, key, "string", context.state, allowUnresolvedScreenState);
       if (error) fail(`${key}: ${error}`);
@@ -64,11 +64,12 @@ export function validateQueryPropertyBinding(binding: QueryPropertyBinding, targ
 /** No tag/query recursion or parent/child data ambiguity. Check unused aliases too. */
 export function resolveQueryPropertyParameters(binding: QueryPropertyBinding, component: CanvasComponent, context: BindingContext): RuntimeParameters {
   return Object.fromEntries(Object.entries(binding.parameters ?? {}).map(([key, expression]) => {
-    if (Object.values(expression.references ?? {}).some(reference => reference.kind === "tag")) fail("Query parameter expressions cannot reference tags.");
+    const dependencies = bindingReferenceDependencies(expression, component, context);
+    if (dependencies.some(item => item.reference.kind === "tag")) fail("Query parameter expressions cannot reference tags, including through custom properties.");
     const error = validateTemplateParameterBinding(expression, component, context.components, context.parameters, key, "string", context.state);
     if (error) fail(`${key}: ${error}`);
-    for (const [alias, reference] of Object.entries(expression.references)) {
-      evaluatePropertyBinding({ expression: alias, references: { [alias]: reference } }, component, context);
+    for (const { reference, component: owner } of dependencies) {
+      evaluatePropertyBinding({ expression: "source", references: { source: reference } }, owner, context);
       if (reference.kind === "input") {
         const input = context.components.find(item => isInput(item.type) && (item.props.fieldKey || item.id) === reference.key)!;
         const error = validateInputs({ id: "query-source", name: "Query source", width: 1, height: 1, components: [input] }, context.inputs, context.parameters);
@@ -89,13 +90,13 @@ export function queryPropertyValue(result: QueryResult, column: string): Paramet
   return value as ParameterValue;
 }
 
-export function transformQueryPropertyValue(value: ParameterValue, transform: string | undefined, target: BindingTarget): ParameterValue {
+export function transformQueryPropertyValue(value: ParameterValue, transform: string | undefined, target: BindingTarget, owner?: CanvasComponent): ParameterValue {
   if (!scalar(value)) fail("The query result has no valid scalar value.");
   const component: CanvasComponent = { id: "query-result", type: "label", x: 0, y: 0, width: 1, height: 1,
     props: { customProperties: { value: { type: typeof value as "string" | "number" | "boolean", value } } } };
   const result = transform === undefined ? value : evaluatePropertyBinding({ expression: transform, references: { value: { kind: "custom", key: "value" } } }, component,
     { components: [component], tags: [], parameters: {}, inputs: {} }).value;
-  validateBindingTargetValue(target, result);
+  validateBindingTargetValue(target, result, owner);
   return target === "text" || target === "stateValue" ? String(result) : result;
 }
 
@@ -127,6 +128,6 @@ export async function loadQueryProperty(binding: QueryPropertyBinding, target: B
     const catalog = await read(request<NamedQuery[]>(`${prefix}/queries${publication === undefined ? "" : `?publishedAt=${encodeURIComponent(publication)}`}`, "GET", undefined, readSignal));
     validateQueryPropertyParameters(catalog.find(item => item.id === binding.queryId), parameters); readSignal.throwIfAborted();
     const result = await read(request<QueryResult>(`${prefix}/queries/${encodeURIComponent(binding.queryId)}/execute`, "POST", { parameters, ...(publication === undefined ? {} : { publishedAt: publication }) }, readSignal));
-    readSignal.throwIfAborted(); return transformQueryPropertyValue(queryPropertyValue(result, binding.column), binding.transform, target);
+    readSignal.throwIfAborted(); return transformQueryPropertyValue(queryPropertyValue(result, binding.column), binding.transform, target, component);
   } finally { clearTimeout(timeout); }
 }

@@ -4,7 +4,7 @@ Gateway administrators manage shared connections in the Designer's **Connections
 
 ## Lifecycle
 
-- **Save connection** accepts new IDs without a revision. Existing entries must send their current `revision`; a stale or missing revision returns HTTP 409 without changing saved configuration. **Reload** discards local edits and fetches the current entry.
+- **Save connection** accepts new IDs without a revision. Existing entries must send their current `revision`; a stale or missing revision returns HTTP 409 without changing saved configuration. **Cancel changes** appears while editing and retrieves the current saved entry. Only a successful retrieval discards the draft; failures preserve edited credentials and fields.
 - Renaming preserves the connection ID and its references. Changing the connector type requires a new connection.
 - **Connection enabled** takes effect when saved. Disabling immediately invalidates OPC UA subscription callbacks, cancels their watches and reports `Bad_Disabled` on bound tags. The last value remains available with bad quality; it is not represented as current good data.
 - Disabled entries block new tests, browse calls, schema/database operations and query operations when they resolve the connection. An operation admitted before disable may finish; disabling is not a transaction rollback or an emergency equipment stop.
@@ -26,20 +26,20 @@ Stored results use fixed messages for success, missing managed SQLite databases,
 - OPC UA subscription state and last notification time.
 - Up to 100 configured tag values with quality, type and source timestamp. Values longer than 512 characters are shortened. The source timestamp describes a value notification and can remain old when a value does not change.
 
-The panel marks its snapshot stale after 30 seconds using time elapsed in the browser. **Refresh diagnostics** refreshes the gateway snapshot; it does not create an extra OPC UA read or write session. Up to 500 references are shown with explicit omitted counts. A save or a selection change clears older UI results; a mismatched configuration revision requires Reload.
+The panel updates automatically every 15 seconds while visible, without overlapping requests or creating an extra OPC UA read/write session. A failed read or mismatched saved revision retains the last valid snapshot with a warning and contextual **Retry diagnostics**. Select the updated saved connection when its revision changes. Up to 500 references are shown with explicit omitted counts. A save or selection change clears older UI results. Automatic shared-resource updates do not overwrite a connection draft or its edited credentials.
 
-Endpoint discovery and certificate fingerprint selection remain available for OPC UA clients. This increment does not add certificate store administration, a delete API, continuous SQL health polling or equipment writes.
+Endpoint discovery and certificate fingerprint selection remain available for OPC UA clients. Public certificate-store administration is separate under Configuration → Public OPC certificates. Connection diagnostics do not add a delete API, continuous SQL health polling or equipment writes.
 
 ## Workshop: SQLite lifecycle and dependencies
 
 Use the **SQLite data controls** setup workshop from `examples/catalog.json` on a disposable gateway. This is a gateway-setup example, not a self-contained `.sparkproj`; its database connection and managed SQLite data are installed explicitly by the workshop loader. It needs the G05 connection operations build or later.
 
 1. Follow the SQLite data controls loader instructions to install the synthetic sample. Open its connection in **Connections**. Run **Test connection** and inspect the completion time. Reload the page; the result should remain visible.
-2. Open **Dependencies and tag values**. The loader publishes this project during setup, so the sample named queries should appear as both draft and published references. Refresh diagnostics after later query edits or publication.
+2. Open **Dependencies and tag values**. The loader publishes this project during setup, so the sample named queries should appear as both draft and published references. Wait for an automatic update after later query edits or publication.
 3. Rename the connection and save. Its ID stays unchanged, so named queries continue to use it. The previous test result disappears because the saved revision changed.
-4. Open the same connection in two Designer tabs. Save a rename in the first. Saving the older entry from the second should report a conflict. Use **Reload** in that tab to discard the older edit and inspect the new name.
+4. Open the same connection in two Designer tabs. Save a rename in the first. Saving the older entry from the second should report a conflict. Use **Cancel changes** in that tab to discard the older edit and inspect the new name.
 5. Clear **Connection enabled**, then save. New named-query executions should fail with an explicit disabled-connection message; the managed SQLite file and reference list remain intact. The Test, Create database and Browse schema actions are unavailable while disabled.
-6. Enable and save the entry, then test it. Queries should work again without recreating the database. Wait more than 30 seconds in diagnostics; the stale marker should appear. Refresh to replace it with a new snapshot timestamp.
+6. Enable and save the entry, then test it. Queries should work again without recreating the database. Keep diagnostics visible and verify that its observation timestamp advances automatically. Failed observations keep the previous data visibly outdated until a successful read.
 
 For the optional OPC UA lab, use a dedicated read-only test server and a configured tag. Verify its value, quality and source timestamp in quick watch. Disable and save the connection: the tag should immediately show `Bad_Disabled`, and its subscription group should stop. Re-enable it and wait for a fresh good notification. Do not infer that a PLC or process has stopped when its client connection is disabled.
 

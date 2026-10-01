@@ -15,6 +15,7 @@ const hooks = asModule(`export * from ${JSON.stringify(react)}; export const use
 modules.set('applicationState', asModule('export const useApplicationStateContext=()=>globalThis.__chartOwner;'));
 modules.set('useDatasetBinding', asModule('export const useDatasetBinding=(...args)=>{globalThis.__chartDatasetArgs=args;return globalThis.__chartSample??{status:"idle"};};'));
 function moduleUrl(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   if (modules.has(name)) return modules.get(name);
   const file = ['tsx','ts'].map(extension=>new URL(`src/${name}.${extension}`,import.meta.url)).find(file=>fs.existsSync(file)); assert.ok(file,name);
   const code = ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText

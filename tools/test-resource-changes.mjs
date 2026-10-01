@@ -44,6 +44,14 @@ function freeze(value) { if (value && typeof value === 'object') { Object.values
 let passed = 0;
 function check(name, run) { run(); passed++; console.log(`PASS ${name}`); }
 
+check('native property sources block deleting their component but allow deleting the source and consumer together', () => {
+  const project=fixture();project.screens[0].components=[component('amount','numberInput'),component('write','button',{action:'setTagValue',tagWrite:{tagPath:'[default]Workshop/Amount',dataType:'Double',valueReference:{kind:'property',componentId:'amount',property:'value'}}})];
+  const plan=planResourceChange(project,queries,[],selected(['amount']));assert.equal(plan.nextProject,null);assert.equal(plan.blockingReferences.length,1);assert.equal(plan.blockingReferences[0].target.componentId,'write');
+  assert.throws(()=>applyResourceChange(plan,project,queries,[]),/structured references/);
+  const together=planResourceChange(project,queries,[],selected(['amount','write']));assert.deepEqual(together.blockingReferences,[]);assert.equal(applyResourceChange(together,project,queries,[]).screens[0].components.length,0);
+  project.screens[0].components[1].props.action='navigate';assert.equal(planResourceChange(project,queries,[],selected(['amount'])).blockingReferences.length,1);
+});
+
 check('screen rename trims display name and retains stable identity, component links and custom menu labels', () => {
   const project = fixture(); project.screens[1].components.push(component('go-home', 'button', { targetScreenId: 'home' }));
   freeze(project); const before = JSON.stringify(project);

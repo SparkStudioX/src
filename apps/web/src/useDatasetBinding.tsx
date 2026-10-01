@@ -6,7 +6,7 @@ import { QueryPropertyCoordinator, queryPropertyRequestKey } from "./queryProper
 import type { QueryPropertyRequest } from "./queryPropertyCoordinator";
 import type { BindingContext } from "./propertyBindings";
 import { resolveDatasetParameters, validateDataset } from "./datasets";
-import { sharedQueryCoordinator } from "./useQueryPropertyBindings";
+import { sharedQueryCoordinator, useQueryPropertyContext } from "./useQueryPropertyBindings";
 import type { CanvasComponent, DatasetSample } from "./types";
 
 /** A dataset belongs to the same live form owner as its inputs and private state. */
@@ -14,15 +14,18 @@ export function useDatasetBinding(component: CanvasComponent, context: BindingCo
   scope: "designer" | "runtime"; publishedAt?: string; active: boolean;
 }): DatasetSample {
   const state = useApplicationStateContext();
+  const queryProperties = useQueryPropertyContext();
   const fallback = useRef<QueryPropertyCoordinator | null>(null);
   if (!fallback.current) fallback.current = new QueryPropertyCoordinator(new ComponentEventCoordinator());
   const owner = state?.store;
   const coordinator = sharedQueryCoordinator(owner, fallback.current);
   const [, update] = useState(0);
   let request: QueryPropertyRequest | undefined, error = "";
-  const source = component.props.dataSource;
+  // An explicit runtime Data binding owns the dataset, including failure.
+  // Do not silently fall back to an older named-query source while it loads.
+  const source = component.props.bindings?.data || component.props.queryBindings?.data ? undefined : component.props.dataSource;
   try {
-    if (source) request = { queryId: source.queryId, parameters: resolveDatasetParameters(source, component, context), scope: options.scope,
+    if (source) request = { queryId: source.queryId, parameters: resolveDatasetParameters(source, component, { ...context, queryProperties: context.queryProperties ?? queryProperties }), scope: options.scope,
       projectId: currentProjectId(), ...(options.scope === "runtime" ? { publishedAt: options.publishedAt } : {}) };
   } catch (reason) { error = reason instanceof Error ? reason.message : String(reason); }
   const active = options.active && !context.communicationLost && state?.isCurrent?.() !== false;

@@ -10,14 +10,17 @@ process.on('uncaughtException',error=>{console.error(error.stack?.split('\n').fi
 process.on('unhandledRejection',error=>{console.error(error?.message??error);process.exit(1);});
 const require=createRequire(import.meta.url),url=code=>'data:text/javascript;base64,'+Buffer.from(code).toString('base64');
 const reactUrl=pathToFileURL(require.resolve('react')).href;
-const hookUrl=url(`export * from ${JSON.stringify(reactUrl)};export const useRef=x=>globalThis.__queryHooks.useRef(x);export const useState=x=>globalThis.__queryHooks.useState(x);export const useEffect=(f,d)=>globalThis.__queryHooks.useEffect(f,d);`);
+const hookUrl=url(`export * from ${JSON.stringify(reactUrl)};export const useRef=x=>globalThis.__queryHooks.useRef(x);export const useState=x=>globalThis.__queryHooks.useState(x);export const useEffect=(f,d)=>globalThis.__queryHooks.useEffect(f,d);export const useContext=()=>globalThis.__queryPropertyContext;`);
 const apiUrl=url('export const api=(...args)=>globalThis.__queryApi(...args);export const currentProjectId=()=>null;');
-function loader(harness=false){const cache=new Map();return function load(name){if(cache.has(name))return cache.get(name);
+const stateContextUrl=url('export const useApplicationStateContext=()=>globalThis.__queryApplicationState;');
+function loader(harness=false){const cache=new Map();return function load(name){
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');if(cache.has(name))return cache.get(name);
   const file=['tsx','ts'].map(ext=>new URL(`src/${name}.${ext}`,import.meta.url)).find(file=>fs.existsSync(file));assert.ok(file,name);
   const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText
     .replace(/import "\.\/[^"\n]+\.css";\r?\n/g,'').replace(/(from\s+|import\s+)(["'])([^"']+)\2/g,(_all,prefix,_quote,dependency)=>{
-      const stub=harness&&name==='useQueryPropertyBindings'&&dependency==='react'?hookUrl
-        :harness&&['useQueryPropertyBindings','queryPropertyCoordinator'].includes(name)&&dependency==='./api'?apiUrl:undefined;
+      const stub=harness&&['useQueryPropertyBindings','useDatasetBinding'].includes(name)&&dependency==='react'?hookUrl
+        :harness&&['useQueryPropertyBindings','useDatasetBinding','queryPropertyCoordinator'].includes(name)&&dependency==='./api'?apiUrl
+        :harness&&name==='useDatasetBinding'&&dependency==='./applicationState'?stateContextUrl:undefined;
       return prefix+JSON.stringify(stub??(dependency.startsWith('./')?load(dependency.slice(2)):pathToFileURL(require.resolve(dependency)).href));});
   const result=url(code);cache.set(name,result);return result;};}
 const model=loader(),hook=loader(true);
@@ -28,7 +31,8 @@ const {ApplicationStateStore}=await import(model('applicationStateModel'));
 const {evaluateComponentBindings,componentGeometry,validatePropertyBinding}=await import(model('propertyBindings'));
 const {runtimeBindingHealth}=await import(model('runtimeQuality'));
 const {QueryPropertyProvider}=await import(model('useQueryPropertyBindings'));
-const {useQueryPropertyBindings}=await import(hook('useQueryPropertyBindings'));
+const {useQueryPropertyBindings,sharedQueryCoordinator}=await import(hook('useQueryPropertyBindings'));
+const {useDatasetBinding}=await import(hook('useDatasetBinding'));
 const {default:BoundComponent}=await import(model('BoundComponent'));
 const {ProjectComponentView}=await import(model('templates'));
 const {ApplicationStateProvider}=await import(model('applicationState'));
@@ -125,10 +129,60 @@ await check('concurrency is capped at eight and excess contexts fail visibly unt
   stops[0]();await until(()=>!coordinator.capacityError(queryPropertyRequestKey(request('read',{amount:128}))));stops.slice(1).forEach(stop=>stop());await sleep(10);assert.ok(peak<=8);
 });
 
-function hookHarness(components,context,options){const slots=[];let cursor=0,pending=[],dirty=false;
+function hookHarness(components,context,options,renderHook=useQueryPropertyBindings){const slots=[];let cursor=0,pending=[],dirty=false;
   const hooks={useRef(initial){return slots[cursor++]??={current:initial};},useState(initial){const index=cursor++;if(!(index in slots))slots[index]=typeof initial==='function'?initial():initial;return[slots[index],value=>{slots[index]=typeof value==='function'?value(slots[index]):value;dirty=true;}];},useEffect(run,deps){const index=cursor++,old=slots[index];if(!old||deps.some((value,i)=>!Object.is(value,old.deps[i])))pending.push(()=>{old?.cleanup?.();slots[index]={deps,cleanup:run()};});}};
-  const h={components,context,options,render(){cursor=0;pending=[];dirty=false;globalThis.__queryHooks=hooks;h.values=useQueryPropertyBindings(h.components,h.context,h.options);pending.forEach(run=>run());return h.values;},async settle(){for(let i=0;i<40;i++){await sleep(2);if(dirty)h.render();}return h.values;},stop(){slots.forEach(slot=>slot?.cleanup?.());}};return h;}
+  const h={components,context,options,render(){cursor=0;pending=[];dirty=false;globalThis.__queryHooks=hooks;globalThis.__queryApplicationState=h.options.state;globalThis.__queryPropertyContext=h.queryProperties;h.values=renderHook(h.components,h.context,h.options);pending.forEach(run=>run());return h.values;},async settle(){for(let i=0;i<40;i++){await sleep(2);if(dirty)h.render();}return h.values;},stop(){slots.forEach(slot=>slot?.cleanup?.());}};return h;}
 function stateOwner(){const store=new ApplicationStateStore();store.configure('run',{});const screen=store.activateScreen('main',{});return{...store.context(screen),store};}
+await check('dataset queries consume current bound custom samples and invalidate unavailable, changed or replaced contexts',async()=>{
+  const source=component('source','label',{customProperties:{amount:{type:'number',value:99}},queryBindings:{'customProperties.amount.value':{queryId:'source',column:'value'}}});
+  const chart=component('chart','chart',{dataSource:{queryId:'dataset',parameters:{amount:{expression:'source',references:{source:{kind:'custom',componentId:'source',key:'amount'}}}}}});
+  const ctx={components:[source,chart],tags:[],parameters:{},inputs:{}},calls=[],samples=sample=>({source:{'customProperties.amount.value':sample}});
+  let finish,signal;globalThis.__queryApi=async(path,_method,body,current)=>{if(!path.includes('/execute'))return[{id:'dataset',parameters:[{name:'amount',type:'number'}]}];calls.push({path,body});if(body.parameters.amount===4){signal=current;return await new Promise(resolve=>{finish=resolve;});}return result(body.parameters.amount);};
+  const h=hookHarness(chart,ctx,{state:stateOwner(),scope:'runtime',publishedAt:'v1',active:true},useDatasetBinding);
+  try{
+    h.queryProperties=samples({status:'ready',value:1});h.render();assert.equal(h.values.status,'loading');await h.settle();assert.equal(h.values.data.rows[0].value,1);assert.deepEqual(calls[0].body,{parameters:{amount:1},publishedAt:'v1'});
+    h.queryProperties=samples({status:'ready',value:2});h.render();assert.equal(h.values.status,'loading');assert.equal(h.values.data,undefined);await h.settle();assert.equal(h.values.data.rows[0].value,2);
+    for(const unavailable of [{status:'loading'},{status:'error',error:'Source failed'},undefined]){h.queryProperties=unavailable?samples(unavailable):undefined;h.render();assert.equal(h.values.status,'error');assert.equal(h.values.data,undefined);await h.settle();assert.equal(calls.length,2,'unavailable custom samples must not use the authored value');}
+    h.context={...ctx,queryProperties:samples({status:'ready',value:3})};h.render();await h.settle();assert.equal(h.values.data.rows[0].value,3);
+    h.queryProperties=samples({status:'ready',value:4});h.render();assert.equal(h.values.data.rows[0].value,3);assert.equal(calls.length,3,'explicit binding context takes precedence over the provider');
+    h.context=ctx;h.render();assert.equal(h.values.status,'loading');assert.equal(h.values.data,undefined);await until(()=>finish);h.queryProperties=samples({status:'loading'});h.render();assert.equal(h.values.status,'error');assert.equal(signal.aborted,true);finish(result(444));await h.settle();assert.equal(h.values.status,'error');assert.equal(h.values.data,undefined);
+    h.queryProperties=samples({status:'ready',value:2});h.options.publishedAt='v2';h.render();assert.equal(h.values.status,'loading');await h.settle();assert.equal(h.values.data.rows[0].value,2);assert.equal(calls.at(-1).body.publishedAt,'v2');
+    h.options.state.store.activateScreen('other',{});h.render();assert.equal(h.values.status,'error');assert.equal(h.values.data,undefined);assert.ok(calls.every(call=>call.body.parameters.amount!==99));
+  }finally{h.stop();}
+});
+await check('an explicit runtime Data binding prevents legacy dataset-source fallback even while unavailable',async()=>{
+  const calls=[];globalThis.__queryApi=async(...args)=>{calls.push(args);return result(99);};
+  for(const bindings of [{bindings:{data:{expression:'value',references:{value:{kind:'parameter',key:'data'}}}}},{queryBindings:{data:{queryId:'bound',column:'value'}}}]){
+    const chart=component('chart','chart',{...bindings,dataSource:{queryId:'legacy'}}),h=hookHarness(chart,{components:[chart],tags:[],parameters:{},inputs:{}},{state:stateOwner(),scope:'runtime',publishedAt:'v1',active:true},useDatasetBinding);
+    try{h.render();assert.equal(h.values.status,'idle');await h.settle();assert.equal(calls.length,0);h.components={...chart,props:{...chart.props,data:result(7)}};h.render();assert.equal(h.values.status,'ready');assert.equal(h.values.data.rows[0].value,7);assert.equal(calls.length,0);}finally{h.stop();}
+  }
+});
+await check('chained custom queries invalidate dependent samples in the first render of a changed, failed or replaced source',async()=>{
+  const source=component('upstream','label',{customProperties:{amount:{type:'number',value:0}},queryBindings:{'customProperties.amount.value':{queryId:'upstream',column:'value'}}});
+  const dependent=component('downstream','label',{queryBindings:{text:{queryId:'downstream',column:'value',parameters:{amount:{expression:'source',references:{source:{kind:'custom',componentId:'upstream',key:'amount'}}}}}}});
+  const definitions=[{id:'upstream',parameters:[]},{id:'downstream',parameters:[{name:'amount',type:'number'}]}],calls=[];
+  let amount=1,fail=false;
+  globalThis.__queryApi=async(path,_method,body)=>{if(!path.includes('/execute'))return definitions;calls.push({path,body});if(path.includes('/upstream/')){if(fail)throw new Error('Upstream unavailable');return result(amount);}return result(body.parameters.amount*10);};
+  // Reverse authoring order: traversal must follow dependencies, not the list.
+  const components=[dependent,source],h=hookHarness(components,{components,tags:[],parameters:{},inputs:{}},{state:stateOwner(),scope:'runtime',publishedAt:'v1',active:true});
+  const coordinator=sharedQueryCoordinator(h.options.state.store,null);
+  try{
+    h.render();assert.equal(h.values.downstream.text.status,'loading');await h.settle();assert.equal(h.values.downstream.text.value,'10');
+    amount=2;coordinator.refresh();await sleep(10);h.render();assert.equal(h.values.upstream['customProperties.amount.value'].value,2);assert.equal(h.values.downstream.text.status,'loading','the first changed-source render must not expose the old ready value');
+    await h.settle();assert.equal(h.values.downstream.text.value,'20');
+    fail=true;coordinator.refresh();await sleep(10);h.render();assert.equal(h.values.upstream['customProperties.amount.value'].status,'error');assert.equal(h.values.downstream.text.status,'error');assert.equal(h.values.downstream.text.value,undefined);
+    fail=false;amount=3;coordinator.refresh();await h.settle();assert.equal(h.values.downstream.text.value,'30');
+    h.options.publishedAt='v2';h.render();assert.equal(h.values.upstream['customProperties.amount.value'].status,'loading');assert.equal(h.values.downstream.text.status,'loading');await h.settle();assert.equal(h.values.downstream.text.value,'30');
+    h.context={...h.context,communicationLost:true};h.render();assert.equal(h.values.downstream.text.status,'error');assert.equal(h.values.downstream.text.value,undefined);
+    assert.ok(calls.filter(call=>call.path.includes('/downstream/')).every(call=>[1,2,3].includes(call.body.parameters.amount)));
+  }finally{h.stop();}
+});
+await check('invalid custom query cells stay subscribed and do not start a retry loop',async()=>{
+  const source=component('upstream','label',{customProperties:{amount:{type:'number',value:0}},queryBindings:{'customProperties.amount.value':{queryId:'upstream',column:'value'}}});
+  let calls=0,value='wrong';globalThis.__queryApi=async path=>path.includes('/execute')?(calls++,result(value)):[{id:'upstream',parameters:[]}];
+  const h=hookHarness([source],{components:[source],tags:[],parameters:{},inputs:{}},{state:stateOwner(),scope:'runtime',publishedAt:'v1',active:true});
+  try{h.render();await h.settle();assert.equal(h.values.upstream['customProperties.amount.value'].status,'error');assert.equal(calls,1);value=4;sharedQueryCoordinator(h.options.state.store,null).refresh();await h.settle();assert.equal(calls,2);assert.equal(h.values.upstream['customProperties.amount.value'].value,4);}finally{h.stop();}
+});
 await check('form hook never fetches during Design and parameter changes leave unrelated onChange subscriptions intact',async()=>{
   const calls=[];globalThis.__queryApi=async(path,_method,body)=>{calls.push({path,body});return path.includes('/execute')?result(body.parameters.amount??9):[query];};
   const first={...label,props:{queryBindings:{width:{...binding,parameters:{amount:reference('input','amount')}}}}},second=component('other','label',{queryBindings:{text:{queryId:'read',column:'value'}}});

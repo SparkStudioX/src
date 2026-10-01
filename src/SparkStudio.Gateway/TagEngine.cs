@@ -13,6 +13,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     public bool DemoMode => enableDemoTags;
     private readonly ConcurrentDictionary<string, TagValue> values = new(StringComparer.Ordinal);
     private readonly DateTimeOffset started = DateTimeOffset.UtcNow;
+    private double demoTargetSpeed = 85;
     private readonly ConcurrentDictionary<string, WatchRegistration> watches = new(StringComparer.Ordinal);
     private readonly object stateGate = new();
     // Subscribers enqueue notifications only; Python never executes on the tag thread.
@@ -82,6 +83,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     private long expressionGeneration = -1;
     private long definitionGeneration = -1;
     private JsonObject[] cachedDefinitions = [];
+    private HashSet<string> cachedDefinitionPaths = new(StringComparer.Ordinal);
     private HashSet<string> cachedDisabledConnections = new(StringComparer.Ordinal);
     private Dictionary<string, WatchPlan> cachedPlans = new(StringComparer.Ordinal);
     private bool cachedRecovery;
@@ -96,6 +98,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             var generation = store.TagConfigurationGeneration;
             if (generation == definitionGeneration && cachedRecovery == (recovery?.Active == true)) return;
             cachedDefinitions = store.GetRuntimeTagDefinitions().OfType<JsonObject>().ToArray();
+            cachedDefinitionPaths = cachedDefinitions.Select(definition => ProjectStore.Required(definition, "path")).ToHashSet(StringComparer.Ordinal);
             cachedDisabledConnections = store.GetConnections().OfType<JsonObject>().Where(item => item["enabled"]?.GetValue<bool>() == false)
                 .Select(item => ProjectStore.Required(item, "id")).ToHashSet(StringComparer.Ordinal);
             cachedPlans = BuildWatchPlans(cachedDefinitions.Where(definition => recovery?.Active != true && TagDefinitionValidator.Kind(definition) == "opcua" && definition["enabled"]?.GetValue<bool>() != false
@@ -165,7 +168,11 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             else
             {
                 var disabled = store.GetConnections().OfType<JsonObject>().Any(item => ProjectStore.Optional(item, "id") == ProjectStore.Optional(saved, "connectionId") && item["enabled"]?.GetValue<bool>() == false);
-                SetUnavailable(path, recovery?.Active == true ? "Bad_RecoveryMode" : saved["effectiveEnabled"]?.GetValue<bool>() == false || disabled ? "Bad_Disabled" : "Bad_WaitingForInitialData");
+                // A newly configured source has not supplied a value yet. Do not
+                // carry a prior memory or demo value into its OPC data record.
+                SetValue(new(path, null, ProjectStore.Optional(saved, "dataType") ?? "Unknown",
+                    recovery?.Active == true ? "Bad_RecoveryMode" : saved["effectiveEnabled"]?.GetValue<bool>() == false || disabled ? "Bad_Disabled" : "Bad_WaitingForInitialData",
+                    DateTimeOffset.UtcNow, "opcua"));
             }
             return saved;
         }
@@ -268,18 +275,22 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
         return paths.Select((path, index) =>
         {
             using (ChangeState())
+            lock (GatewayConfigurationLock.SyncRoot)
             {
                 if (!store.DefaultTagProviderEnabled()) return "Bad_Disabled";
-                if (enableDemoTags && path == "[default]Setpoints/TargetSpeed")
-                {
-                    if (input[index].ValueKind != JsonValueKind.Number || !input[index].TryGetDouble(out var number) || !double.IsFinite(number) || number < 0 || number > 500) return "Bad_OutOfRange";
-                    SetValue(new(path, number, "Double", "Good", DateTimeOffset.UtcNow, "memory")); return "Good";
-                }
                 try
                 {
                     var saved = store.WriteMemoryTag(path, input[index]);
                     SetValue(MemoryValue(saved, DateTimeOffset.UtcNow));
                     return "Good";
+                }
+                // Configured tags own their type, enabled state and persistence,
+                // even when their path also appears in the optional demo.
+                catch (KeyNotFoundException) when (enableDemoTags && path == "[default]Setpoints/TargetSpeed")
+                {
+                    if (input[index].ValueKind != JsonValueKind.Number || !input[index].TryGetDouble(out var number) || !double.IsFinite(number) || number < 0 || number > 500) return "Bad_OutOfRange";
+                    demoTargetSpeed = number;
+                    SetValue(new(path, number, "Double", "Good", DateTimeOffset.UtcNow, "memory")); return "Good";
                 }
                 catch (KeyNotFoundException) { return "Bad_NotFound"; }
                 catch (ArgumentException) { return "Bad_NotWritable"; }
@@ -299,26 +310,39 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     private void UpdateSamples()
     {
         if (!enableDemoTags) return;
-        var now = DateTimeOffset.UtcNow;
-        if (!store.DefaultTagProviderEnabled())
-        {
-            foreach (var value in values.Values.Where(value => value.Path.StartsWith("[default]Line/", StringComparison.Ordinal) || value.Path.StartsWith("[default]Setpoints/", StringComparison.Ordinal)))
-                SetValue(value with { Quality = "Bad_Disabled" });
-            return;
-        }
-        var seconds = (now - started).TotalSeconds;
         using (ChangeState())
+        lock (GatewayConfigurationLock.SyncRoot)
         {
-            if (!values.TryGetValue("[default]Setpoints/TargetSpeed", out var target)) SetValue(new("[default]Setpoints/TargetSpeed", 85d, "Double", "Good", now, "memory"));
-            else if (target.Quality == "Bad_Disabled") SetValue(target with { Quality = "Good" });
-        }
-        for (var line = 1; line <= 2; line++)
-        {
-            void Set(string name, object value, string type) { var p = $"[default]Line/Line{line}/{name}"; SetValue(new(p, value, type, "Good", now, "simulated")); }
-            Set("Speed", Math.Round(72 + line * 8 + Math.Sin(seconds / 7 + line) * 7, 1), "Double");
-            Set("Temperature", Math.Round(38 + line * 4 + Math.Sin(seconds / 14 + line) * 3, 1), "Double");
-            Set("ProductionCount", 12000 + line * 1600 + (int)(seconds * (line + 1)), "Int32");
-            Set("Status", "Running", "String");
+            RefreshDefinitions();
+            var now = DateTimeOffset.UtcNow;
+            if (!store.DefaultTagProviderEnabled())
+            {
+                foreach (var value in values.Values.Where(value => TagExpressions.SamplePath(value.Path) && !cachedDefinitionPaths.Contains(value.Path)))
+                    SetValue(value with { Quality = "Bad_Disabled" });
+                return;
+            }
+            // Demo values fill only unconfigured paths. In particular, a disabled
+            // or unavailable configured tag must never be replaced with demo data.
+            var seconds = (now - started).TotalSeconds;
+            if (!cachedDefinitionPaths.Contains("[default]Setpoints/TargetSpeed"))
+            {
+                if (!values.TryGetValue("[default]Setpoints/TargetSpeed", out var target)
+                    || target.Value is not double number || number != demoTargetSpeed
+                    || target.DataType != "Double" || target.Source != "memory" || target.Quality != "Good")
+                    SetValue(new("[default]Setpoints/TargetSpeed", demoTargetSpeed, "Double", "Good", now, "memory"));
+            }
+            for (var line = 1; line <= 2; line++)
+            {
+                void Set(string name, object value, string type)
+                {
+                    var path = $"[default]Line/Line{line}/{name}";
+                    if (!cachedDefinitionPaths.Contains(path)) SetValue(new(path, value, type, "Good", now, "simulated"));
+                }
+                Set("Speed", Math.Round(72 + line * 8 + Math.Sin(seconds / 7 + line) * 7, 1), "Double");
+                Set("Temperature", Math.Round(38 + line * 4 + Math.Sin(seconds / 14 + line) * 3, 1), "Double");
+                Set("ProductionCount", 12000 + line * 1600 + (int)(seconds * (line + 1)), "Int32");
+                Set("Status", "Running", "String");
+            }
         }
     }
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -419,7 +443,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                 {
                     if (generation != configurationGeneration || tagGeneration != store.TagConfigurationGeneration) continue;
                     var definedPaths = definitions.Select(definition => ProjectStore.Required(definition, "path")).ToHashSet(StringComparer.Ordinal);
-                    foreach (var path in values.Keys.Where(path => !(enableDemoTags && (path.StartsWith("[default]Line/") || path.StartsWith("[default]Setpoints/"))) && !definedPaths.Contains(path)))
+                    foreach (var path in values.Keys.Where(path => !(enableDemoTags && TagExpressions.SamplePath(path)) && !definedPaths.Contains(path)))
                         RemoveValue(path);
                     foreach (var definition in definitions.Where(definition => TagDefinitionValidator.Kind(definition) == "opcua" && (recovery?.Active == true || definition["enabled"]?.GetValue<bool>() == false
                         || disabledConnections.Contains(ProjectStore.Required(definition, "connectionId")))))

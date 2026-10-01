@@ -2,11 +2,11 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { stripTypeScriptTypes } from 'node:module';
+import { webModelModule } from './web-model-module.mjs';
 const url = text => `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(text)).toString('base64')}`;
 const source = file => readFile(new URL(`../apps/web/src/${file}.ts`, import.meta.url), 'utf8');
 const { validateLocalization, validateProjectLocalization, localizeComponent, captionTokens, translationReferences, applyLocalizationCatalog } = await import(url(await source('localization')));
-const drawing = url(await source('drawingComponents'));
-const { evaluateComponentBindings } = await import(url((await source('propertyBindings')).replace('from "./drawingComponents"', `from "${drawing}"`)));
+const { evaluateComponentBindings } = await import(await webModelModule('propertyBindings'));
 const catalog = () => ({ defaultLocale: 'en', locales: ['en', 'es', 'fr'], messages: { note: { en: 'Note for {station}', es: 'Nota para {station}' }, heading: { en: 'Operations', es: 'Operaciones', fr: 'Opérations' } } });
 const component = (props = {}, type = 'textInput') => ({ id: 'note', type, x: 10, y: 20, width: 220, height: 80, props: { text: 'Note for {station}', textKey: 'note', fieldKey: 'note', defaultValue: 'BATCH-014', ...props } });
 const project = () => ({ id: 'locale-test', name: 'Locale test', revision: 4, parameters: { station: 'Assembly' }, localization: catalog(), screens: [{ id: 'home', name: 'Home', width: 800, height: 600, components: [component()] }], templates: [{ id: 'card', name: 'Card', width: 300, height: 150, parameters: { station: 'Assembly' }, components: [component()] }] });

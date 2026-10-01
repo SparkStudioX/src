@@ -35,6 +35,10 @@ export function formatInputText(component: CanvasComponent, text: string): strin
 }
 export function inputDefinitionError(component: CanvasComponent): string | null {
   const { validation, formatMask, textCase, scanTerminator } = component.props;
+  if (component.type === "computerCamera") {
+    if (Object.hasOwn(component.props, "tagPath") || Object.hasOwn(component.props, "optionsSource") || Object.hasOwn(component.props, "selectionFields")) return "Computer cameras capture browser photos and cannot read tags, queries or selection mappings.";
+    if (component.props.defaultValue !== undefined && component.props.defaultValue !== "") return "A computer camera's saved default must be omitted or empty.";
+  }
   if (formatMask !== undefined) {
     if (component.type !== "formattedInput" || typeof formatMask !== "string") return "Masks belong to formatted inputs.";
     try { parseInputMask(formatMask); } catch (reason) { return reason instanceof Error ? reason.message : String(reason); }

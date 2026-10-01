@@ -1,0 +1,967 @@
+{
+  "version": 1,
+  "maxBindings": 128,
+  "structuredTextMaxLength": 4096,
+  "properties": [
+    {
+      "path": "text",
+      "label": "Text",
+      "type": "scalar",
+      "components": [
+        "*"
+      ],
+      "default": ""
+    },
+    {
+      "path": "enabled",
+      "label": "Enabled",
+      "type": "boolean",
+      "components": [
+        "*"
+      ],
+      "default": true
+    },
+    {
+      "path": "visible",
+      "label": "Visible",
+      "type": "boolean",
+      "components": [
+        "*"
+      ],
+      "default": true
+    },
+    {
+      "path": "color",
+      "label": "Color",
+      "type": "color",
+      "components": [
+        "*"
+      ]
+    },
+    {
+      "path": "backgroundColor",
+      "label": "Background Color",
+      "type": "color",
+      "components": [
+        "*"
+      ]
+    },
+    {
+      "path": "foregroundColor",
+      "label": "Foreground Color",
+      "type": "color",
+      "components": [
+        "*"
+      ]
+    },
+    {
+      "path": "borderColor",
+      "label": "Border Color",
+      "type": "color",
+      "components": [
+        "*"
+      ]
+    },
+    {
+      "path": "x",
+      "label": "X",
+      "type": "number",
+      "components": [
+        "*"
+      ],
+      "min": 0,
+      "max": 8192
+    },
+    {
+      "path": "y",
+      "label": "Y",
+      "type": "number",
+      "components": [
+        "*"
+      ],
+      "min": 0,
+      "max": 8192
+    },
+    {
+      "path": "width",
+      "label": "Width",
+      "type": "number",
+      "components": [
+        "*"
+      ],
+      "min": 1,
+      "max": 8192
+    },
+    {
+      "path": "height",
+      "label": "Height",
+      "type": "number",
+      "components": [
+        "*"
+      ],
+      "min": 1,
+      "max": 8192
+    },
+    {
+      "path": "fontSize",
+      "label": "Font Size",
+      "type": "number",
+      "components": [
+        "*"
+      ],
+      "min": 1,
+      "max": 256,
+      "default": 16
+    },
+    {
+      "path": "borderWidth",
+      "label": "Border Width",
+      "type": "number",
+      "components": [
+        "*"
+      ],
+      "min": 0,
+      "max": 32,
+      "default": 0
+    },
+    {
+      "path": "tagPath",
+      "label": "Tag Path",
+      "type": "tagPath",
+      "components": [
+        "value",
+        "gauge"
+      ],
+      "maxLength": 1024
+    },
+    {
+      "path": "stateValue",
+      "label": "State Value",
+      "type": "scalar",
+      "components": [
+        "multiStateIndicator"
+      ],
+      "default": ""
+    },
+    {
+      "path": "value",
+      "label": "Value",
+      "type": "number",
+      "components": [
+        "ledDisplay",
+        "progressBar",
+        "cylindricalTank",
+        "levelIndicator",
+        "thermometer"
+      ],
+      "default": 0
+    },
+    {
+      "path": "min",
+      "label": "Min",
+      "type": "number",
+      "components": [
+        "progressBar",
+        "cylindricalTank",
+        "levelIndicator",
+        "thermometer",
+        "numberInput",
+        "spinner",
+        "slider",
+        "gauge"
+      ],
+      "default": 0
+    },
+    {
+      "path": "max",
+      "label": "Max",
+      "type": "number",
+      "components": [
+        "progressBar",
+        "cylindricalTank",
+        "levelIndicator",
+        "thermometer",
+        "numberInput",
+        "spinner",
+        "slider",
+        "gauge"
+      ],
+      "default": 100
+    },
+    {
+      "path": "decimals",
+      "label": "Decimals",
+      "type": "number",
+      "components": [
+        "ledDisplay",
+        "progressBar",
+        "cylindricalTank",
+        "levelIndicator",
+        "thermometer"
+      ],
+      "min": 0,
+      "max": 6,
+      "integer": true,
+      "default": 1
+    },
+    {
+      "path": "unit",
+      "label": "Unit",
+      "type": "string",
+      "components": [
+        "ledDisplay",
+        "progressBar",
+        "cylindricalTank",
+        "levelIndicator",
+        "thermometer",
+        "value",
+        "gauge",
+        "slider"
+      ],
+      "maxLength": 32,
+      "default": ""
+    },
+    {
+      "path": "showValue",
+      "label": "Show Value",
+      "type": "boolean",
+      "components": [
+        "progressBar",
+        "cylindricalTank",
+        "levelIndicator",
+        "thermometer"
+      ],
+      "default": true
+    },
+    {
+      "path": "showPercent",
+      "label": "Show Percent",
+      "type": "boolean",
+      "components": [
+        "progressBar",
+        "cylindricalTank",
+        "levelIndicator",
+        "thermometer"
+      ],
+      "default": false
+    },
+    {
+      "path": "orientation",
+      "label": "Orientation",
+      "type": "string",
+      "components": [
+        "progressBar",
+        "levelIndicator"
+      ],
+      "enum": [
+        "horizontal",
+        "vertical"
+      ],
+      "default": "horizontal"
+    },
+    {
+      "path": "step",
+      "label": "Step",
+      "type": "number",
+      "components": [
+        "numberInput",
+        "spinner",
+        "slider"
+      ],
+      "min": 0,
+      "exclusiveMin": true,
+      "default": 1
+    },
+    {
+      "path": "strokeColor",
+      "label": "Stroke Color",
+      "type": "color",
+      "components": [
+        "line",
+        "rectangle",
+        "ellipse",
+        "polyline",
+        "pipe",
+        "equipmentSymbol"
+      ],
+      "default": "#64748b"
+    },
+    {
+      "path": "fillColor",
+      "label": "Fill Color",
+      "type": "color",
+      "components": [
+        "rectangle",
+        "ellipse",
+        "pipe",
+        "equipmentSymbol"
+      ],
+      "enum": [
+        "none"
+      ],
+      "default": "none"
+    },
+    {
+      "path": "strokeWidth",
+      "label": "Stroke Width",
+      "type": "number",
+      "components": [
+        "line",
+        "rectangle",
+        "ellipse",
+        "polyline",
+        "pipe",
+        "equipmentSymbol"
+      ],
+      "min": 1,
+      "max": 32,
+      "default": 2
+    },
+    {
+      "path": "rotation",
+      "label": "Rotation",
+      "type": "number",
+      "components": [
+        "line",
+        "rectangle",
+        "ellipse",
+        "polyline",
+        "pipe",
+        "equipmentSymbol"
+      ],
+      "min": 0,
+      "max": 360,
+      "default": 0
+    },
+    {
+      "path": "flowing",
+      "label": "Flowing",
+      "type": "boolean",
+      "components": [
+        "pipe"
+      ],
+      "default": false
+    },
+    {
+      "path": "flowReverse",
+      "label": "Flow Reverse",
+      "type": "boolean",
+      "components": [
+        "pipe"
+      ],
+      "default": false
+    },
+    {
+      "path": "active",
+      "label": "Active",
+      "type": "boolean",
+      "components": [
+        "equipmentSymbol"
+      ],
+      "default": false
+    },
+    {
+      "path": "points",
+      "label": "Points",
+      "type": "json",
+      "components": [
+        "line",
+        "polyline",
+        "pipe"
+      ],
+      "schema": "points"
+    },
+    {
+      "path": "symbol",
+      "label": "Symbol",
+      "type": "string",
+      "components": [
+        "equipmentSymbol"
+      ],
+      "enum": [
+        "pump",
+        "valve",
+        "motor"
+      ],
+      "default": "pump"
+    },
+    {
+      "path": "cornerRadius",
+      "label": "Corner Radius",
+      "type": "number",
+      "components": [
+        "rectangle"
+      ],
+      "min": 0,
+      "max": 50,
+      "default": 0
+    },
+    {
+      "path": "fit",
+      "label": "Fit",
+      "type": "string",
+      "components": [
+        "image"
+      ],
+      "enum": [
+        "contain",
+        "cover",
+        "fill"
+      ],
+      "default": "contain"
+    },
+    {
+      "path": "alt",
+      "label": "Alt",
+      "type": "string",
+      "components": [
+        "image",
+        "icon"
+      ],
+      "maxLength": 4096,
+      "default": ""
+    },
+    {
+      "path": "icon",
+      "label": "Icon",
+      "type": "string",
+      "components": [
+        "icon"
+      ],
+      "maxLength": 128,
+      "minLength": 1,
+      "enum": [
+        "spark",
+        "grid",
+        "design",
+        "plug",
+        "database",
+        "code",
+        "settings",
+        "arrow",
+        "down",
+        "plus",
+        "close",
+        "check",
+        "play",
+        "stop",
+        "save",
+        "monitor",
+        "layers",
+        "tag",
+        "search",
+        "text",
+        "value",
+        "gauge",
+        "button",
+        "table",
+        "folder",
+        "trash",
+        "copy",
+        "refresh",
+        "external",
+        "link",
+        "move",
+        "undo",
+        "info",
+        "clock",
+        "shield",
+        "upload",
+        "download",
+        "activity",
+        "worker",
+        "forklift",
+        "warehouse",
+        "pallet",
+        "route",
+        "drawing-line",
+        "drawing-rectangle",
+        "drawing-ellipse",
+        "drawing-polyline",
+        "drawing-pipe",
+        "equipment-symbol"
+      ]
+    },
+    {
+      "path": "options",
+      "label": "Options",
+      "type": "json",
+      "components": [
+        "select",
+        "radioGroup",
+        "multiStateButton",
+        "list",
+        "treeView"
+      ],
+      "schema": "options"
+    },
+    {
+      "path": "states",
+      "label": "States",
+      "type": "json",
+      "components": [
+        "multiStateIndicator"
+      ],
+      "schema": "states"
+    },
+    {
+      "path": "pageSize",
+      "label": "Page Size",
+      "type": "number",
+      "components": [
+        "table"
+      ],
+      "integer": true,
+      "min": 1,
+      "max": 100,
+      "default": 25
+    },
+    {
+      "path": "tableColumns",
+      "label": "Table Columns",
+      "type": "json",
+      "components": [
+        "table"
+      ],
+      "schema": "tableColumns",
+      "default": []
+    },
+    {
+      "path": "selectionMode",
+      "label": "Selection Mode",
+      "type": "string",
+      "components": [
+        "table"
+      ],
+      "enum": [
+        "single",
+        "multiple"
+      ],
+      "default": "single"
+    },
+    {
+      "path": "data",
+      "label": "Data",
+      "type": "json",
+      "components": [
+        "table",
+        "chart",
+        "sparkline"
+      ],
+      "schema": "dataset",
+      "default": {
+        "columns": [],
+        "rows": []
+      }
+    },
+    {
+      "path": "columns",
+      "label": "Columns",
+      "type": "number",
+      "components": [
+        "repeater"
+      ],
+      "min": 1,
+      "max": 12,
+      "integer": true,
+      "default": 1
+    },
+    {
+      "path": "gap",
+      "label": "Gap",
+      "type": "number",
+      "components": [
+        "repeater"
+      ],
+      "min": 0,
+      "max": 64,
+      "default": 16
+    },
+    {
+      "path": "historyPaths",
+      "label": "History Paths",
+      "type": "json",
+      "components": [
+        "historicalTrend"
+      ],
+      "schema": "historyPaths",
+      "default": []
+    },
+    {
+      "path": "historyMinutes",
+      "label": "History Minutes",
+      "type": "number",
+      "components": [
+        "historicalTrend"
+      ],
+      "min": 1,
+      "max": 43200,
+      "integer": true,
+      "default": 60
+    },
+    {
+      "path": "historyMaxPoints",
+      "label": "History Max Points",
+      "type": "number",
+      "components": [
+        "historicalTrend"
+      ],
+      "min": 10,
+      "max": 10000,
+      "integer": true,
+      "default": 1000
+    },
+    {
+      "path": "alarmMinimumPriority",
+      "label": "Alarm Minimum Priority",
+      "type": "number",
+      "components": [
+        "alarmStatusTable",
+        "alarmJournalTable"
+      ],
+      "min": 1,
+      "max": 4,
+      "integer": true,
+      "default": 1
+    },
+    {
+      "path": "validation.required",
+      "label": "Validation › required",
+      "type": "boolean",
+      "components": [
+        "computerCamera",
+        "textInput",
+        "formattedInput",
+        "barcodeInput",
+        "textArea",
+        "passwordInput",
+        "numberInput",
+        "spinner",
+        "slider",
+        "multiStateButton",
+        "list",
+        "treeView",
+        "checkbox",
+        "toggle",
+        "select",
+        "radioGroup",
+        "dateTimeInput"
+      ],
+      "default": false
+    },
+    {
+      "path": "validation.minLength",
+      "label": "Validation › min Length",
+      "type": "number",
+      "components": [
+        "textInput",
+        "formattedInput",
+        "barcodeInput",
+        "textArea",
+        "passwordInput"
+      ],
+      "min": 0,
+      "max": 4096,
+      "integer": true,
+      "default": 0
+    },
+    {
+      "path": "validation.maxLength",
+      "label": "Validation › max Length",
+      "type": "number",
+      "components": [
+        "textInput",
+        "formattedInput",
+        "barcodeInput",
+        "textArea",
+        "passwordInput"
+      ],
+      "min": 0,
+      "max": 4096,
+      "integer": true,
+      "default": 4096
+    },
+    {
+      "path": "validation.format",
+      "label": "Validation › format",
+      "type": "string",
+      "components": [
+        "textInput",
+        "formattedInput",
+        "barcodeInput",
+        "textArea",
+        "passwordInput"
+      ],
+      "enum": [
+        "text",
+        "email",
+        "digits",
+        "alphanumeric"
+      ],
+      "default": "text"
+    },
+    {
+      "path": "validation.message",
+      "label": "Validation › message",
+      "type": "string",
+      "components": [
+        "computerCamera",
+        "textInput",
+        "formattedInput",
+        "barcodeInput",
+        "textArea",
+        "passwordInput",
+        "numberInput",
+        "spinner",
+        "slider",
+        "multiStateButton",
+        "list",
+        "treeView",
+        "checkbox",
+        "toggle",
+        "select",
+        "radioGroup",
+        "dateTimeInput"
+      ],
+      "maxLength": 200,
+      "default": ""
+    },
+    {
+      "path": "formatMask",
+      "label": "Format Mask",
+      "type": "string",
+      "components": [
+        "formattedInput"
+      ],
+      "minLength": 1,
+      "maxLength": 256,
+      "default": "AA-####"
+    },
+    {
+      "path": "textCase",
+      "label": "Text Case",
+      "type": "string",
+      "components": [
+        "formattedInput"
+      ],
+      "enum": [
+        "preserve",
+        "upper",
+        "lower"
+      ],
+      "default": "preserve"
+    },
+    {
+      "path": "scanTerminator",
+      "label": "Scan Terminator",
+      "type": "string",
+      "components": [
+        "barcodeInput"
+      ],
+      "enum": [
+        "enter",
+        "tab"
+      ],
+      "default": "enter"
+    },
+    {
+      "path": "chart.kind",
+      "label": "Chart › kind",
+      "type": "string",
+      "components": [
+        "chart",
+        "sparkline"
+      ],
+      "enum": [
+        "line",
+        "area",
+        "bar",
+        "scatter",
+        "timeSeries",
+        "pie",
+        "radar",
+        "status",
+        "box",
+        "gantt"
+      ],
+      "default": "line"
+    },
+    {
+      "path": "chart.xKey",
+      "label": "Chart › x Key",
+      "type": "string",
+      "components": [
+        "chart",
+        "sparkline"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    {
+      "path": "chart.endKey",
+      "label": "Chart › end Key",
+      "type": "string",
+      "components": [
+        "chart",
+        "sparkline"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    {
+      "path": "chart.qualityKey",
+      "label": "Chart › quality Key",
+      "type": "string",
+      "components": [
+        "chart",
+        "sparkline"
+      ],
+      "minLength": 1,
+      "maxLength": 128
+    },
+    {
+      "path": "chart.series",
+      "label": "Chart › series",
+      "type": "json",
+      "components": [
+        "chart",
+        "sparkline"
+      ],
+      "schema": "chartSeries"
+    },
+    {
+      "path": "chart.yMin",
+      "label": "Chart › y Min",
+      "type": "number",
+      "components": [
+        "chart",
+        "sparkline"
+      ]
+    },
+    {
+      "path": "chart.yMax",
+      "label": "Chart › y Max",
+      "type": "number",
+      "components": [
+        "chart",
+        "sparkline"
+      ]
+    },
+    {
+      "path": "chart.showLegend",
+      "label": "Chart › show Legend",
+      "type": "boolean",
+      "components": [
+        "chart",
+        "sparkline"
+      ],
+      "default": true
+    },
+    {
+      "path": "chart.rangeSelector",
+      "label": "Chart › range Selector",
+      "type": "boolean",
+      "components": [
+        "chart",
+        "sparkline"
+      ],
+      "default": false
+    },
+    {
+      "path": "viewLayout.kind",
+      "label": "View Layout › kind",
+      "type": "string",
+      "components": [
+        "viewContainer"
+      ],
+      "enum": [
+        "embedded",
+        "tabs",
+        "split",
+        "dock"
+      ],
+      "default": "embedded"
+    },
+    {
+      "path": "viewLayout.orientation",
+      "label": "View Layout › orientation",
+      "type": "string",
+      "components": [
+        "viewContainer"
+      ],
+      "enum": [
+        "horizontal",
+        "vertical"
+      ],
+      "default": "horizontal"
+    },
+    {
+      "path": "viewLayout.ratio",
+      "label": "View Layout › ratio",
+      "type": "number",
+      "components": [
+        "viewContainer"
+      ],
+      "min": 10,
+      "max": 90,
+      "default": 50
+    },
+    {
+      "path": "viewLayout.panes.*.label",
+      "label": "View Layout › panes › * › label",
+      "type": "string",
+      "components": [
+        "viewContainer"
+      ],
+      "minLength": 1,
+      "maxLength": 120
+    },
+    {
+      "path": "viewLayout.panes.*.size",
+      "label": "View Layout › panes › * › size",
+      "type": "number",
+      "components": [
+        "viewContainer"
+      ],
+      "min": 80,
+      "max": 1600,
+      "default": 220
+    },
+    {
+      "path": "viewLayout.panes.*.edge",
+      "label": "View Layout › panes › * › edge",
+      "type": "string",
+      "components": [
+        "viewContainer"
+      ],
+      "enum": [
+        "center",
+        "left",
+        "right",
+        "top",
+        "bottom"
+      ]
+    },
+    {
+      "path": "imageUrl",
+      "label": "Generated image URL",
+      "type": "string",
+      "components": [
+        "image"
+      ],
+      "default": "",
+      "maxLength": 4096
+    },
+    {
+      "path": "assetId",
+      "label": "Image asset",
+      "type": "string",
+      "components": [
+        "image"
+      ],
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  ]
+}

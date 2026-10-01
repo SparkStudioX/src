@@ -16,6 +16,19 @@ const rootFiles = new Set([
   'Dockerfile', 'compose.yaml', 'Directory.Build.props', 'global.json', 'NuGet.Config',
 ]);
 const webFiles = new Set([
+  'apps/web/src/bindingDiagnostics.tsx',
+  'apps/web/check-visitor-checkin.mjs',
+  'apps/web/check-component-message-receivers.mjs',
+  'apps/web/src/componentMessageReceivers.ts', 'apps/web/src/MessageReceiverList.tsx',
+  'apps/web/src/imageSource.ts',
+  'apps/web/src/ComputerCamera.tsx', 'apps/web/src/computerCameraModel.ts', 'apps/web/src/computerCamera.css',
+  'apps/web/check-gateway-configuration.mjs',
+  'apps/web/check-gateway-deployment.mjs',
+  'apps/web/check-native-tag-actions.mjs',
+  'apps/web/check-security-settings.mjs',
+  'apps/web/test-module-files.mjs',
+  'apps/web/src/runtimeProperties.json',
+  'apps/web/check-runtime-properties.mjs',
   'apps/web/check-resilience.mjs', 'apps/web/check-process-data-settings.mjs', 'apps/web/check-opc-certificates.mjs',
   'apps/web/check-input-validation.mjs', 'apps/web/check-table-batch-editor.mjs', 'apps/web/check-view-containers.mjs',
   'apps/web/check-chart-renderer.mjs', 'apps/web/check-chart-authoring.mjs', 'apps/web/check-equipment-command-ui.mjs', 'apps/web/check-application-publication.mjs', 'apps/web/check-binding-data.mjs',
@@ -72,6 +85,9 @@ const webFiles = new Set([
   'apps/web/check-input-state-bindings.mjs', 'apps/web/check-input-state-authoring.mjs',
 ]);
 const toolFiles = new Set([
+  'analyze-web-complexity.mjs', 'test-web-complexity.mjs',
+  'test-computer-camera.mjs',
+  'web-model-module.mjs',
   'load-process-data-example.mjs', 'test-all.mjs', 'test-load-runtime.mjs', 'test-engineering-policy.mjs', 'test-environment.mjs', 'version.mjs', 'write-sbom.mjs', 'fixtures/TestReport.cs',
   'load-table-batch-example.mjs', 'test-application-workflows.mjs', 'test-view-containers.mjs',
   'test-equipment-commands.mjs', 'test-tag-parameter-workshop.mjs', 'test-fine-grained-access.mjs', 'load-access-permissions-example.mjs', 'test-charts.mjs', 'test-tag-model.mjs', 'test-unified-publication-workshop.mjs',
@@ -92,7 +108,7 @@ const toolFiles = new Set([
   'test-tag-engineering.mjs', 'load-tag-engineering-example.mjs',
   'load-network-example.mjs', 'load-backup-example.mjs',
   'test-backup-destinations.mjs', 'test-backup-schedule.mjs', 'test-backups-api.mjs', 'test-configuration-backup.mjs',
-  'fixtures/BackupDestinationChecks.cs',
+  'fixtures/BackupDestinationChecks.cs', 'fixtures/BackupS3Checks.cs',
   'test-visual-styles.mjs', 'test-visual-styles-rendering.mjs', 'test-visual-styles-api.mjs',
   'test-localization.mjs', 'test-localization-rendering.mjs', 'test-localization-api.mjs',
   'test-runtime.mjs', 'test-tag-definitions.mjs', 'test-template-runtime.mjs',
@@ -133,6 +149,8 @@ const toolFiles = new Set([
   'test-input-state-bindings.mjs',
 ]);
 const architectureDocs = new Set([
+  'VISITOR_CHECKIN.md',
+  'RUNTIME_PROPERTY_BINDINGS.md',
   'PROCESS_DATA.md', 'LOAD_TESTING.md',
   'VALIDATED_INPUTS.md', 'COMPONENT_INTERACTIONS.md', 'TABLE_BATCH_EDITING.md', 'VIEW_CONTAINERS.md',
   'CHARTS.md', 'DATASETS_NESTED_QUERIES.md', 'TAG_PARAMETER_BINDINGS.md', 'TAG_MODELS.md',
@@ -169,6 +187,9 @@ const architectureDocs = new Set([
   'TAG_ENGINEERING.md', 'NETWORK_ACCESS.md',
 ]);
 const explicitFiles = new Set([
+  'src/SparkStudio.Gateway.Tests/NativeTagActionChecks.cs',
+  'examples/runtime-property-bindings.json', 'examples/visitor-checkin.json',
+  'src/SparkStudio.Gateway.Tests/RuntimePropertyBindingChecks.cs',
   'examples/validated-inputs.json', 'examples/component-interactions.json', 'examples/table-batch-workflow.json', 'examples/view-containers.json',
   'src/SparkStudio.Gateway.Tests/InputConstraintChecks.cs', 'src/SparkStudio.Gateway.Tests/InteractionEventChecks.cs', 'src/SparkStudio.Gateway.Tests/TableBatchChecks.cs',
   'examples/unified-publication.json', 'examples/dataset-nested-queries.json', 'examples/supplied-data-charts.json',
@@ -179,6 +200,7 @@ const explicitFiles = new Set([
   'src/SparkStudio.Gateway.Tests/TestEnvironment.cs', 'src/SparkStudio.Gateway.Tests/ProcessDataChecks.cs',
   'src/SparkStudio.Gateway.Tests/DataMigrationChecks.cs', 'src/SparkStudio.Gateway.Tests/LiveOpcAcceptance.cs', 'src/SparkStudio.Gateway.Tests/ScriptScopePropagationChecks.cs',
   'src/SparkStudio.Gateway.Tests/SecurityHardeningChecks.cs', 'src/SparkStudio.Gateway.Tests/BackendReliabilityChecks.cs', 'src/SparkStudio.Gateway.Tests/GatewayLoadProbe.cs', 'src/SparkStudio.Gateway.Tests/ReadinessChecks.cs', 'src/SparkStudio.Gateway.Tests/TagCapacityChecks.cs',
+  'src/SparkStudio.Gateway.Tests/TagNamespaceChecks.cs',
   'runtimes/python/worker.py', 'installer/SparkStudio.iss', 'installer/INSTALL-NOTES.txt',
   'examples/application-form.json', 'examples/reusable-applications.json', 'examples/assets-popups.json',
   'examples/catalog.json', 'examples/README.md',

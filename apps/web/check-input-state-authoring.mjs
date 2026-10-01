@@ -15,7 +15,12 @@ export const useRef=initial=>{const at=index++;return slots[at]??={current:initi
 const portalUrl = moduleUrl('export const createPortal=child=>child;');
 const rowsUrl = moduleUrl('export const useQueryRepeater=()=>({rows:[],loading:false,error:""});');
 const cache = new Map();
+// Authentication and native tag confirmation are independent of value-binding
+// authoring and have dedicated suites; unexpected tag activation fails here.
+cache.set('Auth', moduleUrl('export const useAuth=()=>({permissions:{commands:false}});'));
+cache.set('useTagValueAction', moduleUrl('export const useTagValueAction=()=>({confirmation:null,run:async()=>{throw new Error("Unexpected native tag activation in input state authoring checks");}});'));
 function load(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   if (cache.has(name)) return cache.get(name);
   const file = ['tsx','ts'].map(ext => new URL(`src/${name}.${ext}`,import.meta.url)).find(file => fs.existsSync(file)); assert.ok(file,name);
   const code = ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText

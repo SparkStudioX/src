@@ -2,6 +2,10 @@ import { id, resolvePath } from "./api";
 import { instanceRequestScope, queryTemplateParameters, templateParameters } from "./templateModel";
 import { panePlacement } from "./viewContainers";
 import { parameterBindingStateContext, resolveParameterBindings } from "./templateParameterBindings";
+import { bindingReferenceDependencies } from "./propertyBindings";
+import type { BindingContext } from "./propertyBindings";
+import { loadQueryProperty, validateQueryPropertyBinding } from "./queryPropertyModel";
+import type { QueryPropertyApi } from "./queryPropertyModel";
 import { loadQueryRepeater } from "./queryRepeater";
 import type { RepeaterApi } from "./queryRepeater";
 import type {
@@ -21,6 +25,9 @@ import type {
   StateDefinitions,
   RuntimeStateValues,
   Tag,
+  BindingTarget,
+  PropertyBinding,
+  QueryPropertyValues,
 } from "./types";
 
 export function screenParameters(
@@ -66,7 +73,7 @@ export function createPopup(
   const path = instance ? instance.instancePath ?? [{ instanceId: instance.instanceId, ...(instance.rowId === undefined ? {} : { rowId: instance.rowId }) }] : [];
   const container = instance && source.components.find(component => component.id === path[0]?.instanceId);
   const trace = path.length > 1 || container ? traceSource(project, source, path) : [];
-  const querySource = trace.some(step => step.instance.props.rowsSource || Object.values(step.instance.props.parameterBindings ?? {}).some(binding => Object.values(binding.references).some(reference => reference.kind === "tag")));
+  const querySource = trace.some(step => step.instance.props.rowsSource || liveParameterSources(step));
   return {
     id: id("popup"),
     screenId: target.id,
@@ -104,6 +111,44 @@ interface SourceStep {
   instance: CanvasComponent; template: Template; row?: TemplateRow; parentComponents: CanvasComponent[]; parentParameters: Record<string, string>;
   stateDefinitions: Partial<Record<keyof RuntimeStateValues, StateDefinitions>>;
 }
+function liveParameterSources(step: SourceStep): boolean {
+  return Object.values(step.instance.props.parameterBindings ?? {}).some(binding => bindingReferenceDependencies(binding, step.instance, { components: step.parentComponents }).some(({ reference, component }) => {
+    if (reference.kind === "tag") return true;
+    if (reference.kind !== "custom") return false;
+    const owner = reference.componentId === undefined || reference.componentId === component.id ? component : step.parentComponents.find(item => item.id === reference.componentId);
+    return Boolean(owner?.props.queryBindings?.[`customProperties.${reference.key}.value`]);
+  }));
+}
+
+/** Replay only the custom query sources required by this placement, in dependency order. */
+async function sourceQueryProperties(step: SourceStep, context: BindingContext, scope: "designer" | "runtime", request: QueryPropertyApi,
+  publishedAt?: string, signal?: AbortSignal): Promise<QueryPropertyValues> {
+  const queryProperties: QueryPropertyValues = {}, visited = new Set<string>();
+  const scoped = { ...context, queryProperties };
+  let reads = 0;
+  const visit = async (binding: PropertyBinding, component: CanvasComponent): Promise<void> => {
+    // This also validates all source graphs and rejects cycles before any read.
+    const dependencies = bindingReferenceDependencies(binding, component, context);
+    for (const { reference, component: containing } of dependencies) {
+      if (reference.kind !== "custom") continue;
+      const owner = reference.componentId === undefined || reference.componentId === containing.id ? containing : context.components.find(item => item.id === reference.componentId)!;
+      const target = `customProperties.${reference.key}.value` as BindingTarget, key = `${owner.id}:${target}`;
+      if (visited.has(key)) continue;
+      visited.add(key);
+      const expression = owner.props.bindings?.[target], query = owner.props.queryBindings?.[target];
+      if (expression) await visit(expression, owner);
+      if (!query) continue;
+      if (++reads > 128) throw new Error("A popup source can depend on at most 128 custom query properties.");
+      const error = validateQueryPropertyBinding(query, target, owner, scoped); if (error) throw new Error(error);
+      for (const parameter of Object.values(query.parameters ?? {})) await visit(parameter, owner);
+      signal?.throwIfAborted();
+      const value = await loadQueryProperty(query, target, owner, scoped, scope, request, publishedAt, signal);
+      (queryProperties[owner.id] ??= {})[target] = { status: "ready", value };
+    }
+  };
+  for (const binding of Object.values(step.instance.props.parameterBindings ?? {})) await visit(binding, step.instance);
+  return queryProperties;
+}
 function traceSource(project: Project, screen: Screen, path: InstancePathStep[]): SourceStep[] {
   if (!path.length || path.length > 4) throw new Error("The source template path is no longer available. Close this popup and open it again.");
   let scope = screen;
@@ -132,9 +177,10 @@ function traceSource(project: Project, screen: Screen, path: InstancePathStep[])
   });
 }
 const sourceSignature = (steps: SourceStep[]) => JSON.stringify(steps.map(({ instance, template, row, parentComponents, parentParameters, stateDefinitions }) => {
-  const references = Object.values(instance.props.parameterBindings ?? {}).flatMap(binding => Object.values(binding.references ?? {}));
-  const sources = parentComponents.filter(component => references.some(reference => reference.kind === "custom"
-    ? component.id === (reference.componentId ?? instance.id) : reference.kind === "input" && (component.props.fieldKey || component.id) === reference.key));
+  const dependencies = Object.values(instance.props.parameterBindings ?? {}).flatMap(binding => bindingReferenceDependencies(binding, instance, { components: parentComponents }));
+  const references = dependencies.map(item => item.reference);
+  const sources = parentComponents.filter(component => dependencies.some(({ reference, component: owner }) => reference.kind === "custom"
+    ? component.id === (reference.componentId ?? owner.id) : reference.kind === "input" && (component.props.fieldKey || component.id) === reference.key));
   const stateSources = references.flatMap(reference => {
     if (reference.kind !== "sessionState" && reference.kind !== "screenState" && reference.kind !== "instanceState") return [];
     const scope = reference.kind === "sessionState" ? "session" : reference.kind === "screenState" ? "screen" : "instance";
@@ -150,7 +196,7 @@ function validateSourceState(trace: SourceStep[], snapshots?: ParameterBindingSt
     throw new Error("The source state binding context is no longer available. Close this popup and open it again.");
   const shared: ParameterBindingState = {};
   trace.forEach((step, index) => {
-    const state = parameterBindingStateContext(step.instance, snapshots?.[index], step.stateDefinitions);
+    const state = parameterBindingStateContext(step.instance, snapshots?.[index], step.stateDefinitions, step.parentComponents);
     for (const scope of ["session", "screen"] as const) for (const [key, value] of Object.entries(state[scope])) {
       const values = shared[scope] ??= {};
       if (Object.hasOwn(values, key) && values[key] !== value)
@@ -200,7 +246,7 @@ export function popupQuerySource(project: Project, popup: PopupState): PopupQuer
 }
 
 function sourceBindings(step: SourceStep, parameters: RuntimeParameters, inputs: InputValues = {}, snapshot?: ParameterBindingState): RuntimeParameters {
-  const state = parameterBindingStateContext(step.instance, snapshot, step.stateDefinitions);
+  const state = parameterBindingStateContext(step.instance, snapshot, step.stateDefinitions, step.parentComponents);
   return resolveParameterBindings(step.instance, step.template, { components: step.parentComponents, tags: [], parameters, inputs, state });
 }
 
@@ -255,10 +301,19 @@ export async function validatePopupSource(project: Project, popup: PopupState, t
     if (opener?.props.action !== "openPopup" || opener.props.targetScreenId !== popup.screenId) throw new Error("The source no longer opens this popup.");
     definitionReady = true;
     let current: RuntimeParameters = project.templates?.includes(screen as Template) ? templateParameters(screen as Template, popup.rootParameters) : screenParameters(screen, popup.rootParameters);
+    const requests = new Map<string, Promise<unknown>>();
+    const read: QueryPropertyApi = <T,>(path: string, method?: string, body?: unknown, cancellation?: AbortSignal): Promise<T> => {
+      const key = JSON.stringify([path, method, body]);
+      let pending = requests.get(key);
+      if (!pending) { pending = request(path, method, body, cancellation); requests.set(key, pending); }
+      return pending as Promise<T>;
+    };
     for (const [index, step] of trace.entries()) {
       signal?.throwIfAborted();
-      const state = parameterBindingStateContext(step.instance, popup.origin.bindingState?.[index], step.stateDefinitions);
-      const bound = resolveParameterBindings(step.instance, step.template, { components: step.parentComponents, tags, parameters: current, inputs: popup.origin.bindingInputs?.[index] ?? {}, state });
+      const state = parameterBindingStateContext(step.instance, popup.origin.bindingState?.[index], step.stateDefinitions, step.parentComponents);
+      const context = { components: step.parentComponents, tags, parameters: current, inputs: popup.origin.bindingInputs?.[index] ?? {}, state };
+      const queryProperties = await sourceQueryProperties(step, context, scope, read, publishedAt, signal);
+      const bound = resolveParameterBindings(step.instance, step.template, { ...context, queryProperties });
       if (step.instance.props.rowsSource) {
         const rows = await loadQueryRepeater(step.instance.props.rowsSource, step.template, scope, current, request, publishedAt, signal);
         const row = rows.find(row => row.id === path[index].rowId);

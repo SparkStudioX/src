@@ -1,5 +1,6 @@
 import type { BindingReference, BindingTarget, CanvasComponent, ComponentType, InputValues, PropertyBinding, Tag } from "./types";
-import { drawingBindingTargets, supportsDrawingProperty } from "./drawingComponents";
+import { drawingBindingTargets } from "./drawingComponents";
+import { maximumRuntimeBindings, normalizeRuntimePropertyValue, runtimePropertyDefinition, runtimePropertyDefinitions, runtimePropertyGroupErrors, runtimePropertyValue, withRuntimeProperty } from "./runtimePropertyCatalog";
 
 type Scalar = string | number | boolean;
 type Node =
@@ -20,20 +21,13 @@ export interface BindingContext {
 }
 
 export const processBindingTargets = ["value", "min", "max", "decimals", "unit", "showValue", "showPercent", "orientation"] as const;
-export const bindingTargets: BindingTarget[] = ["text", "enabled", "visible", "color", "x", "y", "width", "height", "fontSize", "backgroundColor", "foregroundColor", "borderColor", "borderWidth", "tagPath", "stateValue", ...processBindingTargets, ...drawingBindingTargets];
-export function supportsBindingTarget(type: ComponentType, target: BindingTarget): boolean {
-  if ((drawingBindingTargets as readonly string[]).includes(target)) return supportsDrawingProperty(type, target);
-  if (target === "tagPath") return type === "value" || type === "gauge";
-  if (target === "stateValue") return type === "multiStateIndicator";
-  if (!(processBindingTargets as readonly string[]).includes(target)) return true;
-  if (!["ledDisplay", "progressBar", "cylindricalTank", "levelIndicator", "thermometer"].includes(type)) return false;
-  if (["min", "max", "showValue", "showPercent"].includes(target)) return type !== "ledDisplay";
-  return target !== "orientation" || type === "progressBar" || type === "levelIndicator";
-}
+export const legacyBindingTargets: BindingTarget[] = ["text", "enabled", "visible", "color", "x", "y", "width", "height", "fontSize", "backgroundColor", "foregroundColor", "borderColor", "borderWidth", "tagPath", "stateValue", ...processBindingTargets, ...drawingBindingTargets];
+export const bindingTargets: BindingTarget[] = runtimePropertyDefinitions.filter(item => !item.path.includes("*")).map(item => item.path as BindingTarget);
+export function supportsBindingTarget(component: ComponentType | CanvasComponent, target: BindingTarget, definition?: CanvasComponent): boolean { return runtimePropertyDefinition(target, definition ?? component) !== undefined; }
 export const geometryTargets = ["x", "y", "width", "height"] as const;
 export function isGeometryTarget(target: string): target is typeof geometryTargets[number] { return (geometryTargets as readonly string[]).includes(target); }
 export function propertyValue(component: CanvasComponent, target: BindingTarget): unknown {
-  return isGeometryTarget(target) ? component[target] : component.props[target];
+  return runtimePropertyValue(component, target);
 }
 export function componentGeometry(component: CanvasComponent, context: BindingContext, preview = true) {
   const resolved = preview ? evaluateComponentBindings(component, context).component : component;
@@ -182,12 +176,13 @@ function validateDefinition(binding: PropertyBinding): Node {
 /** Structural validation does not require a connection or current operator values. */
 export function validatePropertyBinding(binding: PropertyBinding, target?: BindingTarget, component?: CanvasComponent): string | undefined {
   try {
-    if (target && component && !supportsBindingTarget(component.type, target)) fail(`${target} bindings are not supported on ${component.type}.`);
+    if (target && component && !supportsBindingTarget(component, target)) fail(`${target} bindings are not supported on ${component.type}.`);
     const node = validateDefinition(binding);
-    if (target && parse(binding.expression).names.size === 0) validateTarget(target, evaluate(node, () => fail("A reference is missing.")));
+    if (target && parse(binding.expression).names.size === 0) normalizeRuntimePropertyValue(target, evaluate(node, () => fail("A reference is missing.")), component);
     if (component && (target === "min" || target === "max")) {
       validateComponentBindingRange({ ...component, props: { ...component.props, bindings: { ...component.props.bindings, [target]: binding } } });
     }
+    if (component && target) validateComponentBindingConstants({ ...component, props: { ...component.props, bindings: { ...component.props.bindings, [target]: binding } } });
     return undefined;
   }
   catch (error) { return error instanceof Error ? error.message : "Invalid property binding."; }
@@ -198,41 +193,35 @@ export function validateComponentBindingRange(component: CanvasComponent): void 
   const range = (key: "min" | "max"): number | undefined => {
     const expression = component.props.bindings?.[key];
     const query = component.props.queryBindings?.[key];
-    if (!expression && !query) return component.props[key] ?? (key === "min" ? 0 : 100);
+    if (!expression && !query) return component.props[key] ?? (["numberInput", "spinner"].includes(component.type) ? undefined : key === "min" ? 0 : 100);
     const definition = expression ?? (query?.transform === undefined ? undefined
       : { expression: query.transform, references: { value: { kind: "custom" as const, key: "value" } } });
     if (!definition) return undefined;
     const constant = constantPropertyBinding(definition);
     if (!constant.constant) return undefined;
-    validateTarget(key, constant.value); return constant.value as number;
+    normalizeRuntimePropertyValue(key, constant.value, component); return constant.value as number;
   };
   const minimum = range("min"), maximum = range("max");
-  if (minimum !== undefined && maximum !== undefined && minimum >= maximum) fail("Minimum must be less than maximum.");
+  if (minimum !== undefined && maximum !== undefined && (["numberInput", "spinner"].includes(component.type) ? minimum > maximum : minimum >= maximum)) fail("Minimum must be less than maximum.");
 }
 
-function validateTarget(target: BindingTarget, value: Scalar): void {
-  if (target === "strokeWidth" && (typeof value !== "number" || !Number.isFinite(value) || value < 1 || value > 32)) fail("Stroke width must produce a number from 1 to 32.");
-  if (target === "rotation" && (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 360)) fail("Rotation must produce a number from 0 to 360 degrees.");
-  if (["flowing", "flowReverse", "active"].includes(target)) boolean(value);
-  if (target === "fillColor" && value !== "none" && (typeof value !== "string" || value.trim() !== value || !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(value))) fail("Fill must produce a hex color or 'none'.");
-  if (["value", "min", "max"].includes(target) && (typeof value !== "number" || !Number.isFinite(value) || Number.isInteger(value) && !Number.isSafeInteger(value)))
-    fail(`${target} must produce an exact finite number.`);
-  if (target === "decimals" && (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 6))
-    fail("decimals must produce a whole number from 0 to 6.");
-  if (target === "unit" && (typeof value !== "string" || value.length > 32)) fail("unit must produce text up to 32 characters.");
-  if (target === "showValue" || target === "showPercent") boolean(value);
-  if (target === "orientation" && value !== "horizontal" && value !== "vertical") fail("orientation must produce 'horizontal' or 'vertical'.");
-  if (target === "tagPath" && (typeof value !== "string" || !value.trim() || value.length > 1024 || /[\u0000-\u001f\u007f{}]/.test(value)))
-    fail("A tag path binding must produce a complete path of 1–1024 characters without control characters or unresolved parameters.");
-  if (target === "enabled" || target === "visible") boolean(value);
-  if (["color", "backgroundColor", "foregroundColor", "borderColor", "strokeColor"].includes(target) && (typeof value !== "string" || value.trim() !== value || !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(value)))
-    fail("A color binding must produce a hex color: #RGB, #RGBA, #RRGGBB or #RRGGBBAA.");
-  if (isGeometryTarget(target) || target === "fontSize" || target === "borderWidth") {
-    const minimum = target === "x" || target === "y" || target === "borderWidth" ? 0 : 1;
-    const maximum = target === "fontSize" ? 256 : target === "borderWidth" ? 32 : 8192;
-    if (typeof value !== "number" || !Number.isFinite(value) || value < minimum || value > maximum)
-      fail(`${target} must produce a number between ${minimum} and ${maximum}.`);
+/** Family checks use authored/constant fields only; live fields are checked together at runtime. */
+export function validateComponentBindingConstants(component: CanvasComponent): void {
+  let projected = component;
+  const known: string[] = [], unknown: string[] = [];
+  const targets = [...new Set([...Object.keys(component.props.bindings ?? {}), ...Object.keys(component.props.queryBindings ?? {})])] as BindingTarget[];
+  for (const target of targets) {
+    const expression = component.props.bindings?.[target], query = component.props.queryBindings?.[target];
+    const definition = expression ?? (query?.transform === undefined ? undefined : { expression: query.transform, references: { value: { kind: "custom" as const, key: "value" } } });
+    if (!definition) { unknown.push(target); continue; }
+    const constant = constantPropertyBinding(definition);
+    if (!constant.constant) { unknown.push(target); continue; }
+    projected = withRuntimeProperty(projected, target, normalizeRuntimePropertyValue(target, constant.value, component)); known.push(target);
   }
+  const family = (target: string) => target.startsWith("chart.") || target === "data" ? "chart" : target.startsWith("viewLayout.") ? "viewLayout"
+    : target.startsWith("validation.") || ["formatMask", "textCase", "scanTerminator"].includes(target) ? "validation" : target === "min" || target === "max" ? "range" : target;
+  const errors = runtimePropertyGroupErrors(projected, known.filter(target => !unknown.some(other => family(other) === family(target))));
+  const error = Object.values(errors)[0]; if (error) fail(error);
 }
 
 function evaluate(node: Node, resolve: (name: string) => Scalar): Scalar {
@@ -268,7 +257,7 @@ function evaluate(node: Node, resolve: (name: string) => Scalar): Scalar {
 }
 
 type ResolvedReference = { value: Scalar; simulated?: true };
-function resolveReference(ref: BindingReference, component: CanvasComponent, context: BindingContext): ResolvedReference {
+function resolveReference(ref: BindingReference, component: CanvasComponent, context: BindingContext, resolveCustom?: (owner: CanvasComponent, target: BindingTarget) => ResolvedReference): ResolvedReference {
   if (ref.kind === "sessionState" || ref.kind === "screenState" || ref.kind === "instanceState") {
     const values = ref.kind === "sessionState" ? context.state?.session : ref.kind === "screenState" ? context.state?.screen : context.state?.instance;
     if (!values || !own(values, ref.key)) return fail(`${ref.kind === "sessionState" ? "Session" : ref.kind === "screenState" ? "Screen" : "Instance"} state '${ref.key}' is not declared in this scope.`);
@@ -278,6 +267,8 @@ function resolveReference(ref: BindingReference, component: CanvasComponent, con
     const owner = ref.componentId === undefined || ref.componentId === component.id ? component : context.components.find(item => item.id === ref.componentId);
     const customs = owner?.props.customProperties;
     if (!customs || !own(customs, ref.key)) return fail(`Custom property '${ref.key}' was not found in this component scope.`);
+    const target = `customProperties.${ref.key}.value` as BindingTarget;
+    if (owner && (own(owner.props.bindings ?? {}, target) || own(owner.props.queryBindings ?? {}, target))) return (resolveCustom ?? runtimeResolver(context).target)(owner, target);
     const definition = customs[ref.key];
     if (!object(definition) || !["number", "string", "boolean"].includes(definition.type) || typeof definition.value !== definition.type) fail(`Custom property '${ref.key}' does not match its declared type.`);
     return { value: scalar(definition.value) };
@@ -322,79 +313,139 @@ export function constantPropertyBinding(binding: PropertyBinding): { constant: f
 
 /** Shared bounded expression evaluator; the caller validates its target type. */
 export function evaluatePropertyBinding(binding: PropertyBinding, component: CanvasComponent, context: BindingContext): { value: Scalar; simulated?: true } {
-  let simulated = false;
-  const value = evaluate(validateDefinition(binding), name => {
-    const reference = resolveReference(binding.references[name], component, context);
-    simulated ||= reference.simulated === true;
-    return reference.value;
-  });
-  return { value, ...(simulated ? { simulated: true as const } : {}) };
+  return runtimeResolver(context).expression(binding, component);
 }
 
 /** Query cells use exactly the same scalar and target constraints as expressions. */
-export function validateBindingTargetValue(target: BindingTarget, value: unknown): asserts value is Scalar {
-  validateTarget(target, scalar(value));
+export function validateBindingTargetValue(target: BindingTarget, value: unknown, component?: CanvasComponent): asserts value is Scalar {
+  normalizeRuntimePropertyValue(target, scalar(value), component);
+}
+
+/** Walk definitions, including aliases in unused branches, for source authorization and capture. */
+export function bindingReferenceDependencies(binding: PropertyBinding, component: CanvasComponent, context: Pick<BindingContext, "components">): { reference: BindingReference; component: CanvasComponent }[] {
+  const result: { reference: BindingReference; component: CanvasComponent }[] = [], visiting = new Set<string>(), completed = new Set<string>();
+  let visits = 0, queries = 0;
+  const walk = (definition: PropertyBinding, owner: CanvasComponent, depth: number) => {
+    if (depth > 32 || ++visits > 4096) fail("Custom binding dependencies exceed their depth or work limit.");
+    validateDefinition(definition);
+    for (const reference of Object.values(definition.references)) {
+      if (result.length >= 4096) fail("Custom binding dependencies exceed their depth or work limit.");
+      result.push({ reference, component: owner });
+      if (reference.kind !== "custom") continue;
+      const source = reference.componentId === undefined || reference.componentId === owner.id ? owner : context.components.find(item => item.id === reference.componentId);
+      if (!source || !own(source.props.customProperties ?? {}, reference.key)) fail(`Custom property '${reference.key}' was not found in this component scope.`);
+      const target = `customProperties.${reference.key}.value` as BindingTarget, key = `${source!.id}:${target}`;
+      if (visiting.has(key)) fail(`Custom property dependency cycle at '${reference.key}'.`);
+      if (completed.has(key)) continue;
+      if (visiting.size >= 32) fail("Custom binding dependencies exceed their depth or work limit.");
+      visiting.add(key);
+      const child = source!.props.bindings?.[target], query = source!.props.queryBindings?.[target];
+      if (child && query) fail("Choose an expression or a query for this property, not both.");
+      if (query && ++queries > 128) fail("A custom-property source context supports at most 128 query dependencies.");
+      if (child) walk(child, source!, depth + 1);
+      for (const parameter of Object.values(query?.parameters ?? {})) walk(parameter, source!, depth + 1);
+      visiting.delete(key); completed.add(key);
+    }
+  };
+  walk(binding, component, 0); return result;
+}
+
+function runtimeResolver(context: BindingContext) {
+  const visiting = new Set<string>(), cache = new Map<string, ResolvedReference>(), validatedGraphs = new Set<string>();
+  let visits = 0, customDepth = 0;
+  const expression = (binding: PropertyBinding, component: CanvasComponent): ResolvedReference => {
+    let simulated = false;
+    const value = evaluate(validateDefinition(binding), name => {
+      if (++visits > 4096) fail("Custom binding dependencies exceed their depth or work limit.");
+      const reference = resolveReference(binding.references[name], component, context, target);
+      simulated ||= reference.simulated === true; return reference.value;
+    });
+    return { value, ...(simulated ? { simulated: true as const } : {}) };
+  };
+  const target = (component: CanvasComponent, path: BindingTarget): ResolvedReference => {
+    const key = `${component.id}:${path}`;
+    if (visiting.has(key)) return fail(`Custom property dependency cycle at '${path}'.`);
+    const custom = path.startsWith("customProperties.");
+    const saved = cache.get(key); if (saved) return saved;
+    if (custom && customDepth >= 32) return fail("Custom binding dependencies exceed their depth or work limit.");
+    if (!supportsBindingTarget(component, path)) return fail(`${path} bindings are not supported on ${component.type}.`);
+    if (custom && !validatedGraphs.has(key)) {
+      bindingReferenceDependencies({ expression: "source", references: { source: { kind: "custom", key: path.split(".")[1] } } }, component, context);
+      validatedGraphs.add(key);
+    }
+    visiting.add(key);
+    if (custom) customDepth++;
+    try {
+      const binding = component.props.bindings?.[path], query = component.props.queryBindings?.[path];
+      if (binding && query) fail("Choose an expression or a query for this property, not both.");
+      let resolved: ResolvedReference;
+      if (query) {
+        const sample = context.queryProperties?.[component.id]?.[path];
+        if (sample?.status !== "ready") return fail(sample?.error || (sample?.status === "loading" ? "Query property is loading." : "Query property is unavailable."));
+        resolved = { value: scalar(sample.value) };
+      } else if (binding) resolved = expression(binding, component);
+      else resolved = { value: scalar(runtimePropertyValue(component, path)) };
+      normalizeRuntimePropertyValue(path, resolved.value, component);
+      cache.set(key, resolved); return resolved;
+    } finally { visiting.delete(key); if (custom) customDepth--; }
+  };
+  return { expression, target };
+}
+
+function failedRuntimeProperty(component: CanvasComponent, target: BindingTarget): CanvasComponent {
+  if (!runtimePropertyDefinition(target, component)) return component;
+  if (target === "text") return withRuntimeProperty(component, target, "Binding error");
+  if (target === "enabled") return withRuntimeProperty(component, target, false);
+  if (target === "visible") return withRuntimeProperty(component, target, true);
+  if (target === "tagPath") return withRuntimeProperty(component, target, "");
+  // Layout stays authored when unavailable; data and process values must not masquerade as fresh samples.
+  if (isGeometryTarget(target) || target === "fontSize" || target === "borderWidth") return component;
+  const result = withRuntimeProperty(component, target, undefined);
+  if (target.startsWith("validation.") || ["min", "max", "step", "options", "formatMask", "textCase", "scanTerminator"].includes(target)) result.props.enabled = false;
+  return result;
 }
 
 /** Pure evaluation: a failure affects one target; saved definitions are never mutated. */
 export function evaluateComponentBindings(component: CanvasComponent, context: BindingContext): {
   component: CanvasComponent;
-  errors: Partial<Record<BindingTarget, string>>;
+  errors: Record<string, string>;
   /** A successful target consumed a simulated tag; unused branches do not count. */
   simulated?: true;
 } {
-  const errors: Partial<Record<BindingTarget, string>> = {};
+  const errors: Record<string, string> = {};
   let simulated = false;
   if (component.props.bindings === undefined && component.props.queryBindings === undefined) return { component, errors };
-  const result: CanvasComponent = { ...component, props: { ...component.props } };
+  let result: CanvasComponent = { ...component, props: { ...component.props } };
   if (component.props.bindings !== undefined && !object(component.props.bindings) || component.props.queryBindings !== undefined && !object(component.props.queryBindings)) {
     errors.text = "Component bindings must be an object.";
     result.props.text = "Binding error";
     result.props.enabled = false;
     return { component: result, errors };
   }
-  for (const target of bindingTargets) {
-    const expressionBound = own(component.props.bindings ?? {}, target), queryBound = own(component.props.queryBindings ?? {}, target);
-    if (!expressionBound && !queryBound) continue;
+  const targets = [...new Set([...Object.keys(component.props.bindings ?? {}), ...Object.keys(component.props.queryBindings ?? {})])] as BindingTarget[];
+  if (Object.keys(component.props.bindings ?? {}).length > maximumRuntimeBindings || Object.keys(component.props.queryBindings ?? {}).length > maximumRuntimeBindings) {
+    return { component: { ...result, props: { ...result.props, enabled: false, text: "Binding error" } }, errors: { text: "A component supports at most 128 expression bindings and 128 query bindings." } };
+  }
+  const resolver = runtimeResolver(context), successful: BindingTarget[] = [];
+  for (const target of targets) {
     try {
-      if (!supportsBindingTarget(component.type, target)) fail(`${target} bindings are not supported on ${component.type}.`);
-      let targetSimulated = false;
-      let value: Scalar;
-      if (queryBound) {
-        if (expressionBound) fail("Choose an expression or a query for this property, not both.");
-        const sample = context.queryProperties?.[component.id]?.[target];
-        if (sample?.status === "idle" || !context.queryProperties) continue;
-        if (sample?.status !== "ready") fail(sample?.error || (sample?.status === "loading" ? "Query property is loading." : "Query property is unavailable."));
-        value = scalar(sample?.value);
-      } else {
-        const binding = component.props.bindings![target]!;
-        value = evaluate(validateDefinition(binding), name => {
-          const reference = resolveReference(binding.references[name], component, context);
-          targetSimulated ||= reference.simulated === true;
-          return reference.value;
-        });
-      }
-      validateTarget(target, value);
-      if (target === "text" || target === "stateValue") result.props[target] = String(value);
-      else if (target === "enabled" || target === "visible" || target === "showValue" || target === "showPercent" || target === "flowing" || target === "flowReverse" || target === "active") result.props[target] = boolean(value);
-      else if (isGeometryTarget(target)) result[target] = value as number;
-      else if (target === "fontSize" || target === "borderWidth" || target === "value" || target === "min" || target === "max" || target === "decimals" || target === "strokeWidth" || target === "rotation") result.props[target] = value as number;
-      else if (target === "orientation") result.props.orientation = value as "horizontal" | "vertical";
-      else result.props[target] = value as string;
-      simulated ||= targetSimulated;
+      if (!supportsBindingTarget(component, target)) fail(`${target} bindings are not supported on ${component.type}.`);
+      // An inactive query retains its authored design preview; dependencies require ready samples.
+      if (!own(component.props.bindings ?? {}, target) && own(component.props.queryBindings ?? {}, target)
+        && (!context.queryProperties || context.queryProperties[component.id]?.[target]?.status === "idle")) continue;
+      const resolved = resolver.target(component, target);
+      result = withRuntimeProperty(result, target, normalizeRuntimePropertyValue(target, resolved.value, component));
+      successful.push(target); simulated ||= resolved.simulated === true;
     } catch (error) {
-      errors[target] = error instanceof Error ? error.message : "Property binding failed.";
-      if (target === "text") result.props.text = "Binding error";
-      else if (target === "enabled") result.props.enabled = false;
-      else if (target === "visible") result.props.visible = true;
-      // Never show the authored fallback tag as if it were the selected asset.
-      else if (target === "tagPath") result.props.tagPath = "";
-      else if (target === "stateValue") result.props.stateValue = undefined;
-      else if ((processBindingTargets as readonly string[]).includes(target)) result.props[target] = undefined;
-      else if ((drawingBindingTargets as readonly string[]).includes(target)) result.props[target] = undefined;
-      else if (["color", "backgroundColor", "foregroundColor", "borderColor"].includes(target)) result.props[target] = undefined;
-      // Invalid geometry/style numbers retain their authored fallback value.
+      // Imported property names are untrusted, including the legacy prototype setter name.
+      Object.defineProperty(errors, target, { value: error instanceof Error ? error.message : "Property binding failed.", enumerable: true, configurable: true, writable: true });
+      result = failedRuntimeProperty(result, target);
     }
   }
+  for (const [target, error] of Object.entries(runtimePropertyGroupErrors(result, successful))) {
+    errors[target as BindingTarget] = error; result = failedRuntimeProperty(result, target as BindingTarget);
+  }
+  // A later enabled expression must never override a failed input constraint.
+  if (Object.keys(errors).some(target => target.startsWith("validation.") || ["min", "max", "step", "options", "formatMask", "textCase", "scanTerminator"].includes(target))) result.props.enabled = false;
   return { component: result, errors, ...(simulated ? { simulated: true as const } : {}) };
 }

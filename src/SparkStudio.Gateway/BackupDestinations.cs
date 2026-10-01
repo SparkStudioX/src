@@ -12,7 +12,9 @@ using Microsoft.Win32.SafeHandles;
 namespace SparkStudio.Gateway;
 
 public sealed record BackupDestination(string Kind, string Address, string? Username = null, string? Password = null,
-    string? Domain = null, int TimeoutSeconds = 300, bool AllowInsecureFtp = false)
+    string? Domain = null, int TimeoutSeconds = 300, bool AllowInsecureFtp = false,
+    string? Bucket = null, string? Region = null, string? Prefix = null, string? AccessKeyId = null,
+    string? SecretAccessKey = null, string? SessionToken = null, string? Endpoint = null, bool ForcePathStyle = false)
 {
     // The temporary cleartext credential DTO must not acquire a secret-bearing generated ToString.
     public override string ToString() => "BackupDestination { credentials redacted }";
@@ -20,7 +22,7 @@ public sealed record BackupDestination(string Kind, string Address, string? User
 public sealed record BackupDeliveryResult(string ArchiveName, long Bytes, string Sha256, int RemovedCount, string? RetentionWarning);
 
 /// <summary>Delivers already encrypted archives. No destination exception or server reply is exposed to callers.</summary>
-public static class BackupDestinations
+public static partial class BackupDestinations
 {
     private const int MaximumEntries = 10_000, MaximumListingBytes = 1024 * 1024;
     private const long MaximumArchiveBytes = GatewayRecovery.MaxTotalBytes + 32L * 1024 * 1024;
@@ -38,7 +40,8 @@ public static class BackupDestinations
 
     public static BackupDestination Validate(BackupDestination destination)
     {
-        if (destination is null || destination.Kind is not ("smb" or "ftp" or "ftps")) throw new ArgumentException("Backup destination must be SMB, FTP or explicit FTPS.");
+        if (destination is null || destination.Kind is not ("smb" or "ftp" or "ftps" or "s3")) throw new ArgumentException("Backup destination must be SMB, FTP, explicit FTPS or S3.");
+        if (destination.Kind == "s3") return ValidateS3(destination);
         if (destination.Kind == "ftp" && !destination.AllowInsecureFtp) throw new ArgumentException("Plain FTP sends credentials without encryption. Choose FTPS, or explicitly acknowledge insecure FTP in backup settings.");
         if (destination.TimeoutSeconds is < 30 or > 3600) throw new ArgumentException("Backup destination timeout must be 30–3600 seconds.");
         if (string.IsNullOrWhiteSpace(destination.Address) || destination.Address.Length > 1000 || destination.Address.Any(c => char.IsControl(c)))
@@ -77,6 +80,11 @@ public static class BackupDestinations
 
     public static async Task<BackupDeliveryResult> DeliverAsync(BackupDestination destination, string localArchivePath,
         string archiveName, Guid ownerId, int retentionDays = 7, CancellationToken cancellationToken = default)
+        => await DeliverWithS3HandlerAsync(destination, localArchivePath, archiveName, ownerId, retentionDays, cancellationToken, null);
+
+    private static async Task<BackupDeliveryResult> DeliverWithS3HandlerAsync(BackupDestination destination, string localArchivePath,
+        string archiveName, Guid ownerId, int retentionDays, CancellationToken cancellationToken, HttpMessageHandler? fixtureHandler,
+        bool fixtureMultipart = false)
     {
         destination = Validate(destination);
         if (destination.Kind == "smb" && !string.IsNullOrEmpty(destination.Username) && string.IsNullOrEmpty(destination.Password))
@@ -100,6 +108,7 @@ public static class BackupDestinations
                     finally { SmbWorker.Release(); }
                 }, CancellationToken.None);
             }
+            else if (destination.Kind == "s3") operation = DeliverS3Async(destination, localArchivePath, archiveName, ownerId, retentionDays, progress, token, fixtureHandler, fixtureMultipart);
             else operation = DeliverCoreAsync(new FtpRemote(destination), localArchivePath, archiveName, ownerId, retentionDays, progress, token);
             // Observe late faults when a native UNC operation has outlived its deadline.
             _ = operation.ContinueWith(task => _ = task.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
@@ -110,7 +119,7 @@ public static class BackupDestinations
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         { throw new TimeoutException("Backup destination exceeded its delivery deadline. No retention is started after timeout; a partial upload may need manual cleanup."); }
         catch (OperationCanceledException) { throw; }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or WebException or SecurityException or System.ComponentModel.Win32Exception or InvalidOperationException or DecoderFallbackException or AuthenticationException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or WebException or SecurityException or System.ComponentModel.Win32Exception or InvalidOperationException or DecoderFallbackException or AuthenticationException or Amazon.Runtime.AmazonClientException or Amazon.Runtime.AmazonServiceException or HttpRequestException or System.Xml.XmlException)
         { throw new InvalidOperationException("Backup destination delivery or verification failed. Check connectivity, destination permissions and credentials; previous backups are retained unless this delivery had already completed and retention had begun."); }
     }
 

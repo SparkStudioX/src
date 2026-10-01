@@ -30,6 +30,8 @@ function run(name, command, args, cwd = root) {
 }
 const web = path.join(root, 'apps/web');
 const toolSuites = [
+  'test-web-complexity',
+  'test-computer-camera',
   'test-source-boundary', 'test-workshop-build', 'test-project-search', 'test-resource-changes',
   'test-bulk-replacement', 'test-authoring-assets', 'test-visual-styles', 'test-visual-styles-rendering',
   'test-localization', 'test-localization-rendering', 'test-sqlite-example', 'test-engineering-policy',

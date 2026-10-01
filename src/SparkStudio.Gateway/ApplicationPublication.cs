@@ -23,6 +23,8 @@ public sealed partial class PublicationStore
             var resources = scripts?.GetDraft() ?? new JsonObject { ["revision"] = 0, ["resources"] = new JsonArray() };
             snapshot["scripts"] = resources;
             snapshot["expectedPublishedAt"] = publication?["publishedAt"]?.DeepClone();
+            // This review publishes a complete draft. Legacy compatibility warnings
+            // belong to the active snapshot and its restore flow, not the new version.
             return new JsonObject {
                 ["reviewToken"] = SnapshotHash(snapshot), ["revision"] = project["revision"]!.DeepClone(),
                 ["requiresScriptApproval"] = ExecutablePublication.Changed(publication, snapshot),
@@ -32,7 +34,7 @@ public sealed partial class PublicationStore
                 ["resources"] = new JsonArray(ScriptResourceStore.Resources(resources).Select(resource => (JsonNode)new JsonObject {
                     ["name"] = resource["name"]!.DeepClone(), ["type"] = resource["type"]!.DeepClone(),
                     ["enabled"] = resource["enabled"]!.DeepClone(), ["event"] = resource["event"]?.DeepClone()
-                }).ToArray()), ["warnings"] = PublicationWarnings()
+                }).ToArray()), ["warnings"] = HistoryWarnings()
             };
         }
     }

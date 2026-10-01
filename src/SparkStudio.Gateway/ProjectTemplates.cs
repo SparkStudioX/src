@@ -10,7 +10,7 @@ internal static class ProjectTemplates
     public const int MaximumInstanceDepth = 4;
     private const long MaximumExpandedComponents = 10000;
     private static readonly HashSet<string> ComponentTypes = new(StringComparer.Ordinal)
-        { "alarmStatusTable", "alarmJournalTable", "historicalTrend", "viewContainer", "formattedInput", "barcodeInput", "equipmentCommand", "chart", "sparkline", "label", "value", "gauge", "button", "table", "textInput", "numberInput", "checkbox", "select", "list", "treeView", "template", "repeater", "image", "icon", "textArea", "spinner", "slider", "radioGroup", "dateTimeInput", "toggle", "passwordInput", "multiStateButton", "multiStateIndicator", "ledDisplay", "progressBar", "cylindricalTank", "levelIndicator", "thermometer", "line", "rectangle", "ellipse", "polyline", "pipe", "equipmentSymbol" };
+        { "alarmStatusTable", "alarmJournalTable", "historicalTrend", "viewContainer", "formattedInput", "barcodeInput", "equipmentCommand", "chart", "sparkline", "label", "value", "gauge", "button", "table", "textInput", "numberInput", "checkbox", "select", "list", "treeView", "template", "repeater", "image", "computerCamera", "icon", "textArea", "spinner", "slider", "radioGroup", "dateTimeInput", "toggle", "passwordInput", "multiStateButton", "multiStateIndicator", "ledDisplay", "progressBar", "cylindricalTank", "levelIndicator", "thermometer", "line", "rectangle", "ellipse", "polyline", "pipe", "equipmentSymbol" };
     private static readonly Regex ParameterReference = new(@"\{([^{}]+)\}", RegexOptions.CultureInvariant);
 
     public static IEnumerable<JsonObject> Templates(JsonObject project) => project["templates"] is JsonArray templates
@@ -45,6 +45,7 @@ internal static class ProjectTemplates
         ProjectNavigation.Validate(project, screens);
         ProjectInteractions.ValidateDrawingActions(project);
         EquipmentCommandDefinitions.Validate(project);
+        NativeTagActionDefinitions.ValidateProject(project);
         ProcessDataComponentValidator.Validate(project);
     }
 
@@ -72,6 +73,8 @@ internal static class ProjectTemplates
                     InputDefinitionValidator.ValidateDefinition(type, props, inputFields);
                 }
                 if (type == "multiStateIndicator") StateControlValidator.ValidateIndicator(component["props"]);
+                if (type == "image" && component["props"] is JsonObject imageProps && imageProps.ContainsKey("imageUrl"))
+                    RuntimePropertyCatalog.ValidateImageUrl(ProjectStore.Optional(imageProps, "imageUrl") ?? throw new ArgumentException("Image URL must be text."));
                 if (ProcessDisplayValidator.Types.Contains(type)) ProcessDisplayValidator.Validate(type, component["props"]);
                 if (DrawingComponentValidator.Types.Contains(type)) DrawingComponentValidator.Validate(type, component["props"]);
                 TableColumnValidator.Validate(type, component["props"]);

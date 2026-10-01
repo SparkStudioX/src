@@ -14,7 +14,8 @@ const previewRequestUrl = asModule(compile(source('previewRequest')));
 const apiUrl = asModule(compile(source('api')).replaceAll('"./authSession"', JSON.stringify(authSessionUrl)).replaceAll('"./previewRequest"', JSON.stringify(previewRequestUrl)));
 const listTreeUrl = asModule(compile(source('listTreeModel')));
 const validationUrl = asModule(compile(source('inputValidation')));
-const modelUrl = asModule(compile(source('inputs')).replaceAll('"./api"', JSON.stringify(apiUrl)).replaceAll('"./listTreeModel"', JSON.stringify(listTreeUrl)).replaceAll('"./inputValidation"', JSON.stringify(validationUrl)));
+const cameraUrl = asModule(compile(source('computerCameraModel')));
+const modelUrl = asModule(compile(source('inputs')).replaceAll('"./api"', JSON.stringify(apiUrl)).replaceAll('"./listTreeModel"', JSON.stringify(listTreeUrl)).replaceAll('"./inputValidation"', JSON.stringify(validationUrl)).replaceAll('"./computerCameraModel"', JSON.stringify(cameraUrl)));
 const model = await import(modelUrl);
 const { initialInput, resolveInputs, validateInputs, isInput, isLocalDateTime, numericInputValue, incrementInput, sliderInputValue } = model;
 let checks = 0;
@@ -30,6 +31,17 @@ const options = [{ label: 'Automatic', value: 'auto' }, { label: 'Manual', value
 check('all ten input types join shared form resolution', () => {
   for (const type of ['textInput', 'textArea', 'numberInput', 'spinner', 'slider', 'checkbox', 'toggle', 'select', 'radioGroup', 'dateTimeInput']) assert.equal(isInput(type), true, type);
   for (const type of ['label', 'button', 'image', 'repeater']) assert.equal(isInput(type), false, type);
+});
+check('camera captures join form validation and state without seeding saved image defaults', () => {
+  const field = component('computerCamera'), capture = 'blob:http://127.0.0.1:5093/synthetic-capture';
+  assert.equal(isInput(field.type), true); assert.equal(initial(field), '');
+  assert.equal(initial(component('computerCamera', { defaultValue: capture })), null);
+  assert.equal(validate(field, capture), null); assert.equal(validate(field, ''), null);
+  assert.match(validate(component('computerCamera', { validation: { required: true } }), ''), /required/i);
+  for (const value of ['https://remote.example/photo.png', 'data:image/png;base64,AA==', 3, true]) assert.ok(validate(field, value));
+  assert.deepEqual(resolveInputs(screen(field), [], {}, { value: capture }), { value: capture });
+  const bound = component('computerCamera', { stateBinding: { scope: 'screen', key: 'photo' } });
+  assert.equal(initialInput(bound, [], {}, false, { session: {}, screen: { photo: capture } }), capture);
 });
 check('missing or bad-quality bound values never become a fabricated default', () => {
   for (const type of ['textArea', 'spinner', 'slider', 'radioGroup', 'dateTimeInput', 'toggle']) {
@@ -191,6 +203,7 @@ check('date values are unchanged across process timezones', () => {
 const require = createRequire(import.meta.url);
 const modules = new Map([['api', apiUrl], ['inputs', modelUrl], ['listTreeModel', listTreeUrl], ['Icon', asModule('export default function Icon() { return null; }')]]);
 function loadComponentModule(name) {
+  if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   if (modules.has(name)) return modules.get(name);
   const file = ['tsx', 'ts'].map(ext => new URL(`./src/${name}.${ext}`, import.meta.url)).find(file => fs.existsSync(file));
   assert.ok(file, `Missing component dependency ${name}`);

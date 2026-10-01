@@ -6,6 +6,341 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Visitor check-in, camera capture and hidden-component hit testing, 2026-09-30
+
+The portable Visitor check-in workshop accepts name/email and a static host,
+captures a square photo through the new Computer camera input, renders a 4×3-inch
+badge through Labelary and clears local visitor values on Dismiss. Its maintained
+package is `artifacts/sparkproj/visitor-checkin.sparkproj`; the [guide](VISITOR_CHECKIN.md)
+covers camera permission, HTTPS/localhost, third-party data handling and source
+compatibility. No visitor register, host notification or printer dispatch is
+included. Earlier preview.10 installers lack these source additions.
+
+Computer camera starts only on an explicit action and owns its transient PNG URL;
+capture/disable/departure stop camera tracks and reset/retake/departure revoke the
+photo. Image supports bound, same-origin blob URLs without persisting image data
+in typed state. Visitor text is UTF-8 hex-escaped into ZPL; the captured photo is
+cropped and dithered into a one-bit graphic. The bounded browser request checks
+HTTP status, PNG signature/type/size, duplicate admission and retired-owner effects.
+
+The actual RenderBoundary DOM wrapper had prevented the hidden-geometry CSS from
+matching. Hidden Image/Button/Input wrappers now use `display:none` in runtime,
+so they cannot block pointer/focus access, while Designer retains selection and
+React retains the component lifetime. The selectors cover positioned canvas,
+popup and template geometry without hiding a visible container merely because
+one of its leaves is hidden.
+
+Native form controls now use a light or dark `color-scheme` derived from their
+resolved opaque background; white authored inputs no longer inherit dark native
+control treatment. Transparent controls retain the surrounding scheme. The
+browser and operating system still determine the mouse pointer's appearance.
+
+Send message authoring suggests declared message types and lists matching
+receivers with component/handler IDs, document, scope, language and template
+placement. It distinguishes potential receivers from other locations and reports
+inspection limits. Discovery never executes scripts or claims a listener is
+currently mounted. General properties now expose a read-only Component ID;
+blank layer captions fall back to that ID, making the tiny visitor controller
+selectable by name.
+
+Verification: production browser build, gateway publish build, 10 synthetic camera
+groups, seven visitor-script/form/lifetime groups, 28 bound-renderer groups, 16
+runtime-property groups, 65 gateway runtime-property checks and 43 input-constraint
+checks passed. Fourteen receiver discovery groups, 41 unified action-authoring
+groups, eight property-authoring groups and eight visual-style renderer groups
+also passed. All 37 portable workshops passed real import, explicit publication,
+operator snapshot and re-export checks on an isolated gateway without changing
+shared tags/connections. Broader offline suites passed, including corrected
+inventory and settings-form checks rerun after their initial failures.
+
+A live Labelary POST using synthetic details and a geometric portrait returned a
+valid 812×609 PNG with permissive CORS headers. Browser inspection confirmed the
+corrected package import and the user's 6090 form, missing-photo validation,
+camera startup/cancellation and restored mouse hit testing. No real camera photo
+was captured or sent; photo processing/Dismiss used synthetic automation. Real
+camera-image rendering remains a manual acceptance exercise.
+
+## Live-preview confirmation presentation, 2026-09-30
+
+The live-actions confirmation now separates its real-data impact from script
+permissions, the 15-minute project/session scope and mode-switch cancellation.
+A compact header, divided footer and scrolling body replace the dense paragraphs.
+Keep read-only receives initial focus; Escape, the close icon and cancellation
+restore focus to the opener. Preview execution permissions are unchanged.
+
+Verification: production web build, 12 existing preview communication checks,
+source-boundary and diff checks passed. An isolated browser inspection verified
+light/dark appearance, dismissal/focus behavior and a 390×520 viewport with the
+footer visible and the body scrolling without horizontal overflow. Live actions
+were not enabled during visual verification.
+
+## Consistent Gateway Settings panels and automatic observations, 2026-09-30
+
+Overview, Deployment, Backups/Restore, Sessions, Diagnostics, Security and Audit
+now share the contrasting content surface, divided panel headers, compact field
+spacing and secondary text used by Configuration, Alarms and History. Backups
+and Security place their inner tabs above that surface. Decorative section
+overlines and routine Refresh/Reload controls are removed; functional titles,
+configuration actions and contextual Retry remain.
+
+Read-only observations update while visible, with duplicate-request and disposal
+guards. Configuration, tag definitions and certificate lists update quietly;
+tag/certificate dialogs and drafts pause relevant reads. Users/Audit observations
+pause while editing accounts. Listener, alarm/history and operator settings
+never receive automatic replacements over drafts. Their Cancel action retrieves
+the newest saved configuration and preserves edits if retrieval fails.
+Connection cancellation also retains credentials until successful retrieval.
+Backup cancellation instead adopts the latest successfully polled saved snapshot,
+clears staged secrets and retains observation errors. Background status reads do
+not unlock ongoing downloads, erase failed restore approval or acknowledge a
+changed recovery receipt.
+
+Verification: 105 focused UI/lifecycle groups, the production web build and
+source-boundary checks passed. Existing certificate and tag-manager checks also
+passed. Isolated browser checks covered all ten main sections, backup
+Schedules/Destinations/Restore, Security's two tabs, S3 fields, light/dark
+presentation and a 720-pixel layout with no page-wide horizontal overflow.
+Backups/Security tab placement and the absence of normal Refresh/Reload controls
+were checked in the rendered DOM; no console errors were observed. Active guides
+and the Gateway operations workshop instructions were updated. This frontend
+change does not change installed service settings, account grants or equipment.
+
+## Security tabs and selected-project tag access, 2026-09-30
+
+Gateway Settings → Security now uses underlined **Users & access** and
+**Operator settings** tabs with keyboard navigation. Operator settings has a
+searchable, paged project list and one selected project's multiline **Tag-path
+prefixes** form. Each project's draft remains intact when switching projects,
+tabs or refreshing accounts. Saving applies the public URL and the complete
+scope map together, including mappings outside the visible list. Cancel restores
+the loaded baseline; explicit reload refreshes the saved revision. Account APIs,
+authorization and tag-scope matching rules are unchanged.
+
+Verification: 11 focused Security UI groups, 20 authentication UI groups and
+the production web build passed. Isolated browser checks verified keyboard tabs,
+independent project drafts, account refresh, search, cancellation and save/reload
+in light and dark themes. An authenticated API comparison confirmed that saving
+one project's synthetic prefixes preserved unrelated settings; the disposable
+gateway's original scope map was restored afterward. The access workshop
+walkthrough and security documentation were updated. No live account grants or
+installed gateway settings were changed.
+
+## Multiple backup destinations and schedules, 2026-09-30
+
+Gateway Settings now has one **Backups** page with **Schedules**, **Destinations**
+and an administrator-only **Restore** tab. Legacy Recovery bookmarks open
+Restore. Searchable lists use one selected-item property form, with shared drafts
+preserved across tabs, optimistic revision checks and write-only secret edits.
+SMB, FTP, FTPS and S3 show only their relevant connection properties.
+
+The gateway persists up to 32 named destinations and 64 independent schedules.
+Schedules select a destination, daily or selected-weekday execution, time zone
+and retention; new schedules start disabled at 02:00 with seven-day retention.
+Due jobs run serially and keep independent attempt dates and retention owners.
+A failed destination does not prevent another due schedule from being considered.
+Single-target settings migrate while preserving protected secrets, prior dates
+and existing archive ownership. Invalid settings/state disable scheduling until
+reviewed, rather than silently resetting dates.
+
+S3 uses the pinned official AWS SDK, HTTPS endpoints, signed requests and
+streamed single/multipart uploads. Delivery verifies staging and final bytes,
+conditionally publishes without overwriting an existing key, and runs bounded
+owner-specific retention only after success. Failed-run cleanup is limited to
+the run's own object versions/upload IDs. Configuration downloads and full-data
+offline restoration retain their documented scope and authorization boundaries.
+
+Verification: 14 scheduler groups, 15 transport groups (including seven S3
+groups), 20 backup UI groups, 20 authentication UI groups and five authenticated HTTP groups passed.
+Production browser and gateway builds and locked default/Windows dependency
+restores passed. Isolated browser checks verified type-specific forms, new
+schedule defaults, cross-tab drafts, save/reload, local encrypted archive creation
+and Restore presentation in dark/light themes. The independently authored
+setup-required backup workshop and catalog walkthrough were updated and the
+checkpoint project was explicitly published on the disposable gateway.
+These checks use synthetic data and owned loopback fixtures; real domain SMB,
+trusted remote FTPS, AWS account policies and S3-compatible-server delivery remain
+environment-specific acceptance gates. The source feature is not included in the
+preview.10 installer. See [scheduled backups](SCHEDULED_BACKUPS.md).
+
+## Alarm and history configuration, 2026-09-30
+
+Gateway Settings now separates **Alarms** and **History** into top-level tabs.
+Each uses a searchable, paged list and one selected-rule property form. Both tabs
+share a draft: switching tabs preserves edits, Save configuration applies both
+as one revision, and Cancel changes restores both. Validation can select an
+invalid rule in the other tab. New rules begin disabled, removal requires an
+inline confirmation, and alarm journal retention has its own compact form.
+
+Both tag-path fields offer **Browse** with searchable, paged configured tags and
+source/type hints. Choosing a tag updates only the selected rule's draft;
+manual paths remain supported. Loading, retry, empty results and stale responses
+are handled without saving configuration or writing a tag value. The process
+data documentation and setup-required workshop walkthrough describe this flow.
+
+Verification: the production web build, 19 authentication UI groups and 16
+process-data UI groups passed. Browser checks against an isolated synthetic
+gateway verified both tag browsers, cross-tab drafts, validation navigation,
+cancel and a saved revision followed by reload. Dark and light presentation
+were inspected. This change does not alter recording behavior, alarm conditions
+or gateway permissions, and does not expand device/site acceptance.
+
+## Gateway Settings presentation, 2026-09-30
+
+Configuration now uses accessible Tags, Connections and Public OPC certificates
+tabs with keyboard navigation. The shared-resource refresh button was removed;
+resource panels retain their refresh controls, and overview status refresh appears
+only in Overview, Sessions and Diagnostics. Public OPC certificates use the same
+heading and bordered form surfaces as the other management pages, with controls
+sized to avoid clipped text. Checkbox labels align consistently across resource,
+security, backup, deployment, alarm/history and recovery forms. Shared tag-folder
+help no longer leaves punctuation below its example. The Designer's screen hint
+places its lightning icon and title on one line.
+
+Verification: production web build, source-boundary checks and existing UI checks
+passed. An isolated gateway/browser pass checked tab keyboard activation,
+certificate forms, account/backup checkbox rows, the shared tag help and the
+Designer hint. This presentation change does not change tag-write permissions,
+certificate trust or saved gateway configuration.
+
+## Native button tag actions, 2026-09-30
+
+Buttons now offer **Edit actions & events → On click → Set tag value** with a
+configured tag browser, typed fixed values and a component-property picker.
+References select self, another component in the same form, a scalar custom
+property or the containing screen/template's name and dimensions. Input value
+sources use the current scoped form values. Saved expression/query bindings,
+assigned styles and validated Python UI overrides are reconstructed on the
+gateway. Caption sources precede translation; inherited/theme-only appearance,
+passwords and structured values are excluded.
+
+Only explicitly published operator applications write. Both memory and OPC UA
+targets require Commands permission and readable tag scope. Optional confirmation
+uses a bounded, one-use reviewed intent; an existing equipment command's limits,
+confirmation and readback take precedence. The gateway owns the saved target and
+value source and rechecks publication, session, source dependencies and tag
+configuration before dispatch. Uncertain writes are never automatically retried.
+Reference search/deletion, copy remapping and custom-property editing preserve
+the authored graph. See [equipment commands](EQUIPMENT_COMMANDS.md).
+
+The setup-required equipment workshop now includes fixed, current input and
+parent-property button examples using four independently authored synthetic
+memory tags. This feature is in the source build, not the preview.10 installer.
+
+Verification: the production web build and all 89 Node acceptance suites passed;
+Gateway completed 22 suites and
+1,164 checks, including 78 native action checks; Connectors completed four suites
+and 179 checks. Nine authenticated command HTTP groups passed against an owned
+loopback gateway. A separate loopback OPC UA fixture confirmed fixed and
+property-sourced writes with readback and rejected a read-only target. Browser
+verification covered the property picker, parent metadata choices, current input
+review, cancellation without a write, confirmed memory readback, and one-click
+fixed/parent writes. The setup-required workshop was loaded and explicitly
+published on the isolated gateway. Device/site acceptance remains separate.
+
+## Component runtime-property bindings, 2026-09-30
+
+The browser and gateway now share a typed catalog for component runtime
+properties. Component-specific rows and typed custom properties expose ƒx,
+including nested chart settings, structured choices and datasets, input rules,
+process displays, drawing/media properties, repeater layout and container pane
+presentation. The property-sheet order remains General/Layout/Appearance,
+component-specific settings, shared configuration, then Custom properties.
+
+Expressions and named-query results resolve nested targets without mutating
+saved definitions. Custom dependencies resolve recursively within their form;
+invalid types, cycles, unavailable sources and inconsistent grouped values fail
+with diagnostics. Structured values use bounded JSON text. Supplied table data
+supports display/selection, while database editing retains its named-query
+source requirements. Gateway input constraints and permissions remain
+authoritative. Configuration IDs, scripts, declarations and initial form
+defaults remain static; input state and template/query datasets retain their
+dedicated binding editors. Existing scalar event watches are unchanged.
+
+The [runtime bindings guide](RUNTIME_PROPERTY_BINDINGS.md) documents the contract
+and independently authored portable workshop. Its maintained package is
+`artifacts/sparkproj/runtime-property-bindings.sparkproj`. All **36 portable
+workshops** passed authenticated import, explicit publication, operator
+snapshot and re-export checks on an isolated loopback gateway. The full gateway
+suite passed **1,086 checks across 21 suites**, including **44 runtime-binding
+acceptance checks**. No installed or development gateway data was replaced.
+This feature is not yet included in an installer.
+
+The production web build and **88 frontend/tool suites** passed. Additional
+focused checks cover same-render query dependency invalidation, transitive tag
+updates, chart dataset precedence and explicit query preview prerequisites.
+Live browser review verified component-specific ƒx rows, Custom properties last,
+and workshop changes to chart limits/legend, table rows, repeater layout and a
+source-controlled split ratio.
+
+## Component property-sheet order, 2026-09-30
+
+Every component now presents General, Layout and Appearance first, followed
+immediately by its component-specific settings. Shared visual style, translation
+and event settings follow those sections; Custom properties is always last.
+The DOM and keyboard reading order match the visual order.
+
+The production web build and **102 focused authoring checks** passed. Live
+Designer review checked all **47 palette entries** and adding a custom numeric
+property after the chart settings. Temporary project edits were undone without
+saving or publishing. This change is available in the development Designer and
+has not been packaged in an installer.
+
+## Authored tag paths and demo isolation, 2026-09-30
+
+Removed the old blanket reservation of `[default]Line` and `[default]Setpoints`.
+These names are valid for configured tags, including the sample project's
+`[default]Line/Line2/Temperature`. Optional demo generation now skips explicitly
+configured paths, including disabled or unavailable tags. Authored setpoint
+writes use their declared datatype and persistent memory state before any demo
+fallback. Deleted ordinary tags under these folders are removed from runtime;
+only the nine exact demonstration paths can be recreated in explicit demo mode.
+Reconfiguring a tag as OPC UA clears its previous source value until acquisition.
+
+**35 namespace checks**, **40 backend reliability checks** and **30 tag-capacity
+checks** passed. They cover the reported temperature value of 666, persistence,
+disabled memory/OPC and expression precedence, demo target fallback after direct
+configuration removal, and unchanged definition caching/checkpoint behavior.
+The authenticated HTTP tag-definition suite passed **14 groups** against a fresh
+disposable gateway on loopback 5091, including saves under both folder names,
+Python writes, invalid-path rejection and deletion. Windows DPAPI required the
+HTTP fixture to run outside the restricted sandbox; no security setting was
+disabled. The installed and development gateway data were unchanged. This fix
+has not yet been packaged in an installer.
+
+## Designer visual review, 2026-09-30
+
+Property-sheet rows now share consistent text, control heights, help text and
+wrapping buttons; non-bindable rows reclaim the unused binding-button column.
+Collection and dataset dialogs render outside the compact property grid, and
+container pane fields have a dedicated aligned layout. Duplicate React editor
+keys were corrected. Publication review separates the version summary, operator
+impact, saved-draft scope and script details; legacy restore warnings remain in
+publication history rather than appearing on a new complete publication review.
+
+Tags and Connections now use matching keyboard-accessible **New Tag** and
+**New Connection** menus. The unsupported Designer `D` badge was removed.
+Canvas fitting measures the actual content box, reserves scrollbar space and
+clips the transformed canvas's unscaled layout bounds. Repeaters reserve their
+own scrollbar space. The [view-container guide](VIEW_CONTAINERS.md) and existing
+workshop catalog entry now include explicit authoring steps and prerequisites.
+
+Browser review opened all **47 palette entries**, including template-dependent
+controls, checked light and dark property sheets down to the 220-pixel pane
+minimum, and inspected collection, input-rule, dataset and container dialogs.
+Publication review was checked at narrow and short window sizes. Both creation
+menus were checked through their source-specific forms without saving gateway
+configuration. A constrained 3,200 × 2,400 canvas at minimum zoom retained stable
+geometry across 20 observations with both scrollbars visible. Repeater wheel
+scrolling advanced its rows and then the outer canvas at its boundary. Temporary
+project edits were undone; no operator publication or equipment write was made.
+
+All **75 frontend check suites** passed, alongside **31 unified-publication
+checks**, **14 gateway view-container checks** and **11 workshop-build groups**
+covering 35 examples. Two headless test harnesses were updated to provide the
+document body used by detached modal portals while preserving their behavior
+assertions. This is source verification, not a new installer release or a full
+re-run of release acceptance.
+
 ## Preview.10 release verification, 2026-09-30
 
 The unsigned Windows x64 installer and 35-project portable workshop bundle were
@@ -914,7 +1249,7 @@ P0 is required for a recoverable connected pilot; P1 broadens that baseline. Des
 | --- | --- | --- |
 | G01 / P0 | **Gateway administration baseline implemented.** Administrator-only overview includes identity/version/uptime, searchable projects/connections, counts and application entry points. Timestamped snapshots become explicitly stale. Session inventory separates engineering/operator audiences and exposes opaque management handles for reviewed audited revocation. Per-project session attribution and deeper managed-resource configuration remain open. | Reload and deep links preserve context; permissions hold at API and UI; changes use revisions and staged Save/Cancel; session disconnect/revocation is explicit and audited; stale status never appears healthy. |
 | G02 / P0 | **Process/API diagnostic baseline implemented.** CPU, process/managed memory, data-volume free space, active/lifetime counters and 128 completed route-template observations accompany a redacted local support JSON. Identities, request values, configuration and authored bodies are excluded from that export. Structured durable logs, script/subscription correlation, queue/worker metrics and saved dashboards remain open. | A controlled connection failure, slow query, script timeout and low-disk condition each produce attributable status/logs. Retention is bounded; collection overhead is measured; bundles exclude credentials, tokens and private keys; diagnostics remain usable during service faults. |
-| G03 / P0 | **Publication history, offline full-data recovery and online scheduled configuration backups implemented.** Encrypted new-location restore starts in enforced recovery mode and requires reviewed restart. Running-host snapshots exclude live databases/history/audit; daily SMB/FTP/FTPS delivery verifies bytes before owner-specific age retention. Same-identity DPAPI policy and separate database backups are explicit. Atomic whole-application publish/rollback now captures screens, queries, Python libraries and gateway/browser events together. Service switching and cross-version migration remain open. | Extend the measured isolated recovery and retention tests to intended service identities, real domain SMB/trusted remote FTPS, production-scale data and supported application-version migration. Cover accounts/grants, connections, tags, projects, assets, publications and managed data; test corrupt/incompatible archives, interruption and rollback. |
+| G03 / P0 | **Publication history, offline full-data recovery and online scheduled configuration backups implemented.** Encrypted new-location restore starts in enforced recovery mode and requires reviewed restart. Running-host snapshots exclude live databases/history/audit; multiple daily/weekday schedules deliver to named SMB/FTP/FTPS/S3 targets and verify bytes before schedule-specific age retention. Same-identity DPAPI policy and separate database backups are explicit. Atomic whole-application publish/rollback now captures screens, queries, Python libraries and gateway/browser events together. Service switching and cross-version migration remain open. | Extend the measured isolated recovery and retention tests to intended service identities, real domain SMB/trusted remote FTPS, intended AWS/S3-compatible policies, production-scale data and supported application-version migration. Cover accounts/grants, connections, tags, projects, assets, publications and managed data; test corrupt/incompatible archives, interruption and rollback. |
 | G04 / P0 | **Deployment observations, saved listeners and installer Local/Network HTTPS configuration implemented; hosting acceptance remains open.** Local management plus optional all-interface TLS uses a separate public hostname, protected PEM import, strict certificate checks and fail-closed installer override rules. Source/model/Inno checks passed; elevated acceptance of the new network wizard, client trust, renewal, trusted proxies, container persistence/upgrade and offline dependency inventory remain open. | Test remote HTTPS and proxy behavior without weakening loopback restrictions; renew an expiring certificate; install/upgrade/uninstall as the intended service account; recover failed upgrades and container volumes. Define restart requirements and preserve a recovery route after invalid configuration. |
 | G05 / P0 | **Connection lifecycle and OPC UA client security — partial.** Revisioned rename/enable/disable, durable timestamped tests with stale-result rejection, draft/published dependencies and bounded tag quick watch are implemented. Safe deletion, continuous reconnect fault acceptance, certificate trust/quarantine/fingerprint lifecycle and credential-reference administration remain open. | Exercise endpoint downtime, server restart, certificate replacement/rejection, bad credentials, disabled connections and stale samples. Verify subscriptions recover without duplicate monitored items or cached configuration leakage. Deletion reports affected tags/queries. |
 | G06 / P0 then P1 | **Database operations — partial.** Designer read cancellation/deadlines and typed preflight are implemented and exercised against SQLite; connection diagnostics expose named-query dependencies. Atomic optimistic table batches are implemented with one transaction, version-per-row updates and real SQLite rollback/concurrency verification. Complete live SQL Server acceptance and pool health. Add a supported .NET provider catalog and dialect/capability contracts; evaluate PostgreSQL and MariaDB/MySQL after the existing providers pass. | Run reads and guarded writes against actual supported servers, including TLS failure, restart, pool exhaustion, concurrent conflicts and uncertain write outcomes. Prove transaction behavior per provider; do not retry an ambiguous write automatically. Driver availability must be distinct from connection health. |
