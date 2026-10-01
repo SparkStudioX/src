@@ -26,36 +26,111 @@ function Get-CleanSourceCommit {
     return $commit
 }
 
-function Get-ReviewedAwsNotices {
-    # This immutable AWS revision declares S3 4.0.104.0 and Core 4.0.102.8.
-    # The matching NuGet packages declare Apache-2.0 but omit distributable text.
-    # Keep vendor license/attribution text in the ignored cache and release only.
-    $revision = 'f5257515bbd26d04376ee826d07ec80ea267c9b9'
-    $reviewed = @(
-        @{ name = 'License.txt'; sha256 = '192898453336a3f666e8138988cdda21ee7b858b1184e00c882c531df174d0d1' },
-        @{ name = 'Notice.txt'; sha256 = 'ebc5492b4c77f9c52a8d33d27588e69717a33440bcb9e2cc5a2652309a4ed20f' }
-    )
-    $cache = Join-Path $root ".tools\third-party-notices\aws-sdk-net\$revision"
+function Get-ReviewedPackageNoticeSpec([string]$Package) {
+    # Supplements are explicit version reviews, never a blanket SPDX exemption.
+    # Microsoft revisions come from each matching nuspec. SQLite's commit is the
+    # resolved v2.1.12 tag; AWS's revision declares the exact assembly versions.
+    $revision = $null; $family = $null
+    if ($Package -in @('AWSSDK.S3/4.0.104', 'AWSSDK.Core/4.0.102.8')) { $family = 'aws'; $revision = 'f5257515bbd26d04376ee826d07ec80ea267c9b9' }
+    elseif ($Package -in @('SQLitePCLRaw.bundle_e_sqlite3/2.1.12', 'SQLitePCLRaw.core/2.1.12', 'SQLitePCLRaw.lib.e_sqlite3/2.1.12', 'SQLitePCLRaw.provider.e_sqlite3/2.1.12')) { $family = 'sqlite'; $revision = 'ca835d21508bff43121c65081035840ac5006c4c' }
+    elseif ($Package -eq 'Azure.Core/1.50.0') { $family = 'azure'; $revision = '724366b17b92e657d2136d470077c769e89818c7' }
+    elseif ($Package -eq 'Azure.Identity/1.17.1') { $family = 'azure'; $revision = 'f6aaf7f37262151b1df40b79d1a64dacc7c98021' }
+    elseif ($Package -eq 'System.ClientModel/1.8.0') { $family = 'azure'; $revision = '033d7cea151a65b3c11037021403787d7e6e01a3' }
+    elseif ($Package -in @('Microsoft.Data.SqlClient/6.1.7', 'Microsoft.SqlServer.Server/1.0.0')) {
+        # SqlServer.Server's nuspec identifies this repository but no commit.
+        # Its MIT declaration was reviewed against this applicable family text.
+        $family = 'sqlclient'; $revision = 'efca28cabb8d13fe0b0afd277bf6ff66eb8231e5'
+    }
+    elseif ($Package -in @('Microsoft.Data.Sqlite/10.0.12', 'Microsoft.Data.Sqlite.Core/10.0.12')) { $family = 'efcore'; $revision = '95017c711e6afc1085133d440e42b4bd78155701' }
+    elseif ($Package -in @('Microsoft.Extensions.Hosting.WindowsServices/10.0.9', 'System.ServiceProcess.ServiceController/10.0.9')) { $family = 'runtime'; $revision = '901ca941248413c79832d2fdbd709da0c4386353' }
+    elseif ($Package -in @('Microsoft.Identity.Client/4.84.2', 'Microsoft.Identity.Client.Broker/4.84.2')) { $family = 'msal'; $revision = 'bad7cae331c1d9e699ca2150a5fecb108ea54916' }
+    elseif ($Package -eq 'Microsoft.Identity.Client.Extensions.Msal/4.78.0') { $family = 'msal'; $revision = 'd6f9310e2f1073ad2db8ca3bf39827b9bcf26e06' }
+    elseif ($Package -eq 'Microsoft.IdentityModel.Abstractions/8.14.0') { $family = 'identity'; $revision = 'c8f7d87bcda35557a68f6cb9c55856a2ee733856' }
+    elseif ($Package -in @('Microsoft.IdentityModel.JsonWebTokens/7.7.1', 'Microsoft.IdentityModel.Logging/7.7.1', 'Microsoft.IdentityModel.Protocols/7.7.1', 'Microsoft.IdentityModel.Protocols.OpenIdConnect/7.7.1', 'Microsoft.IdentityModel.Tokens/7.7.1', 'System.IdentityModel.Tokens.Jwt/7.7.1')) { $family = 'identity'; $revision = 'e65fcb2b0eb679a6eed0f8731a9d21a8e8d2dd5b' }
+    if (!$family) { return $null }
+    $license = 'MIT'
+    switch ($family) {
+        'aws' {
+            $repository = 'aws/aws-sdk-net'; $license = 'Apache-2.0'
+            $files = @(
+                @{ name = 'License.txt'; sha256 = '192898453336a3f666e8138988cdda21ee7b858b1184e00c882c531df174d0d1' },
+                @{ name = 'Notice.txt'; sha256 = 'ebc5492b4c77f9c52a8d33d27588e69717a33440bcb9e2cc5a2652309a4ed20f' }
+            )
+        }
+        'sqlite' {
+            $repository = 'ericsink/SQLitePCL.raw'; $license = 'Apache-2.0'
+            $files = @(
+                @{ name = 'LICENSE.TXT'; sha256 = 'cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30' },
+                @{ name = 'NOTICE.TXT'; sha256 = '485b276b3d2bfaa26df348e1e5c84df3648981e09b88531a6a53006f0705c24b' }
+            )
+        }
+        'azure' {
+            $repository = 'Azure/azure-sdk-for-net'
+            $files = @(
+                @{ name = 'LICENSE.txt'; sha256 = '9b45236978bb5cd5de992021769e1eeaa79f0116d3b02cf8ba065a1ed603d5fa' },
+                @{ name = 'NOTICE.txt'; sha256 = 'edca5c0353ab7281300dec18793a4eb06d26857e5bf9cb905e4b77543e467210' }
+            )
+        }
+        'sqlclient' {
+            $repository = 'dotnet/sqlclient'
+            $files = @(
+                @{ name = 'LICENSE'; sha256 = '9fa73cb72fb654d029c9214f0e3eec32c301a0c23be71b50fe3910e61553fa34' },
+                @{ name = 'NOTICE.txt'; sha256 = 'db4e07b72af7b58c5a6cd39762fe757e7db7f9af4e67e8d6ecc05731dd7ff66c' }
+            )
+        }
+        'efcore' {
+            $repository = 'dotnet/dotnet'
+            $files = @(@{ name = 'src/efcore/LICENSE.txt'; sha256 = 'ae48df11a335dc1a615f4f938b69cba73bcf4485c4f97af49b38efb0f216353b' })
+        }
+        'runtime' {
+            $repository = 'dotnet/dotnet'
+            $files = @(
+                @{ name = 'src/runtime/LICENSE.TXT'; sha256 = 'cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310' },
+                @{ name = 'src/runtime/THIRD-PARTY-NOTICES.TXT'; sha256 = '66f1d4e44973185519bb4aa8a9718eb22fc7af2cc532e3ae9cfc4c127ee7fc54' }
+            )
+        }
+        'msal' {
+            $repository = 'AzureAD/microsoft-authentication-library-for-dotnet'
+            $files = @(
+                @{ name = 'LICENSE'; sha256 = '2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c' },
+                @{ name = 'ThirdPartyNotice.txt'; sha256 = '6ceaa32c30e007e6f7f7a4ba5e07926da77c82866c459f29b020e66c78d8adcf' }
+            )
+        }
+        'identity' {
+            $repository = 'AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet'
+            $files = @(
+                @{ name = 'LICENSE.txt'; sha256 = 'cba03f5387b05405e56b688376421acae396136af4b5116738dc6e5160f87ddd' },
+                @{ name = 'NOTICE.html'; sha256 = 'd9f0289a2c38b4eedf5f22a045b6b37212d0989afb5f416a5f9ace59958136f7' },
+                @{ name = 'ThirdPartyNotice.txt'; sha256 = '8d53e3a82ef34420b78b856dc5199ebed5ad854fc586014526ac17224fbbbc5e' }
+            )
+        }
+    }
+    return @{ repository = $repository; revision = $revision; license = $license; files = $files }
+}
+
+function Get-ReviewedNoticeFiles($Spec) {
+    # Keep original vendor license/attribution text in the ignored cache and release only.
+    $cache = Join-Path $root (".tools\third-party-notices\$($Spec.repository)\$($Spec.revision)")
     New-Item -ItemType Directory -Force -Path $cache | Out-Null
     $result = @()
-    foreach ($entry in $reviewed) {
-        $file = Join-Path $cache $entry.name
-        $url = "https://raw.githubusercontent.com/aws/aws-sdk-net/$revision/$($entry.name)"
+    foreach ($entry in $Spec.files) {
+        $file = Join-Path $cache $entry.name.Replace('/', '__')
+        $url = "https://raw.githubusercontent.com/$($Spec.repository)/$($Spec.revision)/$($entry.name)"
         if (!(Test-Path -LiteralPath $file)) {
             $temporary = "$file.$([guid]::NewGuid().ToString('N')).tmp"
             try {
                 Invoke-WebRequest -Uri $url -OutFile $temporary -TimeoutSec 60
                 if ((Get-Item -LiteralPath $temporary).Length -gt 131072 -or (Get-FileHash -LiteralPath $temporary -Algorithm SHA256).Hash -ne $entry.sha256) {
-                    throw "Official AWS notice checksum mismatch: $($entry.name)"
+                    throw "Official upstream notice checksum mismatch: $($Spec.repository)/$($entry.name)"
                 }
                 Move-Item -LiteralPath $temporary -Destination $file
             } finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary } }
         }
         $item = Get-Item -LiteralPath $file
         if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -gt 131072 -or (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $entry.sha256) {
-            throw "Cached AWS notice differs from its reviewed checksum: $($entry.name)"
+            throw "Cached upstream notice differs from its reviewed checksum: $($Spec.repository)/$($entry.name)"
         }
-        $result += [ordered]@{ name = $entry.name; path = $file; url = $url; sha256 = $entry.sha256; sourceRevision = $revision }
+        $result += [ordered]@{ name = $entry.name; path = $file; url = $url; sha256 = $entry.sha256; sourceRevision = $Spec.revision }
     }
     return $result
 }
@@ -182,9 +257,9 @@ try {
     # Preserve available NuGet package licenses and identify every published dependency.
     $deps = Get-Content -LiteralPath (Join-Path $published 'SparkStudio.Gateway.deps.json') -Raw | ConvertFrom-Json
     $packages = @()
-    $awsNotices = $null
+    $reviewedNotices = @{}
     foreach ($property in $deps.libraries.PSObject.Properties) {
-        $inventoryEntry = [ordered]@{ name = $property.Name; type = $property.Value.type; hash = $property.Value.sha512; noticeFiles = @(); license = $null; licenseType = $null; copyright = $null; licenseUrl = $null; requiresLicenseReview = $false }
+        $inventoryEntry = [ordered]@{ name = $property.Name; type = $property.Value.type; hash = $property.Value.sha512; noticeFiles = @(); license = $null; licenseType = $null; copyright = $null; licenseUrl = $null; repository = $null; repositoryCommit = $null; requiresLicenseReview = $false }
         if ($property.Value.type -eq 'package') {
             $packageDirectory = Join-Path $env:NUGET_PACKAGES $property.Value.path
             if (Test-Path -LiteralPath $packageDirectory) {
@@ -200,6 +275,8 @@ try {
                     if ($copyright) { $inventoryEntry.copyright = $copyright.InnerText }
                     $licenseUrl = $metadata.SelectSingleNode('*[local-name()="licenseUrl"]')
                     if ($licenseUrl) { $inventoryEntry.licenseUrl = $licenseUrl.InnerText }
+                    $repository = $metadata.SelectSingleNode('*[local-name()="repository"]')
+                    if ($repository) { $inventoryEntry.repository = $repository.GetAttribute('url'); $inventoryEntry.repositoryCommit = $repository.GetAttribute('commit') }
                 }
                 $packageNotices = @(Get-ChildItem -LiteralPath $packageDirectory -File -Recurse | Where-Object { $_.Name -match '^(LICENSE|LICENCE|NOTICE|ThirdPartyNotices)(\.|$)' })
                 foreach ($notice in $packageNotices) {
@@ -210,12 +287,18 @@ try {
                     $inventoryEntry.noticeFiles += $destination.Substring($notices.Length + 1).Replace('\', '/')
                 }
             }
-            if ($property.Name -in @('AWSSDK.S3/4.0.104', 'AWSSDK.Core/4.0.102.8')) {
-                if ($inventoryEntry.licenseType -ne 'expression' -or $inventoryEntry.license -ne 'Apache-2.0') { throw 'AWS package license metadata differs from its reviewed distribution supplement.' }
-                if (!$awsNotices) { $awsNotices = @(Get-ReviewedAwsNotices) }
+            $noticeSpec = Get-ReviewedPackageNoticeSpec $property.Name
+            if ($noticeSpec) {
+                if ($inventoryEntry.licenseType -ne 'expression' -or $inventoryEntry.license -ne $noticeSpec.license -or
+                    ($inventoryEntry.repository -and $inventoryEntry.repository -ne "https://github.com/$($noticeSpec.repository)") -or
+                    ($inventoryEntry.repositoryCommit -and $inventoryEntry.repositoryCommit -ne $noticeSpec.revision)) {
+                    throw "Package metadata differs from its reviewed notice supplement: $($property.Name)"
+                }
+                $cacheKey = "$($noticeSpec.repository)/$($noticeSpec.revision)"
+                if (!$reviewedNotices.ContainsKey($cacheKey)) { $reviewedNotices[$cacheKey] = @(Get-ReviewedNoticeFiles $noticeSpec) }
                 $inventoryEntry.reviewedNoticeSources = @()
-                foreach ($notice in $awsNotices) {
-                    $relative = Join-Path $property.Name.Replace('/', '\') (Join-Path 'upstream' $notice.name)
+                foreach ($notice in $reviewedNotices[$cacheKey]) {
+                    $relative = Join-Path $property.Name.Replace('/', '\') (Join-Path 'upstream' $notice.name.Replace('/', '\'))
                     $destination = Join-Path $notices $relative
                     New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent) | Out-Null
                     Copy-Item -LiteralPath $notice.path -Destination $destination

@@ -22,9 +22,10 @@ publication and website/docs deployment remain pending. Earlier dated entries
 retain their original source/build evidence and do not establish acceptance of
 these new installer bytes.
 
-Packaging must also retain the official AWS SDK license and notice texts with
-the new S3 dependency in the hashed payload. Their inclusion and manifest/SBOM
-inventory are package-verification gates, not a legal or vulnerability guarantee.
+Packaging must also retain reviewed upstream dependency licenses and notices,
+including the AWS SDK and SQLite attribution texts, in the hashed payload.
+Their inclusion and manifest/SBOM inventory are package-verification gates,
+not a legal or vulnerability guarantee.
 
 Elevated service install/upgrade/uninstall, rollback and complete real-data
 preservation, broader service-account/ACL behavior, remote HTTPS trust/renewal,

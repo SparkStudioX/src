@@ -157,7 +157,12 @@ Installer staging includes `sbom.cdx.json` (CycloneDX 1.6), identifying the exac
 payload's NuGet packages, locked browser production dependencies, bundled CPython
 and .NET frameworks. The SBOM and third-party notices enter the hashed package
 manifest. Browser/.NET/CPython notice text is retained; NuGet package notices are
-copied when present. Review dependencies without embedded license text against
+copied when present. For specifically reviewed package versions whose packages omit
+the text, the installer builder also copies official upstream licenses/notices from
+immutable source revisions with verified SHA-256 pins. Downloaded texts remain in
+the ignored cache and release payload, outside source commits. The inventory
+records their source URLs, revisions and hashes; a future package version needs a
+new review. Review any remaining dependencies without embedded license text against
 their package metadata before distribution. The NuGet inventory preserves declared
 license expressions, copyright and license URLs and marks packages without copied
 notice files as `requiresLicenseReview`; a successful build does not clear that
