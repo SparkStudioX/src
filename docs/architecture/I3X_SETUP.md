@@ -15,18 +15,18 @@ Alternatively, save point definitions in the connection and create tags later in
 Have an engineering session signed in as a gateway administrator and obtain the following from the i3X service owner:
 
 - The complete i3X 1.0 API base URL, for example `https://i3x.example.com/v1`.
-- The required username/password, bearer token or API key, including its header name.
+- The service's authentication mode: **None**, username/password, bearer token or API key. Obtain credentials and the API-key header name only when the service requires them.
 - A known element you are permitted to browse and read, its expected value/type, and any supported subscription transport.
 - Certificate references for a private CA or mutual TLS, if required.
 
-The API must be reachable from the gateway machine or container. **Outside loopback, SparkStudio requires HTTPS and configured authentication for i3X.** Plain HTTP with **None** authentication is permitted only for a local loopback service. A browser reaching the service does not establish gateway connectivity; `127.0.0.1` refers to the gateway's own host or container.
+The API must be reachable from the gateway machine or container. **Outside loopback, SparkStudio requires HTTPS for i3X.** Plain HTTP is permitted only for a local loopback service. Authentication follows the service's requirements: **None** is allowed for local and remote services that do not require credentials. A browser reaching the service does not establish gateway connectivity; `127.0.0.1` refers to the gateway's own host or container.
 
 ## 1. Create and test the connection
 
 1. Open **Gateway Settings → Configuration → Connections → New Connection → i3X source**.
 2. Give it a recognizable name, such as `Line 1 i3X`, and leave it enabled.
 3. Set **Base URL** to the service's full API root. Include `/v1` if it is part of that root; do not enter an individual element or current-value URL.
-4. Set **Authentication mode** to the service's mode: **Username and password**, **Bearer token**, or **API key**. Fill the displayed credential fields. For an API key, set **API-key header** to the service's required header; its default is `X-API-Key`.
+4. Set **Authentication mode** to the service's mode. Leave **None** selected when it accepts requests without credentials, including for a remote HTTPS service. Otherwise choose **Username and password**, **Bearer token**, or **API key** and fill the displayed credential fields. For an API key, set **API-key header** to the service's required header; its default is `X-API-Key`.
 5. Leave **Acquisition** at **Polling** and **Poll / sync interval (ms)** at `1000` for the initial check. The supported interval is 1,000–60,000 ms.
 6. Leave **Client identity** blank to generate and retain an identity on first save. Keep **Prefer advertised SSE, with sync fallback** checked and **Reconcile current state every (seconds)** at `30` for later subscription use.
 7. Choose **Save connection → Test connection**. Test is unavailable while the connection has unsaved changes or is disabled.
@@ -43,10 +43,10 @@ These settings identify the API and control one shared acquisition session. They
 | --- | --- |
 | Connection name | Your label in SparkStudio, such as `Line 1 i3X`. It is separate from the API's element IDs and subscription client identity. |
 | Connection enabled | Leave checked to acquire values and permit Test/Browse/Read. Unchecking stops acquisition and blocks new operations after **Save connection**; operations already underway may finish. |
-| Base URL | The complete API root, such as `https://i3x.example.com/v1`, up to 2,048 characters. SparkStudio appends routes such as `info` and `objects/value`. Do not enter a particular element URL, credentials, query string or fragment. A trailing slash is optional. The new-connection example `https://api.i3x.dev/v1` is not a preconfigured account: use the URL supplied by your service owner. Outside loopback, HTTPS and configured authentication are required. |
+| Base URL | The complete API root, such as `https://i3x.example.com/v1`, up to 2,048 characters. SparkStudio appends routes such as `info` and `objects/value`. Do not enter a particular element URL, credentials, query string or fragment. A trailing slash is optional. The new-connection example `https://api.i3x.dev/v1` is not a preconfigured account: use the URL supplied by your service owner. Outside loopback, HTTPS is required; authentication depends on the service. |
 | Acquisition | **Polling** is the default and repeatedly reads the saved points' current values. **Subscription / stream** creates a server subscription, receives updates and periodically checks current state. Both are read-only; tags share this connection rather than creating separate sessions. |
 | Poll / sync interval (ms) | Default `1000`; range `1000`–`60000`. `1000` means one second. This is the delay after a completed polling read or subscription sync request. Request duration adds to that delay. Pushed SSE updates do not wait for this interval. |
-| Authentication mode | Default **None**, permitted only for loopback i3X services. Choose the service's **Username and password**, **Bearer token**, or **API key** mode. Authentication and HTTPS are separate requirements outside loopback. |
+| Authentication mode | Default **None**, allowed for both local and remote services that accept requests without credentials. Choose **Username and password**, **Bearer token**, or **API key** only when required by the service. SparkStudio does not require credentials solely because the API is remote. The HTTPS requirement outside loopback still applies. |
 | Username — shown for Username and password | The API account name, for example `spark-reader`, not the SparkStudio login or subscription client identity. A nonblank username is required. Give the account the read/browse and, when used, subscription permissions your service requires. |
 | Password — shown for Username and password | The API account's password. A saved password is protected on this gateway: leave the placeholder unchanged to retain it, or use **Clear password** to remove it. |
 | Bearer token — shown for Bearer token | Paste the token only, without the `Bearer ` prefix. SparkStudio supplies that prefix in the authorization header. A nonblank token is required; leave a saved placeholder unchanged to retain it, or use **Clear token** to remove it. |
@@ -162,7 +162,7 @@ For i3X, **Decode working bytes must be at least eight times HTTP / XML document
 | What you see | What to check |
 | --- | --- |
 | i3X source is missing | Build availability above; current published installers lack this feature. |
-| Save rejects the URL or authentication | A non-loopback API requires both HTTPS and configured authentication. |
+| Save rejects the URL or authentication | Use HTTPS for a non-loopback API. **None** is allowed; when selecting another mode, supply its required username, password, token/key and valid header name. |
 | Test fails or requests are unauthorized | Full API root, gateway network access, certificate trust, credential mode, API-key header and browse/read permissions. |
 | Browse works but a value has bad quality | Exact element ID, selected member, declared type and the service's per-element current-value response. Inspect Diagnostics. |
 | `Bad_WaitingForInitialData` or `Bad_NoData` | No accepted initial value, or the service returned no current value for that element/member. |
