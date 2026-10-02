@@ -98,6 +98,64 @@ After verifying a small reviewed mapping, you can use **Tag creation → Automat
 
 Automatic ownership keeps stable identities and locked types. It rejects collisions and referenced removals. Deleting a generated tag in **Tags** suppresses its rediscovery. To deliberately restore it, return to **Automatic ownership and suppression → Load ownership → Allow rediscovery**. Changing an owned root or **Strip topic levels** requires reviewing the namespace migration and using **Save reviewed migration**. Check the proposed tag paths before applying.
 
+## Topic mapping field reference
+
+A mapping is a rule with three jobs: choose which topics to receive, turn each message's payload into values, and decide how those values become tags. It does not create a new broker connection. The same connection can have several mappings for different topic families or payload formats.
+
+For example, a topic `plant/line1/temp` with payload `23.5`, root `[default]MQTT`, **UTF-8 scalar**, **Double** and **Strip topic levels** `0` proposes `[default]MQTT/plant/line1/temp` with value `23.5`. In review mode it appears in the observed catalog for import; in automatic mode it can become a tag as messages arrive. With strip `1`, the proposed path becomes `[default]MQTT/line1/temp`. The broker topic remains `plant/line1/temp` in both cases.
+
+### Topics and tag creation
+
+| Field | What it does | Starting choice or example |
+| --- | --- | --- |
+| Mapping | Chooses which saved/draft rule you are editing. | Add a mapping for each topic family that needs different handling. |
+| Mapping enabled | Receives and processes this rule's matching topics. Disabling it retains saved readings with `Bad_Disabled` quality. | Keep enabled while testing. Disabling a mapping does not disable the whole connection. |
+| Mapping ID | Stable identifier connecting this rule to its saved points. It is not an MQTT topic or tag path. | Keep the generated ID, or choose a recognizable ID before saving. Saved IDs cannot be renamed. |
+| Topic filter | Selects broker topics to subscribe to. `+` matches one topic level; `#` matches the remaining levels and must be last. More specific matching rules take precedence. | `plant/line1/temp` matches one topic. `plant/+/temp` matches a temperature topic for each one-level line name. `plant/#` matches `plant` and everything below it. Matching is case-sensitive. |
+| Owned root | Starting folder for suggested tag paths. Automatic mode reserves it exclusively for that mapping's generated tags. | `[default]MQTT` means the MQTT folder in the default tag provider. Use an unused folder for Automatic. Review mode lets you edit the proposed paths before importing. |
+| Tag creation | Determines whether messages update explicitly saved points, populate a catalog for review, or create owned tags automatically. | Start with **Observe and review import**; the three modes are compared below. |
+| Strip topic levels | Removes leading topic folders from suggested/generated tag paths. It changes neither the subscription nor the raw topic identity. | For `plant/line1/temp`, `0` keeps all levels, `1` removes `plant`, and `2` leaves `temp`. Do not strip every level. Distinct topics can collide after stripping; review paths first. |
+
+| Tag creation mode | What happens when a matching message arrives | How you get tags |
+| --- | --- | --- |
+| Explicit saved points | Updates only points you have explicitly declared and saved. Requires an exact topic filter without wildcards and a scalar result. | Save the point map in Connections, then create **Device point tag** entries in Tags using those saved points. |
+| Observe and review import | Discovers valid topics/values in the observed catalog without creating tags automatically. Existing saved points can still receive updates. | Browse, select rows, choose paths/types, then **Preview point and tag import → Apply reviewed import**. |
+| Automatic (opt in) | Creates and maintains source points and tags under its owned root as valid messages arrive, subject to types, collisions and capacity. | Inspect the generated tags in Tags; no separate import is required. Removing a generated tag suppresses its rediscovery. |
+
+### Message values
+
+| Field | What it does | Starting choice or example |
+| --- | --- | --- |
+| Payload | Chooses how to interpret message contents. **UTF-8 scalar** reads one number, Boolean or text value. **Scriban extraction** evaluates an expression against the message. | Scalar examples: `21` becomes `Int64`, `21.5` becomes `Double`, `true` becomes `Boolean`, and `ready` or `"ready"` becomes `String`. JSON objects/arrays require extraction. |
+| Declared type | Converts results to a selected type. **Infer once and lock** chooses the type of each topic/child from its first accepted non-null value and rejects later incompatible types. | Choose `Double` for a sensor that may send `21` now and `21.5` later. Inference from the first `21` would lock that leaf to `Int64`. |
+| Result shape | **Scalar** delivers one value per topic. **Declared / discovered structure** expands an extracted object or array into individual child values. Incompatible shape changes are rejected after the initial shape is established. | Use Scalar for one temperature. Use Structure for an extracted object containing temperature and pressure, then browse its children. Structure is unavailable in Explicit saved points mode. |
+| Structured updates | Defines what an omitted child means in a later structured result. **Snapshot** clears previously saved omitted children to `Bad_NoData`; **Patch** retains their prior values. | If a previous result contains temperature and pressure, then the next contains only temperature, Snapshot clears pressure; Patch keeps it. An explicitly `null` child skips its update in both modes; it does not clear the previous value or refresh freshness. |
+| Extraction expression | Appears for Scriban extraction. Returns one scalar or a structure matching Result shape. Missing fields fail unless guarded; a whole `null` result skips the message. | For `{"value":23.5}`, use `json(payload).value`. For structured delivery, return the object/array you want expanded. Check the expression with **Test mapping**. |
+| Source timestamp expression (optional) | Reads the publisher's observation time separately from gateway receipt time. It does not itself change message ordering. | For an ISO-8601 UTC timestamp in a JSON `timestamp` member, use `json(payload).timestamp`. Leave blank if there is no publisher timestamp. |
+
+### Delivery, freshness and cleanup
+
+| Field | What it does | Starting choice or example |
+| --- | --- | --- |
+| Retained messages | Controls a broker's replay of its saved message at subscription time. **Cached · Uncertain_Retained** accepts it with uncertain quality; **Treat as current · Good** explicitly trusts it as current; **Ignore** skips it. | Keep Cached until you know the publisher's retained-data contract. Default cached replay does not refresh a leaf's freshness timer. Explicitly trusted Good replay does refresh that timer, but retained replay never counts as live publisher traffic in the connection's last-live metric. |
+| QoS | Requested subscription delivery level. `0` does not acknowledge delivery; `1` acknowledges delivery and can redeliver a message. | Start with `0` unless broker/publisher requirements call for `1`. QoS 1 alone does not make an application update happen exactly once. |
+| Freshness deadline (ms; 0 disables) | Maximum time without an accepted fresh value before retaining the previous value with `Uncertain_Stale` quality. Tracked separately for each leaf. | `5000` means 5 seconds. Choose a deadline longer than the normal update interval plus expected delay. `0` disables this check. |
+| Application ordering | Determines which admitted message may replace current state. **Arrival order** uses receipt order. **Publisher sequence and epoch** or **Qualified timestamp and epoch** skips equal/older values for each topic within the same publisher run. | Keep Arrival order unless the publisher provides an explicit ordering value and run/session identity. The required extra expression fields appear when selecting another mode. |
+| Mapping tag cap | Maximum active tags owned by an automatic mapping. A proposed batch exceeding the cap is rejected together. It is not the review catalog's size limit. | Applies only to Automatic. Size it for expected topics and structured children; each expanded child counts as a tag. |
+| Prune after (seconds; 0 disables) | Removes unreferenced automatic tags whose values have been absent for the configured healthy interval. Requires continuous healthy connectivity/admission for that whole interval; disconnects or degraded admission reset that qualification. | Applies only to Automatic. `3600` means 1 hour; `0` disables cleanup. Referenced definitions remain protected, and downtime is not healthy absence. |
+
+### Publisher ordering expressions
+
+These fields appear only when Application ordering is set to a sequence or timestamp mode. Leave ordering at Arrival order when your publisher has no defined reset/run contract.
+
+| Field | What to supply | Example |
+| --- | --- | --- |
+| Publisher sequence expression | An increasing nonnegative exact whole number. Equal or lower numbers in the same epoch are skipped. | `json(payload).sequence` for `{"sequence":42,"bootId":"run-7","value":23.5}`. |
+| Ordering timestamp expression | The publisher's ISO-8601 timestamp used to reject equal or older messages in the same epoch. Separate from merely recording a source timestamp. | `json(payload).timestamp`. |
+| Publisher epoch expression | A run/session identity that changes when numbering or the ordering clock restarts. Messages from already superseded epochs are ignored. | `json(payload).bootId`; the publisher must change `bootId` when it starts a new run. |
+
+Use **Mapping test** to check the selected mapping, example topic and payload before saving. It evaluates your current draft without changing live tags or definitions. After saving, verify a real broker publication; a successful supplied-payload test does not prove broker delivery.
+
 ## Troubleshooting
 
 | What you see | What to check |
