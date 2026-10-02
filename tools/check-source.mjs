@@ -155,6 +155,7 @@ const toolFiles = new Set([
   'test-input-state-bindings.mjs',
 ]);
 const architectureDocs = new Set([
+  'MQTT_SETUP.md', 'MTCONNECT_SETUP.md', 'I3X_SETUP.md',
   'DOCKER_RELEASE.md',
   'VISITOR_CHECKIN.md',
   'RUNTIME_PROPERTY_BINDINGS.md',

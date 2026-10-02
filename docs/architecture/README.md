@@ -4,6 +4,8 @@ These guides describe the current SparkStudio source, including development work
 
 Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md). For installation, use the guide attached to your exact release; [Windows installation](WINDOWS_INSTALLER.md) describes preview.11. [Verification and roadmap](PARITY.md) records package verification and release status, separating dated observations from current capability summaries and remaining gates. Earlier ledger entries retain the facts and limitations of their original checks; they are not instructions to start an old development package or assertions about the currently running gateway.
 
+The MQTT, MTConnect and i3X setup walkthroughs were reviewed against the development source on **October 2, 2026**. They explain creating tags from a connection's reviewed import or later in Tags. These three source clients are newer than the published Windows preview.12 and Docker preview.11-docker.1; each guide identifies the required connection menu choice.
+
 ## Overview and installation
 
 - [Product and architecture](PRODUCT.md)
@@ -65,6 +67,12 @@ Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md).
 - [Publication history](PUBLICATION_HISTORY.md)
 - [Preview communication](PREVIEW_COMMUNICATION.md)
 - [Designer diagnostics](DESIGNER_DIAGNOSTICS.md)
+
+## Data source setup
+
+- [MQTT setup walkthrough](MQTT_SETUP.md)
+- [MTConnect setup walkthrough](MTCONNECT_SETUP.md)
+- [i3X setup walkthrough](I3X_SETUP.md)
 
 ## Gateway and operations
 
