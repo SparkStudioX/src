@@ -190,7 +190,7 @@ internal static class ProjectTemplates
         }
     }
 
-    private static (JsonObject Template, int Repetitions) Instance(JsonObject component, IReadOnlyDictionary<string, JsonObject> templates, bool nested)
+    private static (JsonObject Template, int Repetitions) Instance(JsonObject component, Dictionary<string, JsonObject> templates, bool nested)
     {
         if (component["props"] is not JsonObject props) throw new ArgumentException("Every template instance needs a properties object.");
         if (!templates.TryGetValue(RequiredText(props, "templateId"), out var template))

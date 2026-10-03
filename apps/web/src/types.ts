@@ -463,6 +463,42 @@ export interface Publication {
   publishedAt?: string;
 }
 export type DeviceConnectionType = "modbus-tcp" | "ab-eip" | "siemens-s7" | "beckhoff-ads";
+export type SourceConnectionType = "mtconnect" | "i3x" | "mqtt";
+export type ConnectionEditorSection = "connection" | "security" | "acquisition" | "mappings" | "points" | "browse" | "schema" | "mapping-test" | "ownership" | "advanced" | "diagnostics";
+export interface SourcePoint { id: string; name: string; address: string; dataType: TagWriteDataType; selector?: string | null; writable?: false; mappingId?: string | null; suggestedPath?: string | null; owned?: boolean }
+export interface SourceAuthentication { mode: "none" | "basic" | "bearer" | "api-key"; username?: string | null; password?: string | null; token?: string | null; header?: string; hasPassword?: boolean; hasToken?: boolean }
+export interface SourceLimits {
+  documentBytes?: number; valueBytes?: number; stateBytes?: number; queueBytes?: number; queueCount?: number;
+  packetBytes?: number; payloadBytes?: number; catalogCount?: number; catalogBytes?: number;
+  requestTimeoutMs?: number; operationTimeoutMs?: number; connectTimeoutMs?: number;
+  decodeNodes?: number; decodeBytes?: number; scriptTimeoutMs?: number; scriptResultBytes?: number;
+  scriptResultDepth?: number; scriptResultMembers?: number; scriptResultLeaves?: number; workerCount?: number;
+}
+export interface SourceMqttMapping {
+  id: string; topicFilter: string; root: string; tags: "explicit" | "review" | "automatic";
+  payload: "scalar" | "script"; script?: string | null; timestampExpression?: string | null;
+  dataType?: TagWriteDataType | null; qos?: number; retained?: "uncertain" | "good" | "ignore";
+  staleAfterMs?: number; stripLevels?: number; structuredUpdates?: "snapshot" | "patch";
+  enabled?: boolean; maximumTags?: number; pruneAfterSeconds?: number;
+  ordering?: "receipt" | "sequence" | "timestamp"; sequenceExpression?: string | null;
+  epochExpression?: string | null; shape?: "scalar" | "structure";
+}
+export interface SourceSettings {
+  endpoint: string; acquisition?: "poll" | "subscribe"; intervalMs?: number; points?: SourcePoint[];
+  authentication?: SourceAuthentication; tls?: { caCertificateReference?: string | null; clientCertificateReference?: string | null; clientKeyReference?: string | null; serverCertificateSha256?: string | null };
+  limits?: SourceLimits;
+  mtConnect?: { device?: string | null; path?: string | null; heartbeatMs?: number; count?: number; userAgent?: string };
+  i3x?: { preferStream?: boolean; maxDepth?: number; reconciliationSeconds?: number; clientId?: string | null };
+  mqtt?: { protocolVersion?: "3.1.1" | "5"; transport?: "tcp" | "tls" | "websocket"; clientId?: string | null; keepAliveSeconds?: number; cleanStart?: boolean; sessionExpirySeconds?: number; mappings?: SourceMqttMapping[] };
+}
+export interface SourceBrowseEntry { address: string; name: string; isVariable: boolean; dataType?: string | null; selector?: string | null; parent?: string | null; metadata?: Record<string, unknown> | null; mappingId?: string | null; suggestedPath?: string | null }
+export interface SourceBrowsePage { entries: SourceBrowseEntry[]; continuationToken?: string | null; truncated: boolean; generation: number; bindingRevision: number }
+export interface SourceImportPoint { address: string; name: string; dataType: TagWriteDataType; path: string; selector?: string | null; mappingId?: string | null }
+export interface SourceImportPreview { previewToken: string; points: SourcePoint[]; tags: TagDefinition[]; totalTags: number }
+export interface SourceMigrationPreview { token: string; changed: boolean; changes: { pointId: string; before: string; after: string; dataType: string; suppressed?: boolean; pruned?: boolean }[] }
+export interface SourceReadValue { pointId: string; value: unknown; dataType: string; quality: string; sourceTimestamp?: string | null; receiptTimestamp?: string | null; nativeStatus?: string | null; action?: string | number }
+export interface SourceScriptTestResult { success: boolean; skip: boolean; values: SourceReadValue[]; discoveries: { mappingId: string; address: string; selector?: string | null; name: string; dataType: string; suggestedPath: string; value?: unknown; quality: string; sourceTimestamp?: string | null; retained: boolean; shape: string }[]; error?: string | null; elapsedMs: number; structuredUpdates?: "snapshot" | "patch" | null }
+export interface SourceOwnedPoint { pointId: string; mappingId: string; address: string; selector?: string | null; name: string; path: string; dataType: string; suppressed: boolean; pruned: boolean; lastSeen?: string }
 export interface DevicePoint {
   id: string;
   name: string;
@@ -493,8 +529,10 @@ export interface DeviceSettings {
 export interface Connection {
   id: string;
   name: string;
-  type: "opcua" | "sqlserver" | "sqlite" | DeviceConnectionType;
+  type: "opcua" | "sqlserver" | "sqlite" | DeviceConnectionType | SourceConnectionType;
   device?: DeviceSettings;
+  source?: SourceSettings;
+  sourceMigrationToken?: string;
   revision?: number;
   enabled?: boolean;
   lastTest?: { success: boolean; message: string; startedAt: string; completedAt: string; durationMs: number; revision: number; accepted: boolean };

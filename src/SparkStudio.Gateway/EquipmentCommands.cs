@@ -109,11 +109,11 @@ public sealed class EquipmentCommands(ConnectorService connectors, TagEngine tag
             var connection = store.GetConnection(ProjectStore.Required(tag, "connectionId"));
             if (TagDefinitionValidator.Kind(tag) == "device")
             {
-                var point = DeviceConfiguration.Point(connection, ProjectStore.Required(tag, "nodeId"));
+                var point = PointCatalog.Point(connection, ProjectStore.Required(tag, "nodeId"));
                 if (point.DataType != TagDefinitionValidator.DataType(tag)) throw new ArgumentException("The configured device point type changed.");
             }
         }
-        if (TagDefinitionValidator.Kind(target) == "device" && !DeviceConfiguration.Point(store.GetConnection(ProjectStore.Required(target, "connectionId")), ProjectStore.Required(target, "nodeId")).Writable)
+        if (TagDefinitionValidator.Kind(target) == "device" && (!PointCatalog.CanWrite(store.GetConnection(ProjectStore.Required(target, "connectionId"))) || !PointCatalog.Point(store.GetConnection(ProjectStore.Required(target, "connectionId")), ProjectStore.Required(target, "nodeId")).Writable))
             throw new ArgumentException("The saved device point is read-only.");
         return Hash(target.ToJsonString() + readback.ToJsonString() + store.GetConnections().ToJsonString());
     }

@@ -140,7 +140,7 @@ public sealed class GatewayReadiness : IHostedService, IDisposable
             try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
             catch (InvalidOperationException) { }
             catch (System.ComponentModel.Win32Exception) { }
-            try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(1)); }
+            try { await process.WaitForExitAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(1), CancellationToken.None); }
             catch (Exception) { }
             try { await Task.WhenAll(stdout, stderr); }
             catch (Exception) { }

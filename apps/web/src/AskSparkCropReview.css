@@ -1,0 +1,10 @@
+.ask-spark-crop-review { width: 100%; min-width: 0; }
+.ask-spark-crop-review > p { margin: 0 0 8px; font-size: 12px; line-height: 1.45; }
+.ask-spark-crop-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.ask-spark-crop-tile { min-width: 0; margin: 0; padding: 8px; border: 1px solid var(--border); border-radius: 6px; }
+.ask-spark-crop-frame { display: flex; min-height: 96px; align-items: center; justify-content: center; background: var(--surface); }
+.ask-spark-crop-clip { position: relative; overflow: hidden; flex: none; }
+.ask-spark-crop-clip > img { position: absolute; max-width: none; max-height: none; margin: 0; border: 0; border-radius: 0; }
+.ask-spark-crop-tile figcaption { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.ask-spark-crop-tile figcaption strong { font-size: 12px; }
+.ask-spark-crop-error { margin: 6px 0; color: var(--danger, #ef7777); font-size: 12px; line-height: 1.45; }

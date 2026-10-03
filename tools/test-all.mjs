@@ -1,10 +1,13 @@
 #!/usr/bin/env node
-// Offline acceptance: dependency restore is separate; never contacts a running gateway.
+// Offline acceptance; locked dependency restore is included. Never contacts a running gateway.
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
+import { withBuildContext, buildContextProperties } from './build-context.mjs';
+import { freshDotnetEnvironment } from './dotnet-environment.mjs';
 
+await withBuildContext(async () => {
 const root = fileURLToPath(new URL('../', import.meta.url));
 const reportDir = path.join(root, '.data', 'test-results');
 fs.mkdirSync(reportDir, { recursive: true });
@@ -12,7 +15,7 @@ const windows = process.platform === 'win32';
 const localDotnet = path.join(root, '.tools', 'dotnet', windows ? 'dotnet.exe' : 'dotnet');
 const dotnet = process.env.SPARKSTUDIO_DOTNET || (fs.existsSync(localDotnet) ? localDotnet : 'dotnet');
 const python = process.env.SPARKSTUDIO_PYTHON || (windows ? path.join(root, 'runtimes/python/windows-x64/python.exe') : 'python3');
-const env = { ...process.env, SPARKSTUDIO_PYTHON: python, PYTHONPYCACHEPREFIX: path.join(reportDir, 'pycache'), DOTNET_CLI_TELEMETRY_OPTOUT: '1' };
+const env = { ...freshDotnetEnvironment(), SPARKSTUDIO_PYTHON: python, PYTHONPYCACHEPREFIX: path.join(reportDir, 'pycache'), DOTNET_CLI_TELEMETRY_OPTOUT: '1' };
 if (dotnet === localDotnet) Object.assign(env, { DOTNET_ROOT: path.dirname(localDotnet), DOTNET_CLI_HOME: path.join(root, '.tools/dotnet-home'), NUGET_PACKAGES: path.join(root, '.tools/nuget'),
   ...(windows ? { APPDATA: path.join(root, '.tools/dotnet-home/AppData/Roaming'), LOCALAPPDATA: path.join(root, '.tools/dotnet-home/AppData/Local') } : {}) });
 const results = [];
@@ -35,13 +38,17 @@ const toolSuites = [
   'test-computer-camera',
   'test-source-boundary', 'test-workshop-build', 'test-project-search', 'test-resource-changes',
   'test-bulk-replacement', 'test-authoring-assets', 'test-visual-styles', 'test-visual-styles-rendering',
-  'test-localization', 'test-localization-rendering', 'test-sqlite-example', 'test-engineering-policy',
+  'test-localization', 'test-localization-rendering', 'test-sqlite-example', 'test-engineering-policy', 'test-data-sources-workshop',
 ];
 if (!process.argv.includes('--node-only')) {
   const artifacts = path.join(root, '.data/test-build');
+  // Gateway's project reference builds the extraction worker into the isolated
+  // artifacts tree. Connector tests do not run beside the packaged gateway.
+  env.SPARKSTUDIO_SOURCE_WORKER = path.join(artifacts, 'bin', 'SparkStudio.SourceWorker', 'release', 'SparkStudio.SourceWorker.dll');
   for (const name of ['Gateway', 'Connectors']) {
     const project = `src/SparkStudio.${name}.Tests`;
-    if (run(`${name} build`, dotnet, ['build', project, '-c', 'Release', '--artifacts-path', artifacts, '--no-restore'])) {
+    if (!run(`${name} locked restore`, dotnet, ['restore', project, '--artifacts-path', artifacts, ...buildContextProperties(), '--locked-mode', '--configfile', path.join(root, 'NuGet.Config')])) continue;
+    if (run(`${name} build`, dotnet, ['build', project, '-c', 'Release', '--artifacts-path', artifacts, ...buildContextProperties(), '--no-restore'])) {
       run(`${name} tests`, dotnet, [path.join(artifacts, 'bin', `SparkStudio.${name}.Tests`, 'release', `SparkStudio.${name}.Tests.dll`), '--results', path.join(reportDir, `${name.toLowerCase()}.json`), ...(name === 'Connectors' ? ['--sqlite-integration'] : [])], reportDir);
     }
   }
@@ -52,12 +59,17 @@ if (!process.argv.includes('--node-only')) {
   run('Browser build', process.execPath, [path.join(web, 'node_modules/vite/bin/vite.js'), 'build'], web);
   for (const script of ['test-backup-destinations', 'test-backup-schedule', 'test-configuration-backup'])
     run(script, process.execPath, [path.join(root, 'tools', `${script}.mjs`)], reportDir);
+  run('Backend lint failure fixtures', process.execPath, [path.join(root, 'tools', 'test-backend-lint.mjs')]);
+  run('Production build hook reference graph', process.execPath, [path.join(root, 'tools', 'test-build-hooks.mjs')]);
 }
 for (const script of fs.readdirSync(web).filter(file => /^check-.*\.mjs$/.test(file)).sort()) run(`web/${script}`, process.execPath, [path.join(web, script)], web);
 for (const name of toolSuites) run(name, process.execPath, [path.join(root, 'tools', `${name}.mjs`)]);
+run('Build quality orchestration', process.execPath, ['--test', path.join(root, 'tools', 'build-quality.test.mjs')]);
+if (!process.argv.includes('--node-only')) run('Complexity gate policy', process.execPath, ['--test', path.join(root, 'tools', 'complexity.test.mjs')]);
 const failures = results.filter(result => !result.passed).length;
 fs.writeFileSync(path.join(reportDir, 'summary.json'), JSON.stringify({ version: 1, failures, suites: results }, null, 2) + '\n');
 const escape = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('"', '&quot;');
 fs.writeFileSync(path.join(reportDir, 'junit.xml'), `<?xml version="1.0" encoding="utf-8"?>\n<testsuite name="SparkStudio offline" tests="${results.length}" failures="${failures}">${results.map(result => `<testcase name="${escape(result.name)}" time="${result.seconds}">${result.passed ? '' : `<failure message="See ${escape(result.log)}"/>`}</testcase>`).join('')}</testsuite>\n`);
 console.log(`${results.length} suites; ${failures} failures. Reports: ${reportDir}`);
 process.exitCode = failures ? 1 : 0;
+});

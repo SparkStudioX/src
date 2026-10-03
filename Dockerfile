@@ -7,33 +7,48 @@ WORKDIR /web
 COPY apps/web/package*.json ./
 RUN node -e "if(require('./package.json').version!==process.argv[1])process.exit(1)" "$VERSION" && npm ci --no-audit --no-fund
 COPY apps/web/ ./
-RUN npm run build
-
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0.401-noble@sha256:35d40304542c8689331f8cab17c65926cdf48fe711e289321d71924b230a7d29 AS build
-ARG TARGETARCH
-ARG SOURCE_REVISION
-ARG VERSION=0.2.0-preview.11
-ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
-WORKDIR /source
-COPY global.json Directory.Build.props NuGet.Config ./
-COPY src/ ./src/
-COPY apps/web/src/runtimeProperties.json ./apps/web/src/runtimeProperties.json
-COPY runtimes/python/worker.py ./runtimes/python/worker.py
-RUN case "$TARGETARCH" in amd64) rid=linux-x64 ;; arm64) rid=linux-arm64 ;; *) echo "Only amd64 and arm64 are supported" >&2; exit 1 ;; esac \
-    && dotnet restore src/SparkStudio.Gateway --runtime "$rid" --locked-mode --configfile NuGet.Config \
-       /p:RestorePackagesWithLockFile=true /p:NuGetLockFilePath="packages.$rid.lock.json" /p:SelfContained=false
-COPY --from=web /web/dist ./src/SparkStudio.Gateway/wwwroot
-RUN case "$TARGETARCH" in amd64) rid=linux-x64 ;; arm64) rid=linux-arm64 ;; *) exit 1 ;; esac \
-    && printf '%s' "$SOURCE_REVISION" | grep -Eq '^[0-9a-f]{40}$' \
-    && grep -Fq "<Version>$VERSION</Version>" src/SparkStudio.Gateway/SparkStudio.Gateway.csproj \
-    && dotnet publish src/SparkStudio.Gateway -c Release --runtime "$rid" --no-restore --self-contained false \
-       -o /out /p:UseAppHost=false /p:SourceRevisionId="$SOURCE_REVISION" /p:InformationalVersion="$VERSION+$SOURCE_REVISION"
 
 FROM python:3.14.7-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS python
 # Strip installers before copying the interpreter snapshot. Removing them in a
 # later runtime layer would still distribute their original lower-layer bytes.
 RUN rm -rf /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/ensurepip \
     /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14
+
+# Gate tools execute on BUILDPLATFORM; the separately stripped Python above ships
+# on TARGETPLATFORM. An ARM64 payload never supplies an interpreter to an x64 builder.
+FROM --platform=$BUILDPLATFORM python:3.14.7-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS python-tools
+
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0.401-noble@sha256:35d40304542c8689331f8cab17c65926cdf48fe711e289321d71924b230a7d29 AS build
+ARG TARGETARCH
+ARG SOURCE_REVISION
+ARG VERSION=0.2.0-preview.11
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 SPARKSTUDIO_PYTHON=/usr/local/bin/python3
+WORKDIR /source
+# Run quality checks on the builder architecture with the exact pinned tools.
+# Authored offline fixtures and policy files are allowed by .dockerignore;
+# development data, caches and generated artifacts never enter this context.
+COPY --from=web /usr/local/bin/node /usr/local/bin/node
+COPY --from=web /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+COPY --from=python-tools /usr/local/ /usr/local/
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && apt-get update && apt-get install -y --no-install-recommends \
+       git libbz2-1.0 libexpat1 libffi8 liblzma5 libncursesw6 libreadline8t64 libsqlite3-0 libssl3t64 zlib1g \
+    && rm -rf /var/lib/apt/lists/* \
+    && /usr/local/bin/python3 -I -c "import sys, sqlite3, ssl, bz2, lzma, ctypes; assert sys.version_info[:3] == (3, 14, 7)"
+COPY global.json Directory.Build.props Directory.Build.targets .editorconfig NuGet.Config ./
+COPY src/ ./src/
+COPY . ./
+COPY --from=web /web/ ./apps/web/
+RUN npm run build --prefix apps/web
+RUN mkdir -p src/SparkStudio.Gateway/wwwroot && cp -a apps/web/dist/. src/SparkStudio.Gateway/wwwroot/
+RUN case "$TARGETARCH" in amd64) rid=linux-x64 ;; arm64) rid=linux-arm64 ;; *) echo "Only amd64 and arm64 are supported" >&2; exit 1 ;; esac \
+    && dotnet restore src/SparkStudio.Gateway --runtime "$rid" --locked-mode --configfile NuGet.Config \
+       /p:RestorePackagesWithLockFile=true /p:NuGetLockFilePath="packages.$rid.lock.json" /p:SelfContained=false
+RUN case "$TARGETARCH" in amd64) rid=linux-x64 ;; arm64) rid=linux-arm64 ;; *) exit 1 ;; esac \
+    && printf '%s' "$SOURCE_REVISION" | grep -Eq '^[0-9a-f]{40}$' \
+    && grep -Fq "<Version>$VERSION</Version>" src/SparkStudio.Gateway/SparkStudio.Gateway.csproj \
+    && dotnet publish src/SparkStudio.Gateway -c Release --runtime "$rid" --no-restore --self-contained false \
+       -o /out /p:UseAppHost=false /p:SourceRevisionId="$SOURCE_REVISION" /p:InformationalVersion="$VERSION+$SOURCE_REVISION"
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.12-noble@sha256:2d584d8147faddb0d678c5748d47953e5b8e18621ed4fb7049a91381d9d7746f AS runtime-prep
 USER root

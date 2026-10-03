@@ -10,13 +10,14 @@ internal sealed class ConnectionResourcePool<T>(
     int maximumConcurrencyPerConnection = 1,
     Func<ConnectionDefinition, ConnectionDefinition, bool>? sameConfiguration = null) : IDisposable where T : class, IDisposable
 {
-    private sealed class Slot
+    private sealed class Slot : IDisposable
     {
         public readonly SemaphoreSlim Gate = new(1, 1);
         public ConnectionDefinition? Configuration;
         public T? Resource;
         public int Users;
         public long LastUse;
+        public void Dispose() { Gate.Dispose(); GC.SuppressFinalize(this); }
     }
 
     private readonly object _sync = new();
@@ -61,7 +62,7 @@ internal sealed class ConnectionResourcePool<T>(
 
         try
         {
-            if (evicted is not null) { await CloseSlotAsync(evicted); evicted.Gate.Dispose(); }
+            if (evicted is not null) { await CloseSlotAsync(evicted); evicted.Dispose(); }
             using var operation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, stopping);
             await slot.Gate.WaitAsync(operation.Token);
             try
@@ -97,7 +98,7 @@ internal sealed class ConnectionResourcePool<T>(
                 slot.Users--;
                 slot.LastUse = Environment.TickCount64;
                 _leases--;
-                if (_disposed && slot.Users == 0) slot.Gate.Dispose();
+                if (_disposed && slot.Users == 0) slot.Dispose();
                 if (_disposed && _leases == 0) _shutdown.Dispose();
             }
         }
@@ -127,7 +128,7 @@ internal sealed class ConnectionResourcePool<T>(
         await Task.WhenAll(idle.Select(async slot =>
         {
             try { await CloseSlotAsync(slot); }
-            finally { slot.Gate.Dispose(); }
+            finally { slot.Dispose(); }
         }));
     }
 
@@ -159,7 +160,7 @@ internal sealed class ConnectionResourcePool<T>(
             slot.Resource?.Dispose();
             slot.Resource = null;
             slot.Configuration = null;
-            slot.Gate.Dispose();
+            slot.Dispose();
         }
         // Leased resources close in RunAsync's finally after shutdown cancellation.
     }

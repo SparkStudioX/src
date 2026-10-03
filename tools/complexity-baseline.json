@@ -1,0 +1,1897 @@
+{
+  "version": 1,
+  "maximumNewComplexity": 20,
+  "reviewedAt": "2026-10-02",
+  "policy": "New executable units must not exceed 20. Individually reviewed existing hotspots cannot exceed these ceilings. Builds never update this file; reductions should lower ceilings in reviewed source changes.",
+  "scopes": {
+    "typescript": [
+      "apps/web/src"
+    ],
+    "csharp": [
+      "src",
+      "installer/ServiceHelper"
+    ],
+    "python": [
+      "runtimes/python/worker.py",
+      "tools/container-admin.py",
+      "tools/docker-entrypoint.py",
+      "tools/collect-docker-runtime.py"
+    ]
+  },
+  "metrics": {
+    "typescript": {
+      "name": "McCabe cyclomatic complexity (syntax-based)",
+      "version": 1,
+      "base": 1,
+      "decisions": [
+        "if",
+        "for",
+        "for-in",
+        "for-of",
+        "while",
+        "do-while",
+        "catch",
+        "conditional expression",
+        "non-default switch case",
+        "&&",
+        "||",
+        "??"
+      ],
+      "exclusions": [
+        "nested function bodies (reported separately)",
+        "optional chaining",
+        "else",
+        "default switch clauses",
+        "logical assignment operators",
+        "type syntax"
+      ]
+    },
+    "csharp": {
+      "name": "McCabe cyclomatic complexity (syntax-based)",
+      "version": 1,
+      "base": 1,
+      "decisions": [
+        "if",
+        "for",
+        "foreach",
+        "while",
+        "do-while",
+        "catch",
+        "conditional expression",
+        "non-default switch case",
+        "non-default switch arm",
+        "when guard",
+        "&&",
+        "||",
+        "??",
+        "and pattern",
+        "or pattern"
+      ],
+      "exclusions": [
+        "nested executable units (reported separately)",
+        "optional chaining",
+        "else",
+        "default switch clauses and discard arms",
+        "logical assignment operators",
+        "type syntax"
+      ]
+    },
+    "python": {
+      "name": "McCabe cyclomatic complexity (syntax-based)",
+      "version": 1,
+      "base": 1,
+      "decisions": [
+        "if",
+        "conditional expression",
+        "for",
+        "async-for",
+        "while",
+        "except",
+        "assert",
+        "and",
+        "or",
+        "chained comparison",
+        "comprehension for",
+        "comprehension filter",
+        "non-default match case",
+        "match guard",
+        "or pattern"
+      ],
+      "exclusions": [
+        "nested functions/lambdas (reported separately)",
+        "else",
+        "finally",
+        "with",
+        "irrefutable match case",
+        "type annotations"
+      ]
+    }
+  },
+  "exceptions": [
+    {
+      "language": "typescript",
+      "file": "apps/web/src/App.tsx",
+      "name": "App",
+      "occurrence": 1,
+      "ceiling": 47
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/App.tsx",
+      "name": "App / runPreviewAction",
+      "occurrence": 1,
+      "ceiling": 31
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/App.tsx",
+      "name": "App / canvasKeyboard",
+      "occurrence": 1,
+      "ceiling": 26
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/App.tsx",
+      "name": "App / addComponent",
+      "occurrence": 1,
+      "ceiling": 46
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/App.tsx",
+      "name": "App / addComponent / initialDimensions",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/App.tsx",
+      "name": "App / renderInputProperties",
+      "occurrence": 1,
+      "ceiling": 30
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/App.tsx",
+      "name": "App / renderPropertiesPane",
+      "occurrence": 1,
+      "ceiling": 42
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/App.tsx",
+      "name": "App / renderCanvasWorkspace",
+      "occurrence": 1,
+      "ceiling": 23
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/App.tsx",
+      "name": "App / renderProjectPane",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/App.tsx",
+      "name": "App / renderTopbar",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/App.tsx",
+      "name": "App / renderWorkspace",
+      "occurrence": 1,
+      "ceiling": 35
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/App.tsx",
+      "name": "App / renderEditingDialogs",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/App.tsx",
+      "name": "Canvas",
+      "occurrence": 1,
+      "ceiling": 22
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/AssetLibraryDialog.tsx",
+      "name": "AssetLibraryDialog",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/BindingReferencesEditor.tsx",
+      "name": "BindingReferencesEditor / callback:rows.map",
+      "occurrence": 2,
+      "ceiling": 34
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/BoundComponent.tsx",
+      "name": "BoundComponent",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/BulkReplaceDialog.tsx",
+      "name": "BulkReplaceDialog",
+      "occurrence": 1,
+      "ceiling": 25
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/ChartComponent.tsx",
+      "name": "ChartPresentation",
+      "occurrence": 1,
+      "ceiling": 23
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/ComponentActionsEditor.tsx",
+      "name": "ComponentActionsEditor",
+      "occurrence": 1,
+      "ceiling": 41
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/ComponentActionsEditor.tsx",
+      "name": "ComponentActionsEditor / renderTagValueAction",
+      "occurrence": 1,
+      "ceiling": 31
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/ComponentActionsEditor.tsx",
+      "name": "ComponentActionsEditor / renderEventContext",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Components.tsx",
+      "name": "renderImage",
+      "occurrence": 1,
+      "ceiling": 24
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Components.tsx",
+      "name": "createInputInteraction / commitKey",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Components.tsx",
+      "name": "renderScalarInput",
+      "occurrence": 1,
+      "ceiling": 24
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Components.tsx",
+      "name": "QuerySelect",
+      "occurrence": 1,
+      "ceiling": 22
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/ComputerCamera.tsx",
+      "name": "ComputerCamera",
+      "occurrence": 1,
+      "ceiling": 22
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/ConnectionDiagnostics.tsx",
+      "name": "ConnectionDiagnostics",
+      "occurrence": 1,
+      "ceiling": 40
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Connections.tsx",
+      "name": "Connections / save",
+      "occurrence": 1,
+      "ceiling": 23
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Connections.tsx",
+      "name": "Connections / remove",
+      "occurrence": 1,
+      "ceiling": 23
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Connections.tsx",
+      "name": "Connections / renderConnectionForm",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Connections.tsx",
+      "name": "Connections / renderConnectionEditor",
+      "occurrence": 1,
+      "ceiling": 95
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Connections.tsx",
+      "name": "Connections / renderConnectionEditor / callback:nodes.map",
+      "occurrence": 1,
+      "ceiling": 26
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/DeviceConnectionEditor.tsx",
+      "name": "DeviceConnectionFields",
+      "occurrence": 1,
+      "ceiling": 23
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/DeviceConnectionEditor.tsx",
+      "name": "DeviceRegisterMap",
+      "occurrence": 1,
+      "ceiling": 33
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/DrawingComponent.tsx",
+      "name": "DrawingComponent",
+      "occurrence": 1,
+      "ceiling": 35
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/DrawingEditor.tsx",
+      "name": "DrawingEditor",
+      "occurrence": 1,
+      "ceiling": 36
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/EquipmentCommand.tsx",
+      "name": "EquipmentCommand",
+      "occurrence": 1,
+      "ceiling": 36
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/GatewayBackups.tsx",
+      "name": "GatewayBackups",
+      "occurrence": 1,
+      "ceiling": 30
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/GatewayBackups.tsx",
+      "name": "GatewayBackups / renderBackupWorkspace",
+      "occurrence": 1,
+      "ceiling": 46
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/GatewayBackups.tsx",
+      "name": "GatewayBackups / renderBackupPage",
+      "occurrence": 1,
+      "ceiling": 31
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/GatewayConsole.tsx",
+      "name": "GatewayConsole",
+      "occurrence": 1,
+      "ceiling": 38
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/GatewayDeployment.tsx",
+      "name": "GatewayDeployment",
+      "occurrence": 1,
+      "ceiling": 27
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/GatewayDeploymentSettings.tsx",
+      "name": "GatewayDeploymentSettings",
+      "occurrence": 1,
+      "ceiling": 28
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/GatewayProcessData.tsx",
+      "name": "configurationIssue",
+      "occurrence": 1,
+      "ceiling": 25
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/GatewayProcessData.tsx",
+      "name": "GatewayProcessData",
+      "occurrence": 1,
+      "ceiling": 47
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/GatewayProcessData.tsx",
+      "name": "GatewayProcessData / renderProcessDataWorkspace",
+      "occurrence": 1,
+      "ceiling": 33
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/GatewayRecovery.tsx",
+      "name": "GatewayRecovery",
+      "occurrence": 1,
+      "ceiling": 26
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/InputStateBindingEditor.tsx",
+      "name": "InputStateBindingEditor",
+      "occurrence": 1,
+      "ceiling": 34
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/ListTreeInput.tsx",
+      "name": "ChoiceCollection",
+      "occurrence": 1,
+      "ceiling": 27
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/ListTreeInput.tsx",
+      "name": "ChoiceCollection / keyboard",
+      "occurrence": 1,
+      "ceiling": 28
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/OpcCertificates.tsx",
+      "name": "OpcCertificates",
+      "occurrence": 1,
+      "ceiling": 28
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/OperatorRuntime.tsx",
+      "name": "OperatorRuntime",
+      "occurrence": 1,
+      "ceiling": 32
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/OperatorRuntime.tsx",
+      "name": "OperatorRuntime / runAction",
+      "occurrence": 1,
+      "ceiling": 39
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Popup.tsx",
+      "name": "Popup",
+      "occurrence": 1,
+      "ceiling": 27
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Popup.tsx",
+      "name": "Popup / run",
+      "occurrence": 1,
+      "ceiling": 41
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/ProcessDataComponent.tsx",
+      "name": "ProcessDataComponent",
+      "occurrence": 1,
+      "ceiling": 40
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/ProcessDisplay.tsx",
+      "name": "ProcessDisplay",
+      "occurrence": 1,
+      "ceiling": 33
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/ProjectSearchDialog.tsx",
+      "name": "ProjectSearch",
+      "occurrence": 1,
+      "ceiling": 25
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Projects.tsx",
+      "name": "Projects",
+      "occurrence": 1,
+      "ceiling": 25
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Projects.tsx",
+      "name": "Projects / callback:projects.map",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/PropertyBindingsEditor.tsx",
+      "name": "BindingsPanel",
+      "occurrence": 1,
+      "ceiling": 36
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/PropertyBindingsEditor.tsx",
+      "name": "BindingsPanel / draftError",
+      "occurrence": 1,
+      "ceiling": 30
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/PropertyBindingsEditor.tsx",
+      "name": "BindingsPanel / editBinding",
+      "occurrence": 1,
+      "ceiling": 22
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/PropertyBindingsEditor.tsx",
+      "name": "BindingsPanel / apply",
+      "occurrence": 1,
+      "ceiling": 27
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/PropertyBindingsEditor.tsx",
+      "name": "BindingsPanel / renderBindingDialog",
+      "occurrence": 1,
+      "ceiling": 36
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/PropertyBindingsEditor.tsx",
+      "name": "BindingsPanel / renderPropertyRow",
+      "occurrence": 1,
+      "ceiling": 32
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/PropertyBindingsEditor.tsx",
+      "name": "BindingsPanel / renderPropertyRow / renderValueControl",
+      "occurrence": 1,
+      "ceiling": 23
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Queries.tsx",
+      "name": "Queries",
+      "occurrence": 1,
+      "ceiling": 28
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/QueryPropertyBindingEditor.tsx",
+      "name": "QueryPropertyBindingEditor",
+      "occurrence": 1,
+      "ceiling": 41
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/QueryTable.tsx",
+      "name": "QueryTableSession",
+      "occurrence": 1,
+      "ceiling": 36
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/QueryTable.tsx",
+      "name": "QueryTableSession / resolveEditingState",
+      "occurrence": 1,
+      "ceiling": 46
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/QueryTable.tsx",
+      "name": "QueryTableSession / startEdit",
+      "occurrence": 1,
+      "ceiling": 26
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/QueryTable.tsx",
+      "name": "QueryTableSession / renderTableRows / callback:projection.rows.map / callback:columns.map",
+      "occurrence": 1,
+      "ceiling": 40
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/QueryTable.tsx",
+      "name": "QueryTableSession / renderTable",
+      "occurrence": 1,
+      "ceiling": 43
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/ResourceChangeDialog.tsx",
+      "name": "ResourceChangeDialog",
+      "occurrence": 1,
+      "ceiling": 28
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Scripts.tsx",
+      "name": "Scripts",
+      "occurrence": 1,
+      "ceiling": 47
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Scripts.tsx",
+      "name": "Scripts / renderScriptEditor",
+      "occurrence": 1,
+      "ceiling": 43
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Scripts.tsx",
+      "name": "Scripts / renderScriptProperties",
+      "occurrence": 1,
+      "ceiling": 31
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Security.tsx",
+      "name": "Security",
+      "occurrence": 1,
+      "ceiling": 25
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Security.tsx",
+      "name": "GatewaySettingsEditor",
+      "occurrence": 1,
+      "ceiling": 37
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/SourceConnectionEditor.tsx",
+      "name": "SourceConnectionFields",
+      "occurrence": 1,
+      "ceiling": 57
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/SourceConnectionEditor.tsx",
+      "name": "MqttFields",
+      "occurrence": 1,
+      "ceiling": 35
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/SourceConnectionEditor.tsx",
+      "name": "SourceConnectionTools",
+      "occurrence": 1,
+      "ceiling": 52
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/TableBatchEditor.tsx",
+      "name": "TableBatchEditor",
+      "occurrence": 1,
+      "ceiling": 23
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/TagModels.tsx",
+      "name": "TagModels",
+      "occurrence": 1,
+      "ceiling": 26
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Tags.tsx",
+      "name": "Tags",
+      "occurrence": 1,
+      "ceiling": 49
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/Tags.tsx",
+      "name": "Tags / save",
+      "occurrence": 1,
+      "ceiling": 49
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/TemplateParametersEditor.tsx",
+      "name": "OverrideRow",
+      "occurrence": 1,
+      "ceiling": 27
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/bulkReplacement.ts",
+      "name": "build / document / callback:document.components.forEach",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/canvasEditing.ts",
+      "name": "matchSelectedSize",
+      "occurrence": 1,
+      "ceiling": 22
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/componentActionsAuthoring.ts",
+      "name": "tagWritePropertyReferenceError",
+      "occurrence": 1,
+      "ceiling": 22
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/componentActionsAuthoring.ts",
+      "name": "componentActionsDraft",
+      "occurrence": 1,
+      "ceiling": 22
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/componentActionsAuthoring.ts",
+      "name": "applyEventScripts",
+      "occurrence": 1,
+      "ceiling": 23
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/componentActionsAuthoring.ts",
+      "name": "applyNavigationAction",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/componentActionsAuthoring.ts",
+      "name": "applyTagValueAction",
+      "occurrence": 1,
+      "ceiling": 32
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/componentEventModel.ts",
+      "name": "componentEventSamples",
+      "occurrence": 1,
+      "ceiling": 24
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/componentEventModel.ts",
+      "name": "ComponentEventLifecycle / enqueue / callback:owner.queue.then",
+      "occurrence": 1,
+      "ceiling": 41
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/componentMessageModel.ts",
+      "name": "componentMessagePayload / copy",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/componentMessageReceivers.ts",
+      "name": "discoverComponentMessageReceivers",
+      "occurrence": 1,
+      "ceiling": 31
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/componentMessageReceivers.ts",
+      "name": "discoverComponentMessageReceivers / callback:[...records.values()].map",
+      "occurrence": 1,
+      "ceiling": 24
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/designerDiagnostics.ts",
+      "name": "collectDesignerDiagnostics",
+      "occurrence": 1,
+      "ceiling": 37
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/deviceConnections.ts",
+      "name": "validateDevicePoints",
+      "occurrence": 1,
+      "ceiling": 133
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/drawingComponents.ts",
+      "name": "validateDrawingProps",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/gatewayBackupModel.ts",
+      "name": "backupS3Settings",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/gatewayBackupModel.ts",
+      "name": "backupSettingsRequest / callback:draft.schedules.map",
+      "occurrence": 1,
+      "ceiling": 32
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/inputValidation.ts",
+      "name": "inputDefinitionError",
+      "occurrence": 1,
+      "ceiling": 40
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/inputValidation.ts",
+      "name": "inputConstraintError",
+      "occurrence": 1,
+      "ceiling": 30
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/inputs.ts",
+      "name": "initialInput",
+      "occurrence": 1,
+      "ceiling": 47
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/inputs.ts",
+      "name": "stateInputError",
+      "occurrence": 1,
+      "ceiling": 25
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/inputs.ts",
+      "name": "validateInputs",
+      "occurrence": 1,
+      "ceiling": 43
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/localization.ts",
+      "name": "validateLocalization",
+      "occurrence": 1,
+      "ceiling": 26
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/localization.ts",
+      "name": "localizeComponent",
+      "occurrence": 1,
+      "ceiling": 30
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/popupModel.ts",
+      "name": "popupQuerySource",
+      "occurrence": 1,
+      "ceiling": 25
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/popupModel.ts",
+      "name": "validatePopupSource",
+      "occurrence": 1,
+      "ceiling": 24
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/processDataModel.ts",
+      "name": "processDataPropertyError",
+      "occurrence": 1,
+      "ceiling": 25
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/processDisplays.ts",
+      "name": "resolveProcessDisplay",
+      "occurrence": 1,
+      "ceiling": 27
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/projectSearch.ts",
+      "name": "scalarSourceReference",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/projectSearch.ts",
+      "name": "buildProjectSearch / walk",
+      "occurrence": 1,
+      "ceiling": 28
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/propertyBindings.ts",
+      "name": "tokenize",
+      "occurrence": 1,
+      "ceiling": 23
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/propertyBindings.ts",
+      "name": "validateDefinition",
+      "occurrence": 1,
+      "ceiling": 30
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/propertyBindings.ts",
+      "name": "evaluate",
+      "occurrence": 1,
+      "ceiling": 30
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/propertyBindings.ts",
+      "name": "resolveReference",
+      "occurrence": 1,
+      "ceiling": 34
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/propertyBindings.ts",
+      "name": "bindingReferenceDependencies / walk",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/propertyBindings.ts",
+      "name": "evaluateComponentBindings",
+      "occurrence": 1,
+      "ceiling": 26
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/pythonUiModel.ts",
+      "name": "capturePythonUiAction / apply",
+      "occurrence": 1,
+      "ceiling": 38
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/queryPropertyCoordinator.ts",
+      "name": "QueryPropertyCoordinator / run",
+      "occurrence": 1,
+      "ceiling": 24
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/queryPropertyModel.ts",
+      "name": "validateQueryPropertyBinding",
+      "occurrence": 1,
+      "ceiling": 44
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/resourceChanges.ts",
+      "name": "planResourceChange",
+      "occurrence": 1,
+      "ceiling": 36
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/runtimePropertyCatalog.ts",
+      "name": "runtimePropertyDefinition",
+      "occurrence": 1,
+      "ceiling": 27
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/runtimePropertyCatalog.ts",
+      "name": "validateStructured",
+      "occurrence": 1,
+      "ceiling": 38
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/runtimePropertyCatalog.ts",
+      "name": "normalizeRuntimePropertyValue",
+      "occurrence": 1,
+      "ceiling": 46
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/runtimePropertyCatalog.ts",
+      "name": "runtimePropertyGroupErrors",
+      "occurrence": 1,
+      "ceiling": 22
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/runtimeQuality.ts",
+      "name": "inspectRenderedComponent",
+      "occurrence": 1,
+      "ceiling": 30
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/runtimeQuality.ts",
+      "name": "runtimeBindingHealth / inspectTemplate",
+      "occurrence": 1,
+      "ceiling": 27
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/sourceConnections.ts",
+      "name": "validateSourcePoints",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/tableColumnValidation.ts",
+      "name": "validateTableColumns",
+      "occurrence": 1,
+      "ceiling": 33
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/tableColumns.ts",
+      "name": "formatTableCell",
+      "occurrence": 1,
+      "ceiling": 28
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/tableEditing.ts",
+      "name": "tableEditColumnError",
+      "occurrence": 1,
+      "ceiling": 32
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/tableEditing.ts",
+      "name": "validateTableEditDefinition",
+      "occurrence": 1,
+      "ceiling": 27
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/tableEditing.ts",
+      "name": "parseTableEditValue",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/templateParameterBindings.ts",
+      "name": "validateTemplateParameterBinding",
+      "occurrence": 1,
+      "ceiling": 24
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/templates.tsx",
+      "name": "BoundTemplateInstance",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/templates.tsx",
+      "name": "BoundTemplateInstance / renderFrame",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/useDatasetBinding.tsx",
+      "name": "useDatasetBinding",
+      "occurrence": 1,
+      "ceiling": 25
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/useQueryPropertyBindings.tsx",
+      "name": "useQueryPropertyBindings / resolve",
+      "occurrence": 1,
+      "ceiling": 27
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/useQueryRepeater.ts",
+      "name": "useQueryRepeater",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/viewContainers.ts",
+      "name": "viewPaneError",
+      "occurrence": 1,
+      "ceiling": 33
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/viewContainers.ts",
+      "name": "viewLayoutError",
+      "occurrence": 1,
+      "ceiling": 30
+    },
+    {
+      "language": "typescript",
+      "file": "apps/web/src/visualStyles.ts",
+      "name": "validateVisualStyles",
+      "occurrence": 1,
+      "ceiling": 31
+    },
+    {
+      "language": "csharp",
+      "file": "installer/ServiceHelper/NetworkSettings.cs",
+      "name": "SparkStudio.Installer / Program / NetworkSelfTestAsync()",
+      "occurrence": 1,
+      "ceiling": 35
+    },
+    {
+      "language": "csharp",
+      "file": "installer/ServiceHelper/Program.cs",
+      "name": "SparkStudio.Installer / Program / Main(string[])",
+      "occurrence": 1,
+      "ceiling": 58
+    },
+    {
+      "language": "csharp",
+      "file": "installer/ServiceHelper/Program.cs",
+      "name": "SparkStudio.Installer / Program / ProbeReadinessAsync(HttpClient,int,uint,CancellationToken,Uri?)",
+      "occurrence": 1,
+      "ceiling": 30
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/ConnectionResourcePool.cs",
+      "name": "SparkStudio.Connectors / ConnectionResourcePool / RunAsync(ConnectionDefinition,Func<T, CancellationToken, Task<TResult>>,CancellationToken)",
+      "occurrence": 1,
+      "ceiling": 25
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/ConnectorService.Sqlite.cs",
+      "name": "SparkStudio.Connectors / ConnectorService / RestrictSqlite(SqliteConnection,bool,CancellationToken,bool,bool) / lambda:authorize",
+      "occurrence": 1,
+      "ceiling": 22
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/ConnectorService.cs",
+      "name": "SparkStudio.Connectors / ConnectorService / BuildParameter(QueryParameter)",
+      "occurrence": 1,
+      "ceiling": 48
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/ConnectorService.cs",
+      "name": "SparkStudio.Connectors / ConnectorService / NormalizeValue(object?)",
+      "occurrence": 1,
+      "ceiling": 26
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/DeviceModels.cs",
+      "name": "SparkStudio.Connectors / DeviceConfiguration / Validate(DeviceSettings,string)",
+      "occurrence": 1,
+      "ceiling": 98
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/EthernetIpDeviceSession.cs",
+      "name": "SparkStudio.Connectors / EthernetIpDeviceSession / ParsePccc(DevicePoint,string)",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SiemensS7DeviceSession.cs",
+      "name": "SparkStudio.Connectors / SiemensS7DeviceSession / Parse(DevicePoint)",
+      "occurrence": 1,
+      "ceiling": 25
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SourceConfiguration.cs",
+      "name": "SparkStudio.Connectors / SourceConfiguration / Validate(string,SourceSettings)",
+      "occurrence": 1,
+      "ceiling": 183
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SourceConfiguration.cs",
+      "name": "SparkStudio.Connectors / SourceConfiguration / Coerce(object?,string)",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SourceI3xProtocol.cs",
+      "name": "SparkStudio.Connectors / SourceI3xClient / ConvertValue(JsonElement,string)",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SourceMqttMappingEngine.cs",
+      "name": "SparkStudio.Connectors / SourceMqttMappingEngine / ProcessAsync(SourceMqttWire.Publish,DateTimeOffset,long,CancellationToken,Func<SourcePublication, CancellationToken, ValueTask<bool>>?)",
+      "occurrence": 1,
+      "ceiling": 126
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SourceMqttSession.cs",
+      "name": "SparkStudio.Connectors / SourceMqttSession / Monitor / ProcessAsync(CancellationToken)",
+      "occurrence": 1,
+      "ceiling": 24
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SourceMqttWire.cs",
+      "name": "SparkStudio.Connectors / SourceMqttWire / ConnectAsync(ConnectionDefinition,string,CancellationToken,SourceTransportTelemetry?)",
+      "occurrence": 1,
+      "ceiling": 58
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SourceMqttWire.cs",
+      "name": "SparkStudio.Connectors / SourceMqttWire / ReceiveAsync(Func<Publish, bool>,Action<Publish, string>,CancellationToken)",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SourceMqttWire.cs",
+      "name": "SparkStudio.Connectors / SourceMqttWire / SkipProperties(byte[],refint)",
+      "occurrence": 1,
+      "ceiling": 31
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SourceMtConnectProtocol.cs",
+      "name": "SparkStudio.Connectors / MtConnectReducer / Apply(MtConnectDocument,bool)",
+      "occurrence": 1,
+      "ceiling": 52
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SourceMtConnectProtocol.cs",
+      "name": "SparkStudio.Connectors / MtConnectReducer / Read(string,string?)",
+      "occurrence": 1,
+      "ceiling": 39
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SourceMtConnectSession.cs",
+      "name": "SparkStudio.Connectors / SourceMtConnectSession / Monitor / RunAsync()",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SourceMtConnectSession.cs",
+      "name": "SparkStudio.Connectors / MtConnectMultipart / ReadAsync(Stream,string,int,TimeSpan,CancellationToken)",
+      "occurrence": 1,
+      "ceiling": 28
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SourceScriptProtocol.cs",
+      "name": "SparkStudio.Connectors / SourceScriptProtocol / Coerce(object,string?)",
+      "occurrence": 1,
+      "ceiling": 63
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SqlQueryGuard.cs",
+      "name": "SparkStudio.Connectors / SqlQueryGuard / Validate(string)",
+      "occurrence": 1,
+      "ceiling": 25
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SqlQueryGuard.cs",
+      "name": "SparkStudio.Connectors / SqlQueryGuard / ValidateUpdate(string)",
+      "occurrence": 1,
+      "ceiling": 37
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Connectors/SqlQueryGuard.cs",
+      "name": "SparkStudio.Connectors / SqlQueryGuard / Tokenize(string)",
+      "occurrence": 1,
+      "ceiling": 42
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/BackupDestinations.cs",
+      "name": "SparkStudio.Gateway / BackupDestinations / Validate(BackupDestination)",
+      "occurrence": 1,
+      "ceiling": 51
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/BackupDestinations.cs",
+      "name": "SparkStudio.Gateway / BackupDestinations / DeliverWithS3HandlerAsync(BackupDestination,string,string,Guid,int,HttpMessageHandler?,CancellationToken,bool)",
+      "occurrence": 1,
+      "ceiling": 26
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/BackupS3Destination.cs",
+      "name": "SparkStudio.Gateway / BackupDestinations / ValidateS3(BackupDestination)",
+      "occurrence": 1,
+      "ceiling": 48
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/BackupS3Destination.cs",
+      "name": "SparkStudio.Gateway / BackupDestinations / DeliverS3Async(BackupDestination,string,string,Guid,int,DeliveryProgress,HttpMessageHandler?,bool,CancellationToken)",
+      "occurrence": 1,
+      "ceiling": 25
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ChartValidator.cs",
+      "name": "SparkStudio.Gateway / ChartValidator / Validate(string,JsonNode?)",
+      "occurrence": 1,
+      "ceiling": 79
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ComponentBindingValidator.cs",
+      "name": "SparkStudio.Gateway / ComponentBindingValidator / ValidateDocument(JsonObject,JsonObject?,JsonObject?,bool)",
+      "occurrence": 1,
+      "ceiling": 27
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ComponentBindingValidator.cs",
+      "name": "SparkStudio.Gateway / ComponentBindingValidator / ValidatePropertyExpression(JsonNode?,JsonObject,ExpressionContext)",
+      "occurrence": 1,
+      "ceiling": 31
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ComponentBindingValidator.cs",
+      "name": "SparkStudio.Gateway / ComponentBindingValidator / ValidateScalarTarget(string,object)",
+      "occurrence": 1,
+      "ceiling": 31
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ComponentBindingValidator.cs",
+      "name": "SparkStudio.Gateway / ComponentBindingValidator / ExpressionParser / constructor(string,HashSet<string>,Func<string, object>?)",
+      "occurrence": 1,
+      "ceiling": 30
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ComponentBindingValidator.cs",
+      "name": "SparkStudio.Gateway / ComponentBindingValidator / ExpressionParser / Binary(string,object,Func<object>)",
+      "occurrence": 1,
+      "ceiling": 30
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ComponentEventValidator.cs",
+      "name": "SparkStudio.Gateway / ComponentEventValidator / ValidateDocument(JsonObject)",
+      "occurrence": 1,
+      "ceiling": 33
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ComponentEventValidator.cs",
+      "name": "SparkStudio.Gateway / ComponentEventValidator / ValidateLifecycle(string,JsonNode?)",
+      "occurrence": 1,
+      "ceiling": 36
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ComponentQueryBindingValidator.cs",
+      "name": "SparkStudio.Gateway / ComponentQueryBindingValidator / ValidateProject(JsonObject)",
+      "occurrence": 1,
+      "ceiling": 39
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ComponentQueryBindingValidator.cs",
+      "name": "SparkStudio.Gateway / ComponentQueryBindingValidator / ValidateMappedValue(string,JsonElement)",
+      "occurrence": 1,
+      "ceiling": 33
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ConfigurationBackupSnapshot.cs",
+      "name": "SparkStudio.Gateway / ConfigurationBackupSnapshot / Selected(string,bool)",
+      "occurrence": 1,
+      "ceiling": 26
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ContainerHttpsRedirect.cs",
+      "name": "SparkStudio.Gateway / ContainerHttpsRedirect / FromConfiguration(IConfiguration)",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/DatasetBindingValidator.cs",
+      "name": "SparkStudio.Gateway / DatasetBindingValidator / ValidateData(JsonNode?)",
+      "occurrence": 1,
+      "ceiling": 30
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/DeploymentSettings.cs",
+      "name": "SparkStudio.Gateway / DeploymentSettings / Validate(DeploymentIntent?)",
+      "occurrence": 1,
+      "ceiling": 35
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/DrawingComponentValidator.cs",
+      "name": "SparkStudio.Gateway / DrawingComponentValidator / Validate(string,JsonNode?)",
+      "occurrence": 1,
+      "ceiling": 22
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/DrawingComponentValidator.cs",
+      "name": "SparkStudio.Gateway / DrawingComponentValidator / ValidateResult(string,object)",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/EquipmentCommands.cs",
+      "name": "SparkStudio.Gateway / EquipmentCommandDefinitions / Validate(JsonObject)",
+      "occurrence": 1,
+      "ceiling": 36
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/EquipmentCommands.cs",
+      "name": "SparkStudio.Gateway / EquipmentCommands / ExecuteDefinition(HttpContext,ProjectStore,PublicationStore,string?,string,CommandExecuteRequest,CancellationToken)",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/GatewayAccess.cs",
+      "name": "SparkStudio.Gateway / GatewayAccess / UseApplicationAccess(thisWebApplication) / callback:app.Use[0]",
+      "occurrence": 1,
+      "ceiling": 57
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/GatewayBackups.cs",
+      "name": "SparkStudio.Gateway / GatewayBackups / SaveConfiguration(BackupConfigurationRequest)",
+      "occurrence": 1,
+      "ceiling": 25
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/GatewayBackups.cs",
+      "name": "SparkStudio.Gateway / GatewayBackups / RunAsync(BackupSettingsDocumentV2,BackupDestinationDocument?,BackupScheduleDocument?,BackupRunStatus,SecurityUser?,CancellationToken)",
+      "occurrence": 1,
+      "ceiling": 25
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/GatewayBackups.cs",
+      "name": "SparkStudio.Gateway / GatewayBackups / ValidateSettings(BackupConfigurationSettings)",
+      "occurrence": 1,
+      "ceiling": 26
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/GatewayBackups.cs",
+      "name": "SparkStudio.Gateway / GatewayBackups / ValidateDestination(BackupDestinationSettings,bool)",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/GatewayReadiness.cs",
+      "name": "SparkStudio.Gateway / GatewayReadiness / ProbePythonAsync(string?,string,CancellationToken)",
+      "occurrence": 1,
+      "ceiling": 27
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/GatewayRecovery.cs",
+      "name": "SparkStudio.Gateway / GatewayRecovery / ValidateManifest(RecoveryManifest)",
+      "occurrence": 1,
+      "ceiling": 34
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/GatewayScriptOptions.cs",
+      "name": "SparkStudio.Gateway / GatewayScriptOptions / Normalize(JsonObject)",
+      "occurrence": 1,
+      "ceiling": 44
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/InputConstraints.cs",
+      "name": "SparkStudio.Gateway / InputConstraints / ValidateDefinition(string,JsonObject)",
+      "occurrence": 1,
+      "ceiling": 33
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/InputConstraints.cs",
+      "name": "SparkStudio.Gateway / InputConstraints / ValidateValue(string,string,JsonObject,JsonElement)",
+      "occurrence": 1,
+      "ceiling": 34
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/InputDefinitionValidator.cs",
+      "name": "SparkStudio.Gateway / InputDefinitionValidator / ValidateDefinition(string,JsonObject,HashSet<string>)",
+      "occurrence": 1,
+      "ceiling": 72
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/InputDefinitionValidator.cs",
+      "name": "SparkStudio.Gateway / InputDefinitionValidator / ValidateValue(string,string,JsonObject,JsonElement,bool)",
+      "occurrence": 1,
+      "ceiling": 52
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/InputDefinitionValidator.cs",
+      "name": "SparkStudio.Gateway / InputDefinitionValidator / ValidateQuerySelection(string,string,JsonObject,QueryResult,string)",
+      "occurrence": 1,
+      "ceiling": 23
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/InputDefinitionValidator.cs",
+      "name": "SparkStudio.Gateway / InputDefinitionValidator / OptionText(object?)",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/LocalAssetStore.cs",
+      "name": "SparkStudio.Gateway / ImageHeaders / Png(ReadOnlySpan<byte>)",
+      "occurrence": 1,
+      "ceiling": 48
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/LocalAssetStore.cs",
+      "name": "SparkStudio.Gateway / ImageHeaders / Jpeg(ReadOnlySpan<byte>)",
+      "occurrence": 1,
+      "ceiling": 49
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/LocalAssetStore.cs",
+      "name": "SparkStudio.Gateway / ImageHeaders / WebP(ReadOnlySpan<byte>)",
+      "occurrence": 1,
+      "ceiling": 38
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/NativeTagPropertyValues.cs",
+      "name": "SparkStudio.Gateway / NativeTagPropertyValues / Property(string,string)",
+      "occurrence": 1,
+      "ceiling": 48
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/OpcCertificateAdministration.cs",
+      "name": "SparkStudio.Gateway / OpcCertificateAdministration / Trust(OpcCertificateTrustRequest)",
+      "occurrence": 1,
+      "ceiling": 23
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ProcessDataComponentValidator.cs",
+      "name": "SparkStudio.Gateway / ProcessDataComponentValidator / Validate(JsonObject)",
+      "occurrence": 1,
+      "ceiling": 24
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ProcessDataService.cs",
+      "name": "SparkStudio.Gateway / ProcessDataService / Validate(ProcessDataConfiguration)",
+      "occurrence": 1,
+      "ceiling": 33
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ProcessDataService.cs",
+      "name": "SparkStudio.Gateway / ProcessDataService / Sample()",
+      "occurrence": 1,
+      "ceiling": 51
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ProcessDisplayValidator.cs",
+      "name": "SparkStudio.Gateway / ProcessDisplayValidator / ValidateResult(string,object)",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ProjectInteractions.cs",
+      "name": "SparkStudio.Gateway / ProjectInteractions / ResolveLeaf(JsonObject,JsonObject,string,string?,string?,IReadOnlyList<InstancePathStep>?)",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ProjectLocalizationValidator.cs",
+      "name": "SparkStudio.Gateway / ProjectLocalizationValidator / ValidateProject(JsonObject)",
+      "occurrence": 1,
+      "ceiling": 38
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ProjectStateValidator.cs",
+      "name": "SparkStudio.Gateway / ProjectStateValidator / InputBinding(JsonObject)",
+      "occurrence": 1,
+      "ceiling": 34
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ProjectStore.cs",
+      "name": "SparkStudio.Gateway / ProjectStore / SaveConnection(JsonObject)",
+      "occurrence": 1,
+      "ceiling": 49
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ProjectStyleValidator.cs",
+      "name": "SparkStudio.Gateway / ProjectStyleValidator / ValidateProject(JsonObject)",
+      "occurrence": 1,
+      "ceiling": 35
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ProjectTemplates.cs",
+      "name": "SparkStudio.Gateway / ProjectTemplates / ValidateDocuments(JsonArray,string,JsonObject?,JsonObject?)",
+      "occurrence": 1,
+      "ceiling": 31
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/PublicationStore.cs",
+      "name": "SparkStudio.Gateway / PublicationStore / ValidateScreens(JsonObject)",
+      "occurrence": 1,
+      "ceiling": 27
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/PublicationStore.cs",
+      "name": "SparkStudio.Gateway / PublicationStore / GetExecutable(bool,string,string,string,string?,string?,PopupOrigin?,IReadOnlyList<InstancePathStep>?,bool)",
+      "occurrence": 1,
+      "ceiling": 31
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/PythonComponentEvents.cs",
+      "name": "SparkStudio.Gateway / PythonComponentEvents / Capture(JsonObject,JsonArray,string,string,PythonComponentEventRequest,bool)",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/PythonComponentEvents.cs",
+      "name": "SparkStudio.Gateway / PythonComponentEvents / ValidateRequest(PythonComponentEventRequest)",
+      "occurrence": 1,
+      "ceiling": 22
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/PythonComponentEvents.cs",
+      "name": "SparkStudio.Gateway / PythonComponentEvents / Event(JsonObject,PythonComponentEventRequest,Dictionary<string, JsonElement>,string)",
+      "occurrence": 1,
+      "ceiling": 53
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/PythonRunner.cs",
+      "name": "SparkStudio.Gateway / PythonRunner / RunWithLibrariesAsync(string,Dictionary<string, JsonElement>?,Dictionary<string, JsonElement>?,IReadOnlyDictionary<string, string>,CancellationToken,JsonArray?,JsonObject?,int,string[]?,PythonUiContext?)",
+      "occurrence": 1,
+      "ceiling": 35
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/RuntimePropertyCatalog.cs",
+      "name": "SparkStudio.Gateway / RuntimePropertyCatalog / Definition(JsonObject,string)",
+      "occurrence": 1,
+      "ceiling": 32
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/RuntimePropertyCatalog.cs",
+      "name": "SparkStudio.Gateway / RuntimePropertyCatalog / ValidateTargetValue(JsonObject,string,object)",
+      "occurrence": 1,
+      "ceiling": 50
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/RuntimePropertyCatalog.cs",
+      "name": "SparkStudio.Gateway / RuntimePropertyCatalog / ValidateConstants(JsonObject,IReadOnlyDictionary<string, object>)",
+      "occurrence": 1,
+      "ceiling": 35
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ScriptEventService.cs",
+      "name": "SparkStudio.Gateway / ScriptEventService / QueueMessage(string,JsonElement,string,string[]?,string[],bool,int?,CancellationToken)",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ScriptResourceStore.cs",
+      "name": "SparkStudio.Gateway / ScriptResourceStore / Normalize(JsonObject,int)",
+      "occurrence": 1,
+      "ceiling": 35
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ScriptRunJournal.cs",
+      "name": "SparkStudio.Gateway / ScriptRunJournal / LoadCore(bool)",
+      "occurrence": 1,
+      "ceiling": 21
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/SourceDiscoveryStore.cs",
+      "name": "SparkStudio.Gateway / ProjectStore / LoadSourceDiscovery()",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/SourceDiscoveryStore.cs",
+      "name": "SparkStudio.Gateway / ProjectStore / ApplySourceDiscovery(string,IReadOnlyList<SourceDiscoveryItem>)",
+      "occurrence": 1,
+      "ceiling": 49
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/SourceTagEngine.cs",
+      "name": "SparkStudio.Gateway / TagEngine / StageSourceValues(string,IReadOnlyList<SourceValue>,IReadOnlyList<SourceDiscoveryItem>)",
+      "occurrence": 1,
+      "ceiling": 33
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/SourceTagEngine.cs",
+      "name": "SparkStudio.Gateway / TagEngine / SynchronizeSourceAcquisitionAsync(CancellationToken)",
+      "occurrence": 1,
+      "ceiling": 26
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/SparkProjectPackage.cs",
+      "name": "SparkStudio.Gateway / SparkProjectPackage / ReadArchive(byte[])",
+      "occurrence": 1,
+      "ceiling": 32
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/TableColumnValidator.cs",
+      "name": "SparkStudio.Gateway / TableColumnValidator / Validate(string,JsonNode?)",
+      "occurrence": 1,
+      "ceiling": 33
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/TableEditValidator.cs",
+      "name": "SparkStudio.Gateway / TableEditValidator / Validate(string,JsonNode?)",
+      "occurrence": 1,
+      "ceiling": 63
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/TagDefinitionValidator.cs",
+      "name": "SparkStudio.Gateway / TagDefinitionValidator / MemoryValue(string,JsonElement)",
+      "occurrence": 1,
+      "ceiling": 32
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/TagEngine.cs",
+      "name": "SparkStudio.Gateway / TagEngine / DefinitionLoop(CancellationToken)",
+      "occurrence": 1,
+      "ceiling": 26
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/TagEngineering.cs",
+      "name": "SparkStudio.Gateway / ProjectStore / NormalizeTag(JsonObject)",
+      "occurrence": 1,
+      "ceiling": 22
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/TagEngineering.cs",
+      "name": "SparkStudio.Gateway / ProjectStore / PrepareTagImport(JsonObject)",
+      "occurrence": 1,
+      "ceiling": 25
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/TagExpressions.cs",
+      "name": "SparkStudio.Gateway / TagExpressions / Parser / Next()",
+      "occurrence": 1,
+      "ceiling": 60
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/TagModel.cs",
+      "name": "SparkStudio.Gateway / TagModel / Expand(JsonObject,Func<JsonObject, JsonObject>)",
+      "occurrence": 1,
+      "ceiling": 34
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/TemplateParameterBindings.cs",
+      "name": "SparkStudio.Gateway / TemplateParameterBindings / ValidateProject(JsonObject)",
+      "occurrence": 1,
+      "ceiling": 54
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.Gateway/ViewContainerValidator.cs",
+      "name": "SparkStudio.Gateway / ViewContainerValidator / Validate(string,JsonNode?)",
+      "occurrence": 1,
+      "ceiling": 54
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.SourceWorker/Program.cs",
+      "name": "<top-level> / Evaluate(SourceScriptRequest)",
+      "occurrence": 1,
+      "ceiling": 29
+    },
+    {
+      "language": "csharp",
+      "file": "src/SparkStudio.SourceWorker/Program.cs",
+      "name": "ResultBudget / Convert(object?,int)",
+      "occurrence": 1,
+      "ceiling": 30
+    }
+  ]
+}

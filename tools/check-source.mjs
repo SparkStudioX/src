@@ -13,9 +13,10 @@ const binaryHash = '0df6492ea1fd39c00f5a4a8b6f96e39c5a6729f211ded9f904be96b18dc4
 const rootFiles = new Set([
   '.gitignore', '.gitattributes', '.dockerignore', 'AGENTS.md', 'README.md', 'SECURITY.md',
   'CONTRIBUTING.md', 'NOTICE.md', 'LICENSE', 'LICENSE.md', 'LICENSE.txt',
-  'Dockerfile', 'compose.yaml', 'Directory.Build.props', 'global.json', 'NuGet.Config',
+  'Dockerfile', 'compose.yaml', 'Directory.Build.props', 'Directory.Build.targets', '.editorconfig', 'ruff.toml', 'global.json', 'NuGet.Config',
 ]);
 const webFiles = new Set([
+  'apps/web/check-source-connections.mjs',
   'apps/web/src/bindingDiagnostics.tsx',
   'apps/web/check-visitor-checkin.mjs',
   'apps/web/check-component-message-receivers.mjs',
@@ -34,6 +35,7 @@ const webFiles = new Set([
   'apps/web/check-input-validation.mjs', 'apps/web/check-table-batch-editor.mjs', 'apps/web/check-view-containers.mjs',
   'apps/web/check-chart-renderer.mjs', 'apps/web/check-chart-authoring.mjs', 'apps/web/check-equipment-command-ui.mjs', 'apps/web/check-application-publication.mjs', 'apps/web/check-binding-data.mjs',
   'apps/web/package.json', 'apps/web/package-lock.json', 'apps/web/tsconfig.json',
+  'apps/web/eslint.config.mjs',
   'apps/web/vite.config.ts', 'apps/web/index.html', 'apps/web/check-template-model.mjs',
   'apps/web/check-popup-model.mjs', 'apps/web/public/spark.svg',
   'apps/web/check-popup-source.mjs',
@@ -86,6 +88,12 @@ const webFiles = new Set([
   'apps/web/check-input-state-bindings.mjs', 'apps/web/check-input-state-authoring.mjs',
 ]);
 const toolFiles = new Set([
+  // Independently authored mandatory build gates, orchestration and analyzer policy.
+  'build-context.mjs', 'build-quality.mjs', 'build-quality.test.mjs', 'quality-gates.mjs', 'dotnet-environment.mjs', 'lint-backend.mjs', 'test-build-hooks.mjs',
+  'lint-python.py', 'ruff-runtime.json', 'analyze-python-complexity.py', 'test-backend-lint.mjs',
+  'check-complexity.mjs', 'complexity-policy.mjs', 'complexity.test.mjs', 'complexity-baseline.json',
+  'complexity/SparkStudio.Complexity.csproj', 'complexity/Program.cs',
+  'run-data-source-simulators.mjs', 'load-data-sources-example.mjs', 'test-data-sources-workshop.mjs',
   // Authored Linux container packaging, local administration and release checks.
   'docker-entrypoint.py', 'test-docker-entrypoint.py', 'container-admin.py', 'test-container-admin.py',
   'package-notice-supplements.mjs', 'collect-docker-runtime.py', 'write-docker-notices.mjs', 'test-docker-notices.mjs',
@@ -260,7 +268,7 @@ const explicitFiles = new Set([
   'src/SparkStudio.Connectors/packages.lock.json', 'src/SparkStudio.Connectors/packages.win-x64.lock.json',
   'src/SparkStudio.Connectors.Tests/packages.lock.json', 'src/SparkStudio.Connectors.Tests/packages.win-x64.lock.json',
   'src/SparkStudio.Gateway/packages.lock.json', 'src/SparkStudio.Gateway/packages.win-x64.lock.json',
-  'installer/ServiceHelper/packages.lock.json', 'installer/ServiceHelper/packages.win-x64.lock.json',
+  'installer/ServiceHelper/packages.win-x64.lock.json',
 ]);
 const deniedSegments = new Set([
   '.git', '.data', '.tools', '.cache', '.npm-cache', '.nuget', 'node_modules',
@@ -295,9 +303,18 @@ function canonicalPath(file) {
   return null;
 }
 function allowedPath(file) {
+  if (['apps/web/src/askSparkDesignerTools.json', 'apps/web/src/askSparkGatewayTools.json',
+    'apps/web/check-ask-spark.mjs', 'apps/web/check-ask-spark-markdown.mjs', 'apps/web/check-ask-spark-designer.mjs', 'apps/web/check-ask-spark-gateway-tools.mjs',
+    'apps/web/check-ask-spark-designer-ui.mjs', 'apps/web/check-ask-spark-runtime-tools.mjs', 'apps/web/check-ask-spark-visual.mjs',
+    'src/SparkStudio.Gateway.Tests/AskSparkChecks.cs', 'src/SparkStudio.Gateway.Tests/AskSparkToolSearchChecks.cs',
+    'src/SparkStudio.Gateway.Tests/AskSparkCacheChecks.cs', 'src/SparkStudio.Gateway.Tests/AskSparkUsageChecks.cs', 'src/SparkStudio.Gateway.Tests/AskSparkWorkspaceChecks.cs',
+    'examples/ask-spark.json', 'docs/architecture/ASK_SPARK.md'].includes(file)) return true;
+  if (['examples/data-sources.json', 'docs/architecture/DATA_SOURCES.md'].includes(file)) return true;
   if (rootFiles.has(file) || webFiles.has(file) || explicitFiles.has(file) || file === binaryAsset) return true;
   if (/^apps\/web\/src\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+\.(?:ts|tsx|css|svg)$/.test(file)) return true;
-  if (/^src\/SparkStudio\.(?:Gateway|Connectors|Connectors[.]Tests)\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+\.(?:cs|csproj)$/.test(file)) return true;
+  if (/^src\/SparkStudio\.(?:Gateway|Connectors|Connectors[.]Tests|SourceWorker)\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+\.(?:cs|csproj)$/.test(file)) return true;
+  if (/^src\/SparkStudio[.]SourceWorker\/packages(?:[.](?:win-x64|linux-x64|linux-arm64))?[.]lock[.]json$/.test(file)) return true;
+  if (['src/SparkStudio.Gateway.Tests/GatewaySourceChecks.cs', 'src/SparkStudio.Gateway.Tests/SourceAdversarialChecks.cs', 'src/SparkStudio.Gateway.Tests/SourceLoadProbe.cs'].includes(file)) return true;
   if (/^installer\/ServiceHelper\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+\.(?:cs|csproj)$/.test(file)) return true;
   if (file.startsWith('tools/') && toolFiles.has(file.slice(6))) return true;
   if (file.startsWith('docs/architecture/') && architectureDocs.has(file.slice(18))) return true;

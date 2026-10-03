@@ -19,6 +19,9 @@ modules.set('Theme', asModule('export const ThemePicker=()=>null;'));
 modules.set('ScriptEditor', asModule('export default function ScriptEditor(){return null;}'));
 modules.set('browserScripts', asModule('export const useBrowserScripts=()=>{};'));
 modules.set('GatewayConfiguration', asModule('export default function GatewayConfiguration(){return null;}'));
+// Keep the real launcher and its audience checks while supplying the shared
+// assistant context normally mounted above the engineering pages in main.tsx.
+modules.set('askSparkContext', asModule('const context={open:false,approval:null,setOpen:()=>{},requestVoice:()=>{},registerContext:()=>()=>{}};export const useAskSpark=()=>context;'));
 // Native tag review/confirmation is exercised by check-native-tag-actions. Keep
 // these audience/permission checks independent of that hook's state provider.
 modules.set('useTagValueAction', asModule('export const useTagValueAction=()=>({confirmation:null,run:async()=>{throw new Error("Unexpected native tag activation in auth UI checks");}});'));
@@ -113,6 +116,12 @@ await check('engineering project cards require each project design permission an
   const html=render(Projects);
   assert.match(html,/href="\/designer\/plant"/); assert.match(html,/Export \.sparkproj/);
   assert.doesNotMatch(html,/href="\/designer\/other"|Rename|Duplicate|New project|Import \.sparkproj|Show archived|href="\/(?:security|gateway)"/);
+});
+await check('the shared Ask Spark launcher is available only to engineering users', () => {
+  state(identity('engineering',{design:true}),{catalog,loading:false});
+  const engineering=render(Projects);assert.match(engineering,/Ask Spark/);assert.match(engineering,/Open Ask Spark and dictate a message/);
+  state(identity('operator',{view:true},true),{catalog,loading:false});
+  const operator=render(Projects);assert.doesNotMatch(operator,/Ask Spark|dictate a message/);
 });
 await check('gateway administrators retain catalog and security management', () => {
   state(identity('engineering',{design:true,publish:true},true),{catalog,loading:false});

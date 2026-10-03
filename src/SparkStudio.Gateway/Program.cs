@@ -18,7 +18,12 @@ builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxRequestBodySize = 1_048_576;
     GatewayReadiness.ConfigureTransport(options);
 });
-builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
+builder.Services.ConfigureHttpJsonOptions(options => {
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    options.SerializerOptions.Converters.Add(new ExactInt64JsonConverter());
+    options.SerializerOptions.Converters.Add(new ExactUInt64JsonConverter());
+    options.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter<SourceValueAction>(JsonNamingPolicy.CamelCase));
+});
 var dataDir = Path.GetFullPath(Environment.GetEnvironmentVariable("SPARKSTUDIO_DATA_DIR") ?? builder.Configuration["DataDirectory"] ?? Path.Combine(AppContext.BaseDirectory, "data"));
 Directory.CreateDirectory(dataDir);
 using var dataLease = DataDirectoryLease.Acquire(dataDir);
@@ -30,6 +35,7 @@ recovery.ConfigureIsolation(builder);
 var protection = builder.Services.AddDataProtection().SetApplicationName("SparkStudio").PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(dataDir, "keys")));
 if (OperatingSystem.IsWindows()) protection.ProtectKeysWithDpapi();
 builder.Services.AddGatewaySecurity(dataDir, builder.Configuration["SPARKSTUDIO_COOKIE_NAMESPACE"]);
+builder.Services.AddAskSpark(dataDir);
 builder.Services.AddSingleton<GatewayReadiness>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<GatewayReadiness>());
 builder.Services.AddSingleton(new GatewayDeployment(builder.Configuration, builder.Environment, dataDir));
@@ -101,6 +107,7 @@ app.Use(async (context, next) =>
 });
 app.UsePreviewCommunication();
 app.MapGatewaySecurityEndpoints();
+app.MapAskSparkEndpoints();
 app.MapGatewayConsoleEndpoints();
 app.MapGatewayDeploymentEndpoints();
 app.MapDeploymentSettingsEndpoints();
@@ -149,6 +156,7 @@ app.Run();
 
 static void MapProjectEndpoints(RouteGroupBuilder routes)
 {
+routes.MapProjectAuthoringReview();
 routes.MapTagEngineeringEndpoints();
 routes.MapPreviewEndpoints();
 routes.MapPythonComponentEventEndpoints();
@@ -192,7 +200,7 @@ routes.MapPut("/project", (JsonObject project, ProjectStore store, ScriptResourc
     var before = store.GetProject();
     var saved = store.SaveProject(project);
     var notice = ScriptProjectUpdates.Project(GatewayAccess.Actor(context).Username, before, saved);
-    if (notice.Resources["manifestChanged"]!.GetValue<bool>() || new[] { "added", "removed", "modified" }.Any(key => notice.Resources[key]!.AsArray().Count > 0))
+    if (notice.Resources["manifestChanged"]!.GetValue<bool>() || GatewayRequestConstants.ResourceChangeKinds.Any(key => notice.Resources[key]!.AsArray().Count > 0))
         scripts.NotifyUpdate(notice);
     return saved;
 }).Access("design", audit: true);
@@ -282,7 +290,14 @@ routes.MapPost("/scripts/run", (ScriptRequest request, PythonRunner python, Scri
     => python.RunWithLibrariesAsync(request.Code, request.Parameters, request.Inputs, scripts.CaptureLibraries(), cancellation,
         eventContext: new JsonObject { ["type"] = "manual", ["reason"] = "console", ["timestamp"] = DateTimeOffset.UtcNow.ToString("O"),
             ["actor"] = GatewayAccess.Actor(context).Username }, uiContext: PythonUiContext.ForPreview(store, request.UiContext, request.Ui))).Access("admin", audit: true);
-routes.MapGet("/events", TagEventStream.WriteAsync).Access("read", "context");
+routes.MapGet("/events", TagEventEndpoint.WriteAsync).Access("read", "context");
+}
+
+namespace SparkStudio.Gateway
+{
+internal static class GatewayRequestConstants
+{
+    internal static readonly string[] ResourceChangeKinds = ["added", "removed", "modified"];
 }
 
 public record TagReadRequest(string[] Paths, Dictionary<string, JsonElement>? Parameters);
@@ -300,3 +315,4 @@ public record PublishRequest(int Revision, int? ScriptsRevision = null, string? 
 public record RuntimeActionRequest(Dictionary<string, JsonElement>? Parameters, Dictionary<string, JsonElement>? Inputs, string? PublishedAt, string? InstanceId = null, string? RowId = null, PopupOrigin? PopupOrigin = null,
     IReadOnlyList<InstancePathStep>? InstancePath = null, IReadOnlyList<Dictionary<string, JsonElement>>? BindingInputs = null,
     IReadOnlyList<ParameterBindingState>? BindingState = null, JsonObject? Ui = null);
+}

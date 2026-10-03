@@ -12,6 +12,7 @@ public static class GatewayConnections
 
     public static void MapGatewayConnectionEndpoints(this RouteGroupBuilder routes)
     {
+        routes.MapSourceEndpoints();
         routes.MapPost("/connections/{id}/read", async (string id, DeviceReadRequest request, ProjectStore store, ConnectorService connector, CancellationToken cancellation) =>
         {
             if (request.NodeIds is null || request.NodeIds.Length is < 1 or > 256 || request.NodeIds.Any(string.IsNullOrWhiteSpace))
@@ -24,10 +25,16 @@ public static class GatewayConnections
                 if (request.Revision < 0 || saved["revision"]!.GetValue<int>() != request.Revision)
                     throw new InvalidOperationException("The connection changed. Reload before reading device points.");
                 connection = store.GetConnection(id);
-                if (!DeviceConfiguration.IsDevice(connection)) throw new ArgumentException("Use a saved industrial device connection.");
-                foreach (var point in request.NodeIds) _ = DeviceConfiguration.Point(connection, point);
+                if (!PointCatalog.IsPointConnection(connection)) throw new ArgumentException("Use a saved industrial device or source connection.");
+                foreach (var point in request.NodeIds) _ = PointCatalog.Point(connection, point);
             }
-            return await connector.ReadAsync(connection, request.NodeIds, cancellation);
+            var result = await connector.ReadAsync(connection, request.NodeIds, cancellation);
+            lock (GatewayConfigurationLock.SyncRoot) {
+                var current = store.GetConnection(id);
+                if (current.ConfigurationRevision != connection.ConfigurationRevision)
+                    throw new InvalidOperationException("The connection changed while reading its points. Reload and read again.");
+            }
+            return result;
         }).Access("configuration");
         routes.MapPost("/connections/{id}/test", async (string id, ProjectStore store, ConnectorService connector, CancellationToken cancellation) =>
         {
@@ -48,12 +55,9 @@ public static class GatewayConnections
 
     public static object Snapshot(string id, ProjectCatalog catalog, TagEngine tags)
     {
-        var connection = catalog.GatewayStore.GetConnections().OfType<JsonObject>().FirstOrDefault(item => ProjectStore.Optional(item, "id") == id)
-            ?? throw new KeyNotFoundException("Connection not found.");
+        var connection = catalog.GatewayStore.ConnectionMetadata(id);
         var dependencies = References(id, catalog);
-        var definitions = catalog.GatewayStore.GetTagDefinitions().OfType<JsonObject>()
-            .Where(item => ProjectStore.Optional(item, "connectionId") == id).ToArray();
-        var paths = definitions.Select(item => ProjectStore.Required(item, "path")).ToHashSet(StringComparer.Ordinal);
+        var paths = catalog.GatewayStore.ConnectionTagPaths(id).ToHashSet(StringComparer.Ordinal);
         var values = tags.Read(paths.Take(100), null).Select(value => new
         {
             value.Path, value.Quality, value.DataType, value.Timestamp,
@@ -66,6 +70,7 @@ public static class GatewayConnections
             capturedAt = DateTimeOffset.UtcNow, revision = connection["revision"]!.GetValue<int>(), enabled = connection["enabled"]!.GetValue<bool>(),
             dependencies = dependencies.Take(500).ToArray(), dependencyCount = dependencies.Count, omittedDependencies = Math.Max(0, dependencies.Count - 500),
             values, omittedValues = Math.Max(0, paths.Count - 100), subscriptions,
+            source = SourceConfiguration.IsSource(ProjectStore.Required(connection, "type")) ? tags.SourceSnapshot(id) : null,
             note = "Saved tag, UDT member and named-query references prevent deletion. Scripts can also use connections dynamically; review those scripts before removing a connection."
         };
     }
@@ -75,15 +80,10 @@ public static class GatewayConnections
         lock (GatewayConfigurationLock.SyncRoot)
         {
             var dependencies = new List<ConnectionDependency>();
-            dependencies.AddRange(catalog.GatewayStore.GetTagDefinitions().OfType<JsonObject>()
-                .Where(item => ProjectStore.Optional(item, "connectionId") == id)
-                .Select(item => new ConnectionDependency("tag", null, null, ProjectStore.Required(item, "path"), ProjectStore.Required(item, "path"))));
-            foreach (var definition in catalog.GatewayStore.ExportTags()["udtDefinitions"]!.AsArray().OfType<JsonObject>())
-            foreach (var member in definition["members"]!.AsArray().OfType<JsonObject>().Where(item => ProjectStore.Optional(item, "connectionId") == id))
-            {
-                var name = TagModel.DefinitionKey(definition) + "/" + ProjectStore.Required(member, "path");
-                dependencies.Add(new("UDT member", null, null, name, name));
-            }
+            dependencies.AddRange(catalog.GatewayStore.ConnectionTagPaths(id, includeOwned: false)
+                .Select(path => new ConnectionDependency("tag", null, null, path, path)));
+            dependencies.AddRange(catalog.GatewayStore.SourceConnectionOwnedReferences(id).Select(path => new ConnectionDependency("source tag reference", null, null, path, path)));
+            dependencies.AddRange(catalog.GatewayStore.ConnectionUdtReferences(id).Select(name => new ConnectionDependency("UDT member", null, null, name, name)));
             foreach (var project in catalog.List(includeArchived: true).OfType<JsonObject>())
             {
                 var projectId = ProjectStore.Required(project, "id");

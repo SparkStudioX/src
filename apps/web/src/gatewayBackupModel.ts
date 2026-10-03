@@ -41,6 +41,7 @@ export function backupDraftFromSaved(saved: BackupConfiguration, gatewayTimeZone
     }),
   };
 }
+// eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
 const bounded = (value: string, maximum: number, label: string) => { if (value.length > maximum || /[\x00-\x1f\x7f]/.test(value)) throw new Error(`${label} is limited to ${maximum} characters without control characters.`); };
 const identity = (id: string, name: string, ids: Set<string>, label: string) => {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(id) || ids.has(id)) throw new Error(`${label} IDs must be unique and contain 1–64 letters, numbers, dashes or underscores.`);

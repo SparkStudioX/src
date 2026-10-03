@@ -2,10 +2,9 @@
 // Synthetic online configuration snapshots only; never reads installed gateway data.
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { root, dotnet, testEnv } from './test-environment.mjs';
+import { root, runIsolatedFixture } from './test-environment.mjs';
 
 const directory = path.join(root, '.data/test-evidence', `configuration-backup-${randomUUID()}`);
 await mkdir(directory, { recursive: true });
@@ -125,10 +124,8 @@ static async Task Reject(Func<Task> work,string description)
 { try { await work(); } catch(Exception error) when(error is ArgumentException or InvalidOperationException or InvalidDataException or IOException or UnauthorizedAccessException or OperationCanceledException) { return; } throw new Exception("Expected rejection: "+description); }
 `);
 await mkdir(path.join(directory, 'dotnet-roaming'), { recursive: true });
-const result = spawnSync(dotnet, ['run', '--project', path.join(directory, 'Check.csproj'), '--configuration', 'ConfigurationBackupModel', '--verbosity', 'quiet', `-p:RestoreConfigFile=${path.join(directory, 'NuGet.Config')}`, '-p:NuGetAudit=false'], {
-  cwd: root, encoding: 'utf8', timeout: 180000, maxBuffer: 4*1024*1024,
-  env: testEnv,
-});
+const result = await runIsolatedFixture(path.join(directory, 'Check.csproj'), 'ConfigurationBackupModel');
 process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? '');
 assert.equal(result.status, 0, result.error?.message ?? 'Online configuration backup tests failed.');
+console.log('PASS isolated configuration backup fixture preserves the calling production dependency assets.');
 console.log(`Evidence: ${directory}`);

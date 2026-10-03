@@ -5,6 +5,7 @@ import { api } from "./api";
 import Tags from "./Tags";
 import Connections from "./Connections";
 import type { Connection, Tag } from "./types";
+import { useAskSpark } from "./askSparkContext";
 
 const sections = [
   { id: "tags", name: "Tags" },
@@ -14,6 +15,8 @@ const sections = [
 
 export default function GatewayConfiguration() {
   const [section, setSection] = useState<"tags" | "connections" | "certificates">("tags");
+  const { registerContext } = useAskSpark();
+  useEffect(() => registerContext("gateway:configuration", () => ({ section }), 10), [registerContext, section]);
   const id = useId(), tabs = useRef<(HTMLButtonElement | null)[]>([]), generation = useRef(0), pending = useRef(false);
   const [connections, setConnections] = useState<Connection[]>([]), [tags, setTags] = useState<Tag[]>([]);
   const [message, setMessage] = useState(""), [error, setError] = useState(false);

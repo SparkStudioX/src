@@ -142,6 +142,6 @@ export function applyPythonUiResult(action: PythonUiAction | undefined, result: 
     if (action) action.apply(result.uiEffects);
     else if (result.uiEffects?.length) throw new Error("The response has no live UI action context.");
   } catch (error) {
-    throw new Error(`${error instanceof Error ? error.message : String(error)} Gateway data changes may already have completed.`);
+    throw new Error(`${error instanceof Error ? error.message : String(error)} Gateway data changes may already have completed.`, { cause: error });
   }
 }

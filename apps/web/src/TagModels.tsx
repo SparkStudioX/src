@@ -1,6 +1,9 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "./api";
+import type { Connection } from "./types";
+import { connectionPoints, isPointConnection } from "./sourceConnections";
+import { connectionTypeName } from "./deviceConnections";
 import "./accountSettings.css";
 
 type Member = { path: string; kind: string; dataType: string; value?: unknown; expression?: string; inputs?: Record<string, string>; connectionId?: string; nodeId?: string; writable?: boolean };
@@ -14,7 +17,7 @@ type Tab = "definitions" | "instances" | "groups" | "provider";
 const empty = () => ({ format: "sparkstudio.tags", version: 2, tags: [], udtDefinitions: [], instances: [], scanGroups: [] });
 const initialMembers = '[\n  { "path": "Count", "kind": "memory", "dataType": "Int32", "value": 0 },\n  { "path": "Doubled", "kind": "expression", "dataType": "Int32", "expression": "count * 2", "inputs": { "count": "./Count" } }\n]';
 
-export default function TagModels({ onClose, onApplied }: { onClose: () => void; onApplied: () => void }) {
+export default function TagModels({ onClose, onApplied, connections = [] }: { onClose: () => void; onApplied: () => void; connections?: Connection[] }) {
   const dialog = useRef<HTMLDialogElement>(null), id = useId();
   const [model, setModel] = useState<Model | null>(null), [status, setStatus] = useState<Status | null>(null);
   const [tab, setTab] = useState<Tab>("definitions"), [selected, setSelected] = useState("");
@@ -23,6 +26,8 @@ export default function TagModels({ onClose, onApplied }: { onClose: () => void;
   const [review, setReview] = useState<{ package: object; preview: Preview } | null>(null);
   const [reviewPage, setReviewPage] = useState(0);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [message, setMessage] = useState("");
+  const [pointConnection, setPointConnection] = useState(""), [pointId, setPointId] = useState(""), [memberPath, setMemberPath] = useState("SourceValue");
+  const selectedConnection = connections.find(connection => connection.id === pointConnection);
   async function load() {
     const [next, health] = await Promise.all([api<Model>("/tag-engineering/export"), api<Status>("/tag-engineering/status")]);
     setModel(next); setStatus(health); return next;
@@ -87,7 +92,8 @@ export default function TagModels({ onClose, onApplied }: { onClose: () => void;
           <label>Definition ID<input value={name} onChange={event => { change(); setName(event.target.value); }} /></label>
           <label>New version<input type="number" min={1} max={1000000} value={version} onChange={event => { change(); setVersion(Number(event.target.value)); }} /></label>
           <label>Members (JSON)<textarea rows={12} spellCheck={false} value={text} onChange={event => { change(); setText(event.target.value); }} /></label>
-          <small>Use relative member paths and ./Member for expression inputs. Device members use kind "device", connectionId and the saved map's point ID as nodeId. Each member has a source, scalar dataType, and optional scanGroup. Nested UDTs and additional providers are unsupported.</small>
+          <small>Use relative member paths and ./Member for expression inputs. PLC and read-source members use kind "device", connectionId and the saved point ID as nodeId. Read-source members are always read-only. Each member has a scalar dataType and optional scanGroup.</small>
+          <details><summary>Add a saved source point member</summary><div className="form-two-col"><label>Connection<select value={pointConnection} onChange={event => { setPointConnection(event.target.value); setPointId(""); }}><option value="">Choose a connection…</option>{connections.filter(isPointConnection).map(connection => <option key={connection.id} value={connection.id}>{connection.name} · {connectionTypeName(connection.type)}</option>)}</select></label><label>Saved point<select value={pointId} onChange={event => setPointId(event.target.value)}><option value="">Choose a point…</option>{connectionPoints(selectedConnection).map(point => <option value={point.id} key={point.id}>{point.name} · {point.dataType}</option>)}</select></label><label>Relative member path<input value={memberPath} onChange={event => setMemberPath(event.target.value)} /></label></div><button className="button" disabled={!pointConnection || !pointId || !memberPath} onClick={() => { try { const members: Member[] = JSON.parse(text); if (!Array.isArray(members)) throw new Error("Members must be a JSON array."); if (members.some(member => member.path === memberPath)) throw new Error("A member already uses this path."); const point = connectionPoints(selectedConnection).find(item => item.id === pointId); if (!point) throw new Error("Choose a saved point."); change(); setText(JSON.stringify([...members, { path: memberPath, kind: "device", dataType: point.dataType, connectionId: pointConnection, nodeId: point.id, writable: point.writable === true }], null, 2)); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } }}>Add member to draft</button></details>
         </>}
         {tab === "instances" && <>
           <label>Instance<select value={selected} onChange={event => choose(tab, event.target.value)}><option value="">New instance</option>{model.instances.map(item => <option key={item.path}>{item.path}</option>)}</select></label>

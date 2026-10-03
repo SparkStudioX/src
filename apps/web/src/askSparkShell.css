@@ -1,0 +1,19 @@
+.ask-spark-shell { display:flex; align-items:flex-start; min-height:100dvh; width:100%; min-width:0; }
+.ask-spark-page { flex:1 1 auto; width:100%; min-width:0; }
+.ask-spark-shell-open .topbar { height:auto; min-height:72px; flex-wrap:wrap; padding-block:12px; gap:10px 16px; }
+.ask-spark-shell-open .topbar-actions { flex-wrap:wrap; max-width:100%; row-gap:7px; }
+.ask-spark-dock { position:sticky; top:0; width:360px; flex:0 0 360px; height:100dvh; display:flex; flex-direction:column; min-width:0; overflow:hidden; background:var(--panel); }
+.ask-spark-dock > .ask-spark-panel { flex:1 1 auto; width:100%; min-height:0; }
+.ask-spark-inspector-switch { display:none; flex:none; border-left:1px solid var(--border); border-bottom:1px solid var(--border); background:var(--surface-subtle); }
+.ask-spark-inspector-switch > button,.ask-spark-inspector-switch > span { flex:1; text-align:center; padding:11px 9px; border:0; border-bottom:2px solid transparent; background:transparent; color:var(--muted); font:inherit; font-size:12px; }
+.ask-spark-inspector-switch > span { border-bottom-color:var(--accent); color:var(--ink); background:var(--panel); font-weight:600; }.ask-spark-inspector-switch > button { cursor:pointer; }.ask-spark-inspector-switch > button:hover { background:var(--panel); color:var(--ink); }
+@media(min-width:901px) and (max-width:1799px) {
+  .ask-spark-shell-designer .ask-spark-inspector-switch { display:flex; }
+  .ask-spark-shell-designer .app-main[data-ask-spark-open="true"] .designer > #designer-properties-panel,
+  .ask-spark-shell-designer .app-main[data-ask-spark-open="true"] .designer > .designer-pane-separator[aria-controls="designer-properties-panel"] { display:none; }
+  .ask-spark-shell-designer .app-main[data-ask-spark-open="true"] .designer > .canvas-workspace { min-width:320px; }
+}
+.ask-spark-shell-narrow .ask-spark-dock { position:fixed; top:0; right:0; bottom:0; width:min(440px,100vw); height:100dvh; z-index:120; box-shadow:-12px 0 48px #0005; }
+.ask-spark-backdrop { position:fixed; inset:0; background:#0006; z-index:119; }
+.ask-spark-dock:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+@media(max-width:900px) { .ask-spark-shell-designer .ask-spark-inspector-switch { display:flex; } }

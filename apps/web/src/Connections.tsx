@@ -2,11 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { api, ApiError, displayValue, id } from "./api";
 import { Field } from "./App";
 import Icon from "./Icon";
-import type { BrowseNode, Connection } from "./types";
+import type { BrowseNode, Connection, ConnectionEditorSection, SourceMigrationPreview } from "./types";
 import ConnectionDiagnostics from "./ConnectionDiagnostics";
 import CreationMenu, { type CreationChoice } from "./CreationMenu";
 import { connectionTypeName, defaultDeviceSettings, engineeringPointTypes, isDeviceType, isEquipmentType, mappedDevicePoint, nativeDevicePoint, supportsNativeDeviceBrowse, validateAllenBradleySettings, validateDevicePoints } from "./deviceConnections";
 import { DeviceConnectionFields, DeviceRegisterMap } from "./DeviceConnectionEditor";
+import { defaultSourceSettings, isSourceType, validateSourcePoints } from "./sourceConnections";
+import { SourceConnectionFields, SourceConnectionTools } from "./SourceConnectionEditor";
+import { useAskSpark } from "./askSparkContext";
+import { connectionAskSparkContext } from "./askSparkClient";
 
 const newConnectionChoices: CreationChoice<Connection["type"]>[] = [
   { value: "sqlite", label: "SQLite", description: "Use a local gateway database", icon: "database" },
@@ -16,6 +20,9 @@ const newConnectionChoices: CreationChoice<Connection["type"]>[] = [
   { value: "ab-eip", label: "Allen Bradley EtherNet/IP", description: "Read controller symbols or legacy file elements", icon: "plug" },
   { value: "siemens-s7", label: "Siemens S7", description: "Read mapped DB and memory addresses", icon: "plug" },
   { value: "beckhoff-ads", label: "Beckhoff ADS", description: "Connect to TwinCAT PLC symbols", icon: "plug" },
+  { value: "mtconnect", label: "MTConnect agent", description: "Read CNC observations and reduced conditions", icon: "plug" },
+  { value: "i3x", label: "i3X source", description: "Browse and read industrial objects", icon: "plug" },
+  { value: "mqtt", label: "MQTT subscriber", description: "Map broker topics to read-only tags", icon: "plug" },
 ];
 
 interface DiscoveredEndpoint {
@@ -25,6 +32,23 @@ interface DiscoveredEndpoint {
   serverCertificateSha256?: string;
   serverCertificateSubject?: string;
   userTokenTypes?: string[];
+}
+
+function connectionSections(connection: Connection): { id: ConnectionEditorSection; name: string }[] {
+  const sections: { id: ConnectionEditorSection; name: string }[] = [{ id: "connection", name: "Connection" }];
+  if (connection.id === "sample") return sections;
+  if (connection.type === "opcua" || connection.type === "sqlserver" || isSourceType(connection.type)) sections.push({ id: "security", name: "Security" });
+  if (connection.type === "sqlite") sections.push({ id: "schema", name: "Database" });
+  if (isDeviceType(connection.type)) sections.push({ id: "points", name: "Register map" });
+  if (isSourceType(connection.type)) {
+    sections.push(connection.type === "mqtt" ? { id: "mappings", name: "Topic mappings" } : { id: "acquisition", name: "Acquisition" });
+    sections.push({ id: "points", name: "Points" });
+  }
+  if (connection.type === "opcua" || isDeviceType(connection.type) || isSourceType(connection.type)) sections.push({ id: "browse", name: connection.type === "mqtt" ? "Observed topics" : isSourceType(connection.type) ? "Browse & import" : "Browse" });
+  if (connection.type === "mqtt") sections.push({ id: "mapping-test", name: "Mapping test" }, { id: "ownership", name: "Ownership" });
+  if (isSourceType(connection.type)) sections.push({ id: "advanced", name: "Advanced" });
+  sections.push({ id: "diagnostics", name: "Diagnostics" });
+  return sections;
 }
 
 export default function Connections({
@@ -44,10 +68,12 @@ export default function Connections({
       "",
   );
   const [draft, setDraft] = useState<Connection | null>(null);
+  const [sourceMigration, setSourceMigration] = useState<SourceMigrationPreview | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [deleting, setDeleting] = useState(false);
-  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<ConnectionEditorSection>("connection");
+  const sectionButtons = useRef<(HTMLButtonElement | null)[]>([]);
   const generation = useRef(0);
   const browseRequest = useRef(0);
   const watchRequest = useRef(0);
@@ -62,6 +88,10 @@ export default function Connections({
     completedAt?: string;
     durationMs?: number;
     accepted?: boolean;
+    revision?: number;
+    version?: string | null;
+    capabilities?: Record<string, unknown>;
+    details?: Record<string, unknown> | null;
   } | null>(null);
   const [nodes, setNodes] = useState<BrowseNode[]>([]);
   const [browsePath, setBrowsePath] = useState<
@@ -96,6 +126,19 @@ export default function Connections({
   };
   const selected = connections.find((item) => item.id === selectedId);
   const current = draft || selected;
+  const sections = current ? connectionSections(current) : [];
+  const displayedSection = sections.some(section => section.id === activeSection) ? activeSection : "connection";
+  const { registerContext } = useAskSpark();
+  const hasUnsavedChanges = Boolean(draft);
+  useEffect(() => registerContext("resource:connection", () => connectionAskSparkContext(selected?.id, current?.name, displayedSection, hasUnsavedChanges), 20), [registerContext, selected?.id, current?.name, displayedSection, hasUnsavedChanges]);
+  const paneId = `connection-${encodeURIComponent(current?.id ?? "empty")}-sections`;
+  function moveSection(event: import("react").KeyboardEvent<HTMLButtonElement>, index: number) {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const next = event.key === "Home" ? 0 : event.key === "End" ? sections.length - 1
+      : (index + (event.key === "ArrowRight" ? 1 : -1) + sections.length) % sections.length;
+    setActiveSection(sections[next].id); sectionButtons.current[next]?.focus();
+  }
   const currentSavedRevision = (connection: Connection) => latestConnections.current.some(item => item.id === connection.id && (item.revision ?? 0) === (connection.revision ?? 0));
   useEffect(() => {
     // A parent poll may observe our own save before its refresh completes. Invalidate
@@ -116,6 +159,7 @@ export default function Connections({
       setNodes([]); setBrowsePath([]); setSchema([]); setMappingNode(null); setMapBusy(false); setEndpoints([]);
       setWatchValues({}); setWatchBusy(false); setWatchError("");
       setDraft({ ...current, ...patch });
+      setSourceMigration(null);
       setDeleteConfirm(false); setDeleteError("");
     }
   };
@@ -139,6 +183,7 @@ export default function Connections({
     setBusy(false); setBrowseBusy(false); setDiscovering(false); setMapBusy(false);
     setSelectedId(connection.id);
     setDraft(null);
+    setSourceMigration(null);
     setTestResult(null);
     setNodes([]);
     setBrowsePath([]);
@@ -147,7 +192,7 @@ export default function Connections({
     setEndpoints([]);
     setSchema([]);
     setWatchValues({}); setWatchBusy(false); setWatchError("");
-    setDeleteConfirm(false); setDeleteError(""); setDiagnosticsOpen(false);
+    setDeleteConfirm(false); setDeleteError(""); setActiveSection("connection");
   };
   const add = (type: Connection["type"]) => {
     if (deleting) return;
@@ -164,18 +209,20 @@ export default function Connections({
             securityMode: "SignAndEncrypt",
           }
         : isDeviceType(type) ? { device: defaultDeviceSettings(type) }
+        : isSourceType(type) ? { source: defaultSourceSettings(type) }
         : type === "sqlite" ? {database:"application.db"} : { server: "localhost", database: "", trustServerCertificate: false }),
     });
     setSelectedId("");
+    setSourceMigration(null);
     setTestResult(null);
     setNodes([]);
     setBrowsePath([]);
     setEndpoints([]);
     setSchema([]); setMappingNode(null);
     setWatchValues({}); setWatchBusy(false); setWatchError("");
-    setDeleteConfirm(false); setDeleteError(""); setDiagnosticsOpen(false);
+    setDeleteConfirm(false); setDeleteError(""); setActiveSection("connection");
   };
-  const save = async () => {
+  const save = async (migrationToken?: string) => {
     if (!current) return;
     const stamp = generation.current;
     setBusy(true);
@@ -184,12 +231,22 @@ export default function Connections({
         const errors = [...(current.type === "ab-eip" ? validateAllenBradleySettings(current.device ?? defaultDeviceSettings(current.type)) : []), ...validateDevicePoints(current.type, current.device?.points ?? [], current.device?.controllerFamily)];
         if (errors.length) throw new Error(errors.join("\n"));
       }
-      const saved = await api<Connection>("/connections", "POST", current);
+      if (isSourceType(current.type)) {
+        const errors = validateSourcePoints(current.source?.points ?? []);
+        if (errors.length) throw new Error(errors.join("\n"));
+        if (selected && current.type === "mqtt" && !migrationToken) {
+          const preview = await api<SourceMigrationPreview>(`/connections/${encodeURIComponent(current.id)}/source/migration/preview`, "POST", { revision: selected.revision ?? 0, source: current.source });
+          if (stamp !== generation.current) return;
+          if (preview.changed) { setSourceMigration(preview); return; }
+        }
+      }
+      const saved = await api<Connection>("/connections", "POST", { ...current, ...(migrationToken ? { sourceMigrationToken: migrationToken } : {}) });
       const refreshed = await api<Connection[]>("/connections");
       if (stamp !== generation.current) return;
       onChange(refreshed);
       setSelectedId(saved.id);
       setDraft(null);
+      setSourceMigration(null);
       setTestResult(null); setNodes([]); setSchema([]);
       setWatchValues({}); setWatchError("");
       notify(saved.enabled === false ? "Connection disabled. New operations are blocked and tag subscriptions are stopped." : "Connection saved. Test it to check connectivity.");
@@ -205,13 +262,11 @@ export default function Connections({
     setBusy(true);
     setTestResult(null);
     try {
-      const result = await api<NonNullable<Connection["lastTest"]>>(
-        `/connections/${encodeURIComponent(selected.id)}/test`,
-        "POST",
-      );
+      const sourceTest = isSourceType(selected.type) ? await api<{ success: boolean; message: string; version?: string | null; capabilities: Record<string, unknown>; details?: Record<string, unknown> | null; saved: NonNullable<Connection["lastTest"]> }>(`/connections/${encodeURIComponent(selected.id)}/source/test`, "POST", { revision: selected.revision ?? 0 }) : null;
+      const result = sourceTest?.saved ?? await api<NonNullable<Connection["lastTest"]>>(`/connections/${encodeURIComponent(selected.id)}/test`, "POST");
       const refreshed = await api<Connection[]>("/connections");
       if (stamp !== generation.current || !currentSavedRevision(selected)) return;
-      setTestResult(result.accepted ? result : { success: false, message: "This test was superseded by a newer test or a configuration change. Review the saved connection before testing again." });
+      setTestResult(result.accepted && (!sourceTest || result.revision === (selected.revision ?? 0)) ? { ...result, ...(sourceTest ? { version: sourceTest.version, capabilities: sourceTest.capabilities, details: sourceTest.details } : {}) } : { success: false, message: "This test was superseded by a newer test or a configuration change. Review the saved connection before testing again." });
       onChange(refreshed);
     } catch (error) {
       if (stamp === generation.current) setTestResult({
@@ -292,6 +347,8 @@ export default function Connections({
     while (device.points.some(point => point.id === `point${index}`)) index++;
     const point = nativeDevicePoint(current.type, node, index, current.device?.controllerFamily);
     edit({ device: { ...device, points: [...device.points, point] } });
+    setActiveSection("points");
+    sectionButtons.current[sections.findIndex(section => section.id === "points")]?.focus();
     notify("Point added to the register-map draft as read-only. Review its encoding and save the connection before reading or adding a tag.");
   };
   const cancelDraft = async () => {
@@ -303,7 +360,7 @@ export default function Connections({
       onChange(result);
       const next = result.find(item => item.id === selectedId);
       if (next) select(next);
-      else { setDraft(null); setSelectedId(""); }
+      else { setDraft(null); setSourceMigration(null); setSelectedId(""); }
     } catch (error) { if (stamp === generation.current) notify(error instanceof Error ? error.message : String(error), true); }
     finally { if (stamp === generation.current) setBusy(false); }
   };
@@ -323,20 +380,21 @@ export default function Connections({
       const next = refreshed.find(item => item.id !== "sample") || refreshed[0];
       if (next) select(next);
       else {
-        setSelectedId(""); setDraft(null); setDeleteConfirm(false); setDiagnosticsOpen(false);
+        setSelectedId(""); setDraft(null); setDeleteConfirm(false); setActiveSection("connection");
         setTestResult(null); setNodes([]); setBrowsePath([]); setSchema([]); setMappingNode(null);
       }
       notify(refreshFailed ? "Connection deleted. The list could not be refreshed; reopen Connections to load its latest state." : `Connection deleted.${isEquipmentType(selected.type) ? "" : " Database files are retained."}`, refreshFailed);
     } catch (error) {
       if (stamp !== generation.current) return;
       setDeleteError(error instanceof Error ? error.message : String(error));
-      if (error instanceof ApiError && error.status === 409) setDiagnosticsOpen(true);
+      if (error instanceof ApiError && error.status === 409) setActiveSection("diagnostics");
     } finally { if (mounted.current) setDeleting(false); if (stamp === generation.current) setBusy(false); }
   };
   const displayedTest = testResult || (!draft ? current?.lastTest : null);
   // Pure render helpers share this hook owner, preserving child keys and edit lifetimes.
   function renderConnectionForm(current: Connection) {
     return (<div className="connection-form" inert={deleting}>
+      <div hidden={displayedSection !== "connection"}>
       <label className="checkbox-field"><input type="checkbox" checked={current.enabled !== false} onChange={event => edit({ enabled: event.target.checked })} /><span>Connection enabled</span></label>
       <p className="muted">Disabling stops tag subscriptions and blocks new operations. Operations already in progress may finish. Save to apply.</p>
       <div className="form-two-col">
@@ -353,9 +411,10 @@ export default function Connections({
           />
         </Field>
       </div>
+      </div>
       {current.type === "opcua" ? (
         <>
-          <Field
+          <div hidden={displayedSection !== "connection"}><Field
             label="Server endpoint"
             hint="Enter the server address, then choose its security mode and credentials."
           >
@@ -367,7 +426,7 @@ export default function Connections({
               }
             />
           </Field>
-          <div className="form-two-col">
+          </div><div className="form-two-col" hidden={displayedSection !== "security"}>
             <Field label="Security mode">
               <select
                 value={current.securityMode || "SignAndEncrypt"}
@@ -393,13 +452,15 @@ export default function Connections({
           </div>
         </>
       ) : isDeviceType(current.type) ? (
-        <DeviceConnectionFields type={current.type} settings={current.device} onChange={device => edit({ device })} />
+        <div hidden={displayedSection !== "connection"}><DeviceConnectionFields type={current.type} settings={current.device} onChange={device => edit({ device })} /></div>
+      ) : isSourceType(current.type) ? (
+        <SourceConnectionFields type={current.type} source={current.source} onChange={source => edit({ source })} section={displayedSection} savedMappingIds={selected?.id === current.id ? selected.source?.mqtt?.mappings?.map(mapping => mapping.id) : []} />
       ) : current.type === "sqlite" ? (
-        <Field label="Database filename" hint="A local database in the gateway data directory. Use a filename such as production.db.">
+        <div hidden={displayedSection !== "connection"}><Field label="Database filename" hint="A local database in the gateway data directory. Use a filename such as production.db.">
           <input value={current.database || ""} onChange={event => edit({ database: event.target.value })} />
-        </Field>
+        </Field></div>
       ) : (
-        <div className="form-two-col">
+        <div className="form-two-col" hidden={displayedSection !== "connection"}>
           <Field
             label="Server"
             hint="Hostname, IP address, or server\instance."
@@ -423,7 +484,7 @@ export default function Connections({
           </Field>
         </div>
       )}
-      {(current.type === "opcua" || current.type === "sqlserver") && <><h3 className="form-section-title">Authentication</h3>
+      {(current.type === "opcua" || current.type === "sqlserver") && <div hidden={displayedSection !== "security"}><h3 className="form-section-title">Authentication</h3>
         <div className="form-two-col">
           <Field
             label="Username"
@@ -460,8 +521,8 @@ export default function Connections({
             />
           </Field>
         </div>
-      </>}{current.type === "sqlserver" && (
-        <label className="checkbox-field">
+      </div>}{current.type === "sqlserver" && (
+        <label className="checkbox-field" hidden={displayedSection !== "security"}>
           <input
             type="checkbox"
             checked={current.trustServerCertificate || false}
@@ -474,9 +535,6 @@ export default function Connections({
           </span>
         </label>
       )}
-      {current.lastError && (
-        <div className="inline-error">{current.lastError}</div>
-      )}
     </div>);
   }
 
@@ -486,7 +544,7 @@ export default function Connections({
         <div className="large-empty">
           <Icon name="plug" size={42} />
           <h2>Connect to your plant</h2>
-          <p>Choose New Connection to add a PLC, OPC UA server or database.</p>
+          <p>Choose New Connection to add a PLC, industrial read source, OPC UA server or database.</p>
         </div>
       ) : (
         <>
@@ -532,11 +590,35 @@ export default function Connections({
               </div>
             )}
           </div>
+          <div className="connection-section-tabs" role="tablist" aria-label="Connection sections">{sections.map((section, index) => <button key={section.id} ref={element => { sectionButtons.current[index] = element; }} type="button" role="tab" id={`${paneId}-${section.id}`} aria-controls={paneId} aria-selected={displayedSection === section.id} tabIndex={displayedSection === section.id ? 0 : -1} onClick={() => setActiveSection(section.id)} onKeyDown={event => moveSection(event, index)}>{section.name}</button>)}</div>
           {deleteConfirm && selected && <div className="connection-delete-confirm" role="alert">
             <div><strong>Delete {selected.name}?</strong><p>Remove or change any saved tag and named-query references first.{!isEquipmentType(selected.type) && " Database files are retained."} Update any scripts that use this connection.</p></div>
             <div className="editor-actions"><button className="button" disabled={deleting} onClick={() => { setDeleteConfirm(false); setDeleteError(""); }}>Cancel</button><button className="button danger" disabled={busy || browseBusy || mapBusy} onClick={() => void remove()}>{deleting ? "Deleting…" : "Delete connection"}</button></div>
             {deleteError && <p className="inline-error" role="status">{deleteError}</p>}
           </div>}
+          {current.lastError && <div className="connection-panel-notice inline-error" role="status">{current.lastError}</div>}
+          {displayedTest && (
+            <div
+              className={`test-result ${displayedTest.success ? "success" : "failed"}`}
+            >
+              <Icon
+                name={displayedTest.success ? "check" : "info"}
+                size={20}
+              />
+              <div>
+                <strong>
+                  {displayedTest.success
+                    ? "Last connection test passed"
+                    : "Connection test did not pass"}
+                </strong>
+                <p>{displayedTest.message}</p>
+                {testResult?.capabilities && <><p>Source version {testResult.version ?? "not reported"} · tested revision {testResult.revision}</p><details><summary>Source capabilities and effective profile</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify({ capabilities: testResult.capabilities, details: testResult.details }, null, 2)}</pre></details></>}
+                {displayedTest.completedAt && <small>{new Date(displayedTest.completedAt).toLocaleString()} · {displayedTest.durationMs} ms · A test result is a point-in-time observation.</small>}
+              </div>
+            </div>
+          )}
+          {sourceMigration && <div className="connection-delete-confirm" role="status"><div><strong>Review source namespace migration</strong><p>{sourceMigration.changes.length} owned definitions retain their identities and locked types. Review paths and mapping changes before saving.</p><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Point</th><th>Before</th><th>After</th><th>Type</th></tr></thead><tbody>{sourceMigration.changes.slice(0, 200).map(change => <tr key={change.pointId}><td>{change.pointId}</td><td>{change.before}</td><td>{change.after}</td><td>{change.dataType}{change.suppressed ? " · suppressed" : change.pruned ? " · pruned" : ""}</td></tr>)}</tbody></table></div>{sourceMigration.changes.length > 200 && <p>Showing 200 of {sourceMigration.changes.length} records; saving applies the complete reviewed migration.</p>}</div><div className="editor-actions"><button className="button" disabled={busy} onClick={() => setSourceMigration(null)}>Cancel migration</button><button className="button primary" disabled={busy || !draft} onClick={() => void save(sourceMigration.token)}>Save reviewed migration</button></div></div>}
+          <div id={paneId} className="connection-tab-panel" role="tabpanel" aria-labelledby={`${paneId}-${displayedSection}`} tabIndex={0}>
           {isSample ? (
             <div className="info-banner">
               <Icon name="info" size={19} />
@@ -550,16 +632,17 @@ export default function Connections({
               </div>
             </div>
           ) : (
-            renderConnectionForm(current)
+            <div hidden={!["connection", "security", "acquisition", "mappings", "advanced"].includes(displayedSection)}>{renderConnectionForm(current)}</div>
           )}
-          {isDeviceType(current.type) && <div inert={deleting}><DeviceRegisterMap key={`${current.id}:${current.device?.controllerFamily ?? ""}`} type={current.type} controllerFamily={current.device?.controllerFamily} configurationKey={JSON.stringify({ ...current.device, points: undefined, id: current.id, revision: current.revision })} points={current.device?.points ?? []} disabled={busy} onChange={points => edit({ device: { ...(current.device ?? defaultDeviceSettings(current.type as import("./types").DeviceConnectionType)), points } })} /></div>}
-          {current.type === "sqlite" && <div className="browse-section" inert={deleting}>
+          {isDeviceType(current.type) && <div inert={deleting} hidden={displayedSection !== "points"}><DeviceRegisterMap key={`${current.id}:${current.device?.controllerFamily ?? ""}`} type={current.type} controllerFamily={current.device?.controllerFamily} configurationKey={JSON.stringify({ ...current.device, points: undefined, id: current.id, revision: current.revision })} points={current.device?.points ?? []} disabled={busy} onChange={points => edit({ device: { ...(current.device ?? defaultDeviceSettings(current.type as import("./types").DeviceConnectionType)), points } })} /></div>}
+          {isSourceType(current.type) && current.source && <SourceConnectionTools key={current.id} connection={current} section={displayedSection} saved={!draft && Boolean(selected)} disabled={busy || deleting} onChange={source => edit({ source })} notify={notify} onImported={connection => { generation.current++; setDraft(null); setSourceMigration(null); onChange(latestConnections.current.map(item => item.id === connection.id ? connection : item)); setSelectedId(connection.id); onTagsChanged(); }} />}
+          {current.type === "sqlite" && <div className="browse-section" inert={deleting} hidden={displayedSection !== "schema"}>
             <div className="browse-section-heading"><div><h3>Local database</h3><p>Save the connection, then create an empty database or inspect an existing one.</p></div>
               <div className="editor-actions"><button className="button" disabled={busy || !!draft || !selected || selected.enabled === false} onClick={() => void databaseAction(true)}>Create database</button><button className="button" disabled={busy || !!draft || !selected || selected.enabled === false} onClick={() => void databaseAction(false)}>Browse schema</button></div></div>
             {schema.map(table => <div key={table.name}><h4>{table.name}</h4><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Column</th><th>Type</th><th>Key</th></tr></thead><tbody>{table.columns.map(column => <tr key={column.name}><td>{column.name}</td><td>{column.dataType}</td><td>{column.primaryKey ? "Primary" : ""}</td></tr>)}</tbody></table></div></div>)}
           </div>}
           {current.type === "opcua" && !isSample && (
-            <div className="browse-section certificate-section" inert={deleting}>
+            <div className="browse-section certificate-section" inert={deleting} hidden={displayedSection !== "security"}>
               <div className="browse-section-heading">
                 <div>
                   <h3>Server identity</h3>
@@ -630,27 +713,8 @@ export default function Connections({
               ))}
             </div>
           )}
-          {displayedTest && (
-            <div
-              className={`test-result ${displayedTest.success ? "success" : "failed"}`}
-            >
-              <Icon
-                name={displayedTest.success ? "check" : "info"}
-                size={20}
-              />
-              <div>
-                <strong>
-                  {displayedTest.success
-                    ? "Last connection test passed"
-                    : "Connection test did not pass"}
-                </strong>
-                <p>{displayedTest.message}</p>
-                {displayedTest.completedAt && <small>{new Date(displayedTest.completedAt).toLocaleString()} · {displayedTest.durationMs} ms · A test result is a point-in-time observation.</small>}
-              </div>
-            </div>
-          )}
-          {isEquipmentType(current.type) && !isSample && (
-            <div className="browse-section" inert={deleting}>
+          {(current.type === "opcua" || isDeviceType(current.type)) && !isSample && (
+            <div className="browse-section" inert={deleting} hidden={displayedSection !== "browse"}>
               <div className="browse-section-heading">
                 <div>
                   <h3>{isDeviceType(current.type) ? "Browse and quick watch" : "Browse server"}</h3>
@@ -790,7 +854,8 @@ export default function Connections({
               )}
             </div>
           )}
-          {selected && !isSample && !draft && <ConnectionDiagnostics key={`${selected.id}:${selected.revision ?? 0}`} connection={selected} expanded={diagnosticsOpen} onExpandedChange={setDiagnosticsOpen} />}
+          <div hidden={displayedSection !== "diagnostics"}>{selected && !isSample && !draft ? <ConnectionDiagnostics key={`${selected.id}:${selected.revision ?? 0}`} connection={selected} embedded expanded={displayedSection === "diagnostics"} onExpandedChange={() => {}} /> : !isSample && <p className="connection-panel-notice">Save the connection or cancel changes to review diagnostics for its saved configuration.</p>}</div>
+          </div>
         </>
       )}
     </section>);

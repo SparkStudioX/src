@@ -28,12 +28,14 @@ public sealed partial class ConnectorService : IDisposable
     private readonly CancellationTokenSource _watchShutdown = new();
     private readonly CancellationToken _watchStopping;
     private int _disposed;
+    private readonly Func<ConnectionDefinition, ISourceSession>? _sourceFactory;
 
-    public ConnectorService(string dataDirectory, Action? ensureOperationsAllowed = null)
+    public ConnectorService(string dataDirectory, Action? ensureOperationsAllowed = null, Func<ConnectionDefinition, ISourceSession>? sourceFactory = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataDirectory);
         _dataDirectory = Path.GetFullPath(dataDirectory);
         _ensureOperationsAllowed = ensureOperationsAllowed;
+        _sourceFactory = sourceFactory;
         _watchStopping = _watchShutdown.Token;
         _deviceSessions = new ConnectionResourcePool<IDeviceSession>(32, CreateDeviceSessionAsync, _ => true, _ => Task.CompletedTask,
             error => error is ArgumentException, sameConfiguration: (left, right) => left.Type == right.Type && JsonSerializer.Serialize(left.Device) == JsonSerializer.Serialize(right.Device));
@@ -53,6 +55,11 @@ public sealed partial class ConnectorService : IDisposable
         _ensureOperationsAllowed?.Invoke();
         try
         {
+            if (SourceConfiguration.IsSource(connection))
+            {
+                var source = await TestSourceAsync(connection, cancellationToken);
+                return new(source.Success, source.Message);
+            }
             if (DeviceConfiguration.IsDevice(connection))
             {
                 await WithDeviceAsync(connection, async (session, ct) => { await session.TestAsync(ct); return true; }, cancellationToken);
@@ -111,6 +118,8 @@ public sealed partial class ConnectorService : IDisposable
     public Task<IReadOnlyList<BrowseNode>> BrowseAsync(ConnectionDefinition connection, string? nodeId, CancellationToken cancellationToken)
     {
         _ensureOperationsAllowed?.Invoke();
+        if (SourceConfiguration.IsSource(connection)) return BrowseSourceLegacyAsync(connection, nodeId, cancellationToken);
+        if (!DeviceConfiguration.IsDevice(connection) && !IsOpc(connection)) throw new ArgumentException("Choose a supported equipment connection.");
         if (DeviceConfiguration.IsDevice(connection))
         {
             DeviceConfiguration.Validate(connection.Device ?? throw new ArgumentException("Device settings are required."), connection.Type);
@@ -161,6 +170,8 @@ public sealed partial class ConnectorService : IDisposable
         ArgumentNullException.ThrowIfNull(nodeIds);
         if (nodeIds.Count > MaximumReadNodes) throw new ArgumentException($"Read at most {MaximumReadNodes} nodes at a time.");
         if (nodeIds.Count == 0) return Task.FromResult<IReadOnlyList<ConnectorValue>>([]);
+        if (SourceConfiguration.IsSource(connection)) return ReadSourceLegacyAsync(connection, nodeIds, cancellationToken);
+        if (!DeviceConfiguration.IsDevice(connection) && !IsOpc(connection)) throw new ArgumentException("Choose a supported equipment connection.");
         if (DeviceConfiguration.IsDevice(connection))
         {
             var points = nodeIds.Select(id => DeviceConfiguration.Point(connection, id)).ToArray();
@@ -227,7 +238,7 @@ public sealed partial class ConnectorService : IDisposable
         }
         catch (SqlException) when (timeout.IsCancellationRequested)
         {
-            if (cancellationToken.IsCancellationRequested) throw new OperationCanceledException(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             throw new TimeoutException("SQL query exceeded the 30 second operation limit.");
         }
         catch (SqlException error) { throw new InvalidOperationException(SafeError(error)); }
@@ -355,6 +366,7 @@ public sealed partial class ConnectorService : IDisposable
         _watchShutdown.Cancel();
         _sessions.Dispose();
         _deviceSessions.Dispose();
+        DisposeSources();
         _watchShutdown.Dispose();
     }
 

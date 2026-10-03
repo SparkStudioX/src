@@ -30,6 +30,7 @@ export function validateLocalization(value: unknown): asserts value is Translati
       fail(`Message ${key} needs a default translation and can only contain declared languages.`);
     const entries = translations as Record<string, unknown>;
     for (const text of Object.values(entries)) {
+      // eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
       if (typeof text !== "string" || !text.trim() || text.length > 2048 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/.test(text)) fail("Translations need 1–2048 characters without control characters other than tabs and line breaks.");
       total += (text as string).length;
       if (total > 262144) fail("Translation text exceeds the project limit of 262144 characters.");
@@ -74,6 +75,7 @@ export function localizeComponent(component: CanvasComponent, catalog: Translati
   const requested = catalog.locales.includes(locale) && own(messages, locale) ? messages[locale] : undefined;
   const fallback = own(messages, catalog.defaultLocale) ? messages[catalog.defaultLocale] : undefined;
   const text = requested ?? fallback;
+  // eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
   if (typeof text !== "string" || text.length > 2048 || !text.trim() || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/.test(text)) return authoredFallback();
   try { if (!sameTokens(component.props.text ?? "", text)) return authoredFallback(); } catch { return authoredFallback(); }
   return { component: { ...component, props: { ...component.props, text } }, locale: requested === undefined ? catalog.defaultLocale : locale,

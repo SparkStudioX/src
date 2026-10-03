@@ -74,7 +74,7 @@ function parseParameters(text: string): Record<string, Scalar> {
 }
 function time(value?: string | null) { return value ? new Date(value).toLocaleTimeString() : "—"; }
 
-export default function Scripts({ parameters, pythonAvailable, notify, onDirtyChange, navigationRequest, onNavigationHandled, onSearchResources, onSearchError, onSearchLoading }: {
+export default function Scripts({ parameters, pythonAvailable, notify, onDirtyChange, navigationRequest, onNavigationHandled, onSearchResources, onSearchError, onSearchLoading, externalRefresh }: {
   parameters: RuntimeParameters;
   pythonAvailable: boolean;
   notify: (message: string, error?: boolean) => void;
@@ -84,6 +84,7 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
   onSearchResources?: (resources: ScriptSearchResource[]) => void;
   onSearchError?: (message: string) => void;
   onSearchLoading?: (loading: boolean) => void;
+  externalRefresh?: ScriptDraft | null;
 }) {
   const { gatewayAdmin, permissions } = useAuth();
   const [draft, setDraft] = useState<ScriptDraft | null>(null);
@@ -114,10 +115,24 @@ export default function Scripts({ parameters, pythonAvailable, notify, onDirtyCh
   const handledNavigation = useRef<number | null>(null);
   const selected = draft?.resources.find(resource => resource.id === selectedId);
   const dirty = draft !== null && JSON.stringify(draft) !== saved;
+  const handledRefresh = useRef<ScriptDraft | null>(null);
+  useEffect(() => {
+    if (!externalRefresh || handledRefresh.current === externalRefresh || busy) return;
+    handledRefresh.current = externalRefresh;
+    if (dirty || defaultError) {
+      setError("Ask Spark changed saved scripts. Your unsaved script text is retained. Use Reload when you are ready to replace it with the saved resources.");
+      return;
+    }
+    loadEpoch.current++;
+    setDraft(externalRefresh); setSaved(JSON.stringify(externalRefresh)); setLoading(false); setSearchLoadError(""); setError(""); setResult(null);
+    setSelectedId(previous => externalRefresh.resources.some(resource => resource.id === previous) ? previous : null);
+    setOpenIds(previous => previous.filter(id => externalRefresh.resources.some(resource => resource.id === id)));
+    setDefaultText(JSON.stringify(externalRefresh.resources.find(resource => resource.id === selectedId)?.parameters ?? {}));
+  }, [externalRefresh, busy, dirty, defaultError, selectedId]);
   useEffect(() => { onDirtyChange?.(dirty || Boolean(defaultError)); }, [dirty, defaultError, onDirtyChange]);
   useEffect(() => {
     if (draft) onSearchResources?.(draft.resources);
-  }, [draft, onSearchResources]);
+  }, [draft, onSearchResources, externalRefresh]);
   useEffect(() => { onSearchError?.(searchLoadError); }, [searchLoadError, onSearchError]);
   useEffect(() => { onSearchLoading?.(loading); }, [loading, onSearchLoading]);
   const browserScript = selected?.type === "client";

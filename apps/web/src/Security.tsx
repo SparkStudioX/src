@@ -166,6 +166,7 @@ function GatewaySettingsEditor({ settings, projects, reloading, onReload, onSave
   const currentPrefixes = chosen ? projectTagPrefixes[chosen.id] || [] : [];
   let validation = "";
   for (const [projectId, values] of Object.entries(projectTagPrefixes)) {
+    // eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
     if (values.length > 100 || new Set(values).size !== values.length || values.some(value => value.length > 512 || /[\x00-\x1f\x7f]/.test(value))) { validation = `${projects.find(project => project.id === projectId)?.name || projectId}: use at most 100 unique prefixes, each no longer than 512 characters and without control characters.`; break; }
   }
   const locked = busy || reloading;

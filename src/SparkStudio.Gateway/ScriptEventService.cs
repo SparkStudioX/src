@@ -28,7 +28,12 @@ public sealed class ScriptEventService : BackgroundService
     private Task journalWriter = Task.CompletedTask;
     public string MessageScope { get; set; }
 
-    private sealed class ExecutionLease { public readonly SemaphoreSlim Semaphore = new(1, 1); public int Users; }
+    private sealed class ExecutionLease : IDisposable
+    {
+        public readonly SemaphoreSlim Semaphore = new(1, 1);
+        public int Users;
+        public void Dispose() { Semaphore.Dispose(); GC.SuppressFinalize(this); }
+    }
     private sealed record ActiveRun(CancellationTokenSource Cancellation, TaskCompletionSource Done, Generation? Generation, string ResourceId, bool Shared);
     private sealed class Resource(JsonObject definition)
     {
@@ -66,7 +71,7 @@ public sealed class ScriptEventService : BackgroundService
     }
     private sealed record Work(Resource Resource, JsonObject Context, Dictionary<string, JsonElement> Parameters,
         string Source, string Trigger, int Revision, IReadOnlyDictionary<string, string> Libraries,
-        CancellationToken Caller, string[] Chain, bool WaitForLease, TaskCompletionSource<JsonObject> Completion, JsonArray? Queries, PythonExecutionAccess? Access);
+        string[] Chain, bool WaitForLease, TaskCompletionSource<JsonObject> Completion, JsonArray? Queries, PythonExecutionAccess? Access, CancellationToken Caller);
 
     public ScriptEventService(ScriptResourceStore store, PythonRunner python, ILogger<ScriptEventService> logger, TagEngine tags)
     {
@@ -79,7 +84,7 @@ public sealed class ScriptEventService : BackgroundService
             // Keep the unreadable file intact. Diagnostics must not prevent project startup.
             journalAvailable = false;
             journalError = "Existing execution history could not be read. It is preserved; new history is in memory until storage is repaired and the project restarts.";
-            logger.LogError(error, "Could not load script execution history");
+            GatewayLog.ScriptHistoryReadFailed(logger, error);
         }
     }
     public JsonArray Logs() { lock (gate) return new(logs.Reverse().Select(entry => entry.DeepClone()).ToArray()); }
@@ -124,11 +129,11 @@ public sealed class ScriptEventService : BackgroundService
             lock (gate)
             {
                 if (Busy(id)) throw new InvalidOperationException("This script resource is already running.");
-                pending = Enqueue(generation, resource, context, parameters, run.Source, "manual", run.Revision, run.Libraries, linked.Token, [], false, run.Queries);
+                pending = Enqueue(generation, resource, context, parameters, run.Source, "manual", run.Revision, run.Libraries, [], false, linked.Token, run.Queries);
             }
             return await pending;
         }
-        return await RunCoreAsync(generation, resource, run.Revision, run.Source, "manual", parameters, run.Libraries, context, linked.Token, [], false, run.Queries);
+        return await RunCoreAsync(generation, resource, run.Revision, run.Source, "manual", parameters, run.Libraries, context, [], false, linked.Token, run.Queries);
     }
     public string GetMessageRequirement(string name)
     {
@@ -140,15 +145,15 @@ public sealed class ScriptEventService : BackgroundService
     }
     public Task<JsonObject> DispatchMessageAsync(string name, JsonElement payload, string actor, string[]? roles,
         CancellationToken cancellation, string[]? chain = null, int? expectedRevision = null)
-        => QueueMessage(name, payload, actor, roles, cancellation, chain ?? [], false, expectedRevision).Pending;
+        => QueueMessage(name, payload, actor, roles, chain ?? [], false, expectedRevision, cancellation).Pending;
     public JsonObject SendMessage(string name, JsonElement payload, string actor, string[]? roles, string[]? chain = null, int? expectedRevision = null)
     {
-        var delivery = QueueMessage(name, payload, actor, roles, CancellationToken.None, chain ?? [], true, expectedRevision);
+        var delivery = QueueMessage(name, payload, actor, roles, chain ?? [], true, expectedRevision, CancellationToken.None);
         Observe(delivery.Pending);
         return new() { ["accepted"] = true, ["messageId"] = delivery.Id };
     }
     private (string Id, Task<JsonObject> Pending) QueueMessage(string name, JsonElement payload, string actor, string[]? roles,
-        CancellationToken cancellation, string[] chain, bool oneWay, int? expectedRevision)
+        string[] chain, bool oneWay, int? expectedRevision, CancellationToken cancellation)
     {
         if (payload.ValueKind != JsonValueKind.Object || System.Text.Encoding.UTF8.GetByteCount(payload.GetRawText()) > 65_536)
             throw new ArgumentException("Message payload must be a JSON object of at most 64 KiB.");
@@ -173,7 +178,7 @@ public sealed class ScriptEventService : BackgroundService
             context["messageId"] = id; context["handler"] = name; context["actor"] = actor;
             context["payload"] = JsonNode.Parse(payload.GetRawText()); context["oneWay"] = oneWay;
             return (id, Enqueue(generation, resource, context, ScriptResourceStore.ResolveParameters(resource.Definition, null),
-                "published", "message", generation.Revision!.Value, generation.Libraries, cancellation, chain, chain.Length == 0 || oneWay));
+                "published", "message", generation.Revision!.Value, generation.Libraries, chain, chain.Length == 0 || oneWay, cancellation));
         }
     }
     private (Generation, Resource) MessageHandler(string name, bool internalStartup = false)
@@ -314,7 +319,7 @@ public sealed class ScriptEventService : BackgroundService
             try
             {
                 await RunCoreAsync(generation, resource, generation.Revision!.Value, "published", "shutdown",
-                    ScriptResourceStore.ResolveParameters(resource.Definition, null), generation.Libraries, context, deadline.Token, [], true);
+                    ScriptResourceStore.ResolveParameters(resource.Definition, null), generation.Libraries, context, [], true, deadline.Token);
             }
             catch (OperationCanceledException) when (deadline.IsCancellationRequested) { break; }
         }
@@ -338,7 +343,7 @@ public sealed class ScriptEventService : BackgroundService
                     using var access = PythonExecutionAccess.Enter(work.Access);
                     linked.Token.ThrowIfCancellationRequested();
                     var result = await RunCoreAsync(generation, work.Resource, work.Revision, work.Source, work.Trigger, work.Parameters,
-                        work.Libraries, work.Context, linked.Token, work.Chain, work.WaitForLease, work.Queries);
+                        work.Libraries, work.Context, work.Chain, work.WaitForLease, linked.Token, work.Queries);
                     work.Completion.TrySetResult(result);
                 }
                 catch (OperationCanceledException) { work.Completion.TrySetCanceled(linked.Token); }
@@ -357,11 +362,11 @@ public sealed class ScriptEventService : BackgroundService
     }
     private Task<JsonObject> Enqueue(Generation generation, Resource resource, JsonObject context,
         Dictionary<string, JsonElement> parameters, string source, string trigger, int revision,
-        IReadOnlyDictionary<string, string> libraries, CancellationToken caller, string[] chain, bool waitForLease, JsonArray? queryDefinitions = null)
+        IReadOnlyDictionary<string, string> libraries, string[] chain, bool waitForLease, CancellationToken caller, JsonArray? queryDefinitions = null)
     {
         generation.Cancellation.Token.ThrowIfCancellationRequested(); caller.ThrowIfCancellationRequested();
         var completion = new TaskCompletionSource<JsonObject>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var work = new Work(resource, context, parameters, source, trigger, revision, libraries, caller, chain.ToArray(), waitForLease, completion, queryDefinitions, PythonExecutionAccess.Current);
+        var work = new Work(resource, context, parameters, source, trigger, revision, libraries, chain.ToArray(), waitForLease, completion, queryDefinitions, PythonExecutionAccess.Current, caller);
         lock (gate)
         {
             if (!resource.Lane.Queue.Writer.TryWrite(work))
@@ -378,11 +383,11 @@ public sealed class ScriptEventService : BackgroundService
         try
         {
             return await Enqueue(generation, resource, context, ScriptResourceStore.ResolveParameters(resource.Definition, null),
-                "published", resource.Event, generation.Revision!.Value, generation.Libraries, generation.Cancellation.Token, [], true);
+                "published", resource.Event, generation.Revision!.Value, generation.Libraries, [], true, generation.Cancellation.Token);
         }
         catch (InvalidOperationException error)
         {
-            logger.LogWarning(error, "Gateway event {ResourceId} was not queued", resource.Id);
+            GatewayLog.ScriptQueueFailed(logger, resource.Id, error);
             return new() { ["success"] = false, ["stderr"] = error.Message };
         }
     }
@@ -433,7 +438,7 @@ public sealed class ScriptEventService : BackgroundService
             }
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
-        catch (Exception error) { logger.LogError(error, "Script event {ResourceId} stopped unexpectedly", resource.Id); }
+        catch (Exception error) { GatewayLog.ScriptEventFailed(logger, resource.Id, error); }
         finally { lock (gate) if (states.TryGetValue(resource.Id, out var state)) state["nextRunAt"] = null; }
     }
     private static async Task DelayUntilAsync(DateTimeOffset due, CancellationToken cancellation)
@@ -497,14 +502,14 @@ public sealed class ScriptEventService : BackgroundService
         try
         {
             Observe(Enqueue(generation, resource, context, ScriptResourceStore.ResolveParameters(resource.Definition, null),
-                "published", "tagChange", generation.Revision!.Value, generation.Libraries, generation.Cancellation.Token, [], true));
+                "published", "tagChange", generation.Revision!.Value, generation.Libraries, [], true, generation.Cancellation.Token));
         }
         catch (InvalidOperationException) { /* Enqueue already increments missedEvents. */ }
         catch (OperationCanceledException) { }
     }
     private async Task<JsonObject> RunCoreAsync(Generation? generation, Resource resource, int revision, string source, string trigger,
         Dictionary<string, JsonElement> parameters, IReadOnlyDictionary<string, string> libraries, JsonObject context,
-        CancellationToken cancellation, string[] chain, bool waitForLease, JsonArray? queryDefinitions = null)
+        string[] chain, bool waitForLease, CancellationToken cancellation, JsonArray? queryDefinitions = null)
     {
         cancellation.ThrowIfCancellationRequested();
         ExecutionLease lease;
@@ -585,7 +590,7 @@ public sealed class ScriptEventService : BackgroundService
         finally
         {
             if (acquired) lease.Semaphore.Release();
-            lock (gate) if (--lease.Users == 0) { leases.Remove(resource.Id); lease.Semaphore.Dispose(); }
+            lock (gate) if (--lease.Users == 0) { leases.Remove(resource.Id); lease.Dispose(); }
         }
     }
     private void Complete(JsonObject entry, string status, JsonObject result, double duration)
@@ -627,7 +632,7 @@ public sealed class ScriptEventService : BackgroundService
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
             {
                 lock (gate) journalError = "Execution history could not be persisted. Check project storage.";
-                logger.LogError(error, "Could not persist script execution history");
+                GatewayLog.ScriptHistoryWriteFailed(logger, error);
             }
             await Task.Delay(250);
         }

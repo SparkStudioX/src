@@ -30,7 +30,7 @@ internal static class BackupS3Checks
         const string prefix = "backups/gateway/";
         string Name() => BackupDestinations.CreateArchiveName(owner, DateTimeOffset.UtcNow, Guid.NewGuid());
         Task<BackupDeliveryResult> Deliver(string name, CancellationToken token = default, bool multipart = false)
-            => BackupDestinations.DeliverS3FixtureAsync(Target(), archive, name, owner, 7, token, new LoopbackRewrite(service.Port), multipart);
+            => BackupDestinations.DeliverS3FixtureAsync(Target(), archive, name, owner, 7, new LoopbackRewrite(service.Port), token, multipart);
         void Seed()
         {
             service.Reset();

@@ -64,7 +64,7 @@ export function planResourceChange(project: Project, queries: NamedQuery[], scri
 
   const entries = buildProjectSearch(project, queries, scripts);
   const references: SearchReference[] = [];
-  let terms: string[] = [];
+  let terms: string[];
   let removedIds = new Set<string>();
   let candidate: Project = project;
   const insideDeletedResource = (entry: SearchEntry): boolean => savedRequest.action === "delete"
@@ -76,6 +76,7 @@ export function planResourceChange(project: Project, queries: NamedQuery[], scri
     plan.afterName = name;
     if (!name) plan.errors.push("Enter a non-empty resource name.");
     if (name.length > 120) plan.errors.push("Resource names must contain at most 120 characters.");
+    // eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
     if (/[\u0000-\u001f\u007f-\u009f]/.test(savedRequest.name)) plan.errors.push("Resource names cannot contain control characters.");
     if (name === owner.name) plan.errors.push("The resource already has that name.");
     candidate = replaceDocument(project, ownerKind, ownerId, item => ({ ...item, name }));

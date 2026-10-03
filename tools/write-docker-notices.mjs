@@ -114,6 +114,8 @@ export function verifyNugetIntegrity(directory, name, version, lockedHash) {
 
 async function nugetInventory(payload, nuget, notices, cache) {
   const deps = read(path.join(payload, 'SparkStudio.Gateway.deps.json'));
+  const worker = path.join(payload, 'source-worker', 'SparkStudio.SourceWorker.deps.json');
+  if (fs.existsSync(worker)) Object.assign(deps.libraries, read(worker).libraries);
   const packages = [];
   for (const [identity, library] of Object.entries(deps.libraries).sort()) {
     if (library.type !== 'package') continue;

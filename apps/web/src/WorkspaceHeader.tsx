@@ -3,6 +3,7 @@ import { useAuth } from "./Auth";
 import { AccountSettingsDialog } from "./AccountSettings";
 import { SessionIdentity } from "./OperatorAccess";
 import Icon from "./Icon";
+import { AskSparkLauncher } from "./AskSpark";
 import "./workspaceHeader.css";
 
 export default function WorkspaceHeader({ page }: { page: "projects" | "gateway" }) {
@@ -13,6 +14,7 @@ export default function WorkspaceHeader({ page }: { page: "projects" | "gateway"
     <header className="workspace-header"><div className="workspace-header-inner">
       <a className="workspace-brand" href={operator ? "/?audience=operator" : "/"}><span className="brand-mark"><Icon name="spark" size={24} /></span><strong>spark<span>studio</span></strong></a>
       <div className="workspace-header-actions">
+        {!operator && <AskSparkLauncher />}
         {page === "gateway" ? <a className="workspace-header-link" href="/">Projects</a> : gatewayAccess && !operator && <a className="workspace-header-link" href="/gateway">Settings</a>}
         <SessionIdentity operator={operator} iconOnlySignOut onAccountSettings={() => setAccountSettingsOpen(true)} />
       </div>

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
@@ -31,13 +32,13 @@ public sealed class SiemensS7DeviceSession : IDeviceSession
         if (db.Success)
         {
             layout = db.Groups[2].Value.ToUpperInvariant();
-            address = new(DataType.DataBlock, int.Parse(db.Groups[1].Value), int.Parse(db.Groups[3].Value), db.Groups[4].Success ? int.Parse(db.Groups[4].Value) : null);
+            address = new(DataType.DataBlock, int.Parse(db.Groups[1].Value, CultureInfo.InvariantCulture), int.Parse(db.Groups[3].Value, CultureInfo.InvariantCulture), db.Groups[4].Success ? int.Parse(db.Groups[4].Value, CultureInfo.InvariantCulture) : null);
         }
         else if (direct.Success)
         {
             layout = direct.Groups[2].Value.ToUpperInvariant();
             address = new(direct.Groups[1].Value.ToUpperInvariant() switch { "M" => DataType.Memory, "I" or "E" => DataType.Input, _ => DataType.Output },
-                0, int.Parse(direct.Groups[3].Value), direct.Groups[4].Success ? int.Parse(direct.Groups[4].Value) : null);
+                0, int.Parse(direct.Groups[3].Value, CultureInfo.InvariantCulture), direct.Groups[4].Success ? int.Parse(direct.Groups[4].Value, CultureInfo.InvariantCulture) : null);
         }
         else throw new ArgumentException("Use an S7 DB/marker/input/output byte or bit address, such as DB10.DBD20 or DB10.DBX0.3.");
         if (address.Db > 65535 || address.Start > 2_097_151 || address.Start + ByteLength(point) > 2_097_152)
@@ -68,7 +69,7 @@ public sealed class SiemensS7DeviceSession : IDeviceSession
     public Task TestAsync(CancellationToken cancellation) => DeviceScalarCodec.SdkAsync(() => TestCoreAsync(cancellation), "S7");
     private async Task TestCoreAsync(CancellationToken cancellation)
     {
-        using var deadline = DeviceScalarCodec.Deadline(cancellation, settings.TimeoutMs);
+        using var deadline = DeviceScalarCodec.Deadline(settings.TimeoutMs, cancellation);
         using var client = Client();
         await client.OpenAsync(deadline.Token);
         _ = await client.ReadStatusAsync(deadline.Token);
@@ -84,7 +85,7 @@ public sealed class SiemensS7DeviceSession : IDeviceSession
         DeviceScalarCodec.SdkAsync(() => ReadCoreAsync(points, cancellation), "S7");
     private async Task<IReadOnlyList<ConnectorValue>> ReadCoreAsync(IReadOnlyList<DevicePoint> points, CancellationToken cancellation)
     {
-        using var deadline = DeviceScalarCodec.Deadline(cancellation, settings.TimeoutMs);
+        using var deadline = DeviceScalarCodec.Deadline(settings.TimeoutMs, cancellation);
         using var client = Client();
         await client.OpenAsync(deadline.Token);
         var result = new List<ConnectorValue>();
@@ -149,7 +150,7 @@ public sealed class SiemensS7DeviceSession : IDeviceSession
         var address = Parse(point);
         if (!point.Writable) throw new ArgumentException("This point does not permit writes.");
         var raw = DeviceScalarCodec.Encode(point, value);
-        using var deadline = DeviceScalarCodec.Deadline(cancellation, settings.TimeoutMs);
+        using var deadline = DeviceScalarCodec.Deadline(settings.TimeoutMs, cancellation);
         using var client = Client();
         await client.OpenAsync(deadline.Token);
         var bytes = DeviceScalarCodec.StorageType(point) == "Boolean" ? null : Encode(point, raw);

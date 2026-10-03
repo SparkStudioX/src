@@ -14,7 +14,7 @@ public sealed class RuntimeSessionMessaging(TimeProvider? time = null)
     private readonly Dictionary<string, (long Second, int Count)> rates = new(StringComparer.Ordinal);
     private (long Second, int Count) gatewayRate;
     private int pending;
-    public sealed class Session(string id, string projectId, string publishedAt, string userId, string username, string owner, Func<bool> valid, DateTimeOffset now)
+    public sealed class Session(string id, string projectId, string publishedAt, string userId, string username, string owner, Func<bool> valid, DateTimeOffset now) : IDisposable
     {
         public string Id { get; } = id;
         public string ProjectId { get; } = projectId;
@@ -25,10 +25,13 @@ public sealed class RuntimeSessionMessaging(TimeProvider? time = null)
         internal Func<bool> Valid { get; } = valid;
         internal DateTimeOffset Seen = now;
         internal bool Connected;
+        internal bool StreamAttached;
         internal readonly Queue<JsonObject> Queue = new();
         internal readonly CancellationTokenSource Closed = new();
+        private int disposed;
         internal readonly Channel<bool> Signal = Channel.CreateBounded<bool>(new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropWrite });
         public object Identity() => new { sessionId = Id, projectId = ProjectId, publishedAt = PublishedAt };
+        public void Dispose() { if (Interlocked.Exchange(ref disposed, 1) == 0) Closed.Dispose(); GC.SuppressFinalize(this); }
     }
 
     public Session Register(string projectId, string publishedAt, string userId, string username, string owner, Func<bool> valid)
@@ -53,7 +56,7 @@ public sealed class RuntimeSessionMessaging(TimeProvider? time = null)
         {
             var session = Owned(projectId, sessionId, userId, owner);
             if (session.Connected) throw new InvalidOperationException("This operator tab already has a message stream.");
-            session.Connected = true; session.Seen = clock.GetUtcNow();
+            session.Connected = true; session.StreamAttached = true; session.Seen = clock.GetUtcNow();
             return session;
         }
     }
@@ -69,7 +72,15 @@ public sealed class RuntimeSessionMessaging(TimeProvider? time = null)
         }
     }
 
-    public void Disconnect(Session session) { lock (gate) Remove(session); }
+    public void Disconnect(Session session)
+    {
+        lock (gate)
+        {
+            session.StreamAttached = false;
+            Remove(session);
+            session.Dispose();
+        }
+    }
     public bool Refresh(Session session)
     {
         lock (gate)
@@ -143,6 +154,9 @@ public sealed class RuntimeSessionMessaging(TimeProvider? time = null)
     {
         if (!sessions.Remove(session.Id)) return;
         session.Connected = false; pending -= session.Queue.Count; session.Queue.Clear(); session.Signal.Writer.TryComplete(); session.Closed.Cancel();
+        // A connected stream still needs Closed.Token while setting up its linked token.
+        // Its Disconnect path releases the source after the stream finishes.
+        if (!session.StreamAttached) session.Dispose();
     }
 }
 
@@ -181,11 +195,14 @@ public static class RuntimeSessionMessageEndpoints
         ?? throw new UnauthorizedAccessException("An active operator login is required.");
     private static async Task Stream(string sessionId, HttpContext context, RuntimeSessionMessaging messaging, TagEngine tags, SecurityStore security)
     {
-        using var lease = TagEventStream.Acquire(context);
+        using var lease = TagEventEndpoint.Acquire(context);
         var session = messaging.Connect(GatewayAccess.ProjectId(context), sessionId, GatewayAccess.Actor(context).Id, Owner(context));
+        var token = CancellationToken.None;
+        try
+        {
         using var changes = new TagDeltaSubscription(tags, path => GatewayAccess.CanReadTag(context, security, path));
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted, session.Closed.Token);
-        var token = cancellation.Token;
+        token = cancellation.Token;
         context.Response.ContentType = "text/event-stream";
         context.Response.Headers.CacheControl = "no-store";
         context.Response.Headers["X-Accel-Buffering"] = "no";
@@ -199,14 +216,12 @@ public static class RuntimeSessionMessageEndpoints
             await context.Response.Body.FlushAsync(token);
             return true;
         }
-        try
-        {
             await Write("ready", session.Identity());
             var scopeRevision = -1L;
             var nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(5);
             while (messaging.Refresh(session))
             {
-                var update = TagEventStream.CaptureCurrent(changes, scopeRevision, () => security.SettingsRevision);
+                var update = TagEventEndpoint.CaptureCurrent(changes, scopeRevision, () => security.SettingsRevision);
                 if (update is not null)
                 {
                     if (update.Snapshot is { } snapshot)
@@ -216,7 +231,7 @@ public static class RuntimeSessionMessageEndpoints
                 }
                 if (DateTimeOffset.UtcNow >= nextHeartbeat)
                 {
-                    await TagEventStream.WriteHeartbeatAsync(context.Response, token);
+                    await TagEventEndpoint.WriteHeartbeatAsync(context.Response, token);
                     nextHeartbeat = DateTimeOffset.UtcNow.AddSeconds(5);
                 }
                 while (messaging.Take(session) is { } message) await Write("message", message);

@@ -78,6 +78,12 @@ Create the first administrator using the local code in `.data/development/securi
 
 The first build acquires the pinned workspace .NET SDK, embedded Python, NuGet dependencies and npm dependencies. SDK/cache files are kept under `.tools`, and the Windows Python runtime under `runtimes/python/windows-x64`. `build.ps1 -SkipRestore` reuses previously restored dependencies; it does not prepare a fresh machine.
 
+Every normal frontend (`npm run build`), production .NET build/publish (Gateway, Connectors, SourceWorker and ServiceHelper), full (`tools/build.ps1`), Docker and CI build runs frontend ESLint, backend .NET SDK analyzers and Ruff, the complete offline unit/acceptance aggregate and the frontend/C#/Python cyclomatic complexity gate. A failed gate stops the build with a nonzero exit code. Quality diagnostics and the gate summary are saved under `.data/quality/`; detailed test reports remain under `.data/test-results/`. `-SkipRestore` does not skip quality gates. These builds require Node, the pinned .NET SDK and CPython, even when starting from the frontend command.
+
+Direct `node tools/build-quality.mjs full` requires prepared npm dependencies and a production Gateway restore, like `build.ps1 -SkipRestore`. Use `tools/build.ps1` to prepare them. Nested test fixtures use isolated restore/build directories and verify that the calling production build's dependency assets remain unchanged.
+
+The shared coordinator issues a temporary context for its nested test/compiler processes so they do not recursively restart the aggregate. A context is valid only while its owning coordinator is alive and is removed on completion; there is no public quality-bypass flag or persistent passing-build stamp. TypeScript checking and compiler diagnostics remain enabled within nested builds.
+
 ## Build an application
 
 Start with the seed project's simulated lines. The independently authored example loaders below describe their payloads; their legacy CLI requests now require authentication. Use the [authenticated test preload](docs/architecture/SECURITY.md#verification-commands) only on an isolated test gateway, or import project packages through the signed-in application. There is no unauthenticated developer bypass.
@@ -206,7 +212,7 @@ Open `https://localhost:8443`; HTTP on 8090 redirects there. The Windows gateway
 
 ## Feature workshops
 
-The [workshop catalog](examples/README.md) covers 56 authored examples. 37 build into independent, importable `.sparkproj` projects; 19 require gateway tags, databases, industrial lab devices, administrative exercises or local image assignment and are clearly listed separately. Each major feature includes a workshop, walkthrough, prerequisites and verification. The portable collection uses synthetic data. Visitor check-in requires a webcam and internet access to Labelary; the other portable exercises work offline.
+The [workshop catalog](examples/README.md) covers 58 authored examples. 37 build into independent, importable `.sparkproj` projects; 21 require gateway tags, databases, industrial lab devices, administrative exercises, AI credentials or local image assignment and are clearly listed separately. Each major feature includes a workshop, walkthrough, prerequisites and verification. The portable collection uses synthetic data. Visitor check-in requires a webcam and internet access to Labelary; the other portable exercises work offline.
 
 Preview.12 supports [Modbus TCP, Allen Bradley EtherNet/IP, Siemens S7 and Beckhoff ADS](docs/architecture/INDUSTRIAL_DEVICE_CONNECTIONS.md) through shared device sessions, saved point maps, polling and reviewed scalar commands. Raw storage and engineering types can differ for numeric scaling; native symbolic browse identities remain separate from saved point IDs. Follow the setup-required industrial workshop and record acceptance against each actual controller/firmware before deployment.
 
@@ -269,6 +275,10 @@ Python lifecycle and session messaging use one **Actions & Events** editor. Impo
 
 ## Aggregate offline verification
 
+Run `node tools/build-quality.mjs` to execute all mandatory quality gates without copying a product build into the development output. Frontend lint uses the ESLint and typescript-eslint recommended correctness rules, plus self-comparison, constructor-return, constant-expression and loop checks. Intentional control-character validators have narrow documented exceptions. Backend lint recompiles Gateway, its production connector/source-worker dependencies and the Windows service helper with the pinned SDK's Recommended analyzers and production warnings as errors; generated files and test fixtures are not production lint inputs. Ruff checks the Python worker and three container runtime tools for syntax, undefined/unused names and bug-prone constructs. Its reviewed platform wheel and extracted standalone binary are hash-verified under ignored `.tools/ruff/`; embedded Python requires no pip or installed packages.
+
+`node tools/check-complexity.mjs` measures all frontend modules, production C# members/accessors/local functions/callbacks, and the four production Python files. New functions must remain at or below 20. Existing functions above 20 have explicit reviewed ceilings in `tools/complexity-baseline.json`; increases fail, and builds never regenerate the baseline. Reports list the analyzed source files and hashes under `.data/quality/complexity/`. Any baseline adjustment requires a deliberate reviewed source change.
+
 Web complexity reports use the existing TypeScript compiler to inspect every
 executable function in `apps/web/src`, including JSX callbacks. Run
 `node tools/analyze-web-complexity.mjs --label before` before a refactor, then
@@ -283,9 +293,8 @@ and adds another function base. Review maximum scores and decision totals togeth
 `node tools/test-web-complexity.mjs` verifies the metric and report comparisons;
 the aggregate offline runner includes these checks.
 
-Install dependencies once with `npm ci --prefix apps/web` and restore both test
-projects with `dotnet restore src/SparkStudio.Gateway.Tests --artifacts-path .data/test-build --locked-mode --configfile NuGet.Config`
-and `dotnet restore src/SparkStudio.Connectors.Tests --artifacts-path .data/test-build --locked-mode --configfile NuGet.Config`.
+Install dependencies once with `npm ci --prefix apps/web`. The aggregate restores both test
+projects with locked dependencies into `.data/test-build` before compiling them.
 On Windows, `tools/bootstrap.ps1` supplies the pinned SDK and CPython; otherwise set
 `SPARKSTUDIO_PYTHON` to an absolute CPython executable. The aggregate runner chooses
 the workspace SDK when present, or `SPARKSTUDIO_DOTNET`/`dotnet` on PATH. Restore with
@@ -302,6 +311,11 @@ A failed assertion stops its current suite, preserving meaningful fixture cleanu
 it does not suppress later suites. Counts in historical verification remain records
 of those builds, not promises for the current tree.
 
-The Product validation CI job runs this contract on Windows and Linux with restored
+The Product validation CI job runs all four mandatory gates on Windows and Linux with restored
 locked dependencies. Live device, SQL Server, browser and elevated service acceptance
 remain separate tests; the offline aggregate never connects to installed gateways.
+
+Ask Spark is available throughout the engineering workspace. Configure Gemini in
+Gateway Settings → AI, then use typed messages, voice transcription or pasted
+screenshots. See [Ask Spark setup and workshop](docs/architecture/ASK_SPARK.md)
+for context, tool permissions, draft Undo, privacy and publication review.

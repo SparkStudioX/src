@@ -30,6 +30,7 @@ export interface BulkReplacePlan {
 
 type Validator = (value: string) => string[];
 type Writer = (next: Project, value: string) => void;
+// eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
 const controls = /[\u0000-\u001f\u007f-\u009f]/;
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
 const knownTypes = new Set(["alarmStatusTable", "alarmJournalTable", "historicalTrend", "viewContainer", "formattedInput", "barcodeInput", "equipmentCommand", "chart", "sparkline", "label", "value", "gauge", "button", "table", "list", "treeView", "textInput", "passwordInput", "multiStateButton",

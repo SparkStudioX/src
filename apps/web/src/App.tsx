@@ -1,4 +1,7 @@
 import { validateDataset } from "./datasets";
+import { AskSparkLauncher } from "./AskSpark";
+import { useAskSparkDesigner } from "./useAskSparkDesigner";
+import { captureDesignerCanvas } from "./askSparkVisual";
 import { RuntimePropertyRow } from "./RuntimePropertyRow";
 import type { BindingTarget } from "./types";
 import ProcessDataProperties from "./ProcessDataProperties";
@@ -7,6 +10,7 @@ import { TagSnapshotStore } from "./tagStore";
 import { useTagSnapshot } from "./useTagSnapshot";
 import { PropertyCollectionDialog } from "./PropertyCollectionEditor";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { api, currentProjectId, displayValue, eventStreamUrl, id, projectPage, projectStorageKey } from "./api";
 import { useAuth } from "./Auth";
@@ -38,6 +42,7 @@ import type {
   RuntimeParameters,
   Screen,
   ScriptResult,
+  ScriptResource,
   PythonUiAction,
   Tag,
   Template,
@@ -288,6 +293,9 @@ export default function App() {
   const setTags = tagStore.replace;
   const [connections, setConnections] = useState<Connection[]>([]);
   const [queries, setQueries] = useState<NamedQuery[]>([]);
+  const [queryRefresh, setQueryRefresh] = useState<NamedQuery[] | null>(null);
+  const [scriptRefresh, setScriptRefresh] = useState<{ revision: number; resources: ScriptResource[] } | null>(null);
+  const askSparkCanvas = useRef<HTMLDivElement>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [previewPopup, setPreviewPopup] = useState<PopupState | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
@@ -792,13 +800,13 @@ export default function App() {
       }, screen), true, `nudge:${screen.id}:${selectedIds.join(",")}`);
     }
   };
-  const save = useCallback(async () => {
+  const save = useCallback(async (throwOnError = false, signal?: AbortSignal) => {
     const current = projectRef.current;
-    if (!current || savingRef.current) return;
+    if (!current || savingRef.current) { if (throwOnError) throw new Error("A project save is already in progress or no project is open."); return; }
     savingRef.current = true;
     setSaving(true);
     try {
-      const saved = await api<Project>("/project", "PUT", current);
+      const saved = await api<Project>("/project", "PUT", current, signal);
       // Retain edits made while the save request was in flight.
       const latest = projectRef.current;
       const next = latest === current || !latest ? saved : { ...latest, revision: saved.revision };
@@ -807,8 +815,10 @@ export default function App() {
       setProject(next);
       setDirty(projectContent(next) !== savedContentRef.current);
       notify("Project saved to the gateway.");
+      return { saved: true, revision: saved.revision, unsavedChanges: projectContent(next) !== savedContentRef.current };
     } catch (error) {
       notify(String(error instanceof Error ? error.message : error), true);
+      if (throwOnError) throw error;
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -843,6 +853,43 @@ export default function App() {
   }, [previewActionBusy, preview, updateHistory]);
   const undo = useCallback(() => travelHistory("undo"), [travelHistory]);
   const redo = useCallback(() => travelHistory("redo"), [travelHistory]);
+  const askSparkOpen = useAskSparkDesigner({
+    snapshot: () => projectRef.current ? {
+      project: projectRef.current, documentId: screen?.id ?? "", documentKind: editingTemplateId ? "template" : "screen",
+      selectedComponentIds: selectedIds, queries: searchQueries ?? queries, scripts: searchScripts, tags, assets,
+    } : null,
+    change,
+    select: (documentId, kind, ids) => { setWorkspace("designer"); openDocument({ id: documentId, kind }); setSelectedIds(ids); },
+    save: signal => save(true, signal),
+    capture: async signal => {
+      const canvas = askSparkCanvas.current;
+      if (workspace !== "designer" || !canvas) throw new Error("Open a document in the Designer workspace before capturing its canvas.");
+      return captureDesignerCanvas(canvas, signal);
+    },
+    refreshResources: async (event, signal) => {
+      if (event.name.startsWith("queries_")) {
+        const next = await api<NamedQuery[]>("/queries", "GET", undefined, signal);
+        signal.throwIfAborted(); if (projectRef.current?.id !== event.projectId) return;
+        flushSync(() => { setQueries(next); setQueryRefresh(next); setSearchQueries(null); });
+      } else if (event.name.startsWith("scripts_")) {
+        const next = await api<{ revision: number; resources: ScriptResource[] }>("/scripts/resources", "GET", undefined, signal);
+        signal.throwIfAborted(); if (projectRef.current?.id !== event.projectId) return;
+        flushSync(() => { setScriptRefresh(next); if (!scriptsEditorReady) setSearchScripts(next.resources); });
+      } else if (event.name === "assets_upload" || event.name === "spark_designer_crop_image_assets") {
+        const next = await api<Asset[]>("/assets", "GET", undefined, signal);
+        signal.throwIfAborted(); if (projectRef.current?.id !== event.projectId) return;
+        flushSync(() => setAssets(next));
+      }
+    },
+    preview: async signal => {
+      signal.throwIfAborted();
+      if (!screen || editorParameterError || previewActionBusy) throw new Error("Open a valid screen and finish the current action before previewing.");
+      if (!preview && !await previewCommunication.start("read-only")) throw new Error("Read-only preview could not start.");
+      signal.throwIfAborted(); setWorkspace("designer"); setPreview(true); setPreviewPopup(null); setPreviewInputs({});
+      return { preview: true, mode: "read-only" };
+    },
+    editable: [preview, previewActionBusy].every(value => !value), workspace, dirty: [dirty, scriptsDirty, queriesDirty, saving].some(Boolean),
+  });
   useEffect(() => {
     const handle = (event: KeyboardEvent) => {
       if (workspace !== "designer" || eventEditorId) return;
@@ -1839,6 +1886,7 @@ export default function App() {
       </div>}
       {screen && (!preview || !editorParameterError) && (
         <Canvas
+          captureRef={askSparkCanvas}
           key={JSON.stringify([screen.id, preview, previewCommunication.session?.token, editingTemplate?.parameterTypes ?? null])}
           screen={screen}
           tags={tags}
@@ -2257,6 +2305,7 @@ export default function App() {
         )}
       </div>
       <div className="topbar-actions">
+        <AskSparkLauncher />
         {workspace === "designer" && project && (
           <>
             <span className={`save-state ${dirty ? "unsaved" : ""}`}>
@@ -2305,7 +2354,7 @@ export default function App() {
   }
 
   function renderWorkspace() {
-    return (<div className="app-main">
+    return (<div className="app-main" data-ask-spark-open={askSparkOpen}>
       {renderTopbar()}
 
       {preview && <ComponentEventDiagnostics state={applicationState} />}
@@ -2369,6 +2418,7 @@ export default function App() {
       {project && (workspace === "queries" || queriesVisited) && <div style={{ display: workspace === "queries" ? "contents" : "none" }}>
         <Queries
           queries={queries}
+          externalRefresh={queryRefresh}
           canRunUpdates={gatewayAdmin}
           connections={connections}
           onChange={setQueries}
@@ -2384,6 +2434,7 @@ export default function App() {
         <Scripts
           parameters={project.parameters}
           pythonAvailable={health?.pythonAvailable || false}
+          externalRefresh={scriptRefresh}
           notify={notify}
           onDirtyChange={setScriptsDirty}
           navigationRequest={scriptNavigation}
@@ -2765,6 +2816,7 @@ function OptionsEditor({ component, onChange }: { component: CanvasComponent; on
 }
 
 function Canvas({
+  captureRef,
   screen,
   tags,
   parameters,
@@ -2791,6 +2843,7 @@ function Canvas({
   onScopedInputChange,
   communicationLost,
 }: {
+  captureRef?: React.Ref<HTMLDivElement>;
   screen: Screen;
   tags: Tag[];
   parameters: RuntimeParameters;
@@ -2971,6 +3024,7 @@ function Canvas({
         style={{ width: screen.width * scale, height: screen.height * scale }}
       >
         <div
+          ref={captureRef}
           className={`screen-canvas ${preview ? "runtime" : gridSize ? "snap-grid" : ""}`}
           key={`${screen.id}:${preview}`}
           onPointerDown={selectArea}
@@ -3048,21 +3102,29 @@ function Canvas({
                 actionBusyId={actionBusyId}
                 interactionLocked={Boolean(actionBusyId)}
               />
-              {!preview && !selectedGroupId && selectedIds.includes(component.id) && (
-                <>
-                  <span className="component-selection-label">
-                    {component.type}
-                  </span>
-                  <span className="selection-corner top-left" />
-                  <span className="selection-corner top-right" />
-                  <span className="selection-corner bottom-left" />
-                  {selectedIds.length === 1 && <div
-                    className="resize-handle"
-                    onPointerDown={(event) => drag(event, component, true)}
-                    title="Drag to resize"
-                  />}
-                </>
-              )}
+            </div>
+          ))}
+          {!preview && selectedComponents.map(component => (
+            <div
+              key={component.id}
+              className="canvas-component-selection"
+              data-selection-id={component.id}
+              style={{ left: component.x, top: component.y, width: component.width, height: component.height }}
+            >
+              {!selectedGroupId && <>
+                <span className="component-selection-label">
+                  {component.type}
+                </span>
+                <span className="selection-corner top-left" />
+                <span className="selection-corner top-right" />
+                <span className="selection-corner bottom-left" />
+                {selectedIds.length === 1 && <div
+                  className="resize-handle"
+                  onPointerDown={(event) => drag(event, component, true)}
+                  title="Drag to resize"
+                  aria-label="Resize selected component"
+                />}
+              </>}
             </div>
           ))}
           {!preview && selectedGroupId && groupBounds && <div className="canvas-group-bounds" data-group-id={selectedGroupId} style={{ left: groupBounds.x, top: groupBounds.y, width: groupBounds.width, height: groupBounds.height }}>

@@ -11,7 +11,7 @@ public static class ConfigurationBackupSnapshot
     public static readonly TimeSpan CaptureTimeout = TimeSpan.FromSeconds(30);
     private static readonly HashSet<string> RootFiles = new(StringComparer.OrdinalIgnoreCase)
     {
-        "gateway-format.json", "projects.json", "connections.json", "tags.json", "tag-values.json", "process-data.json", "deployment.json", "deployment.json.previous", "backup-settings.json",
+        "gateway-format.json", "projects.json", "connections.json", "tags.json", "tag-values.json", "source-discovery.json", "source-config-commit.json", "process-data.json", "deployment.json", "deployment.json.previous", "backup-settings.json", "ask-spark-settings.json",
         "project.json", "queries.json", "published.json", "scripts-draft.json", "scripts-published.json"
     };
     private static readonly HashSet<string> ProjectFiles = new(StringComparer.OrdinalIgnoreCase)
@@ -28,6 +28,8 @@ public static class ConfigurationBackupSnapshot
         if (File.Exists(archive) || Directory.Exists(archive)) throw new IOException("Choose a new archive filename.");
         RecoveryFileSystem.RejectLinks(work); Directory.CreateDirectory(work); RecoveryFileSystem.RejectLinks(work);
         var stage = Path.Combine(work, ".sparkstudio-config-" + Guid.NewGuid().ToString("N"));
+        if (Path.GetDirectoryName(stage) != work || !Path.GetFileName(stage).StartsWith(".sparkstudio-config-", StringComparison.Ordinal))
+            throw new InvalidOperationException("Unrecognized configuration staging path.");
         try
         {
             RecoveryFileSystem.CreatePrivateDirectory(stage);
@@ -43,8 +45,6 @@ public static class ConfigurationBackupSnapshot
         {
             if (Directory.Exists(stage))
             {
-                if (Path.GetDirectoryName(stage) != work || !Path.GetFileName(stage).StartsWith(".sparkstudio-config-", StringComparison.Ordinal))
-                    throw new InvalidOperationException("Unrecognized configuration staging path.");
                 RecoveryFileSystem.RejectLinks(stage); Directory.Delete(stage, recursive: true);
             }
         }

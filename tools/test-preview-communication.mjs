@@ -81,6 +81,8 @@ try {
   await test('guarded sample reads and tag reads work without action authority', async () => {
     const rows = await admin.call(route('/preview/queries/production-summary/execute'), { method: 'POST', token: readOnly.token, body: { parameters: { line: 'Line1' } } }); assert.equal(rows.rows.length, 1);
     const values = await admin.call('/api/tags/read', { method: 'POST', token: readOnly.token, headers: { 'X-SPARK-PROJECT': projectId }, body: { paths: [signal] } }); assert.equal(values[0].value, false);
+    const scoped = await admin.call(route('/tags/read'), { method: 'POST', token: readOnly.token, body: { paths: [signal] } }); assert.equal(scoped[0].value, false);
+    await admin.call(`/api/projects/${otherProjectId}/tags/read`, { method: 'POST', token: readOnly.token, body: { paths: [signal] }, status: 403 });
   });
   await test('read-only routes reject named update definitions in both modes', async () => {
     await admin.call(route('/queries/preview-update'), { method: 'PUT', body: { id: 'preview-update', name: 'Unused update boundary', kind: 'update', connectionId: 'unused-preview-fixture', sql: 'UPDATE fixture SET value=@value', parameters: [{ name: 'value', type: 'int' }] } });

@@ -95,7 +95,7 @@ sys.stdout.flush()
     public Task<JsonObject> RunAsync(string code, Dictionary<string, JsonElement>? parameters, Dictionary<string, JsonElement>? inputs, CancellationToken cancellation)
         => RunWithLibrariesAsync(code, parameters, inputs, scripts.CaptureLibraries(), cancellation);
 
-    public Task<JsonObject> RunAsync(string code, Dictionary<string, JsonElement>? parameters, Dictionary<string, JsonElement>? inputs, CancellationToken cancellation, JsonArray queryDefinitions, PythonUiContext? uiContext = null, IReadOnlyDictionary<string, string>? libraries = null)
+    public Task<JsonObject> RunAsync(string code, Dictionary<string, JsonElement>? parameters, Dictionary<string, JsonElement>? inputs, JsonArray queryDefinitions, CancellationToken cancellation, PythonUiContext? uiContext = null, IReadOnlyDictionary<string, string>? libraries = null)
         => RunWithLibrariesAsync(code, parameters, inputs, libraries ?? scripts.CaptureLibraries(), cancellation, queryDefinitions, uiContext: uiContext);
 
     public Task<JsonObject> RunComponentEventAsync(string code, Dictionary<string, JsonElement> parameters, Dictionary<string, JsonElement> inputs,
@@ -195,7 +195,7 @@ sys.stdout.flush()
         return tags.Read(resolved, null);
     }
 
-    private object WriteTags(JsonObject args, PythonExecutionAccess? authority)
+    private string[] WriteTags(JsonObject args, PythonExecutionAccess? authority)
     {
         var paths = args["paths"]!.Deserialize<string[]>()!;
         authority?.RequireTags(paths, true);

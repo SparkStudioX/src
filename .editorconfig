@@ -1,0 +1,21 @@
+root = true
+
+[*.cs]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+
+# The SDK's Recommended analyzer set is enabled in Directory.Build.props.
+# These additional style/correctness diagnostics are enforced by the compiler too.
+csharp_style_prefer_braces = when_multiline:suggestion
+
+[src/SparkStudio.{Gateway,Connectors,SourceWorker}/**/*.cs]
+dotnet_diagnostic.IDE0005.severity = warning
+
+[installer/ServiceHelper/**/*.cs]
+dotnet_diagnostic.IDE0005.severity = warning
+
+[**/{bin,obj}/**]
+generated_code = true

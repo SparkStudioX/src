@@ -23,13 +23,16 @@ export const updatesAfterUnmount=()=>lateWrites;
 `);
 const api = uri(`export const api=(...args)=>globalThis.__deploymentApi(...args); export const apiUrl=route=>'/api'+route; export const authenticatedFetch=(...args)=>globalThis.__deploymentFetch(...args); export const assertAuthResponseCurrent=()=>{};`);
 const auth = uri(`export const useAuth=()=>({gatewayAdmin:true,gatewayCapabilities:{diagnostics:true,configuration:true,sessions:true,backups:true,audit:true}});`);
+// GatewayConsole registers its visible section with the global assistant. Keep
+// that stable provider seam without starting chat requests in lifecycle tests.
+const askSpark = uri(`const registrations=new Map();const registerContext=(owner,getter)=>{registrations.set(owner,getter);globalThis.__deploymentAskContext=getter();return()=>{if(registrations.get(owner)===getter)registrations.delete(owner)}};const context={registerContext};export const useAskSpark=()=>context;`);
 const modules = new Map();
 function module(name) {
   if (modules.has(name)) return modules.get(name);
   const file = ['tsx', 'ts'].map(extension => new URL(`src/${name}.${extension}`, import.meta.url)).find(candidate => fs.existsSync(candidate)); assert.ok(file, name);
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
     .replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
-    .replace(/(from\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, dependency) => prefix + JSON.stringify(dependency === 'react' ? hooks : dependency === './api' ? api : dependency === './Auth' ? auth : dependency === './deviceConnections' ? module('deviceConnections') : dependency.startsWith('./') ? uri(`export default function ${dependency.slice(2)}(){return null}`) : pathToFileURL(require.resolve(dependency)).href));
+    .replace(/(from\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, dependency) => prefix + JSON.stringify(dependency === 'react' ? hooks : dependency === './api' ? api : dependency === './Auth' ? auth : dependency === './askSparkContext' ? askSpark : dependency === './deviceConnections' ? module('deviceConnections') : dependency.startsWith('./') ? uri(`export default function ${dependency.slice(2)}(){return null}`) : pathToFileURL(require.resolve(dependency)).href));
   const url = uri(code); modules.set(name, url); return url;
 }
 const [{default: Deployment},{default: Listener},{default: Recovery},{default: Console},lifecycle] = await Promise.all([
@@ -122,8 +125,9 @@ await check('successful recovery polling does not erase a failed approval or aut
 });
 await check('gateway observations poll only visible status sections and a tab change fences an old response',async()=>{
   let reads=0;const old=deferred();const ui=await start(Console,async()=>{if(++reads===1)return overview();if(reads===2)return old.promise;return overview('Current gateway')});
+  assert.deepEqual(globalThis.__deploymentAskContext,{surface:'gateway',section:'overview',editorAvailable:false});
   noToolbarReload(ui);document.visibilityState='hidden';ui.poll(15000);assert.equal(reads,1);document.visibilityState='visible';ui.poll(15000);ui.poll(15000);assert.equal(reads,2);
-  ui.hashChange('#security');await settle();ui.render();assert.equal(reads,3);old.resolve(overview('Outdated gateway'));await settle();ui.render();assert.match(ui.text(),/Current gateway/);assert.doesNotMatch(ui.text(),/Outdated gateway/);assert.ok(![...timers.values()].some(timer=>timer.ms===15000));
+  ui.hashChange('#security');await settle();ui.render();assert.deepEqual(globalThis.__deploymentAskContext,{surface:'gateway',section:'security',editorAvailable:false});assert.equal(reads,3);old.resolve(overview('Outdated gateway'));await settle();ui.render();assert.match(ui.text(),/Current gateway/);assert.doesNotMatch(ui.text(),/Outdated gateway/);assert.ok(![...timers.values()].some(timer=>timer.ms===15000));
 });
 await check('quiet gateway status reads preserve support-download action locks and late reads cannot write after unmount',async()=>{
   const download=deferred(),read=deferred();let reads=0;const ui=await start(Console,async()=>++reads===1?overview():reads===2?overview('Updated gateway'):read.promise,{hash:'#diagnostics',fetch:()=>download.promise});

@@ -6,9 +6,22 @@
       "kind": "source-commit",
       "value": "4e58e436ef3817458427e23a81d14a65ff1d190a"
     },
-    "note": "Use 0.2.0-preview.12 or a later compatible release for this collection. The portable projects' runtime property bindings, camera capture, photo badges, native tag buttons and multi-schedule/S3 backups require at least preview.11; the setup-required industrial devices workshop requires preview.12. The bundle source revision and each workshop prerequisites identify its actual requirements; exact artifact/source evidence is recorded separately in docs/architecture/PARITY.md."
+    "note": "Use 0.2.0-preview.12 or a later compatible release for this collection. The portable projects' runtime property bindings, camera capture, photo badges, native tag buttons and multi-schedule/S3 backups require at least preview.11; the setup-required industrial devices workshop requires preview.12. The bundle source revision and each workshop prerequisites identify its actual requirements; exact artifact/source evidence is recorded separately in docs/architecture/PARITY.md. The read-only data sources workshop additionally requires a build with MTConnect, i3X and MQTT source sessions; earlier preview.12 assets lack these additions."
   },
   "workshops": [
+    {
+      "id": "ask-spark",
+      "title": "Ask Spark authoring",
+      "summary": "Open and edit a synthetic canvas through conversation, inspect rendered captures and turn your screenshots into reviewed image assets.",
+      "source": "examples/ask-spark.json",
+      "distribution": "setup-required",
+      "features": ["Docked assistant", "Voice transcription", "Pasted screenshots", "Markdown answers", "Progressive tool discovery", "Configurable model steps", "Batched draft edits and Undo", "Reusable faceplates", "Project and document opening", "Rendered canvas captures", "Approved image crop batches", "Query and script refresh", "Authorized published runtime testing"],
+      "prerequisites": ["Requires a build containing Ask Spark; older preview.12 release assets do not include it.", "Configure a Gemini API key in Gateway Settings > AI. Use a development project and engineering Design permission. No equipment or gateway tags are needed."],
+      "gatewayWrites": "none",
+      "entryScreenId": "ask-spark-workshop",
+      "guide": "docs/architecture/ASK_SPARK.md",
+      "walkthrough": ["Import the synthetic workshop as a separate development project. Ask Spark to open the project and its workshop screen from Projects or Gateway Settings.", "Select Speed, Temperature and Count. Ask Spark to align their left edges and equalize widths in one batch, then capture and critique the rendered canvas.", "Use Undo, paste a screenshot and dictate a request. Review each message before sending.", "Request two named crops from your synthetic screenshot. Review their thumbnails and approve the batch; verify new assets appear without reloading.", "Ask for a Markdown comparison table and a code example; inspect the formatting and Copy code button.", "Ask to discover backup tools without making changes. Verify AI settings defaults to 100 model steps per message.", "Ask for a reusable faceplate, inspect the template, then validate, save and preview. Publication requires its own review.", "Optionally publish this synthetic project and ask for a runtime session check and read-only inspection, signing into the operator session as the same account when prompted. See the guide for optional query/script refresh exercises."]
+    },
     {
       "id": "visitor-checkin",
       "title": "Visitor check-in and photo badges",
@@ -1519,12 +1532,33 @@
       "summary": "Configure isolated Modbus TCP, six EtherNet/IP controller families, Siemens S7 and Beckhoff ADS points, then read and review synthetic scalar commands.",
       "source": "examples/industrial-devices-workshop.json",
       "distribution": "setup-required",
-      "features": ["Protocol-specific connection settings", "ControlLogix, CompactLogix, Micro800, MicroLogix, SLC 500 and PLC-5 address/type profiles", "Saved point maps and qualified native symbol mapping", "Read-only quick watch", "Device-tag acquisition", "Reviewed scalar writes and physical alias serialization", "Reference-safe connection deletion"],
-      "prerequisites": ["Requires 0.2.0-preview.12 or a later compatible release containing the four industrial drivers and six EtherNet/IP family profiles; preview.11 and earlier do not contain these drivers. Exact artifact/source evidence is recorded separately in docs/architecture/PARITY.md. EtherNet/IP dependencies remain pinned to libplctag 1.5.2 / NativeImport 1.0.41, native core 2.6.0.", "Use isolated simulators or lab PLCs with independently created synthetic Int16 storage. Logix and Micro800 use SyntheticSetpoint INT; MicroLogix, SLC 500 and PLC-5 use an allocated N7:0 integer element. Logix requires its numeric route; the other four use blank direct routes. Only ControlLogix/CompactLogix have native catalogs. ControlLogix/CompactLogix String is rejected until controller structure-schema qualification is implemented; Micro800 String and DH+ routes are also excluded. PCCC ST strings retain their bounded file profile.", "ADS uses an existing router or a shared gateway-managed router when TCP 48898 has no listener. Its local AMS identity must match, existing routers need a target route, and the controller always needs a back-route. S7 requires accessible non-optimized DB layouts.", "Run tools/load-industrial-devices-example.mjs on an isolated gateway to create only its unpublished project, then configure connections/tags separately and explicitly publish. Rebind the one EtherNet/IP Setpoint tag deliberately to exercise each available family.", "Operators need Commands and tag-read scope for [default]IndustrialWorkshop/. Operate alone cannot write. Physical device/firmware qualification remains separate for every family."],
+      "features": [
+        "Protocol-specific connection settings",
+        "ControlLogix, CompactLogix, Micro800, MicroLogix, SLC 500 and PLC-5 address/type profiles",
+        "Saved point maps and qualified native symbol mapping",
+        "Read-only quick watch",
+        "Device-tag acquisition",
+        "Reviewed scalar writes and physical alias serialization",
+        "Reference-safe connection deletion"
+      ],
+      "prerequisites": [
+        "Requires 0.2.0-preview.12 or a later compatible release containing the four industrial drivers and six EtherNet/IP family profiles; preview.11 and earlier do not contain these drivers. Exact artifact/source evidence is recorded separately in docs/architecture/PARITY.md. EtherNet/IP dependencies remain pinned to libplctag 1.5.2 / NativeImport 1.0.41, native core 2.6.0.",
+        "Use isolated simulators or lab PLCs with independently created synthetic Int16 storage. Logix and Micro800 use SyntheticSetpoint INT; MicroLogix, SLC 500 and PLC-5 use an allocated N7:0 integer element. Logix requires its numeric route; the other four use blank direct routes. Only ControlLogix/CompactLogix have native catalogs. ControlLogix/CompactLogix String is rejected until controller structure-schema qualification is implemented; Micro800 String and DH+ routes are also excluded. PCCC ST strings retain their bounded file profile.",
+        "ADS uses an existing router or a shared gateway-managed router when TCP 48898 has no listener. Its local AMS identity must match, existing routers need a target route, and the controller always needs a back-route. S7 requires accessible non-optimized DB layouts.",
+        "Run tools/load-industrial-devices-example.mjs on an isolated gateway to create only its unpublished project, then configure connections/tags separately and explicitly publish. Rebind the one EtherNet/IP Setpoint tag deliberately to exercise each available family.",
+        "Operators need Commands and tag-read scope for [default]IndustrialWorkshop/. Operate alone cannot write. Physical device/firmware qualification remains separate for every family."
+      ],
       "gatewayWrites": "explicit-lab-device-commands",
       "entryScreenId": "industrial-devices",
       "guide": "docs/architecture/INDUSTRIAL_DEVICE_CONNECTIONS.md",
-      "walkthrough": ["Load the authored draft; confirm all unconfigured values remain unavailable.", "Create a protocol-specific lab connection and saved Setpoint map entry. Choose the actual EtherNet/IP family, route and Int16 lab address from the guide; save its map before testing Micro800/PCCC.", "Browse/read without writing and add the device tag. Publish explicitly, review 25, cancel, then review and confirm; verify one write and matching fresh readback.", "Try 101 and an Operate-only account to verify rejection before dispatch. Change lab state or disable the connection after review and verify the old intent is rejected.", "Repeat with each available protocol and EtherNet/IP family. Rebind its Setpoint tag explicitly between connections, recording controller/firmware/OS/dependency evidence rather than transferring acceptance between families.", "Inspect bad quality and command uncertainty after lab disconnect, then remove/rebind saved device tags and UDT members before deleting the connection."]
+      "walkthrough": [
+        "Load the authored draft; confirm all unconfigured values remain unavailable.",
+        "Create a protocol-specific lab connection and saved Setpoint map entry. Choose the actual EtherNet/IP family, route and Int16 lab address from the guide; save its map before testing Micro800/PCCC.",
+        "Browse/read without writing and add the device tag. Publish explicitly, review 25, cancel, then review and confirm; verify one write and matching fresh readback.",
+        "Try 101 and an Operate-only account to verify rejection before dispatch. Change lab state or disable the connection after review and verify the old intent is rejected.",
+        "Repeat with each available protocol and EtherNet/IP family. Rebind its Setpoint tag explicitly between connections, recording controller/firmware/OS/dependency evidence rather than transferring acceptance between families.",
+        "Inspect bad quality and command uncertainty after lab disconnect, then remove/rebind saved device tags and UDT members before deleting the connection."
+      ]
     },
     {
       "id": "data-controls",
@@ -1554,6 +1588,39 @@
         "On the isolated gateway only, test Data workshop SQLite and inspect the saved time plus draft/published query dependencies. Disable and save it, verify reads fail, then re-enable, save and test again. Changing the connection invalidates its earlier test result.",
         "Follow docs/architecture/CONNECTION_OPERATIONS.md to confirm that saved queries block connection deletion, then create and delete a separate unused connection. Managed SQLite database files are retained after connection removal.",
         "Preview the selected form values, then open Independent station forms to compare isolated list and tree choices."
+      ]
+    },
+    {
+      "id": "data-sources",
+      "title": "Read-only data sources",
+      "summary": "Connect synthetic MTConnect, i3X and MQTT sources; browse and review imports, test typed extraction, inspect quality and persisted ownership.",
+      "source": "examples/data-sources.json",
+      "distribution": "setup-required",
+      "features": [
+        "MTConnect condition reduction and streaming",
+        "i3X opaque element IDs and selectors",
+        "MQTT zero-tag observed catalogs",
+        "Reviewed atomic point/tag import",
+        "Typed script tests",
+        "Automatic ownership and suppression",
+        "Read-only source UDT members"
+      ],
+      "prerequisites": [
+        "Requires a build containing MTConnect, i3X and MQTT source sessions; earlier preview.12 assets do not include these additions.",
+        "Use tools/run-data-source-simulators.mjs for independently authored synthetic loopback agents and a QoS 0 broker. Configure the connections and tags explicitly.",
+        "Engineering Configuration permission and an operator readable scope for [default]SourceWorkshop/ are required. The loader creates an unpublished project only."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "data-sources",
+      "guide": "docs/architecture/DATA_SOURCES.md",
+      "walkthrough": [
+        "Start the loopback fixtures and load the unpublished project. Create one source connection at a time using the guide and inspect Test/Diagnostics.",
+        "Browse the MTConnect CNC and i3X synthetic cell, keep Agent excluded, and preview selected points/tags before atomic apply. Read exact Int64 values and separate raw IDs/selectors.",
+        "Create MQTT Review mappings with zero saved tags. Inspect its observed catalog and retained/live quality, then review-import selected topics.",
+        "Test a draft Scriban mapping with a supplied payload. Inspect typed output, timestamp and limit/missing-field diagnostics without changing values or definitions.",
+        "Browse a/b, a/b/c and the real a/b/value topic. Deliberately enable automatic ownership under an unused root; inspect locked types, suppression and reviewed namespace migration.",
+        "Pause MQTT publications for Uncertain_Stale with a healthy transport. Stop/restart the fixtures for communication recovery. Confirm all source write actions remain unavailable.",
+        "Add a saved MTConnect point as a CNC UDT member and explicitly publish the displays when ready. Clean up tags/instances before their referenced connections."
       ]
     }
   ]

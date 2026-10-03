@@ -1,6 +1,7 @@
 import type { InputValue, TableEditColumn } from "./types";
 
 const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+// eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
 const key = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= 128 && value === value.trim() && !/[\u0000-\u001f\u007f-\u009f]/.test(value);
 const boundedNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= Number.MAX_SAFE_INTEGER;
 const definitionFields = new Set(["versionColumn", "columns", "script", "batch"]);

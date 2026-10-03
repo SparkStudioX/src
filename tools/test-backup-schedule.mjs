@@ -2,9 +2,8 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { root, dotnet, testEnv } from './test-environment.mjs';
+import { root, runIsolatedFixture } from './test-environment.mjs';
 const fixture = path.join(root, '.data/test-evidence', `backup-schedule-${randomUUID()}`);
 await mkdir(fixture, { recursive: true });
 const xml = value => value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
@@ -285,5 +284,6 @@ static void Throws(Action action){try{action();}catch(Exception e)when(e is Argu
 static async Task Wait(Func<Task<bool>> predicate){for(var i=0;i<200;i++){if(await predicate())return;await Task.Delay(50);}throw new Exception("Timed out.");}
 sealed class Lifetime:IHostApplicationLifetime,IDisposable{readonly CancellationTokenSource source=new(); public CancellationToken ApplicationStarted=>CancellationToken.None;public CancellationToken ApplicationStopping=>source.Token;public CancellationToken ApplicationStopped=>CancellationToken.None;public void StopApplication()=>source.Cancel();public void Dispose()=>source.Dispose();}
 `);
-const check = spawnSync(dotnet, ['run','--project',path.join(fixture,'Check.csproj'),'-c','BackupScheduleModel','--verbosity','quiet',`-p:RestoreConfigFile=${path.join(fixture,'NuGet.Config')}`],{cwd:root,encoding:'utf8',timeout:180000,maxBuffer:4*1024*1024,env:testEnv});
+const check = await runIsolatedFixture(path.join(fixture, 'Check.csproj'), 'BackupScheduleModel');
 process.stdout.write(check.stdout ?? ''); process.stderr.write(check.stderr ?? ''); assert.equal(check.status,0,check.error?.message ?? 'Backup schedule checks failed.');
+console.log('PASS isolated backup schedule fixture preserves the calling production dependency assets.');

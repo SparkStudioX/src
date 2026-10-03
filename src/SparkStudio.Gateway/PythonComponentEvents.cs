@@ -296,9 +296,32 @@ public sealed partial class RuntimeActions
     private static readonly object EventAdmissionGate = new();
     private static int gatewayEventWaiters;
     private readonly SemaphoreSlim componentEventSlots = new(4, 4);
+    private bool componentEventsClosed;
+    private int componentEventUsers;
     private int componentEventWaiters;
     private readonly object componentEventGate = new();
     private readonly Queue<(string Actor, long Time)> recentComponentEvents = new();
+
+    private ComponentEventLease AcquireComponentEventLease()
+    {
+        lock (componentEventGate) {
+            if (componentEventsClosed) throw new InvalidOperationException("This project's component event runtime has stopped.");
+            componentEventUsers++;
+            return new(this);
+        }
+    }
+    private void ReleaseComponentEventLease()
+    {
+        lock (componentEventGate) {
+            componentEventUsers--;
+            if (componentEventsClosed && componentEventUsers == 0) componentEventSlots.Dispose();
+        }
+    }
+    private sealed class ComponentEventLease(RuntimeActions owner) : IDisposable
+    {
+        private int disposed;
+        public void Dispose() { if (Interlocked.Exchange(ref disposed, 1) == 0) owner.ReleaseComponentEventLease(); }
+    }
 
     public Task<JsonObject> ExecuteComponentEventAsync(string screenId, string componentId, PythonComponentEventRequest request, string actor, CancellationToken cancellation)
         => ExecuteCapturedEventAsync(() => publications.GetComponentEvent(screenId, componentId, request), request, actor, cancellation);
@@ -313,6 +336,7 @@ public sealed partial class RuntimeActions
     private async Task<JsonObject> ExecuteCapturedEventAsync(Func<JsonObject> capture, PythonComponentEventRequest request, string actor, CancellationToken cancellation)
     {
         cancellation.ThrowIfCancellationRequested();
+        using var admission = AcquireComponentEventLease();
         lock (componentEventGate)
         {
             var now = Environment.TickCount64;

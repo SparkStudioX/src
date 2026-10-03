@@ -112,8 +112,19 @@ public static class NativeTagActionDefinitions
     }
 }
 
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable",
+    Justification = "ProjectRuntimeRegistry owns these shared actions. Request-scoped DI factories return them, so IDisposable would close the shared semaphore after each request. The registry calls CloseComponentEvents, which retires admission and disposes after active leases finish.")]
 public sealed partial class RuntimeActions
 {
+    internal void CloseComponentEvents()
+    {
+        lock (componentEventGate) {
+            if (componentEventsClosed) return;
+            componentEventsClosed = true;
+            if (componentEventUsers == 0) componentEventSlots.Dispose();
+        }
+    }
+
     public async Task<JsonObject> CaptureTagActionAsync(string screenId, string componentId, RuntimeActionRequest request, CancellationToken cancellation)
     {
         if (JsonSerializer.SerializeToUtf8Bytes(request, ProjectStore.Json).Length > 262144) throw new ArgumentException("Native tag action source snapshots are limited to 256 KiB of JSON.");

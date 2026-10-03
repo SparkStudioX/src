@@ -5,6 +5,7 @@ namespace SparkStudio.Gateway;
 /// <summary>Read-only numeric display fields and bounded constant binding results.</summary>
 internal static class ProcessDisplayValidator
 {
+    private static readonly string[] RangeFields = ["min", "max"];
     private const double MaximumSafeInteger = 9007199254740991d;
     public static readonly HashSet<string> Types = new(StringComparer.Ordinal)
         { "ledDisplay", "progressBar", "cylindricalTank", "levelIndicator", "thermometer" };
@@ -65,7 +66,7 @@ internal static class ProcessDisplayValidator
         if (!Types.Contains(type) || type == "ledDisplay") return;
         var bindings = props["bindings"] as JsonObject;
         var queryBindings = props["queryBindings"] as JsonObject;
-        if (new[] { "min", "max" }.Any(key => (bindings?.ContainsKey(key) == true || queryBindings?.ContainsKey(key) == true) && !constants.ContainsKey(key))) return;
+        if (RangeFields.Any(key => (bindings?.ContainsKey(key) == true || queryBindings?.ContainsKey(key) == true) && !constants.ContainsKey(key))) return;
         var minimum = constants.TryGetValue("min", out var min) ? (double)min : Number(props, "min", 0);
         var maximum = constants.TryGetValue("max", out var max) ? (double)max : Number(props, "max", 100);
         ValidateRange(minimum, maximum);

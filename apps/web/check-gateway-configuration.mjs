@@ -29,6 +29,7 @@ export const updatesAfterUnmount=()=>lateWrites;
 const react = pathToFileURL(require.resolve('react')).href;
 const api = uri(`export class ApiError extends Error{constructor(message,status){super(message);this.status=status;this.name='ApiError'}}export const api=(...args)=>globalThis.__configurationApi(...args);export const apiUrl=route=>'/api'+route;export const authenticatedFetch=(...args)=>globalThis.__configurationApi(args[0],'FETCH',args[1]);export const assertAuthResponseCurrent=()=>{};export const id=kind=>'new-'+kind;export const displayValue=value=>typeof value==='string'?value:JSON.stringify(value);`);
 const shells = {
+  askSparkContext: uri('const entries=new Map();const sync=()=>{globalThis.__configurationAskContext=[...entries.values()].sort((a,b)=>a.priority-b.priority).at(-1)};const registerContext=(owner,getter,priority)=>{const entry={owner,getter,priority};entries.set(owner,entry);sync();return()=>{if(entries.get(owner)===entry){entries.delete(owner);sync()}}};const value={registerContext};export const useAskSpark=()=>value;'),
   App: uri(`import React from ${JSON.stringify(react)};export const Field=({label,hint,children})=>React.createElement('label',null,label,children,hint&&React.createElement('small',null,hint));`),
   Icon: uri('export default function Icon(){return null}'),
   CreationMenu: uri(`import React from ${JSON.stringify(react)};export default function CreationMenu({choices,onSelect}){return React.createElement('div',null,choices.map(choice=>React.createElement('button',{key:choice.value,onClick:()=>onSelect(choice.value)},'Create '+choice.label)))}`),
@@ -105,13 +106,25 @@ const noRefreshButtons = ui => assert.ok(!ui.all().some(node => node.type === 'b
 let checks = 0;
 const check = async (name, run) => { try { await run(); checks++; console.log(`PASS ${name}`); } finally { lifecycle.unmount(); } };
 try {
+  await check('Ask Spark follows the selected connection tab without exposing credentials or unsaved generated IDs', async () => {
+    const ui = await start('Connections');
+    const current = () => globalThis.__configurationAskContext.getter();
+    assert.equal(globalThis.__configurationAskContext.priority, 20); assert.equal(current().connectionId, 'db'); assert.equal(current().connectionName, 'Production database');
+    ui.click('Security'); ui.change('Password', 'synthetic-context-secret'); assert.equal(current().connectionSection, 'security'); assert.equal(current().connectionHasUnsavedChanges, true); assert.equal(current().password, undefined); assert.ok(!JSON.stringify(current()).includes('synthetic-context-secret'));
+    ui.click('Create OPC UA client'); assert.equal(current().connectionId, undefined); assert.match(current().connectionName, /New/); assert.equal(current().connectionHasUnsavedChanges, true); assert.equal(current().snapshotToken, undefined);
+    ui.unmount(); assert.equal(globalThis.__configurationAskContext, undefined);
+  });
   await check('Configuration tabs link panels, preserve keyboard focus and quietly refresh only visible sections', async () => {
     const ui = await start('GatewayConfiguration'); noRefreshButtons(ui); assert.equal(ui.timers(), 2);
+    assert.equal(globalThis.__configurationAskContext.priority, 10); assert.equal(globalThis.__configurationAskContext.getter().section, 'tags');
     const initial = reads(ui, '/connections'); await ui.tick(); assert.equal(reads(ui, '/connections'), initial + 1);
     ui.hide(true); await ui.tick(); assert.equal(reads(ui, '/connections'), initial + 1); ui.hide(false);
     const tag = ui.button('Tags'); let prevented = false; tag.props.onKeyDown({ key: 'End', preventDefault: () => { prevented = true; } }); ui.render(); await ui.flush();
     assert.ok(prevented); assert.equal(text(ui.focused()), 'Public OPC certificates'); assert.equal(ui.button('Public OPC certificates').props['aria-selected'], true);
+    assert.equal(globalThis.__configurationAskContext.getter().section, 'certificates');
     const active = ui.button('Public OPC certificates'); assert.ok(ui.all().some(node => node.props.id === active.props['aria-controls'] && node.props.role === 'tabpanel')); const count = reads(ui, '/connections'); await ui.tick(); assert.equal(reads(ui, '/connections'), count); assert.equal(ui.timers(), 1);
+    ui.click('Connections'); await ui.flush(); assert.equal(globalThis.__configurationAskContext.priority, 20); assert.equal(globalThis.__configurationAskContext.getter().connectionId, 'db');
+    ui.click('Tags'); await ui.flush(); assert.equal(globalThis.__configurationAskContext.priority, 10); assert.equal(globalThis.__configurationAskContext.getter().section, 'tags');
   });
   await check('Configuration failed initial requests expose only contextual Retry and recover together', async () => {
     let failed = true; const ui = await start('GatewayConfiguration', route => route === '/connections' && failed ? Promise.reject(new Error('Configuration unavailable')) : undefined);
@@ -150,17 +163,17 @@ try {
   });
   await check('Connection Cancel appears only for a draft and failed cancellation preserves edited credentials', async () => {
     let fail = true; const ui = await start('Connections', route => route === '/connections' && fail ? Promise.reject(new Error('Saved connections unavailable')) : undefined); noRefreshButtons(ui); assert.ok(!ui.all().some(node => node.type === 'button' && text(node) === 'Cancel changes'));
-    ui.change('Connection name', 'Edited database'); ui.change('Password', 'synthetic-unsaved-password'); ui.click('Cancel changes'); await ui.flush(); assert.equal(ui.field('Connection name').props.value, 'Edited database'); assert.equal(ui.field('Password').props.value, 'synthetic-unsaved-password'); assert.match(ui.notices.at(-1)[0], /Saved connections unavailable/);
-    fail = false; ui.click('Cancel changes'); await ui.flush(); assert.equal(ui.field('Connection name').props.value, 'Production database'); assert.equal(ui.field('Password').props.value, ''); assert.ok(!ui.all().some(node => node.type === 'button' && text(node) === 'Cancel changes'));
+    ui.change('Connection name', 'Edited database'); ui.click('Security'); ui.change('Password', 'synthetic-unsaved-password'); ui.click('Cancel changes'); await ui.flush(); assert.equal(ui.field('Password').props.value, 'synthetic-unsaved-password'); ui.click('Connection'); assert.equal(ui.field('Connection name').props.value, 'Edited database'); assert.match(ui.notices.at(-1)[0], /Saved connections unavailable/);
+    fail = false; ui.click('Cancel changes'); await ui.flush(); assert.equal(ui.field('Connection name').props.value, 'Production database'); ui.click('Security'); assert.equal(ui.field('Password').props.value, ''); assert.ok(!ui.all().some(node => node.type === 'button' && text(node) === 'Cancel changes'));
   });
   await check('A superseded Connection Cancel never discards newer edits or updates shared connections', async () => {
     const pending = deferred(); const ui = await start('Connections', route => route === '/connections' ? pending.promise : undefined); ui.change('Connection name', 'First draft'); ui.click('Cancel changes'); ui.change('Connection name', 'Newer draft'); pending.resolve(connections()); await ui.flush(); assert.equal(ui.field('Connection name').props.value, 'Newer draft'); assert.equal(ui.changed.length, 0);
   });
   await check('Automatic shared connection updates preserve the selected local draft and secret until successful Cancel', async () => {
-    const ui = await start('GatewayConfiguration'); ui.click('Connections'); await ui.flush(); ui.change('Connection name', 'Local connection draft'); ui.change('Password', 'synthetic-staged-secret');
+    const ui = await start('GatewayConfiguration'); ui.click('Connections'); await ui.flush(); ui.change('Connection name', 'Local connection draft'); ui.click('Security'); ui.change('Password', 'synthetic-staged-secret');
     const latest = [{ ...connections()[0], name: 'Externally updated database', server: 'new.database.example.test', revision: 2 }]; ui.setHandler(route => route === '/connections' ? latest : undefined); await ui.tick();
-    assert.equal(ui.field('Connection name').props.value, 'Local connection draft'); assert.equal(ui.field('Password').props.value, 'synthetic-staged-secret'); assert.match(ui.text(), /Externally updated database/); ui.click('Cancel changes'); await ui.flush();
-    assert.equal(ui.field('Connection name').props.value, 'Externally updated database'); assert.equal(ui.field('Server').props.value, 'new.database.example.test'); assert.equal(ui.field('Password').props.value, ''); noRefreshButtons(ui);
+    assert.equal(ui.field('Password').props.value, 'synthetic-staged-secret'); ui.click('Connection'); assert.equal(ui.field('Connection name').props.value, 'Local connection draft'); assert.match(ui.text(), /Externally updated database/); ui.click('Cancel changes'); await ui.flush();
+    assert.equal(ui.field('Connection name').props.value, 'Externally updated database'); assert.equal(ui.field('Server').props.value, 'new.database.example.test'); ui.click('Security'); assert.equal(ui.field('Password').props.value, ''); noRefreshButtons(ui);
   });
   await check('Disposing a Connection Cancel prevents late shared writes, notifications and component state updates', async () => {
     const pending = deferred(); const ui = await start('Connections', route => route === '/connections' ? pending.promise : undefined); ui.change('Connection name', 'Draft'); ui.click('Cancel changes'); ui.unmount(); pending.resolve(connections()); await settle(); await settle(); assert.equal(ui.changed.length, 0); assert.equal(ui.notices.length, 0); assert.equal(lifecycle.updatesAfterUnmount(), 0);
@@ -176,9 +189,9 @@ try {
   });
   await check('Delete conflicts preserve the connection and show dependencies; sample and unsaved connections cannot be deleted', async () => {
     const ui = await start('Connections', (_route, method) => method === 'DELETE' ? Promise.reject(new ApiError('This connection is used by 1 saved tag reference. Remove it before deleting.', 409)) : undefined);
-    ui.click('Delete connection'); ui.click('Delete connection'); await ui.flush(); assert.match(ui.text(), /used by 1 saved tag/); assert.equal(ui.changed.length, 0); assert.equal(ui.field('Connection name').props.value, 'Production database');
-    assert.equal(ui.find(node => node.type === 'details' && node.props.className === 'connection-diagnostics', 'expanded dependency details').props.open, true);
-    ui.click('Cancel'); ui.change('Connection name', 'Unsaved change'); assert.equal(ui.button('Delete connection').props.disabled, true);
+    ui.click('Delete connection'); ui.click('Delete connection'); await ui.flush(); assert.match(ui.text(), /used by 1 saved tag/); assert.equal(ui.changed.length, 0);
+    assert.equal(ui.button('Diagnostics').props['aria-selected'], true); ui.find(node => node.type === 'section' && node.props.className === 'connection-diagnostics', 'visible dependency diagnostics');
+    ui.click('Cancel'); ui.click('Connection'); assert.equal(ui.field('Connection name').props.value, 'Production database'); ui.change('Connection name', 'Unsaved change'); assert.equal(ui.button('Delete connection').props.disabled, true);
     ui.click('Create OPC UA client'); assert.ok(!ui.all().some(node => node.type === 'button' && text(node) === 'Delete connection'));
     const sample = await start('Connections', undefined, { props: { connections: [{ id: 'sample', name: 'Sample', type: 'opcua' }] } }); assert.ok(!sample.all().some(node => node.type === 'button' && text(node) === 'Delete connection'));
   });
@@ -218,37 +231,36 @@ try {
     const point = { id: 'speed', name: 'Speed', address: 'holdingRegister:0', dataType: 'UInt16', writable: false };
     const device = { id: 'plc', name: 'Synthetic PLC', type: 'modbus-tcp', revision: 1, device: { host: '127.0.0.1', port: 502, points: [point] } }, pending = deferred();
     const ui = await start('GatewayConfiguration', route => route === '/connections' ? [device] : undefined);
-    ui.click('Connections'); await ui.flush(); ui.click('Import / edit JSON'); ui.chooseFile({ size: 100, text: () => pending.promise });
+    ui.click('Connections'); await ui.flush(); ui.click('Register map'); ui.click('Import / edit JSON'); ui.chooseFile({ size: 100, text: () => pending.promise });
     ui.click('Tags'); await ui.flush(); pending.resolve(JSON.stringify([{ ...point, id: 'obsolete-import' }])); await ui.flush(); assert.equal(lifecycle.updatesAfterUnmount(), 0);
-    ui.click('Connections'); await ui.flush(); ui.click('Import / edit JSON'); assert.equal(JSON.parse(ui.field('Points JSON').props.value)[0].id, 'speed'); assert.doesNotMatch(ui.text(), /obsolete-import/);
+    ui.click('Connections'); await ui.flush(); ui.click('Register map'); ui.click('Import / edit JSON'); assert.equal(JSON.parse(ui.field('Points JSON').props.value)[0].id, 'speed'); assert.doesNotMatch(ui.text(), /obsolete-import/);
   });
   await check('Connection cancellation and saved-revision refresh fence register-map preparation without changing saved points', async () => {
     const point = { id: 'speed', name: 'Speed', address: 'holdingRegister:0', dataType: 'UInt16', writable: false };
     const device = { id: 'plc', name: 'Synthetic PLC', type: 'modbus-tcp', revision: 1, device: { host: '127.0.0.1', port: 502, points: [point] } };
     const file = deferred(), cancel = deferred();
     const canceled = await start('Connections', route => route === '/connections' ? cancel.promise : undefined, { props: { connections: [device] } });
-    canceled.change('Connection name', 'Unsaved PLC'); canceled.click('Import / edit JSON'); canceled.chooseFile({ size: 100, text: () => file.promise }); canceled.click('Cancel changes');
+    canceled.change('Connection name', 'Unsaved PLC'); canceled.click('Register map'); canceled.click('Import / edit JSON'); canceled.chooseFile({ size: 100, text: () => file.promise }); canceled.click('Cancel changes');
     file.resolve(JSON.stringify([{ ...point, id: 'discarded-on-cancel' }])); await canceled.flush(); assert.equal(JSON.parse(canceled.field('Points JSON').props.value)[0].id, 'speed');
-    cancel.resolve([device]); await canceled.flush(); assert.equal(canceled.field('Connection name').props.value, 'Synthetic PLC'); assert.equal(JSON.parse(canceled.field('Points JSON').props.value)[0].id, 'speed');
+    cancel.resolve([device]); await canceled.flush(); assert.equal(canceled.field('Connection name').props.value, 'Synthetic PLC'); canceled.click('Register map'); assert.equal(JSON.parse(canceled.field('Points JSON').props.value)[0].id, 'speed');
     canceled.unmount();
     let current = device; const refreshedFile = deferred();
     const refreshed = await start('GatewayConfiguration', route => route === '/connections' ? [current] : undefined);
-    refreshed.click('Connections'); await refreshed.flush(); refreshed.click('Import / edit JSON'); refreshed.chooseFile({ size: 100, text: () => refreshedFile.promise });
+    refreshed.click('Connections'); await refreshed.flush(); refreshed.click('Register map'); refreshed.click('Import / edit JSON'); refreshed.chooseFile({ size: 100, text: () => refreshedFile.promise });
     current = { ...device, revision: 2, device: { ...device.device, host: '127.0.0.2' } }; await refreshed.tick();
     refreshedFile.resolve(JSON.stringify([{ ...point, id: 'discarded-on-refresh' }])); await refreshed.flush();
-    assert.equal(JSON.parse(refreshed.field('Points JSON').props.value)[0].id, 'speed'); assert.equal(refreshed.field('Controller host').props.value, '127.0.0.2'); assert.equal(lifecycle.updatesAfterUnmount(), 0);
+    assert.equal(JSON.parse(refreshed.field('Points JSON').props.value)[0].id, 'speed'); refreshed.click('Connection'); assert.equal(refreshed.field('Controller host').props.value, '127.0.0.2'); assert.equal(lifecycle.updatesAfterUnmount(), 0);
   });
-  await check('Connection diagnostics stay collapsed, start polling only when expanded and stop when closed', async () => {
+  await check('Connection diagnostics poll only while their section is visible and stop when another section is selected', async () => {
     const ui = await start('Connections'); const route = '/connections/db/diagnostics'; assert.equal(reads(ui, route), 1); assert.equal(ui.timers(), 0);
-    const details = () => ui.find(node => node.type === 'details' && node.props.className === 'connection-diagnostics', 'diagnostics disclosure');
-    assert.equal(details().props.open, false); details().props.onToggle({ currentTarget: { open: true } }); ui.render(); await ui.flush(); assert.equal(ui.timers(), 2); const opened = reads(ui, route);
-    await ui.tick(); assert.equal(reads(ui, route), opened + 1); details().props.onToggle({ currentTarget: { open: false } }); ui.render(); await ui.flush(); assert.equal(ui.timers(), 0);
+    assert.ok(!ui.all().some(node => node.props.className === 'connection-diagnostics')); ui.click('Diagnostics'); await ui.flush(); ui.find(node => node.type === 'section' && node.props.className === 'connection-diagnostics', 'visible diagnostics section'); assert.equal(ui.timers(), 2); const opened = reads(ui, route);
+    await ui.tick(); assert.equal(reads(ui, route), opened + 1); ui.click('Connection'); await ui.flush(); assert.equal(ui.timers(), 0);
     await ui.tick(); assert.equal(reads(ui, route), opened + 1); assert.doesNotMatch(ui.text(), /Deletion is not available|Dependencies and tag values|Read-only snapshots/);
   });
   await check('OPC discovery shows authentication requirements and does not pin a certificate until an endpoint is chosen', async () => {
     const endpoints = [{ endpointUrl: 'opc.tcp://localhost:49320', securityMode: 'SignAndEncrypt', securityPolicy: 'http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256', serverCertificateSha256: 'A'.repeat(64), userTokenTypes: ['UserName'] }];
     const ui = await start('Connections', route => route.startsWith('/opcua/endpoints?') ? endpoints : undefined);
-    ui.click('Create OPC UA client'); ui.change('Server endpoint', 'opc.tcp://localhost:49320'); ui.click('Discover endpoints'); await ui.flush();
+    ui.click('Create OPC UA client'); ui.change('Server endpoint', 'opc.tcp://localhost:49320'); ui.click('Security'); ui.click('Discover endpoints'); await ui.flush();
     assert.match(ui.text(), /Authentication: Username and password/); assert.equal(ui.field('Server certificate SHA-256 pin').props.value, '');
     ui.click('Use endpoint'); assert.equal(ui.field('Server certificate SHA-256 pin').props.value, 'A'.repeat(64)); assert.match(ui.notices.at(-1)[0], /Verify the certificate fingerprint/);
   });

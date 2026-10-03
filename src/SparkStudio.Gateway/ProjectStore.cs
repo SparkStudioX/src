@@ -7,6 +7,7 @@ namespace SparkStudio.Gateway;
 
 public sealed partial class ProjectStore
 {
+    private static readonly string[] OpcAuthenticationFailures = ["BadIdentityTokenInvalid", "BadIdentityTokenRejected", "BadUserAccessDenied"];
     private readonly object gate = GatewayConfigurationLock.SyncRoot;
     private readonly string directory;
     private readonly IDataProtector protector;
@@ -18,6 +19,7 @@ public sealed partial class ProjectStore
     private JsonArray definitions = [];
     private readonly Dictionary<string, string> connectionTests = new(StringComparer.Ordinal);
     private readonly HashSet<string> removedConnectionIds = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (JsonObject Saved, long Generation, ConnectionDefinition Definition)> sourceConnectionCache = new(StringComparer.Ordinal);
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
     public ProjectStore(string directory, IDataProtectionProvider protection, ProjectStore? gatewayStore = null, string? projectId = null, bool gatewayOnly = false)
@@ -27,6 +29,7 @@ public sealed partial class ProjectStore
         this.projectId = projectId;
         Directory.CreateDirectory(directory);
         protector = protection.CreateProtector("SparkStudio.ConnectionSecrets.v1");
+        RecoverSourceCommit();
         project = gatewayOnly ? Seed.Project() : Load("project.json") switch
         { null => Seed.Project(), JsonObject document => document, _ => throw new InvalidOperationException("Stored project draft must be an object.") };
         if (project["name"] is not JsonValue projectName || !projectName.TryGetValue<string>(out _) ||
@@ -37,7 +40,11 @@ public sealed partial class ProjectStore
         { null => [], JsonArray items => items, _ => throw new InvalidOperationException("Stored connections must be an array.") } : [];
         queries = gatewayOnly ? [] : Load("queries.json") switch
         { null => gatewayStore is null ? Seed.Queries() : [], JsonArray items => items, _ => throw new InvalidOperationException("Stored queries must be an array.") };
-        if (gatewayStore is null) LoadTagModel(Load("tags.json"));
+        if (gatewayStore is null) {
+            LoadSourceDiscovery();
+            LoadTagModel(Load("tags.json"));
+            ValidateRestoredSourceOwnership();
+        }
     }
     private JsonNode? Load(string name) => File.Exists(Path.Combine(directory, name)) ? JsonNode.Parse(File.ReadAllText(Path.Combine(directory, name)))
         ?? throw new InvalidOperationException($"Stored {name} cannot be empty.") : null;
@@ -81,17 +88,27 @@ public sealed partial class ProjectStore
         if (gatewayStore is not null) return gatewayStore.GetConnections();
         lock (gate)
         {
-            var safe = (JsonArray)connections.DeepClone();
-            foreach (var item in safe.OfType<JsonObject>())
-            {
-                item["revision"] ??= 0;
-                item["enabled"] ??= true;
-                item["hasPassword"] = item.ContainsKey("protectedPassword");
-                item.Remove("protectedPassword");
-                item.Remove("password");
-            }
-            return safe;
+            return new JsonArray(connections.Select(item => item is JsonObject saved ? (JsonNode)SafeConnection(saved) : item?.DeepClone()).ToArray());
         }
+    }
+    private JsonObject SafeConnection(JsonObject saved)
+    {
+        var item = (JsonObject)saved.DeepClone();
+        item["revision"] ??= 0;
+        item["enabled"] ??= true;
+        item["hasPassword"] = item.ContainsKey("protectedPassword");
+        item.Remove("protectedPassword");
+        item.Remove("password");
+        RedactSourceSecrets(item);
+        if (item["source"] is JsonObject source) {
+            var points = source["points"] as JsonArray ?? [];
+            foreach (var point in SourceOwnedPoints(Required(item, "id"))) {
+                var owned = JsonSerializer.SerializeToNode(point, Json)!.AsObject(); owned["owned"] = true;
+                points.Add(owned);
+            }
+            source["points"] = points;
+        }
+        return item;
     }
     public JsonObject SaveConnection(JsonObject value)
     {
@@ -102,9 +119,8 @@ public sealed partial class ProjectStore
             if (removedConnectionIds.Contains(id))
                 throw new InvalidOperationException("This connection identity was removed. Create a new connection with a fresh ID.");
             var type = Required(value, "type");
-            if (type is not ("opcua" or "sqlserver" or "sqlite") && !DeviceConfiguration.IsDevice(type)) throw new ArgumentException("Choose a supported industrial or database connection.");
-            var next = (JsonArray)connections.DeepClone();
-            var old = next.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "id") == id);
+            if (type is not ("opcua" or "sqlserver" or "sqlite") && !DeviceConfiguration.IsDevice(type) && !SourceConfiguration.IsSource(type)) throw new ArgumentException("Choose a supported industrial or database connection.");
+            var old = connections.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "id") == id);
             var revision = old?["revision"]?.GetValue<int>() ?? 0;
             if (value.ContainsKey("revision") && (value["revision"] is not JsonValue supplied || !supplied.TryGetValue<int>(out var suppliedRevision) || suppliedRevision < 0))
                 throw new ArgumentException("Connection revision must be a nonnegative integer.");
@@ -129,6 +145,15 @@ public sealed partial class ProjectStore
                 ValidateDeviceMapChange(id, settings);
                 node["device"] = JsonSerializer.SerializeToNode(settings, Json);
             }
+            SourceDiscoveryState? updatedSourceState = null;
+            if (SourceConfiguration.IsSource(type))
+            {
+                var settings = ReadSourceSettingsForSave(value, old);
+                settings = SourceConfiguration.Normalize(type, settings);
+                ValidateSourceMapChange(id, settings);
+                updatedSourceState = PrepareSourceMappingChange(id, settings, Optional(value, "sourceMigrationToken"));
+                node["source"] = ProtectSourceSettings(settings);
+            }
             var password = Optional(value, "password");
             if (password is not null && password.Length > 0) node["protectedPassword"] = protector.Protect(password);
             else if (password is null && old?["protectedPassword"] is { } secret) node["protectedPassword"] = secret.DeepClone();
@@ -136,15 +161,29 @@ public sealed partial class ProjectStore
                 throw new ArgumentException("An opc.tcp endpoint URL without embedded credentials is required.");
             if (type == "sqlserver") { Required(node, "server"); Required(node, "database"); }
             if (type == "sqlite") node["database"] = ConnectorService.ValidateSqliteDatabaseName(Required(node, "database"));
-            if (old is not null) next.Remove(old);
-            next.Add(node);
-            Persist("connections.json", next);
-            connections = next;
+            if (SourceConfiguration.IsSource(type) && updatedSourceState is null) {
+                var index = old is null ? -1 : connections.IndexOf(old);
+                var candidate = connections.ToList();
+                if (index < 0) candidate.Add(node); else candidate[index] = node;
+                DurableJsonFile.WriteArray(Path.Combine(directory, "connections.json"), candidate, Json);
+                if (index < 0) connections.Add(node); else connections[index] = node;
+            }
+            else {
+                var next = (JsonArray)connections.DeepClone();
+                var previous = next.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "id") == id);
+                if (previous is not null) next.Remove(previous);
+                next.Add(node);
+                if (updatedSourceState is not null) CommitSourceConfiguration(next, updatedSourceState);
+                else { Persist("connections.json", next); connections = next; }
+            }
             tagConfigurationGeneration++;
-            expandedTagDefinitions = null;
+            // Source map validation preserves every referenced type and read-only
+            // access. Endpoint, enable and display edits do not change authored
+            // expansion; migration commits invalidate it independently.
+            if (!SourceConfiguration.IsSource(type)) expandedTagDefinitions = null;
             expandedTagIndex = null;
             connectionTests.Remove(id);
-            return (JsonObject)GetConnections().OfType<JsonObject>().Single(x => Optional(x, "id") == id).DeepClone();
+            return SafeConnection(node);
         }
     }
     public ConnectionDefinition GetConnection(string id, bool allowDisabled = false)
@@ -155,8 +194,15 @@ public sealed partial class ProjectStore
             var value = connections.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "id") == id) ?? throw new KeyNotFoundException("Connection not found.");
             if (!allowDisabled && value["enabled"]?.GetValue<bool>() == false)
                 throw new InvalidOperationException("This connection is disabled. Enable and save it before starting an operation.");
+            var sourceType = SourceConfiguration.IsSource(Required(value, "type"));
+            if (sourceType && sourceConnectionCache.TryGetValue(id, out var cached) && ReferenceEquals(cached.Saved, value) && cached.Generation == sourcePointCatalogGeneration)
+                return cached.Definition;
             var encrypted = Optional(value, "protectedPassword");
-            return new ConnectionDefinition(id, Required(value, "name"), Required(value, "type"), Optional(value, "endpoint"), Optional(value, "server"), Optional(value, "database"), Optional(value, "username"), encrypted is null ? null : protector.Unprotect(encrypted), Optional(value, "securityMode"), value["trustServerCertificate"]?.GetValue<bool>() ?? false, Optional(value, "serverCertificateSha256"), value["device"]?.Deserialize<DeviceSettings>(Json));
+            var source = UnprotectSourceSettings(value);
+            if (source is not null) source = source with { Points = source.SavedPoints.Concat(SourceOwnedPoints(id)).DistinctBy(point => point.Id).ToArray() };
+            var result = new ConnectionDefinition(id, Required(value, "name"), Required(value, "type"), Optional(value, "endpoint"), Optional(value, "server"), Optional(value, "database"), Optional(value, "username"), encrypted is null ? null : protector.Unprotect(encrypted), Optional(value, "securityMode"), value["trustServerCertificate"]?.GetValue<bool>() ?? false, Optional(value, "serverCertificateSha256"), value["device"]?.Deserialize<DeviceSettings>(Json), source, value["revision"]?.GetValue<int>() ?? 0);
+            if (sourceType) sourceConnectionCache[id] = (value, sourcePointCatalogGeneration, result);
+            return result;
         }
     }
 
@@ -185,8 +231,15 @@ public sealed partial class ProjectStore
             if ((old["revision"]?.GetValue<int>() ?? 0) != revision)
                 throw new InvalidOperationException("The connection changed since it was loaded. Select it again before deleting.");
             next.Remove(old);
+            if (SourceConfiguration.IsSource(Required(old, "type")) && OwnedLeaves.Any(leaf => leaf.ConnectionId == id))
+            {
+                CommitSourceConfiguration(next, new(1, sourceDiscovery.Generation + 1, OwnedLeaves.Where(leaf => leaf.ConnectionId != id).ToArray()));
+            }
+            else
+            {
             Persist("connections.json", next);
             connections = next;
+            }
             removedConnectionIds.Add(id);
             tagConfigurationGeneration++;
             expandedTagDefinitions = null;
@@ -264,7 +317,7 @@ public sealed partial class ProjectStore
             return "The OPC UA server application URI does not match its certificate. Correct the server's application URI or certificate.";
         if (Status("BadSecurityChecksFailed"))
             return "OPC UA security validation failed. Check that the server trusts SparkStudio's client certificate, the gateway trusts the server, and the endpoint address matches the server certificate.";
-        if (new[] { "BadIdentityTokenInvalid", "BadIdentityTokenRejected", "BadUserAccessDenied" }
+        if (OpcAuthenticationFailures
             .Any(status => message?.StartsWith($"OPC UA failed ({status}, ", StringComparison.Ordinal) == true))
             return "OPC UA authentication failed. Check the account credentials and server permissions.";
         return "Connection check failed. Verify the address, authentication and certificate settings.";
@@ -295,9 +348,52 @@ public sealed partial class ProjectStore
         lock (gate)
         {
             expandedTagDefinitions ??= TagModel.Expand(tagModel, NormalizeTag);
+            ValidateOwnedNamespaces(expandedTagDefinitions);
             var result = (JsonArray)expandedTagDefinitions.DeepClone();
+            foreach (var owned in SourceOwnedDefinitions()) result.Add(owned!.DeepClone());
             ApplyMemoryState(result);
             return result;
+        }
+    }
+    internal JsonObject ConnectionMetadata(string id)
+    {
+        if (gatewayStore is not null) return gatewayStore.ConnectionMetadata(id);
+        lock (gate) {
+            var item = connections.OfType<JsonObject>().SingleOrDefault(item => Optional(item, "id") == id) ?? throw new KeyNotFoundException("Connection not found.");
+            return new() { ["id"] = id, ["type"] = Required(item, "type"), ["revision"] = item["revision"]?.GetValue<int>() ?? 0, ["enabled"] = item["enabled"]?.GetValue<bool>() ?? true };
+        }
+    }
+    internal ConnectionDefinition[] EnabledSourceConnections()
+    {
+        if (gatewayStore is not null) return gatewayStore.EnabledSourceConnections();
+        lock (gate) return connections.OfType<JsonObject>().Where(item => SourceConfiguration.IsSource(Required(item, "type")) && item["enabled"]?.GetValue<bool>() != false)
+            .Select(item => GetConnection(Required(item, "id"))).ToArray();
+    }
+    internal string[] ConnectionTagPaths(string id, bool includeOwned = true)
+    {
+        if (gatewayStore is not null) return gatewayStore.ConnectionTagPaths(id, includeOwned);
+        lock (gate) {
+            expandedTagDefinitions ??= TagModel.Expand(tagModel, NormalizeTag);
+            return expandedTagDefinitions.OfType<JsonObject>().Where(tag => Optional(tag, "connectionId") == id).Select(tag => Required(tag, "path"))
+                .Concat(includeOwned ? OwnedLeaves.Where(leaf => leaf.ConnectionId == id && !leaf.Suppressed && !leaf.Pruned).Select(leaf => leaf.Path) : []).ToArray();
+        }
+    }
+    internal string[] ConnectionUdtReferences(string id)
+    {
+        if (gatewayStore is not null) return gatewayStore.ConnectionUdtReferences(id);
+        lock (gate) return tagModel["udtDefinitions"]!.AsArray().OfType<JsonObject>()
+            .SelectMany(definition => definition["members"]!.AsArray().OfType<JsonObject>().Where(member => Optional(member, "connectionId") == id)
+                .Select(member => TagModel.DefinitionKey(definition) + "/" + Required(member, "path"))).ToArray();
+    }
+    internal (string Path, bool Enabled)[] ConnectionRuntimeBindings(string id)
+    {
+        if (gatewayStore is not null) return gatewayStore.ConnectionRuntimeBindings(id);
+        lock (gate) {
+            expandedTagDefinitions ??= TagModel.Expand(tagModel, NormalizeTag);
+            return expandedTagDefinitions.OfType<JsonObject>().Where(tag => Optional(tag, "connectionId") == id)
+                .Select(tag => (Required(tag, "path"), tag["effectiveEnabled"]?.GetValue<bool>() != false))
+                .Concat(OwnedLeaves.Where(leaf => leaf.ConnectionId == id && !leaf.Suppressed && !leaf.Pruned)
+                    .Select(leaf => (leaf.Path, DefaultTagProviderEnabled()))).ToArray();
         }
     }
     public JsonObject SaveTag(JsonObject value)
@@ -308,6 +404,8 @@ public sealed partial class ProjectStore
             var node = NormalizeTag(value);
             var tagPath = Required(node, "path");
             var current = GetTagDefinitions();
+            if (current.OfType<JsonObject>().Any(tag => Optional(tag, "path") == tagPath && tag["sourceOwned"]?.GetValue<bool>() == true))
+                throw new ArgumentException("A source-owned tag is edited through its mapping; it cannot be replaced by an authored definition.");
             if (current.OfType<JsonObject>().Any(tag => Optional(tag, "path") == tagPath && tag["udtInstance"] is not null))
                 throw new ArgumentException("Edit UDT members through a reviewed instance override or a new definition version.");
             var next = (JsonArray)definitions.DeepClone();
@@ -326,6 +424,7 @@ public sealed partial class ProjectStore
         lock (gate)
         {
             TagDefinitionValidator.Path(path);
+            if (DeleteOwnedTag(path)) return true;
             if (GetTagDefinitions().OfType<JsonObject>().Any(tag => Optional(tag, "path") == path && tag["udtInstance"] is not null))
                 throw new ArgumentException("Remove a UDT instance through a reviewed tag model change.");
             var next = (JsonArray)definitions.DeepClone();

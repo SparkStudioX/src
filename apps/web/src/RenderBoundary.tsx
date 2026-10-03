@@ -1,11 +1,11 @@
 import { Component } from "react";
-import type { ErrorInfo, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 /** Rendering failures stay local; retry remounts only the failed subtree. */
 export default class RenderBoundary extends Component<{ children: ReactNode; label?: string; resetKey?: unknown; tile?: boolean }, { failed: boolean; retry: number }> {
   state = { failed: false, retry: 0 };
   static getDerivedStateFromError() { return { failed: true }; }
-  componentDidCatch(_error: Error, _info: ErrorInfo) {
+  componentDidCatch() {
     // Do not leak authored data, credentials or stack traces into operator UI.
     console.error("SparkStudio rendering failed. Retry this view or reload the application.");
   }

@@ -11,6 +11,7 @@ namespace SparkStudio.Gateway;
 
 public static partial class BackupDestinations
 {
+    private static readonly string[] ReservedBucketSuffixes = ["-s3alias", "--ol-s3", ".mrap", "--x-s3", "--table-s3"];
     private static BackupDestination ValidateS3(BackupDestination destination)
     {
         if (destination.TimeoutSeconds is < 30 or > 3600) throw new ArgumentException("Backup destination timeout must be 30–3600 seconds.");
@@ -22,7 +23,7 @@ public static partial class BackupDestinations
             || bucket.Contains("..") || bucket.Contains(".-") || bucket.Contains("-.") || IPAddress.TryParse(bucket, out _)
             || bucket.StartsWith("xn--", StringComparison.Ordinal) || bucket.StartsWith("sthree-", StringComparison.Ordinal)
             || bucket.StartsWith("amzn-s3-demo-", StringComparison.Ordinal)
-            || new[] { "-s3alias", "--ol-s3", ".mrap", "--x-s3", "--table-s3" }.Any(bucket.EndsWith))
+            || ReservedBucketSuffixes.Any(bucket.EndsWith))
             throw new ArgumentException("S3 needs an ordinary general purpose bucket name of 3–63 lowercase letters, digits, periods or hyphens.");
         if (destination.Region is null || !Regex.IsMatch(destination.Region, @"\A[a-z0-9][a-z0-9-]{0,62}\z", RegexOptions.CultureInvariant))
             throw new ArgumentException("S3 needs a bounded region name, such as us-east-1.");
@@ -52,15 +53,15 @@ public static partial class BackupDestinations
 
     // This seam is only for an owned loopback fixture. Production always uses strict TLS.
     internal static Task<BackupDeliveryResult> DeliverS3FixtureAsync(BackupDestination destination, string archive,
-        string name, Guid owner, int days, CancellationToken token, HttpMessageHandler handler, bool multipart = false)
+        string name, Guid owner, int days, HttpMessageHandler handler, CancellationToken token, bool multipart = false)
     {
         if (destination.Kind != "s3" || !Uri.TryCreate(destination.Endpoint, UriKind.Absolute, out var endpoint)
             || !endpoint.IsLoopback || !destination.ForcePathStyle) throw new ArgumentException("S3 fixtures require an owned loopback path-style endpoint.");
-        return DeliverWithS3HandlerAsync(destination, archive, name, owner, days, token, handler, multipart);
+        return DeliverWithS3HandlerAsync(destination, archive, name, owner, days, handler, token, multipart);
     }
 
     private static async Task<BackupDeliveryResult> DeliverS3Async(BackupDestination destination, string archive,
-        string name, Guid owner, int days, DeliveryProgress progress, CancellationToken token, HttpMessageHandler? fixtureHandler, bool fixtureMultipart)
+        string name, Guid owner, int days, DeliveryProgress progress, HttpMessageHandler? fixtureHandler, bool fixtureMultipart, CancellationToken token)
     {
         if (string.IsNullOrEmpty(destination.SecretAccessKey)) throw new ArgumentException("S3 delivery requires a saved secret access key.");
         using var httpFactory = new BoundedS3ClientFactory(destination.Endpoint, destination.Bucket!, fixtureHandler);
@@ -92,12 +93,12 @@ public static partial class BackupDestinations
         S3WrittenObject? temporary = null, final = null;
         try
         {
-            temporary = await PutS3Async(client, destination.Bucket!, temporaryKey, local, length, digest, token, fixtureMultipart);
+            temporary = await PutS3Async(client, destination.Bucket!, temporaryKey, local, length, digest, fixtureMultipart, token);
             await VerifyS3Async(client, destination.Bucket!, temporaryKey, temporary, length, digest, token);
             token.ThrowIfCancellationRequested(); local.Position = 0;
             // General purpose S3 has no rename. A conditional upload publishes the final key only after the
             // staging readback passed; a second readback also verifies the published generation.
-            final = await PutS3Async(client, destination.Bucket!, finalKey, local, length, digest, token, fixtureMultipart);
+            final = await PutS3Async(client, destination.Bucket!, finalKey, local, length, digest, fixtureMultipart, token);
             await VerifyS3Async(client, destination.Bucket!, finalKey, final, length, digest, token);
             progress.Committed = new(name, length, Convert.ToHexString(digest).ToLowerInvariant(), 0, null);
         }
@@ -132,12 +133,12 @@ public static partial class BackupDestinations
 
     private sealed record S3WrittenObject(string ETag, string? VersionId);
     private static async Task<S3WrittenObject> PutS3Async(AmazonS3Client client, string bucket, string key,
-        Stream local, long length, byte[] digest, CancellationToken token, bool fixtureMultipart)
+        Stream local, long length, byte[] digest, bool fixtureMultipart, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         // Multipart avoids S3's single-PUT size limit and keeps larger archive uploads bounded.
         if (fixtureMultipart || length > 128L * 1024 * 1024)
-            return await PutS3MultipartAsync(client, bucket, key, local, length, token, fixtureMultipart ? 128 : 64 * 1024 * 1024);
+            return await PutS3MultipartAsync(client, bucket, key, local, length, fixtureMultipart ? 128 : 64 * 1024 * 1024, token);
         var request = new PutObjectRequest
         {
             BucketName = bucket, Key = key, InputStream = local, AutoCloseStream = false, AutoResetStreamPosition = false,
@@ -152,7 +153,7 @@ public static partial class BackupDestinations
     }
 
     private static async Task<S3WrittenObject> PutS3MultipartAsync(AmazonS3Client client, string bucket, string key,
-        Stream local, long length, CancellationToken token, int partBytes)
+        Stream local, long length, int partBytes, CancellationToken token)
     {
         var initiated = await client.InitiateMultipartUploadAsync(new InitiateMultipartUploadRequest
         { BucketName = bucket, Key = key, ContentType = "application/octet-stream" }, token);
@@ -203,7 +204,7 @@ public static partial class BackupDestinations
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         { inner.Position = offset + position; return Count(await inner.ReadAsync(buffer[..ReadCount(buffer.Length)], cancellationToken)); }
         public override async Task<int> ReadAsync(byte[] buffer, int start, int count, CancellationToken cancellationToken)
-        { inner.Position = offset + position; return Count(await inner.ReadAsync(buffer, start, ReadCount(count), cancellationToken)); }
+        { inner.Position = offset + position; return Count(await inner.ReadAsync(buffer.AsMemory(start, ReadCount(count)), cancellationToken)); }
         public override long Seek(long value, SeekOrigin origin) { Position = origin switch { SeekOrigin.Begin => value, SeekOrigin.Current => position + value, SeekOrigin.End => size + value, _ => throw new ArgumentException("Invalid stream origin.") }; return position; }
         public override long Position { get => position; set { if (value < 0 || value > size) throw new IOException("S3 part stream seek exceeds its bounds."); position = value; } }
         public override long Length => size; public override bool CanSeek => true; public override bool CanRead => true; public override bool CanWrite => false;
@@ -228,7 +229,7 @@ public static partial class BackupDestinations
         if (total != length || !CryptographicOperations.FixedTimeEquals(hash.GetHashAndReset(), digest)) throw new IOException("S3 readback verification failed.");
     }
 
-    private static Task DeleteS3WrittenAsync(AmazonS3Client client, string bucket, string key, S3WrittenObject written, CancellationToken token)
+    private static Task<DeleteObjectResponse> DeleteS3WrittenAsync(AmazonS3Client client, string bucket, string key, S3WrittenObject written, CancellationToken token)
         => client.DeleteObjectAsync(new DeleteObjectRequest { BucketName = bucket, Key = key, IfMatch = written.ETag, VersionId = written.VersionId }, token);
 
     private static bool SafeS3EntityTag(string? value) => value is { Length: > 0 and <= 1024 } && !value.Any(char.IsControl);
@@ -318,12 +319,12 @@ public static partial class BackupDestinations
         public override int Read(byte[] buffer, int offset, int length) => Count(inner.Read(buffer, offset, length));
         public override int Read(Span<byte> buffer) => Count(inner.Read(buffer));
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) => Count(await inner.ReadAsync(buffer, cancellationToken));
-        public override async Task<int> ReadAsync(byte[] buffer, int offset, int length, CancellationToken cancellationToken) => Count(await inner.ReadAsync(buffer, offset, length, cancellationToken));
+        public override async Task<int> ReadAsync(byte[] buffer, int offset, int length, CancellationToken cancellationToken) => Count(await inner.ReadAsync(buffer.AsMemory(offset, length), cancellationToken));
         public override bool CanRead => true; public override bool CanSeek => false; public override bool CanWrite => false;
         public override long Length => throw new NotSupportedException(); public override long Position { get => total; set => throw new NotSupportedException(); }
         public override void Flush() { } public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException(); public override void Write(byte[] buffer, int offset, int length) => throw new NotSupportedException();
         protected override void Dispose(bool disposing) { if (disposing) inner.Dispose(); base.Dispose(disposing); }
-        public override async ValueTask DisposeAsync() { await inner.DisposeAsync(); GC.SuppressFinalize(this); }
+        public override async ValueTask DisposeAsync() { await inner.DisposeAsync(); await base.DisposeAsync(); GC.SuppressFinalize(this); }
     }
 }

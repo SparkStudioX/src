@@ -33,8 +33,14 @@ public sealed record SecurityUpdateUser(long Revision, string? DisplayName, bool
 public sealed record SecurityUpdateSettings(long Revision, string? PublicBaseUrl, Dictionary<string, string[]>? ProjectTagPrefixes);
 
 /// <summary>Gateway-owned identities and grants. Password hashes never leave this store.</summary>
-public sealed class SecurityStore
+public sealed class SecurityStore : IDisposable
 {
+    public void Dispose()
+    {
+        passwordSlots.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
     private sealed record StoredUser(SecurityUser User, string PasswordHash);
     private sealed record StoredState(int Version, List<StoredUser> Users, SecuritySettings Settings);
     private sealed record Throttle(int Failures, DateTimeOffset Since, DateTimeOffset? BlockedUntil);

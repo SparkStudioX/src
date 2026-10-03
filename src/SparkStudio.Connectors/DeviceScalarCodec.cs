@@ -44,10 +44,16 @@ internal static class DeviceScalarCodec
         if (value.ValueKind != JsonValueKind.Number) throw new ArgumentException("A numeric value is required.");
         try
         {
-            object engineering = point.DataType is "Float" or "Double" ? Floating(point.DataType, value.GetDouble()) : Integer(point.DataType, JsonDecimal(value));
+            object engineering;
+            if (point.DataType == "Float") engineering = (float)Floating(point.DataType, value.GetDouble());
+            else if (point.DataType == "Double") engineering = Floating(point.DataType, value.GetDouble());
+            else engineering = Integer(point.DataType, JsonDecimal(value));
             var storage = StorageType(point);
-            if (storage is "Float" or "Double")
-                return Floating(storage, (Convert.ToDouble(engineering, CultureInfo.InvariantCulture) - point.Offset) / point.Scale);
+            if (storage is "Float" or "Double") {
+                var raw = Floating(storage, (Convert.ToDouble(engineering, CultureInfo.InvariantCulture) - point.Offset) / point.Scale);
+                if (storage == "Float") return (float)raw;
+                return raw;
+            }
             return Integer(storage, (Decimal(engineering) - Decimal(point.Offset)) / Decimal(point.Scale));
         }
         catch (OverflowException) { throw new ArgumentException("The encoded device integer is outside its range."); }
@@ -59,8 +65,11 @@ internal static class DeviceScalarCodec
         if (point.DataType == "String")
             return raw is string text && text.Length <= point.StringLength && !text.Any(character => character > 127 || character == '\0')
                 ? text : throw new ArgumentException("The device string does not fit the saved ASCII layout.");
-        if (point.DataType is "Float" or "Double")
-            return Floating(point.DataType, Convert.ToDouble(raw, CultureInfo.InvariantCulture) * point.Scale + point.Offset);
+        if (point.DataType is "Float" or "Double") {
+            var engineering = Floating(point.DataType, Convert.ToDouble(raw, CultureInfo.InvariantCulture) * point.Scale + point.Offset);
+            if (point.DataType == "Float") return (float)engineering;
+            return engineering;
+        }
         return Integer(point.DataType, Decimal(raw) * Decimal(point.Scale) + Decimal(point.Offset));
     }
 
@@ -80,11 +89,11 @@ internal static class DeviceScalarCodec
         return number;
     }
 
-    private static object Floating(string type, double value)
+    private static double Floating(string type, double value)
     {
         if (!double.IsFinite(value) || type == "Float" && (value > float.MaxValue || value < -float.MaxValue))
             throw new ArgumentException("The device floating-point value is outside its finite range.");
-        return type == "Float" ? (object)(float)value : value;
+        return type == "Float" ? (float)value : value;
     }
 
     private static object Integer(string type, decimal value)
@@ -98,7 +107,7 @@ internal static class DeviceScalarCodec
         };
     }
 
-    internal static CancellationTokenSource Deadline(CancellationToken token, int timeoutMs)
+    internal static CancellationTokenSource Deadline(int timeoutMs, CancellationToken token)
     {
         var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(timeoutMs);

@@ -1004,6 +1004,8 @@ button svg {
 }
 .canvas-component {
   position: absolute;
+  /* Each component paints in saved layer order, including its own positioned children. */
+  z-index: 0;
   user-select: none;
   touch-action: none;
   cursor: grab;
@@ -1012,10 +1014,15 @@ button svg {
   outline: 1px dashed var(--border-strong);
   outline-offset: 1px;
 }
-.canvas-component.is-selected {
+.canvas-component-selection {
+  position: absolute;
   outline: 1.5px solid var(--accent);
   outline-offset: 1px;
-  z-index: 2;
+  pointer-events: none;
+  z-index: 1;
+}
+.canvas-component-selection .resize-handle {
+  pointer-events: auto;
 }
 .runtime .canvas-component {
   cursor: default;
@@ -2062,6 +2069,19 @@ button svg {
 }
 .connection-editor .resource-editor-heading > .editor-actions { justify-content: flex-end; }
 .connection-editor .editor-actions .button { white-space: nowrap; }
+.connection-editor [hidden] { display: none !important; }
+.connection-section-tabs { display: flex; gap: 4px; padding: 0 20px; overflow-x: auto; border-bottom: 1px solid var(--border); scrollbar-width: thin; }
+.connection-section-tabs [role="tab"] { flex: 0 0 auto; padding: 14px 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-secondary); font-size: 11px; font-weight: 550; white-space: nowrap; cursor: pointer; }
+.connection-section-tabs [role="tab"]:hover { color: var(--ink); background: var(--surface-subtle); }
+.connection-section-tabs [role="tab"][aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.connection-section-tabs [role="tab"]:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+.connection-tab-panel { min-height: 280px; }
+.connection-tab-panel:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.connection-panel-notice { padding: 25px; color: var(--text-secondary); line-height: 1.6; }
+.connection-diagnostics-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; padding: 20px 25px; }
+.connection-diagnostics-heading h3 { margin: 0; font-size: 12px; color: var(--ink); }
+.connection-diagnostics-heading .connection-diagnostics-summary { margin-left: 0; }
+.connection-tab-panel > div > .connection-diagnostics { border-top: 0; }
 .connection-delete-confirm {
   padding: 20px 25px;
   border-bottom: 1px solid var(--border);

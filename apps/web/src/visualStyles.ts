@@ -29,6 +29,7 @@ export function validateVisualStyles(styles: unknown): asserts styles is VisualS
     const entry = style as Record<string, unknown>;
     if (typeof entry.id !== "string" || entry.id.trim() !== entry.id || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(entry.id) || ids.has(entry.id)) fail("Style IDs must be unique, 1–64 letters, numbers, dashes or underscores, beginning with a letter or number.");
     ids.add(entry.id as string);
+    // eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
     if (typeof entry.name !== "string" || !entry.name.trim() || entry.name.trim() !== entry.name || entry.name.length > 80 || /[\x00-\x1f\x7f-\x9f]/.test(entry.name)) fail("Style names need 1–80 characters without outer whitespace or control characters.");
     if (!object(entry.properties) || Object.keys(entry.properties).length < 1 || Object.keys(entry.properties).some(key => !visualStyleProperties.includes(key as VisualStyleProperty))) fail("Styles need at least one supported appearance property.");
     for (const [key, value] of Object.entries(entry.properties as Record<string, unknown>)) {

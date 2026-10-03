@@ -1,6 +1,7 @@
 import type { Project, ProjectNavigationSettings, Screen } from "./types";
 
 export function navigationLabelError(label: string): string | undefined {
+  // eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
   if (/[\u0000-\u001f\u007f-\u009f]/.test(label)) return "Menu labels cannot contain control characters.";
   if (!label.trim()) return "Menu labels cannot be empty.";
   if (label.length > 120) return "Menu labels must be at most 120 characters.";
@@ -8,6 +9,7 @@ export function navigationLabelError(label: string): string | undefined {
 }
 
 export function defaultNavigationLabel(screen: Pick<Screen, "id" | "name">): string {
+  // eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
   const clean = (value: string) => value.replace(/[\u0000-\u001f\u007f-\u009f]/g, "").trim();
   const label = clean(screen.name) || clean(screen.id) || "Screen";
   // The gateway limit uses UTF-16 length; retain complete code points when truncating.

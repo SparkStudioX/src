@@ -25,7 +25,7 @@ public sealed partial class ConnectorService
         if (rowKey == versionColumn) throw new ArgumentException("Row key and version column must differ.");
         SqlQueryGuard.Validate(readSql); ValidateReadParameters(parameters);
         var stopwatch = Stopwatch.StartNew();
-        if (IsSqlite(connection)) return await RunSqliteAsync(cancellation, token =>
+        if (IsSqlite(connection)) return await RunSqliteAsync(token =>
         {
             using var client = OpenSqlite(SqlitePath(connection, true), false);
             RestrictSqlite(client, true, token, transactions: true);
@@ -43,7 +43,7 @@ public sealed partial class ConnectorService
             }
             token.ThrowIfCancellationRequested(); transaction.Commit();
             return new ExecuteResult(rows.Count, stopwatch.Elapsed.TotalMilliseconds);
-        });
+        }, cancellation);
         RequireSql(connection);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation); timeout.CancelAfter(TimeSpan.FromSeconds(30));
         try

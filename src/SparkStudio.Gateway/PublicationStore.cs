@@ -5,6 +5,7 @@ namespace SparkStudio.Gateway;
 /// <summary>Operators use an explicitly published, persisted snapshot of screens and named queries.</summary>
 public sealed partial class PublicationStore
 {
+    private static readonly string[] PublishedInputFields = ["fieldKey", "defaultValue", "min", "max", "step", "options", "optionsSource", "tagPath", "validation", "formatMask", "textCase", "scanTerminator"];
     private readonly object gate = GatewayConfigurationLock.SyncRoot;
     private readonly string path;
     private readonly LocalAssetStore assets;
@@ -204,7 +205,7 @@ public sealed partial class PublicationStore
                 {
                     var definition = new JsonObject { ["type"] = item["type"]!.DeepClone() };
                     var properties = item["props"]!.AsObject();
-                    foreach (var key in new[] { "fieldKey", "defaultValue", "min", "max", "step", "options", "optionsSource", "tagPath", "validation", "formatMask", "textCase", "scanTerminator" })
+                    foreach (var key in PublishedInputFields)
                         // Browser state is never supplied by gateway defaults.
                         // Bound fields must arrive as explicit, validated inputs.
                         if (!(key == "defaultValue" && properties.ContainsKey("stateBinding")) && properties[key] is { } value)

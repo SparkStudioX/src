@@ -23,6 +23,8 @@ for (const item of browser) {
     ...(hashes?.length ? { hashes } : {}), properties: [{ name: 'sparkstudio:notices', value: item.notices.join(';') }] });
 }
 const deps = read(path.join(stage, 'SparkStudio.Gateway.deps.json'));
+const sourceWorkerDeps = path.join(stage, 'source-worker', 'SparkStudio.SourceWorker.deps.json');
+if (fs.existsSync(sourceWorkerDeps)) Object.assign(deps.libraries, read(sourceWorkerDeps).libraries);
 const inventoryPath = path.join(stage, 'THIRD-PARTY-NOTICES/package-inventory.json');
 const packageInventory = fs.existsSync(inventoryPath) ? read(inventoryPath) : [];
 for (const [key, value] of Object.entries(deps.libraries)) {

@@ -16,6 +16,7 @@ export default function Queries({
   onNavigationHandled,
   onSearchResources,
   canRunUpdates = true,
+  externalRefresh,
 }: {
   queries: NamedQuery[];
   connections: Connection[];
@@ -27,9 +28,12 @@ export default function Queries({
   onNavigationHandled?: (token: number) => void;
   onSearchResources?: (resources: NamedQuery[]) => void;
   canRunUpdates?: boolean;
+  externalRefresh?: NamedQuery[] | null;
 }) {
   const [selectedId, setSelectedId] = useState(queries[0]?.id || "");
   const [draft, setDraft] = useState<NamedQuery | null>(null);
+  const draftBase = useRef<NamedQuery | null>(null);
+  const [externalNotice, setExternalNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<QueryResult | number | null>(null);
   const [error, setError] = useState("");
@@ -41,7 +45,18 @@ export default function Queries({
     useState<RuntimeParameters>(parameters);
   const selected = queries.find((query) => query.id === selectedId);
   const current = draft || selected;
-  const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(selected);
+  const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(draftBase.current);
+  const handledRefresh = useRef<NamedQuery[] | null>(null);
+  useEffect(() => {
+    if (!externalRefresh || handledRefresh.current === externalRefresh) return;
+    handledRefresh.current = externalRefresh;
+    if (dirty) {
+      setExternalNotice("Ask Spark changed saved queries. Your unsaved query text is retained; discard it to load the saved version.");
+      return;
+    }
+    setDraft(null); setResult(null); setError(""); setExternalNotice("");
+    setSelectedId(previous => externalRefresh.some(query => query.id === previous) ? previous : externalRefresh[0]?.id || "");
+  }, [externalRefresh, dirty]);
   const handledNavigation = useRef<number | null>(null);
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => {
@@ -58,6 +73,7 @@ export default function Queries({
     if (!queries.some(query => query.id === queryId)) { notify("This named query is no longer available.", true); return; }
     setSelectedId(queryId);
     setDraft(null);
+    setExternalNotice("");
     setResult(null);
     setError("");
     setRunNotice("");
@@ -79,7 +95,10 @@ export default function Queries({
       connection.type === "sqlserver" || connection.type === "sqlite" || connection.id === "sample",
   );
   const edit = (patch: Partial<NamedQuery>) => {
-    if (current && !busy) setDraft({ ...current, ...patch });
+    if (current && !busy) {
+      if (!draft) draftBase.current = selected ?? null;
+      setDraft({ ...current, ...patch });
+    }
   };
   const save = async () => {
     if (!current) return;
@@ -93,6 +112,7 @@ export default function Queries({
       onChange([...queries.filter((query) => query.id !== saved.id), saved]);
       setSelectedId(saved.id);
       setDraft(null);
+      setExternalNotice("");
       notify("Named query saved.");
       return saved;
     } catch (reason) {
@@ -144,6 +164,7 @@ export default function Queries({
           disabled={busy}
           onClick={() => {
             if (dirty) { notify("Save or discard the current query's changes before creating another query.", true); return; }
+            draftBase.current = null;
             setDraft({
               id: id("query"),
               name: "New query",
@@ -162,6 +183,7 @@ export default function Queries({
           New query
         </button>
       </div>
+      <p role="status" hidden={!externalNotice}>{externalNotice}</p>
       <div className="management-columns">
         <aside className="resource-list">
           <div className="section-heading">
@@ -213,7 +235,7 @@ export default function Queries({
                 <div className="editor-actions">
                   {current.kind !== "update" && <label>Read deadline <select aria-label="Read-query test deadline" value={testDeadline} disabled={busy} onChange={event => setTestDeadline(Number(event.target.value))}>{[1000, 5000, 15000, 30000].map(value => <option key={value} value={value}>{value / 1000} seconds</option>)}</select></label>}
                   {busy && activeRun.current?.controller && <button className="button" onClick={() => activeRun.current?.controller?.abort()}>Cancel read query</button>}
-                  {draft && <button className="button" disabled={busy} onClick={() => { setDraft(null); setResult(null); setError(""); }}>Discard changes</button>}
+                  {draft && <button className="button" disabled={busy} onClick={() => { setDraft(null); setResult(null); setError(""); setExternalNotice(""); }}>Discard changes</button>}
                   <button
                     className="button"
                     disabled={busy || !draft}

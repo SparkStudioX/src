@@ -61,7 +61,7 @@ public sealed class ProcessDataService : BackgroundService
         {
             configuration = new(1, 30, [], []);
             configurationError = "Saved process data configuration is unreadable or invalid. Recording is stopped; explicitly replace it below after reviewing the recovery draft. The original file will be preserved.";
-            logger.LogError(exception, "Process data configuration is unavailable; other gateway services remain available");
+            GatewayLog.ProcessConfigurationUnavailable(logger, exception);
         }
         try
         {
@@ -97,7 +97,7 @@ public sealed class ProcessDataService : BackgroundService
         {
             database?.Dispose(); database = null; states.Clear();
             storageError = "Process data storage is unavailable. Recording and runtime reads are stopped. Preserve the database, repair or restore it, then restart the gateway.";
-            logger.LogError(exception, "Process data storage is unavailable; no files were deleted and other gateway services remain available");
+            GatewayLog.ProcessStorageUnavailable(logger, exception);
         }
     }
 
@@ -121,7 +121,7 @@ public sealed class ProcessDataService : BackgroundService
             {
                 if (!next.ReplaceInvalidConfiguration) throw new InvalidOperationException("Confirm replacement of the invalid configuration. Its original bytes will be archived before saving.");
                 RecoveryFileSystem.RejectLinks(configurationPath);
-                var backup = configurationPath + ".invalid-" + DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmss") + "-" + Guid.NewGuid().ToString("N") + ".json";
+                var backup = configurationPath + ".invalid-" + DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N") + ".json";
                 using var source = new FileStream(configurationPath, FileMode.Open, FileAccess.Read, FileShare.Read);
                 using var output = new FileStream(backup, FileMode.CreateNew, FileAccess.Write, FileShare.None);
                 source.CopyTo(output); output.Flush(true);
@@ -136,7 +136,7 @@ public sealed class ProcessDataService : BackgroundService
             catch (Exception exception) when (StorageFailure(exception))
             {
                 error = "Configuration was saved, but recording storage could not be updated. Inspect process data diagnostics and reload before making another change.";
-                logger.LogError(exception, "Process data configuration storage update failed");
+                GatewayLog.ProcessConfigurationWriteFailed(logger, exception);
                 throw new InvalidOperationException(error, exception);
             }
             return Configuration();
@@ -356,7 +356,7 @@ public sealed class ProcessDataService : BackgroundService
         {
             try { Sample(); }
             catch (Exception exception) when (exception is SqliteException or IOException or InvalidOperationException)
-            { lock (gate) error = "Process data storage is unavailable. Check gateway logs and free disk space."; logger.LogError(exception, "Process data sample could not be persisted"); }
+            { lock (gate) error = "Process data storage is unavailable. Check gateway logs and free disk space."; GatewayLog.ProcessSampleWriteFailed(logger, exception); }
             await Task.Delay(250, stoppingToken);
         }
     }

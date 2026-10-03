@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using SparkStudio.Connectors;
@@ -32,11 +33,23 @@ public static class BackendReliabilityChecks
             using (var frames = new MemoryStream())
             {
                 heartbeatContext.Response.Body = frames;
-                await TagEventStream.WriteHeartbeatAsync(heartbeatContext.Response, CancellationToken.None);
+                await TagEventEndpoint.WriteHeartbeatAsync(heartbeatContext.Response, CancellationToken.None);
                 var frame = System.Text.Encoding.UTF8.GetString(frames.ToArray());
                 Check(frame == "event: heartbeat\ndata: {}\n\n", "idle SSE sends a named event visible to the browser liveness watchdog");
             }
             passed += await MemoryDefinitionCacheChecks(Path.Combine(directory, "memory-cache"), protection);
+            var messaging = new RuntimeSessionMessaging();
+            var tab = messaging.Register("project", "published", "user", "operator", "login", () => true);
+            messaging.Connect("project", tab.Id, "user", "login");
+            var closed = (CancellationTokenSource)typeof(RuntimeSessionMessaging.Session).GetField("Closed", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(tab)!;
+            messaging.Close("project", tab.Id, "user", "login");
+            using (var linked = CancellationTokenSource.CreateLinkedTokenSource(CancellationToken.None, closed.Token))
+                Check(linked.IsCancellationRequested, "a close racing stream token setup cancels its linked token without disposing the source early");
+            messaging.Disconnect(tab);
+            try { _ = closed.Token; throw new Exception("Disconnected session retained its cancellation source."); }
+            catch (ObjectDisposedException) { passed++; }
+            messaging.Disconnect(tab);
+            Check(messaging.GetSessionInfo("project").Count == 0, "repeated stream disconnect remains idempotent after cancellation source cleanup");
             var store = new ProjectStore(directory, protection);
             var package = new JsonObject { ["format"] = "sparkstudio.tags", ["version"] = 1,
                 ["tags"] = new JsonArray(Enumerable.Range(0, 100).Select(index => (JsonNode)new JsonObject
@@ -113,9 +126,9 @@ public static class BackendReliabilityChecks
                 }))
                 {
                     changeDuringCapture = true;
-                    Check(TagEventStream.CaptureCurrent(changingScope, -1, () => scopeRevision) is null,
+                    Check(TagEventEndpoint.CaptureCurrent(changingScope, -1, () => scopeRevision) is null,
                         "scope changes during snapshot filtering discard the inconsistent batch");
-                    var safe = TagEventStream.CaptureCurrent(changingScope, -1, () => scopeRevision);
+                    var safe = TagEventEndpoint.CaptureCurrent(changingScope, -1, () => scopeRevision);
                     Check(safe is { Revision: 2, Snapshot.Length: 0 }, "retry replaces client values under the final narrowed scope");
                 }
                 var callbackOutsideLock = false;
@@ -172,6 +185,26 @@ public static class BackendReliabilityChecks
                 "invalid publication metadata is isolated as well as invalid JSON syntax");
             using var catalogTags = new TagEngine(reloaded.GatewayStore, connectors, NullLogger<TagEngine>.Instance);
             using var registry = new ProjectRuntimeRegistry(reloaded, catalogTags, connectors, new ConfigurationBuilder().Build(), NullLoggerFactory.Instance, new Lifetime());
+            var services = new ServiceCollection();
+            services.AddScoped(_ => registry.Get(healthy.Id).Actions);
+            using (var provider = services.BuildServiceProvider())
+            {
+                RuntimeActions first;
+                using (var requestScope = provider.CreateScope()) first = requestScope.ServiceProvider.GetRequiredService<RuntimeActions>();
+                using var nextRequest = provider.CreateScope();
+                var second = nextRequest.ServiceProvider.GetRequiredService<RuntimeActions>();
+                Check(ReferenceEquals(first, second), "project actions remain shared across independent request scopes");
+                var slots = (SemaphoreSlim)typeof(RuntimeActions).GetField("componentEventSlots", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(second)!;
+                Check(await slots.WaitAsync(TimeSpan.Zero), "disposing a request scope does not close its project's component event admission");
+                slots.Release();
+                var active = (IDisposable)typeof(RuntimeActions).GetMethod("AcquireComponentEventLease", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(second, null)!;
+                await registry.DeactivateAsync(healthy.Id, CancellationToken.None);
+                Check(await slots.WaitAsync(TimeSpan.Zero), "project retirement waits for active component event leases before disposing admission");
+                slots.Release();
+                active.Dispose();
+                try { await slots.WaitAsync(TimeSpan.Zero); throw new Exception("Retired admission remained usable."); }
+                catch (ObjectDisposedException) { passed++; }
+            }
             await registry.StartAsync(CancellationToken.None);
             Check(registry.StartupFailures.ContainsKey(damaged.Id) && registry.Get(healthy.Id).Workspace.Id == healthy.Id,
                 "one corrupt project is isolated while healthy project runtime starts");

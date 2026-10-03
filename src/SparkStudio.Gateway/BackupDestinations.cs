@@ -80,10 +80,10 @@ public static partial class BackupDestinations
 
     public static async Task<BackupDeliveryResult> DeliverAsync(BackupDestination destination, string localArchivePath,
         string archiveName, Guid ownerId, int retentionDays = 7, CancellationToken cancellationToken = default)
-        => await DeliverWithS3HandlerAsync(destination, localArchivePath, archiveName, ownerId, retentionDays, cancellationToken, null);
+        => await DeliverWithS3HandlerAsync(destination, localArchivePath, archiveName, ownerId, retentionDays, null, cancellationToken);
 
     private static async Task<BackupDeliveryResult> DeliverWithS3HandlerAsync(BackupDestination destination, string localArchivePath,
-        string archiveName, Guid ownerId, int retentionDays, CancellationToken cancellationToken, HttpMessageHandler? fixtureHandler,
+        string archiveName, Guid ownerId, int retentionDays, HttpMessageHandler? fixtureHandler, CancellationToken cancellationToken,
         bool fixtureMultipart = false)
     {
         destination = Validate(destination);
@@ -108,7 +108,7 @@ public static partial class BackupDestinations
                     finally { SmbWorker.Release(); }
                 }, CancellationToken.None);
             }
-            else if (destination.Kind == "s3") operation = DeliverS3Async(destination, localArchivePath, archiveName, ownerId, retentionDays, progress, token, fixtureHandler, fixtureMultipart);
+            else if (destination.Kind == "s3") operation = DeliverS3Async(destination, localArchivePath, archiveName, ownerId, retentionDays, progress, fixtureHandler, fixtureMultipart, token);
             else operation = DeliverCoreAsync(new FtpRemote(destination), localArchivePath, archiveName, ownerId, retentionDays, progress, token);
             // Observe late faults when a native UNC operation has outlived its deadline.
             _ = operation.ContinueWith(task => _ = task.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);

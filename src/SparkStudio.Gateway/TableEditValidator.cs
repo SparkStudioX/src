@@ -127,7 +127,7 @@ internal static class TableEditValidator
         return inputs;
     }
 
-    private static IReadOnlyDictionary<string, JsonElement> ValidatedRows(JsonObject table, QueryResult result)
+    private static Dictionary<string, JsonElement> ValidatedRows(JsonObject table, QueryResult result)
     {
         var edit = table["tableEdit"]!.AsObject();
         var rowKey = ProjectStore.Required(table, "rowKey");

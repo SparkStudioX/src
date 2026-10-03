@@ -2,7 +2,9 @@
 
 Each major user-facing feature should ship with an independently authored workshop project, a short exercise guide, compatibility information and a verified import/publish/runtime check. Workshops serve as both learning material and reproducible acceptance examples. Use synthetic data and make any gateway setup or writes explicit.
 
-[catalog.json](catalog.json) is the machine-readable inventory of all 56 source examples. 37 are portable project workshops; 19 require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
+[catalog.json](catalog.json) is the machine-readable inventory of all 58 source examples. 37 are portable project workshops; 21 require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
+
+The [Ask Spark workshop](../docs/architecture/ASK_SPARK.md) uses a synthetic canvas to exercise voice transcription, pasted screenshots, context-aware edits and Undo. It needs AI configuration on a development gateway; no equipment, database or gateway tags are involved.
 
 ## Use a downloaded workshop
 
@@ -80,12 +82,15 @@ These remain useful authored source fixtures, but are excluded from the standalo
 | [Reusable applications](reusable-applications.json) | Twelve synthetic `Workcenters` and `Orders` memory tags. | Explicit save/release actions write those tags. |
 | [Images and popups](assets-popups.json) | Eight synthetic memory tags and the local drawing in `examples/assets/assembly-cell.png`. | Explicit popup save/release actions write those tags. |
 | [Industrial devices](industrial-devices-workshop.json) | Independent Int16 lab storage, saved maps and device tags for the four protocols, including six EtherNet/IP families; see the [family/address matrix](../docs/architecture/INDUSTRIAL_DEVICE_CONNECTIONS.md#ethernetip-family-setup). | Explicit reviewed equipment commands write the chosen lab setpoint; rebind its EtherNet/IP tag deliberately between family connections. |
+| [Read-only data sources](data-sources.json) | Independently authored loopback MTConnect/i3X agents and MQTT broker, explicit source configuration and reviewed imports; see the [source guide](../docs/architecture/DATA_SOURCES.md). | None. Script tests evaluate supplied payloads; automatic tag ownership is an explicit engineering opt-in. |
 | [SQLite data controls](data-controls.json) | Separate managed SQLite connection and synthetic database initialized by its dedicated loader. | None during the exercise; setup creates and seeds the database. |
 | [Read query operations](query-testing.json) | Managed SQLite connection and synthetic database; follow the [setup and cancellation guide](../docs/architecture/QUERY_TESTING.md). | None during reads; setup creates and seeds the database. |
 
 The dedicated `tools/load-backup-example.mjs` creates a new Scheduled backup workshop project on an authenticated local gateway; it leaves the checkpoint unpublished unless `--publish` is explicit. It never configures backup credentials or schedules. Its read-only screen helps compare published checkpoint A with an unpublished draft B after an isolated configuration restore. Follow the guide before using any real destination.
 
 The dedicated `tools/load-industrial-devices-example.mjs` creates only a new unpublished Industrial devices workshop project. It creates no connections or tags. Configure isolated lab profiles separately and explicitly publish after checking each mapped address. Profiles you leave unconfigured remain unavailable.
+
+The dedicated `tools/load-data-sources-example.mjs` creates only a new unpublished Read-only data sources workshop project. Start `tools/run-data-source-simulators.mjs`, then configure MTConnect, i3X and MQTT through Connections. Review point/tag imports and automatic ownership separately. This workshop requires a build containing the source-session implementation; earlier preview.12 assets lack these additions.
 
 The generic `tools/load-example.mjs <id>` loader is a development tool for an authenticated local gateway on port 5090 or 5091. It backs up and adds missing resources to the **default project**, preserves existing resource IDs and tag values, and leaves the draft unpublished unless `--publish` is supplied. It cannot retarget an arbitrary project. Prefer portable imports for the collection above. The [security verification guide](../docs/architecture/SECURITY.md#verification-commands) describes authentication for an isolated test gateway; there is no unauthenticated loader bypass.
 

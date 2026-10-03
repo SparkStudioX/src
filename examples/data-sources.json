@@ -1,0 +1,74 @@
+{
+  "name": "Read-only data sources workshop",
+  "description": "Independently authored synthetic MTConnect, i3X and MQTT engineering exercises. Configure sources separately; the project never publishes or writes source values.",
+  "sourceRecipes": [
+    {
+      "name": "Workshop MTConnect", "type": "mtconnect",
+      "source": {
+        "endpoint": "http://127.0.0.1:5310", "acquisition": "poll", "intervalMs": 1000,
+        "authentication": { "mode": "none" },
+        "mtConnect": { "heartbeatMs": 1000, "count": 1000, "userAgent": "SparkStudioWorkshop/1.0" },
+        "points": [
+          { "id": "speed", "name": "Speed", "address": "workshop-cnc/speed", "dataType": "Double", "writable": false },
+          { "id": "count", "name": "Part count", "address": "workshop-cnc/count", "dataType": "Int64", "writable": false },
+          { "id": "condition", "name": "Condition level", "address": "workshop-cnc/condition", "selector": "level", "dataType": "String", "writable": false }
+        ]
+      }
+    },
+    {
+      "name": "Workshop i3X", "type": "i3x",
+      "source": {
+        "endpoint": "http://127.0.0.1:5311/v1", "acquisition": "poll", "intervalMs": 1000,
+        "authentication": { "mode": "none" }, "i3x": { "preferStream": true, "maxDepth": 1, "reconciliationSeconds": 5 },
+        "points": [
+          { "id": "temperature", "name": "Temperature", "address": "workshop:temperature#1", "dataType": "Double", "writable": false },
+          { "id": "count", "name": "Part count", "address": "workshop:count#1", "dataType": "Int64", "writable": false },
+          { "id": "running", "name": "Running", "address": "workshop:state#1", "selector": "/running", "dataType": "Boolean", "writable": false }
+        ]
+      }
+    },
+    {
+      "name": "Workshop MQTT", "type": "mqtt",
+      "source": {
+        "endpoint": "mqtt://127.0.0.1:18890", "acquisition": "subscribe", "authentication": { "mode": "none" }, "points": [],
+        "mqtt": {
+          "protocolVersion": "5", "transport": "tcp", "keepAliveSeconds": 30, "cleanStart": true, "sessionExpirySeconds": 0,
+          "mappings": [
+            { "id": "review", "topicFilter": "workshop/review/#", "root": "[default]SourceWorkshop/MQTT/Review", "tags": "review", "payload": "scalar", "qos": 0, "retained": "uncertain", "stripLevels": 2, "staleAfterMs": 3000, "maximumTags": 100 },
+            { "id": "tree", "topicFilter": "workshop/tree/#", "root": "[default]SourceWorkshop/MQTT/Tree", "tags": "review", "payload": "scalar", "qos": 0, "retained": "uncertain", "stripLevels": 2, "staleAfterMs": 3000, "maximumTags": 100 },
+            { "id": "script", "topicFilter": "workshop/script/cell", "root": "[default]SourceWorkshop/MQTT/Script", "tags": "review", "payload": "script", "script": "json(payload).value", "dataType": "Int64", "timestampExpression": "json(payload).timestamp", "shape": "scalar", "qos": 0, "retained": "uncertain", "stripLevels": 2, "maximumTags": 100 }
+          ]
+        }
+      }
+    }
+  ],
+  "scriptTest": {
+    "mappingId": "script", "topic": "workshop/script/cell", "retained": false,
+    "payload": "{\"value\":9007199254740993,\"temperature\":21.5,\"running\":true,\"timestamp\":\"2026-10-01T12:00:00Z\"}"
+  },
+  "navigation": { "mode": "none", "startupScreenId": "data-sources", "items": [] },
+  "screens": [
+    {
+      "id": "data-sources", "name": "Read-only data sources", "width": 1280, "height": 900,
+      "components": [
+        { "id": "heading", "type": "label", "x": 28, "y": 20, "width": 1224, "height": 48, "props": { "text": "Read-only data sources: connect, browse, review and observe", "fontSize": 27 } },
+        { "id": "setup", "type": "label", "x": 28, "y": 78, "width": 1224, "height": 76, "props": { "text": "Setup required. Run the independent loopback fixtures and follow DATA_SOURCES.md. This unpublished project configures no connections or tags. Unconfigured values remain unavailable." } },
+        { "id": "mt-heading", "type": "label", "x": 28, "y": 174, "width": 380, "height": 40, "props": { "text": "MTConnect · synthetic CNC", "fontSize": 22 } },
+        { "id": "i3x-heading", "type": "label", "x": 448, "y": 174, "width": 380, "height": 40, "props": { "text": "i3X · opaque IDs and selectors", "fontSize": 22 } },
+        { "id": "mqtt-heading", "type": "label", "x": 868, "y": 174, "width": 380, "height": 40, "props": { "text": "MQTT · observed topics", "fontSize": 22 } },
+        { "id": "mt-speed", "type": "value", "x": 28, "y": 226, "width": 380, "height": 115, "props": { "text": "CNC speed", "tagPath": "[default]SourceWorkshop/CNC/Speed" } },
+        { "id": "mt-count", "type": "value", "x": 28, "y": 357, "width": 380, "height": 115, "props": { "text": "Exact Int64 part count", "tagPath": "[default]SourceWorkshop/CNC/Count" } },
+        { "id": "mt-condition", "type": "value", "x": 28, "y": 488, "width": 380, "height": 115, "props": { "text": "Reduced condition level", "tagPath": "[default]SourceWorkshop/CNC/Condition" } },
+        { "id": "i3x-temperature", "type": "value", "x": 448, "y": 226, "width": 380, "height": 115, "props": { "text": "Cell temperature", "tagPath": "[default]SourceWorkshop/i3X/Temperature" } },
+        { "id": "i3x-count", "type": "value", "x": 448, "y": 357, "width": 380, "height": 115, "props": { "text": "Exact Int64 part count", "tagPath": "[default]SourceWorkshop/i3X/Count" } },
+        { "id": "i3x-running", "type": "value", "x": 448, "y": 488, "width": 380, "height": 115, "props": { "text": "State /running selector", "tagPath": "[default]SourceWorkshop/i3X/Running" } },
+        { "id": "mqtt-temperature", "type": "value", "x": 868, "y": 226, "width": 380, "height": 115, "props": { "text": "Reviewed temperature", "tagPath": "[default]SourceWorkshop/MQTT/Review/temperature" } },
+        { "id": "mqtt-own-value", "type": "value", "x": 868, "y": 357, "width": 380, "height": 115, "props": { "text": "Topic a/b · own value", "tagPath": "[default]SourceWorkshop/MQTT/Tree/a/b" } },
+        { "id": "mqtt-real-value-child", "type": "value", "x": 868, "y": 488, "width": 380, "height": 115, "props": { "text": "Real topic a/b/value", "tagPath": "[default]SourceWorkshop/MQTT/Tree/a/b/value" } },
+        { "id": "quality", "type": "label", "x": 28, "y": 632, "width": 1224, "height": 80, "props": { "text": "Observe quality separately from value: retained MQTT replay is Uncertain_Retained until a live message replaces it. Pause only MQTT publications to see Uncertain_Stale with a healthy transport. Source timestamps and gateway receipt times remain separate in Connections quick watch." } },
+        { "id": "ownership", "type": "label", "x": 28, "y": 728, "width": 1224, "height": 96, "props": { "text": "Review first, then deliberately enable automatic Tree mapping. Removing an unreferenced generated tag persists suppression; Allow rediscovery clears it. Inspect ownership, migration previews and locked types. All sources are read-only; equipment commands, native actions and Publish are unavailable." } },
+        { "id": "scope", "type": "label", "x": 28, "y": 832, "width": 1224, "height": 48, "props": { "text": "These are current-state exercises, not a lossless event journal. Use synthetic data only. The fixture MQTT endpoint supports QoS 0 on loopback and is not a production broker." } }
+      ]
+    }
+  ]
+}

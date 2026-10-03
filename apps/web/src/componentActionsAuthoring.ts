@@ -13,7 +13,8 @@ export const writableActionTags = (tags: Tag[]) => tags.filter(tag => (tag.sourc
 export function tagWritePathError(path: string): string | undefined {
   if (!path.startsWith("[default]") || path.length > 512) return "Enter a concrete [default] tag path of at most 512 characters.";
   const relative = path.slice(9);
-  if (/[\u0000-\u001f\u007f-\u009f\[\]{}\\]/.test(relative) || relative.split("/").some(segment => !segment.trim() || segment === "." || segment === "..")) return "Use a concrete tag path without empty segments, dot segments, braces or control characters.";
+  // eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
+  if (/[\u0000-\u001f\u007f-\u009f[\]{}\\]/.test(relative) || relative.split("/").some(segment => !segment.trim() || segment === "." || segment === "..")) return "Use a concrete tag path without empty segments, dot segments, braces or control characters.";
   return undefined;
 }
 export function tagWriteValue(dataType: TagWriteDataType, text: string): InputValue {

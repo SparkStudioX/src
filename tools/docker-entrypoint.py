@@ -31,7 +31,7 @@ def identities(value):
         except ValueError:
             labels = name.split(".")
             if all(character in "0123456789." for character in name) or not all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in labels):
-                raise ConfigurationError("TLS names cannot include a scheme, port, path, wildcard or invalid DNS label.")
+                raise ConfigurationError("TLS names cannot include a scheme, port, path, wildcard or invalid DNS label.") from None
             kind = "DNS"
         entry = (kind, name)
         if entry not in result:

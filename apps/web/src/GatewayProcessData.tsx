@@ -10,6 +10,7 @@ export type ProcessDataSection = "alarms" | "history";
 interface ConfigurationIssue { message: string; section?: ProcessDataSection; index?: number }
 const numeric = (value: string) => value.trim() ? Number(value) : Number.NaN;
 const integer = (value: number, minimum: number, maximum: number) => Number.isInteger(value) && value >= minimum && value <= maximum;
+// eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
 const pathError = (value: string) => !/^\[[^\]\s]+\].+$/.test(value) || value.length > 1024 || /[{}\x00-\x1f]/.test(value);
 const pageSize = 50;
 const priorityNames = ["", "Low", "Medium", "High", "Critical"];

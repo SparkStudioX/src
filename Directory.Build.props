@@ -3,5 +3,17 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <Deterministic>true</Deterministic>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>10.0-recommended</AnalysisLevel>
+    <RunAnalyzersDuringBuild>true</RunAnalyzersDuringBuild>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <_SparkStudioProductionProject Condition="'$(MSBuildProjectName)' == 'SparkStudio.Gateway' or '$(MSBuildProjectName)' == 'SparkStudio.Connectors' or '$(MSBuildProjectName)' == 'SparkStudio.SourceWorker' or '$(MSBuildProjectName)' == 'ServiceHelper'">true</_SparkStudioProductionProject>
+    <!-- IDE0005 requires documentation generation to analyze unused imports.
+         Missing public XML comments are not a new API-documentation requirement. -->
+    <GenerateDocumentationFile Condition="'$(_SparkStudioProductionProject)' == 'true'">true</GenerateDocumentationFile>
+    <NoWarn Condition="'$(_SparkStudioProductionProject)' == 'true'">$(NoWarn);CS1591</NoWarn>
+    <!-- Only authored production projects enforce lint warnings as errors.
+         Synthetic fixture projects and executable test runners have their own assertions. -->
+    <TreatWarningsAsErrors Condition="'$(_SparkStudioProductionProject)' == 'true'">true</TreatWarningsAsErrors>
   </PropertyGroup>
 </Project>

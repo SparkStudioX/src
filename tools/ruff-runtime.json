@@ -1,0 +1,18 @@
+{
+  "version": "0.16.10",
+  "source": "https://pypi.org/project/ruff/0.16.10/",
+  "platforms": {
+    "win-x64": {
+      "url": "https://files.pythonhosted.org/packages/99/29/cfb0df9448d4d4ad48c2de029ada9ebd71baa6da983a6c77ee6c6cd0fe82/ruff-0.16.10-py3-none-win_amd64.whl",
+      "sha256": "97f2015c92aa97105b0eab19eb5d224884399281cfc5da86a92db4ab5e7fb2ca"
+    },
+    "linux-x64": {
+      "url": "https://files.pythonhosted.org/packages/e4/03/17234145f302a645a123e8c3bb2411ecf4669fbc350de3b0d803230a1729/ruff-0.16.10-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+      "sha256": "f33f43a864a8483eebd160e713336c8bab02c934feaff0a33cf5ccb41546d09a"
+    },
+    "linux-arm64": {
+      "url": "https://files.pythonhosted.org/packages/6e/fb/470085af734da396e68cd80fb0a3e7c109a459716ae59588c0f6fab8a17d/ruff-0.16.10-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
+      "sha256": "494401c86df4c4c25f69b9419605d944467ee98c42fb6ad405ef4fa40b8fb67d"
+    }
+  }
+}

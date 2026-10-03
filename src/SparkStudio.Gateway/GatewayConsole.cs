@@ -53,6 +53,7 @@ public sealed class GatewayObservations(string dataDirectory)
 
 public static class GatewayConsole
 {
+    private static readonly string[] SupportSnapshotExclusions = ["credentials", "session identities and tokens", "configuration values", "tag values and paths", "project resources", "script output", "exception bodies", "certificates and keys"];
     public static void UseGatewayObservations(this WebApplication app)
     {
         app.Use(async (context, next) =>
@@ -102,7 +103,7 @@ public static class GatewayConsole
                 version = typeof(GatewayConsole).Assembly.GetName().Version?.ToString(), framework = RuntimeInformation.FrameworkDescription,
                 projectCount = catalog.List(includeArchived: true).Count, connectionCount = catalog.GatewayStore.GetConnections().Count,
                 tagCount = tags.Snapshot().Length, metrics = observations.Snapshot(),
-                excluded = new[] { "credentials", "session identities and tokens", "configuration values", "tag values and paths", "project resources", "script output", "exception bodies", "certificates and keys" } };
+                excluded = SupportSnapshotExclusions };
             return Results.File(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, ProjectStore.Json), "application/json", "sparkstudio-support-snapshot.json");
         }).Access("diagnostics", audit: true);
     }

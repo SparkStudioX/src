@@ -31,6 +31,9 @@ function Get-ReviewedPackageNoticeSpec([string]$Package) {
     # Microsoft revisions come from each matching nuspec. SQLite's commit is the
     # resolved v2.1.12 tag; AWS's revision declares the exact assembly versions.
     $revision = $null; $family = $null
+    if ($Package -eq 'Scriban/7.5.0') {
+        return @{ repository = 'scriban/scriban'; revision = 'b916a431461ec8a6dcd1d6819e304726308242d3'; license = 'BSD-2-Clause'; files = @(@{ name = 'license.txt'; sha256 = '7423242b4ae72bccdf19a06cd3c20790df8519a164a08f37b31cb4a40034d827' }) }
+    }
     if ($Package -in @('libplctag/1.5.2', 'libplctag.NativeImport/1.0.41')) {
         $revision = if ($Package -eq 'libplctag/1.5.2') { '343d1b0edeb7fcbae5d56e81477af7b3dc5b05fa' } else { '6ba1b192553372e65fb10eb6a0f1fb577890bdb9' }
         $sources = @("https://github.com/libplctag/libplctag.NET/tree/$revision")
@@ -249,6 +252,15 @@ try {
     }
     # Preserve available NuGet package licenses and identify every published dependency.
     $deps = Get-Content -LiteralPath (Join-Path $published 'SparkStudio.Gateway.deps.json') -Raw | ConvertFrom-Json
+    $sourceWorkerDeps = Join-Path $published 'source-worker\SparkStudio.SourceWorker.deps.json'
+    if (Test-Path -LiteralPath $sourceWorkerDeps) {
+        $sourceWorkerLibraries = (Get-Content -LiteralPath $sourceWorkerDeps -Raw | ConvertFrom-Json).libraries
+        foreach ($sourceWorkerPackage in $sourceWorkerLibraries.PSObject.Properties) {
+            if (!$deps.libraries.PSObject.Properties[$sourceWorkerPackage.Name]) {
+                $deps.libraries | Add-Member -NotePropertyName $sourceWorkerPackage.Name -NotePropertyValue $sourceWorkerPackage.Value
+            }
+        }
+    }
     $packages = @()
     $reviewedNotices = @{}
     foreach ($property in $deps.libraries.PSObject.Properties) {

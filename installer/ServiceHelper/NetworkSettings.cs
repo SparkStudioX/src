@@ -49,7 +49,7 @@ internal static partial class Program
 
     private static byte[] CertificateBytes(string? path)
     {
-        if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path) || path.StartsWith(@"\\") || path.Any(c => c < ' ' || c == '"'))
+        if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path) || path.StartsWith(@"\\", StringComparison.Ordinal) || path.Any(c => c < ' ' || c == '"'))
             throw new ArgumentException("Choose local absolute paths for the PEM certificate and private key.");
         RejectReparsePoints(Path.GetFullPath(path));
         if (!File.Exists(path) || new FileInfo(path).Length is <= 0 or > 65_536 || (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
@@ -322,8 +322,8 @@ internal static partial class Program
         try
         {
             var checks = 0;
-            void Assert(bool condition, string message) { if (!condition) throw new Exception(message); checks++; }
-            void Reject(Action action) { try { action(); } catch (Exception error) when (error is ArgumentException or InvalidOperationException) { checks++; return; } throw new Exception("Expected network setting rejection."); }
+            void Assert(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); checks++; }
+            void Reject(Action action) { try { action(); } catch (Exception error) when (error is ArgumentException or InvalidOperationException) { checks++; return; } throw new InvalidOperationException("Expected network setting rejection."); }
             async Task VerifyFixtureTlsAsync(NetworkOptions fixtureOptions, X509Certificate2 fixtureCertificate)
             {
                 var pfx = fixtureCertificate.Export(X509ContentType.Pkcs12);
@@ -340,7 +340,7 @@ internal static partial class Program
                     var hostSeen = false;
                     while (await reader.ReadLineAsync(deadline.Token) is { Length: > 0 } headerLine)
                         if (headerLine.Equals($"Host: {fixtureOptions.Hostname}:{tlsPort}", StringComparison.OrdinalIgnoreCase)) hostSeen = true;
-                    if (!hostSeen) throw new Exception("The readiness Host header did not preserve the selected DNS/IP identity.");
+                    if (!hostSeen) throw new InvalidOperationException("The readiness Host header did not preserve the selected DNS/IP identity.");
                     var body = System.Text.Encoding.UTF8.GetBytes("{\"product\":\"SparkStudio\",\"status\":\"ready\",\"pythonAvailable\":true,\"processId\":1234}");
                     var header = System.Text.Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n");
                     await stream.WriteAsync(header, deadline.Token); await stream.WriteAsync(body, deadline.Token); await stream.FlushAsync(deadline.Token);
@@ -398,7 +398,7 @@ internal static partial class Program
             foreach (var identity in new[] { "gateway.fixture.test", "192.0.2.10" })
             {
                 var generatedChange = InstallDeployment(directory, 5090, generatedOptions with { Hostname = identity }, fixtureIdentity);
-                var installed = ReadNetworkIntent(directory) ?? throw new Exception("Generated network settings were not saved.");
+                var installed = ReadNetworkIntent(directory) ?? throw new InvalidOperationException("Generated network settings were not saved.");
                 using var generated = ValidateCertificate(installed);
                 Assert(generated.HasPrivateKey && generated.MatchesHostname(identity, allowWildcards: false, allowCommonName: false), "Generated certificate identity/key did not persist.");
                 Reject(() => ValidateCertificate(installed with { Hostname = identity == "192.0.2.10" ? "192.0.2.11" : "other.fixture.test" }));
@@ -431,7 +431,7 @@ internal static partial class Program
                     Assert(trusted.Build(publicCertificate), "Trusting only the exported self-signed public certificate did not validate server authentication.");
                 }
                 var guide = File.ReadAllText(guideFile);
-                var fingerprint = string.Join(":", generated.GetCertHash(HashAlgorithmName.SHA256).Select(value => value.ToString("X2")));
+                var fingerprint = string.Join(":", generated.GetCertHash(HashAlgorithmName.SHA256).Select(value => value.ToString("X2", System.Globalization.CultureInfo.InvariantCulture)));
                 Assert(guide.Contains(fingerprint) && guide.Contains($"https://{identity}:5443")
                     && guide.Contains("one year") && !guide.Contains("PRIVATE KEY"), "The trust guide lost the exact fingerprint, address or renewal instructions.");
                 await VerifyFixtureTlsAsync(installed, generated);
@@ -494,7 +494,7 @@ internal static partial class Program
             var watch = System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                try { await VerifyNetworkReadinessAsync(options with { HttpsPort = stalledPort }, () => 1234); throw new Exception("Stalled TLS response body was accepted."); }
+                try { await VerifyNetworkReadinessAsync(options with { HttpsPort = stalledPort }, () => 1234); throw new InvalidOperationException("Stalled TLS response body was accepted."); }
                 catch (InvalidOperationException error) when (error.Message.Contains("within 5 seconds")) { Assert(watch.Elapsed < TimeSpan.FromSeconds(8), "TLS readiness body deadline was not bounded."); }
             }
             finally { stalledDeadline.Cancel(); stalledListener.Stop(); try { await stalledServer; } catch (OperationCanceledException) { } }

@@ -4,10 +4,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
-using System.Security.Authentication;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
-using System.Net.Security;
 using System.Security.Principal;
 using System.Text.Json;
 using Microsoft.Win32;
@@ -361,7 +357,7 @@ internal static partial class Program
         var good = new ServiceInfo(Command(dir, 5090), @"NT AUTHORITY\LocalService", Native.OwnProcess, Native.Stopped);
         var checks = 0;
         void Accepted(Action action) { action(); checks++; }
-        void Rejected(Action action) { try { action(); } catch (Exception error) when (error is ArgumentException or InvalidOperationException) { checks++; return; } throw new Exception("Expected ownership/path rejection."); }
+        void Rejected(Action action) { try { action(); } catch (Exception error) when (error is ArgumentException or InvalidOperationException) { checks++; return; } throw new InvalidOperationException("Expected ownership/path rejection."); }
         Accepted(() => ValidateOwnership(dir, null, null));
         Accepted(() => ValidateOwnership(dir, registration, null)); // A retained registration can be retried after owned-service cleanup.
         Accepted(() => ValidateOwnership(dir, registration, good));
@@ -529,7 +525,7 @@ internal sealed record ServiceInfo(string BinaryPath, string Account, uint Servi
 
 internal sealed class ServiceHandle : SafeHandleZeroOrMinusOneIsInvalid
 {
-    private ServiceHandle() : base(true) { }
+    internal ServiceHandle() : base(true) { }
     protected override bool ReleaseHandle() => Native.CloseServiceHandle(handle);
 }
 
@@ -648,11 +644,11 @@ internal static class Native
                 if (process.IsInvalid)
                     throw new Win32Exception(fallbackError, "OpenProcess remained denied for the owned gateway after temporarily enabling SeDebugPrivilege.");
             }
-            var path = new System.Text.StringBuilder(32768);
-            var length = path.Capacity;
+            var path = new char[32768];
+            var length = path.Length;
             if (!QueryFullProcessImageName(process, 0, path, ref length))
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "QueryFullProcessImageName could not verify the owned gateway executable.");
-            if (!Path.GetFullPath(path.ToString()).Equals(Path.GetFullPath(expectedExecutable), StringComparison.OrdinalIgnoreCase))
+            if (!Path.GetFullPath(new string(path, 0, length)).Equals(Path.GetFullPath(expectedExecutable), StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException("The service process does not match the owned gateway executable. No process was stopped or terminated.");
             return process;
         }
@@ -831,7 +827,7 @@ internal static class Native
     [DllImport("advapi32.dll", SetLastError = true)] private static extern bool DeleteService(ServiceHandle service);
     [DllImport("advapi32.dll", SetLastError = true)] internal static extern bool CloseServiceHandle(IntPtr handle);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern SafeProcessHandle OpenProcess(uint access, bool inheritHandle, uint processId);
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] private static extern bool QueryFullProcessImageName(SafeProcessHandle process, uint flags, System.Text.StringBuilder path, ref int length);
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] private static extern bool QueryFullProcessImageName(SafeProcessHandle process, uint flags, [Out] char[] path, ref int length);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern uint WaitForSingleObject(SafeProcessHandle process, uint milliseconds);
     [DllImport("kernel32.dll")] private static extern IntPtr GetCurrentProcess();
     [DllImport("advapi32.dll", SetLastError = true)] private static extern bool OpenProcessToken(IntPtr process, uint access, out SafeAccessTokenHandle token);

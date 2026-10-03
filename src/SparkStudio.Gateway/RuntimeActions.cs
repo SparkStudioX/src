@@ -60,7 +60,7 @@ public sealed partial class RuntimeActions(PublicationStore publications, Python
             InputDefinitionValidator.ValidateQuerySelection(key, ProjectStore.Required(definition, "type"), source, result, resolvedInputs[key].GetString()!);
         }
 
-        return await python.RunAsync(action["code"]!.GetValue<string>(), resolvedParameters, resolvedInputs, cancellation, action["queries"]!.AsArray(), uiContext, CapturedLibraries(action));
+        return await python.RunAsync(action["code"]!.GetValue<string>(), resolvedParameters, resolvedInputs, action["queries"]!.AsArray(), cancellation, uiContext, CapturedLibraries(action));
     }
 
     public async Task<JsonObject> ExecuteTableEditAsync(string screenId, string componentId, TableEditRequest request, CancellationToken cancellation)
@@ -81,10 +81,10 @@ public sealed partial class RuntimeActions(PublicationStore publications, Python
         var inputs = TableEditValidator.Inputs(action["table"]!.AsObject(), rows, request);
         // This read is only a preflight. The authored update must include its key
         // and version in the WHERE clause and require exactly one affected row.
-        return await python.RunAsync(action["code"]!.GetValue<string>(), context, inputs, cancellation, action["queries"]!.AsArray(), libraries: CapturedLibraries(action));
+        return await python.RunAsync(action["code"]!.GetValue<string>(), context, inputs, action["queries"]!.AsArray(), cancellation, libraries: CapturedLibraries(action));
     }
 
-    private static IReadOnlyDictionary<string, string>? CapturedLibraries(JsonObject action)
+    private static Dictionary<string, string>? CapturedLibraries(JsonObject action)
         => (action["libraries"] as JsonObject)?.ToDictionary(pair => pair.Key, pair => pair.Value!.GetValue<string>(), StringComparer.Ordinal);
 
     private async Task<Dictionary<string, JsonElement>> ResolveContextAsync(JsonObject action, Dictionary<string, JsonElement>? parameters,
@@ -187,7 +187,7 @@ public sealed partial class RuntimeActions(PublicationStore publications, Python
     }
 
     private async Task ValidateBindingInputsAsync(JsonObject scope, Dictionary<string, JsonElement>? inputs,
-        IReadOnlyDictionary<string, JsonElement> parentParameters, JsonObject[] capturedQueries, CancellationToken cancellation)
+        Dictionary<string, JsonElement> parentParameters, JsonObject[] capturedQueries, CancellationToken cancellation)
     {
         var definitions = (scope["bindingInputDefinitions"] as JsonArray ?? []).OfType<JsonObject>().ToArray();
         RejectUnknownKeys(inputs, definitions.Select(item => ProjectStore.Required(item, "fieldKey")), "parameter binding input");

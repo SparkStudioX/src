@@ -9,6 +9,7 @@ public sealed partial class ConnectorService
     public Task<string> WriteValueAsync(ConnectionDefinition connection, string nodeId, string dataType, JsonElement value, CancellationToken cancellationToken, Action? beforeDispatch = null)
     {
         _ensureOperationsAllowed?.Invoke();
+        if (!PointCatalog.CanWrite(connection)) throw new ArgumentException("This connection is read-only or has an unsupported write driver.");
         if (DeviceConfiguration.IsDevice(connection))
         {
             var point = DeviceConfiguration.Point(connection, nodeId);

@@ -1,4 +1,3 @@
-using System.Net;
 using System.Net.NetworkInformation;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -64,7 +63,7 @@ public sealed class BeckhoffAdsDeviceSession : IDeviceSession
     public Task TestAsync(CancellationToken cancellation) => DeviceScalarCodec.SdkAsync(() => TestCoreAsync(cancellation), "ADS");
     private async Task TestCoreAsync(CancellationToken cancellation)
     {
-        using var deadline = DeviceScalarCodec.Deadline(cancellation, settings.TimeoutMs);
+        using var deadline = DeviceScalarCodec.Deadline(settings.TimeoutMs, cancellation);
         using var client = await OpenAsync(deadline.Token);
     }
 
@@ -74,7 +73,7 @@ public sealed class BeckhoffAdsDeviceSession : IDeviceSession
     {
         ObjectDisposedException.ThrowIf(disposed, this); cancellation.ThrowIfCancellationRequested();
         if (parent == "@configured") return DeviceConfiguration.Map(settings);
-        using var deadline = DeviceScalarCodec.Deadline(cancellation, settings.TimeoutMs);
+        using var deadline = DeviceScalarCodec.Deadline(settings.TimeoutMs, cancellation);
         using var client = await OpenAsync(deadline.Token);
         var loader = SymbolLoaderFactory.Create(client, new SymbolLoaderSettings(SymbolsLoadMode.VirtualTree)
         { AutomaticReconnection = false, ExpandArrayValues = false });
@@ -141,7 +140,7 @@ public sealed class BeckhoffAdsDeviceSession : IDeviceSession
         DeviceScalarCodec.SdkAsync(() => ReadCoreAsync(points, cancellation), "ADS");
     private async Task<IReadOnlyList<ConnectorValue>> ReadCoreAsync(IReadOnlyList<DevicePoint> points, CancellationToken cancellation)
     {
-        using var deadline = DeviceScalarCodec.Deadline(cancellation, settings.TimeoutMs);
+        using var deadline = DeviceScalarCodec.Deadline(settings.TimeoutMs, cancellation);
         using var client = await OpenAsync(deadline.Token);
         var values = new List<ConnectorValue>();
         foreach (var point in points)
@@ -178,7 +177,7 @@ public sealed class BeckhoffAdsDeviceSession : IDeviceSession
     {
         if (!point.Writable) throw new ArgumentException("This point does not permit writes.");
         var raw = DeviceScalarCodec.Encode(point, value);
-        using var deadline = DeviceScalarCodec.Deadline(cancellation, settings.TimeoutMs);
+        using var deadline = DeviceScalarCodec.Deadline(settings.TimeoutMs, cancellation);
         using var client = await OpenAsync(deadline.Token);
         await VerifySymbolAsync(client, point, true, deadline.Token);
         var created = await client.CreateVariableHandleAsync(point.Address, deadline.Token); Check(created);

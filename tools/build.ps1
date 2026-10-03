@@ -20,12 +20,7 @@ try {
             & npm.cmd ci --cache (Join-Path $root '.tools\npm-cache') --no-audit --no-fund
             if ($LASTEXITCODE -ne 0) { throw 'Browser dependency restore failed.' }
         }
-        & npm.cmd run build
-        if ($LASTEXITCODE -ne 0) { throw 'Browser build failed.' }
     } finally { Pop-Location }
-    $webRoot = Join-Path $root 'src\SparkStudio.Gateway\wwwroot'
-    New-Item -ItemType Directory -Force -Path $webRoot | Out-Null
-    Copy-Item -Path (Join-Path $root 'apps\web\dist\*') -Destination $webRoot -Recurse -Force
-    & $dotnet build src/SparkStudio.Gateway --no-restore
-    if ($LASTEXITCODE -ne 0) { throw 'Gateway build failed.' }
+    & node (Join-Path $PSScriptRoot 'build-quality.mjs') full
+    if ($LASTEXITCODE -ne 0) { throw 'Build quality validation or artifact build failed.' }
 } finally { Pop-Location }

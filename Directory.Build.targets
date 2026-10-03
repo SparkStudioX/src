@@ -1,0 +1,73 @@
+<Project>
+  <UsingTask TaskName="SparkStudioBuildOwner" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <OwnerPid ParameterType="System.String" Output="true" />
+      <ContextPath ParameterType="System.String" Output="true" />
+      <ContextToken ParameterType="System.String" Output="true" />
+    </ParameterGroup>
+    <Task><Code Type="Fragment" Language="cs"><![CDATA[
+      OwnerPid = System.Diagnostics.Process.GetCurrentProcess().Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
+      var globals = ((Microsoft.Build.Framework.IBuildEngine6)BuildEngine).GetGlobalProperties();
+      string parentPath, parentToken;
+      ContextPath = globals.TryGetValue("_QualityContextPath", out parentPath) ? parentPath : System.Environment.GetEnvironmentVariable("SPARKSTUDIO_BUILD_CONTEXT") ?? string.Empty;
+      ContextToken = globals.TryGetValue("_QualityContextToken", out parentToken) ? parentToken : System.Environment.GetEnvironmentVariable("SPARKSTUDIO_BUILD_TOKEN") ?? string.Empty;
+    ]]></Code></Task>
+  </UsingTask>
+  <!-- Every production build enters the same quality gate as npm and build.ps1.
+       The coordinator issues and validates short-lived child-build contexts;
+       there is no SkipQuality property. Merely evaluating a project runs no build target. -->
+  <Target Name="SparkStudioBuildQuality" BeforeTargets="BuildOnlySettings;PrepareForBuild;PrepareForPublish"
+          Condition="'$(_SparkStudioProductionProject)' == 'true'">
+    <PropertyGroup>
+      <_QualityReceipt>$(MSBuildThisFileDirectory).data/quality/msbuild/$([System.Guid]::NewGuid()).txt</_QualityReceipt>
+    </PropertyGroup>
+    <!-- Only parent-supplied global properties or the active coordinator environment
+         may carry a lease. A reused IDE project instance cannot reuse its old local properties. -->
+    <SparkStudioBuildOwner>
+      <Output TaskParameter="OwnerPid" PropertyName="_QualityOwnerPid" />
+      <Output TaskParameter="ContextPath" PropertyName="_QualityContextPath" />
+      <Output TaskParameter="ContextToken" PropertyName="_QualityContextToken" />
+    </SparkStudioBuildOwner>
+    <Exec WorkingDirectory="$(MSBuildThisFileDirectory)"
+          EnvironmentVariables="SPARKSTUDIO_BUILD_CONTEXT=$(_QualityContextPath);SPARKSTUDIO_BUILD_TOKEN=$(_QualityContextToken)"
+          Command="node &quot;$(MSBuildThisFileDirectory)tools/build-quality.mjs&quot; msbuild $(_QualityOwnerPid) &quot;$(_QualityReceipt)&quot;" />
+    <ItemGroup><_QualityReceiptLines Remove="@(_QualityReceiptLines)" /></ItemGroup>
+    <ReadLinesFromFile File="$(_QualityReceipt)"><Output TaskParameter="Lines" ItemName="_QualityReceiptLines" /></ReadLinesFromFile>
+    <PropertyGroup>
+      <_QualityReceiptData>@(_QualityReceiptLines)</_QualityReceiptData>
+      <_QualityContextPath>$(_QualityReceiptData.Split(';')[0])</_QualityContextPath>
+      <_QualityContextToken>$(_QualityReceiptData.Split(';')[1])</_QualityContextToken>
+      <_QualityOwnsContext>$(_QualityReceiptData.Split(';')[2])</_QualityOwnsContext>
+    </PropertyGroup>
+  </Target>
+  <!-- ResolveProjectReferences consumes cloned items produced by its earlier
+       dependencies. Forward to the originals and those clones before its MSBuild task. -->
+  <Target Name="SparkStudioForwardBuildContext" BeforeTargets="ResolveProjectReferences"
+          Condition="'$(_QualityContextPath)' != ''">
+    <ItemGroup>
+      <ProjectReference Update="@(ProjectReference)">
+        <AdditionalProperties>%(ProjectReference.AdditionalProperties);_QualityContextPath=$(_QualityContextPath);_QualityContextToken=$(_QualityContextToken)</AdditionalProperties>
+      </ProjectReference>
+      <ProjectReferenceWithConfiguration Update="@(ProjectReferenceWithConfiguration)">
+        <AdditionalProperties>%(ProjectReferenceWithConfiguration.AdditionalProperties);_QualityContextPath=$(_QualityContextPath);_QualityContextToken=$(_QualityContextToken)</AdditionalProperties>
+      </ProjectReferenceWithConfiguration>
+      <_MSBuildProjectReferenceExistent Update="@(_MSBuildProjectReferenceExistent)">
+        <AdditionalProperties>%(_MSBuildProjectReferenceExistent.AdditionalProperties);_QualityContextPath=$(_QualityContextPath);_QualityContextToken=$(_QualityContextToken)</AdditionalProperties>
+      </_MSBuildProjectReferenceExistent>
+    </ItemGroup>
+  </Target>
+  <Target Name="SparkStudioReleaseBuildContext" AfterTargets="Build" Condition="('$(_IsPublishing)' != 'true' or '$(_QualityOwnsContext)' == 'false') and '$(_QualityReceipt)' != '' and Exists('$(_QualityReceipt)')">
+    <Exec WorkingDirectory="$(MSBuildThisFileDirectory)"
+          Command="node &quot;$(MSBuildThisFileDirectory)tools/build-quality.mjs&quot; release-msbuild &quot;$(_QualityReceipt)&quot; after-build" />
+  </Target>
+  <Target Name="SparkStudioReleasePublishContext" AfterTargets="Publish" Condition="'$(MSBuildProjectName)' != 'SparkStudio.Gateway' and '$(_QualityReceipt)' != '' and Exists('$(_QualityReceipt)')">
+    <Exec WorkingDirectory="$(MSBuildThisFileDirectory)"
+          Command="node &quot;$(MSBuildThisFileDirectory)tools/build-quality.mjs&quot; release-msbuild &quot;$(_QualityReceipt)&quot;" />
+  </Target>
+  <!-- Explicit ordering keeps the Gateway lease valid until its worker publish finishes. -->
+  <Target Name="SparkStudioReleaseGatewayPublishContext" AfterTargets="Publish" DependsOnTargets="PublishSourceWorker"
+          Condition="'$(MSBuildProjectName)' == 'SparkStudio.Gateway' and '$(_QualityReceipt)' != '' and Exists('$(_QualityReceipt)')">
+    <Exec WorkingDirectory="$(MSBuildThisFileDirectory)"
+          Command="node &quot;$(MSBuildThisFileDirectory)tools/build-quality.mjs&quot; release-msbuild &quot;$(_QualityReceipt)&quot;" />
+  </Target>
+</Project>

@@ -1,0 +1,1212 @@
+[
+  {
+    "name": "spark_designer_inspect_context",
+    "description": "Inspect the active unsaved designer draft, document list, selection and current snapshot token.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "read",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": true
+  },
+  {
+    "name": "spark_designer_get_document",
+    "description": "Read one screen/template and its component properties; includes exact snapshot token.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "documentId": {
+          "type": "string"
+        },
+        "documentKind": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "template"
+          ]
+        }
+      },
+      "required": [
+        "documentId",
+        "documentKind"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "read",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": true
+  },
+  {
+    "name": "spark_designer_get_project_settings",
+    "description": "Read project parameters, state, navigation, styles, translations, authoring defaults and equipment command definitions.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "read",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": true
+  },
+  {
+    "name": "spark_designer_component_schema",
+    "description": "Read supported component properties, validation bounds and binding/script/state examples.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "read",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": true
+  },
+  {
+    "name": "spark_designer_search",
+    "description": "Search every screen, component, binding, script, query and project property in the active draft.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "read",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": true
+  },
+  {
+    "name": "spark_designer_find_references",
+    "description": "Find structured references to a screen, template, component, query, tag or script.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "reference": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "SearchReference {kind,id,ownerId?,ownerKind?}."
+        }
+      },
+      "required": [
+        "reference"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "read",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": true
+  },
+  {
+    "name": "spark_designer_review_resource_change",
+    "description": "Review reference impact before renaming/deleting a screen, template or component selection.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "request": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "{action:'delete'|'rename',target:{kind:'screen'|'template',id}|{kind:'components',ownerKind,ownerId,ids},name?}"
+        }
+      },
+      "required": [
+        "request"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "read",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": true
+  },
+  {
+    "name": "spark_designer_review_bulk_replace",
+    "description": "Preview exact text/tag replacement matches. Does not change scripts or execute code.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "request": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "{find,replace,matchCase:boolean,scope:'all'|'screens'|'templates',kind:'displayText'|'tagPaths'}"
+        }
+      },
+      "required": [
+        "request"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "read",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": true
+  },
+  {
+    "name": "spark_designer_diagnose",
+    "description": "Evaluate bindings against current tag samples, inspect missing references/quality; no scripts, queries or equipment actions execute.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "documentId": {
+          "type": "string"
+        },
+        "documentKind": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "template"
+          ]
+        }
+      },
+      "required": [
+        "documentId",
+        "documentKind"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "read",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": true
+  },
+  {
+    "name": "spark_designer_document_project",
+    "description": "Produce an inventory of the current draft for user documentation. Values in password controls are omitted.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "read",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": true
+  },
+  {
+    "name": "spark_designer_validate",
+    "description": "Validate the current unsaved draft using gateway authoring rules without saving.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "read",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": true
+  },
+  {
+    "name": "spark_designer_select",
+    "description": "Open a document and select components in the designer.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "documentId": {
+          "type": "string"
+        },
+        "documentKind": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "template"
+          ]
+        },
+        "componentIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "documentId",
+        "documentKind",
+        "componentIds"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_preview",
+    "description": "Open read-only preview of the current draft. Does not publish or execute equipment commands.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_save",
+    "description": "Save the exact active draft with optimistic revision checking; does not publish.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        }
+      },
+      "required": [
+        "snapshotToken"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_create_document",
+    "description": "Create a complete screen, popup or reusable template in the draft.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "documentKind": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "template"
+          ]
+        },
+        "document": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Screen {id,name,width,height,components:[],kind?:'screen'|'popup',parameters?,state?}; template also has parameterTypes/instanceState."
+        }
+      },
+      "required": [
+        "snapshotToken",
+        "documentKind",
+        "document"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_update_document",
+    "description": "Change screen/template name, geometry, parameters, state or popup kind.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "documentId": {
+          "type": "string"
+        },
+        "documentKind": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "template"
+          ]
+        },
+        "patch": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Allowed: name,width,height,kind,parameters,state,parameterTypes,instanceState."
+        }
+      },
+      "required": [
+        "snapshotToken",
+        "documentId",
+        "documentKind",
+        "patch"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_clone_document",
+    "description": "Clone a screen/template, preserving local component IDs and internal bindings.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "documentId": {
+          "type": "string"
+        },
+        "documentKind": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "template"
+          ]
+        },
+        "newId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "snapshotToken",
+        "documentId",
+        "documentKind",
+        "newId",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_create_components",
+    "description": "Add component(s) in supplied Z order. Existing components remain.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "documentId": {
+          "type": "string"
+        },
+        "documentKind": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "template"
+          ]
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "{id,type,x,y,width,height,props}"
+          }
+        }
+      },
+      "required": [
+        "snapshotToken",
+        "documentId",
+        "documentKind",
+        "components"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_update_components",
+    "description": "Patch layout or component properties for explicit IDs. Props shallow-merge; use set_binding for bindings.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "documentId": {
+          "type": "string"
+        },
+        "documentKind": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "template"
+          ]
+        },
+        "componentIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "patch": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Allowed: x,y,width,height,groupId,props. Use props for actions, scripting, tagPath, templates, tables, chart/history/alarms, assetId, drawings and other authored settings."
+        }
+      },
+      "required": [
+        "snapshotToken",
+        "documentId",
+        "documentKind",
+        "componentIds",
+        "patch"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_arrange_components",
+    "description": "Arrange components using the same grouping, layout and Z-order logic as manual editing.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "documentId": {
+          "type": "string"
+        },
+        "documentKind": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "template"
+          ]
+        },
+        "componentIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "operation": {
+          "type": "string",
+          "enum": [
+            "align",
+            "distribute",
+            "move",
+            "matchSize",
+            "group",
+            "ungroup",
+            "duplicate",
+            "front",
+            "back"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "description": "align:left|hcenter|right|top|vcenter|bottom, distribute:horizontal|vertical, matchSize:width|height|both"
+        },
+        "dx": {
+          "type": "number"
+        },
+        "dy": {
+          "type": "number"
+        },
+        "groupId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "snapshotToken",
+        "documentId",
+        "documentKind",
+        "componentIds",
+        "operation"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_change_resource",
+    "description": "Apply a previously reviewed rename/delete. Reference validation blocks dangling bindings; explicit confirmation before deletion.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "request": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "acknowledgeTextReferences": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "snapshotToken",
+        "request"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": true,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_set_binding",
+    "description": "Set expression or named-query property binding and remove conflicting binding of the other kind.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "documentId": {
+          "type": "string"
+        },
+        "documentKind": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "template"
+          ]
+        },
+        "componentId": {
+          "type": "string"
+        },
+        "property": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "expression",
+            "query"
+          ]
+        },
+        "binding": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Expression {expression,references:{alias:{kind:'tag',path}|{kind:'input',key}|{kind:'custom',key,componentId?}|{kind:'parameter',key}|{kind:'sessionState'|'screenState'|'instanceState',key}}}; query {queryId,column,parameters?,transform?,refresh:{mode:'onChange'|'poll',intervalMs?}}."
+        }
+      },
+      "required": [
+        "snapshotToken",
+        "documentId",
+        "documentKind",
+        "componentId",
+        "property",
+        "kind",
+        "binding"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_remove_binding",
+    "description": "Remove both expression/query binding from property while keeping authored fallback.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "documentId": {
+          "type": "string"
+        },
+        "documentKind": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "template"
+          ]
+        },
+        "componentId": {
+          "type": "string"
+        },
+        "property": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "snapshotToken",
+        "documentId",
+        "documentKind",
+        "componentId",
+        "property"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_set_component_section",
+    "description": "Replace one component's script/events, messaging, custom properties, state binding, dataset, table editing, template parameters or view layout section. Code is saved as draft; never executes here.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "documentId": {
+          "type": "string"
+        },
+        "documentKind": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "template"
+          ]
+        },
+        "componentId": {
+          "type": "string"
+        },
+        "section": {
+          "type": "string",
+          "enum": [
+            "events",
+            "componentEvents",
+            "messageHandlers",
+            "customProperties",
+            "stateBinding",
+            "dataSource",
+            "tableEdit",
+            "rowsSource",
+            "parameterBindings",
+            "parameters",
+            "viewLayout",
+            "optionsSource"
+          ]
+        },
+        "value": {}
+      },
+      "required": [
+        "snapshotToken",
+        "documentId",
+        "documentKind",
+        "componentId",
+        "section",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_set_project_section",
+    "description": "Replace project navigation, state, parameters, styles, translations, defaults or equipment command definitions in the draft. Does not publish.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "section": {
+          "type": "string",
+          "enum": [
+            "parameters",
+            "navigation",
+            "sessionState",
+            "styles",
+            "localization",
+            "authoringDefaults",
+            "commands"
+          ]
+        },
+        "value": {}
+      },
+      "required": [
+        "snapshotToken",
+        "section",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_bulk_replace",
+    "description": "Apply selected IDs from the matching review_bulk_replace snapshot.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "request": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "changeIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "snapshotToken",
+        "request",
+        "changeIds"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_create_faceplate",
+    "description": "Create a reusable template from selected components. Existing screen stays intact; parameterize bindings then place template instances separately.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "documentId": {
+          "type": "string"
+        },
+        "documentKind": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "template"
+          ]
+        },
+        "componentIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "templateId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "snapshotToken",
+        "documentId",
+        "documentKind",
+        "componentIds",
+        "templateId",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_generate_tag_screen",
+    "description": "Generate a 3-column read-only monitoring screen with labeled existing tags.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "newId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "snapshotToken",
+        "newId",
+        "name",
+        "paths"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_generate_query_screen",
+    "description": "Generate a table screen from an existing read-only named query.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "newId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "queryId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "snapshotToken",
+        "newId",
+        "name",
+        "queryId"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_clone_equipment",
+    "description": "Clone an equipment screen and remap exact structured tag references. Embedded code/text remains unchanged and should be inspected separately.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "documentId": {
+          "type": "string"
+        },
+        "documentKind": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "template"
+          ]
+        },
+        "newId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "tagMap": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Map exact original tag path to replacement path."
+        }
+      },
+      "required": [
+        "snapshotToken",
+        "documentId",
+        "documentKind",
+        "newId",
+        "name",
+        "tagMap"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_apply_edits",
+    "description": "Apply 1–100 ordered draft edits atomically using one current snapshotToken. Validate the final project once, create one Undo action, and never save or publish. Prefer this for creating a screen and its components together. Each operation uses the named tool arguments without snapshotToken; inspect its tool schema first.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string"
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "enum": [
+                  "spark_designer_create_document",
+                  "spark_designer_update_document",
+                  "spark_designer_clone_document",
+                  "spark_designer_create_components",
+                  "spark_designer_update_components",
+                  "spark_designer_arrange_components",
+                  "spark_designer_change_resource",
+                  "spark_designer_set_binding",
+                  "spark_designer_remove_binding",
+                  "spark_designer_set_component_section",
+                  "spark_designer_set_project_section",
+                  "spark_designer_bulk_replace",
+                  "spark_designer_create_faceplate",
+                  "spark_designer_generate_tag_screen",
+                  "spark_designer_generate_query_screen",
+                  "spark_designer_clone_equipment"
+                ]
+              },
+              "arguments": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "name",
+              "arguments"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "snapshotToken",
+        "operations"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_open_document",
+    "description": "Open an existing screen or template in the current project and clear selection. Retains unsaved project, query and script drafts. Returns the newly selected document context; use open_project to change projects.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "documentId": {
+          "type": "string"
+        },
+        "documentKind": {
+          "type": "string",
+          "enum": [
+            "screen",
+            "template"
+          ]
+        }
+      },
+      "required": [
+        "documentId",
+        "documentKind"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_capture_canvas",
+    "description": "Capture a PNG of the currently visible rendered Designer canvas, including actual component rendering and layout, for visual review. Open the intended document first. Excludes editor selection chrome and password values. The image is returned to the current conversation; this does not save or publish.",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "read",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_crop_image_assets",
+    "description": "Crop retained images in this conversation into named project image assets. Supply 1–16 crops using sourceImageId and natural prepared-image pixel coordinates. One explicit confirmation covers the batch. Assets upload sequentially; any partial success is reported. No external URLs are accepted.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "crops": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "properties": {
+              "sourceImageId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "box": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "y": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "width": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "width",
+                  "height"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "sourceImageId",
+              "name",
+              "box"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "crops"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "write",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": true,
+    "parallelSafe": false
+  }
+]

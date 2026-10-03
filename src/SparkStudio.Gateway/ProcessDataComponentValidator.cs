@@ -4,6 +4,7 @@ namespace SparkStudio.Gateway;
 
 public static class ProcessDataComponentValidator
 {
+    private static readonly string[] HistorySettings = ["historyPaths", "historyMinutes", "historyMaxPoints"];
     public static void Validate(JsonObject project)
     {
         foreach (var component in ProjectTemplates.Components(project))
@@ -24,7 +25,7 @@ public static class ProcessDataComponentValidator
                 foreach (var (key, minimum, maximum) in new[] { ("historyMinutes", 1, 44640), ("historyMaxPoints", 2, 10000) })
                     if (props.ContainsKey(key) && (props[key] is not JsonValue value || !value.TryGetValue<int>(out var number) || number < minimum || number > maximum)) throw new ArgumentException($"{key} is outside its supported range.");
             }
-            else if (new[] { "historyPaths", "historyMinutes", "historyMaxPoints" }.Any(props.ContainsKey)) throw new ArgumentException("History settings require a historical trend.");
+            else if (HistorySettings.Any(props.ContainsKey)) throw new ArgumentException("History settings require a historical trend.");
         }
     }
 }

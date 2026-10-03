@@ -288,6 +288,7 @@ function resolveReference(ref: BindingReference, component: CanvasComponent, con
 
 /** Single-pass parameter indirection. Values cannot inject another substitution or control characters. */
 export function validateTagAddress(path: string, parameters?: BindingContext["parameters"]): void {
+  // eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
   if (typeof path !== "string" || !path.trim() || path.length > 1024 || /[\x00-\x1f\x7f]/.test(path))
     fail("A tag address needs 1–1024 characters without control characters.");
   let count = 0;
@@ -301,6 +302,7 @@ export function validateTagAddress(path: string, parameters?: BindingContext["pa
 export function resolveTagAddress(path: string, parameters: BindingContext["parameters"]): string {
   validateTagAddress(path, parameters);
   const result = path.replace(/\{([^{}]+)\}/g, (_match, key: string) => String(scalar(parameters[key])));
+  // eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
   if (!result.trim() || result.length > 1024 || /[{}\x00-\x1f\x7f]/.test(result)) fail("The resolved tag address must be bounded text without unresolved placeholders or control characters.");
   return result;
 }

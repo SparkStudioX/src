@@ -21,7 +21,7 @@ function load(name) {
   return url(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
     .replace(/import "\.\/[^"\n]+\.css";\r?\n/g, '')
     .replace(/(from\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, dependency) => prefix + JSON.stringify(
-      dependency === 'react' ? hooksUrl : dependency === 'react-dom' ? url('export const createPortal=value=>value;') : dependency === './api' ? apiUrl : dependency === './deviceConnections' ? load('deviceConnections') : dependency.startsWith('./') ? stubUrl : pathToFileURL(require.resolve(dependency)).href)));
+      dependency === 'react' ? hooksUrl : dependency === 'react-dom' ? url('export const createPortal=value=>value;') : dependency === './api' ? apiUrl : dependency === './deviceConnections' ? load('deviceConnections') : dependency === './sourceConnections' ? load('sourceConnections') : dependency.startsWith('./') ? stubUrl : pathToFileURL(require.resolve(dependency)).href)));
 }
 const hooks = await import(hooksUrl), { default: Tags } = await import(load('Tags')), { default: TagTransfer } = await import(load('TagTransfer'));
 const definitions = Array.from({ length: 10000 }, (_, index) => ({ path: `[default]Scaling/T${String(index).padStart(5, '0')}`, kind: 'memory', dataType: 'Double', value: index }));

@@ -121,6 +121,7 @@ function validateStructured(schema: string | undefined, value: unknown, componen
   } else if (schema === "tableColumns") {
     const error = validateTableColumns(entries); if (error) fail(error);
   } else if (schema === "historyPaths") {
+    // eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
     if (entries.length < 1 || entries.length > 8 || entries.some(path => !text(path, 1024) || !/^\[[^\]]+\].+/.test(path) || /[\u0000-\u001f\u007f{}]/.test(path)) || new Set(entries).size !== entries.length) fail("History needs 1–8 unique, fully resolved tag paths including a provider.");
   } else if (schema === "chartSeries") {
     const error = chartDefinitionError({ kind: "line", xKey: "x", series: entries }); if (error) fail(error);
@@ -153,6 +154,7 @@ export function normalizeRuntimePropertyValue(target: string, value: unknown, co
       const error = imageUrlError(value, typeof window === "undefined" ? undefined : window.location.origin);
       if (error) fail(error);
     }
+    // eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
     if (spec.type === "tagPath" && (!(value as string).trim() || /[\u0000-\u001f\u007f{}]/.test(value as string))) fail("A tag path binding must produce a complete path of 1–1024 characters without control characters or unresolved parameters.");
   }
   return value;

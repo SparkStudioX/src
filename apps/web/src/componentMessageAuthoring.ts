@@ -9,6 +9,7 @@ export const componentMessageScopeDescriptions: Record<ComponentMessageScope, st
 };
 
 export function componentMessageTypeError(value: string): string | null {
+  // eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
   if (!value.trim() || value.trim().length > 80 || /[\u0000-\u001f\u007f-\u009f]/u.test(value)) return "Use a message type with 1–80 characters and no control characters.";
   return null;
 }

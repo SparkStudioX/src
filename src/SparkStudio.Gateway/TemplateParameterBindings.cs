@@ -12,6 +12,7 @@ public sealed class ParameterBindingState : Dictionary<string, Dictionary<string
 /// <summary>Instance parameter expressions read the caller, never another child parameter.</summary>
 internal static class TemplateParameterBindings
 {
+    private static readonly string[] InputFields = ["fieldKey", "min", "max", "step", "options", "optionsSource", "validation", "formatMask", "textCase", "scanTerminator"];
     public static void ValidateProject(JsonObject project)
     {
         RejectMisplaced(project);
@@ -19,7 +20,7 @@ internal static class TemplateParameterBindings
         foreach (var document in ProjectTemplates.Documents(project))
         {
             RejectMisplaced(document);
-            var templateDocument = templates.Values.Contains(document);
+            var templateDocument = templates.ContainsValue(document);
             var components = document["components"]!.AsArray().OfType<JsonObject>()
                 .ToDictionary(item => ProjectStore.Required(item, "id"), StringComparer.Ordinal);
             var parameters = (project["parameters"] as JsonObject ?? []).Select(pair => pair.Key)
@@ -118,7 +119,7 @@ internal static class TemplateParameterBindings
             inputKeys.Contains(ProjectStore.Required(item["props"]!.AsObject(), "fieldKey"))).Select(item =>
             {
                 var definition = new JsonObject { ["type"] = item["type"]!.DeepClone() };
-                foreach (var key in new[] { "fieldKey", "min", "max", "step", "options", "optionsSource", "validation", "formatMask", "textCase", "scanTerminator" })
+                foreach (var key in InputFields)
                     if (item["props"]![key] is { } value) definition[key] = value.DeepClone();
                 return (JsonNode)definition;
             }).ToArray());

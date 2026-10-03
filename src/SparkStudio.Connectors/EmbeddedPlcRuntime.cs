@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Cryptography;
@@ -83,9 +82,10 @@ internal static class EmbeddedPlcRuntime
             if (OperatingSystem.IsWindows())
             {
                 dependencyHandle = NativeLibrary.Load(retained["vcruntime140.dll"]);
-                var actual = new StringBuilder(32768);
-                if (GetModuleFileName(dependencyHandle, actual, actual.Capacity) == 0 ||
-                    !string.Equals(actual.ToString(), retained["vcruntime140.dll"], StringComparison.OrdinalIgnoreCase))
+                var actual = new char[32768];
+                var length = GetModuleFileName(dependencyHandle, actual, actual.Length);
+                if (length == 0 || length >= actual.Length ||
+                    !string.Equals(new string(actual, 0, checked((int)length)), retained["vcruntime140.dll"], StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("The native Windows runtime was not loaded from its verified bundled location.");
             }
             plctag.ForceExtractLibrary = false;
@@ -100,7 +100,7 @@ internal static class EmbeddedPlcRuntime
 
     [DllImport("kernel32.dll", EntryPoint = "GetModuleFileNameW", CharSet = CharSet.Unicode, SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static extern uint GetModuleFileName(nint module, StringBuilder name, int capacity);
+    private static extern uint GetModuleFileName(nint module, [Out] char[] name, int capacity);
 
     internal static IReadOnlyDictionary<string, string> RetainVerifiedBundle(IReadOnlyDictionary<string, byte[]> binaries, string cache)
     {

@@ -9,11 +9,29 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="../../apps/web/src/runtimeProperties.json" LogicalName="SparkStudio.RuntimeProperties.json" />
+    <EmbeddedResource Include="../../apps/web/src/askSparkDesignerTools.json" LogicalName="SparkStudio.AskSpark.DesignerTools.json" />
+    <EmbeddedResource Include="../../apps/web/src/askSparkGatewayTools.json" LogicalName="SparkStudio.AskSpark.GatewayTools.json" />
     <ProjectReference Include="../SparkStudio.Connectors/SparkStudio.Connectors.csproj">
       <AdditionalProperties Condition="'$(RuntimeIdentifier)' != ''">PlcRuntimeIdentifier=$(RuntimeIdentifier)</AdditionalProperties>
     </ProjectReference>
+    <ProjectReference Include="../SparkStudio.SourceWorker/SparkStudio.SourceWorker.csproj" ReferenceOutputAssembly="false" Private="false" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.9" />
     <PackageReference Include="AWSSDK.S3" Version="4.0.104" />
     <Content Include="../../runtimes/python/worker.py" Link="python/worker.py" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="CopySourceWorker" AfterTargets="Build">
+    <MSBuild Projects="../SparkStudio.SourceWorker/SparkStudio.SourceWorker.csproj" Targets="GetTargetPath"
+      Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);UseAppHost=$(UseAppHost);_QualityContextPath=$(_QualityContextPath);_QualityContextToken=$(_QualityContextToken)">
+      <Output TaskParameter="TargetOutputs" ItemName="_SourceWorkerTarget" />
+    </MSBuild>
+    <ItemGroup>
+      <_SourceWorkerFolder Include="@(_SourceWorkerTarget->'%(RootDir)%(Directory)')" />
+      <_SourceWorkerFiles Include="%(_SourceWorkerFolder.Identity)*" Exclude="%(_SourceWorkerFolder.Identity)*.pdb" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_SourceWorkerFiles)" DestinationFolder="$(TargetDir)source-worker" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="PublishSourceWorker" AfterTargets="Publish">
+    <MSBuild Projects="../SparkStudio.SourceWorker/SparkStudio.SourceWorker.csproj" Targets="Publish"
+      Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);UseAppHost=$(UseAppHost);PublishDir=$([System.IO.Path]::GetFullPath('$(PublishDir)'))source-worker/;PublishSingleFile=false;PublishTrimmed=false;_QualityContextPath=$(_QualityContextPath);_QualityContextToken=$(_QualityContextToken)" />
+  </Target>
 </Project>

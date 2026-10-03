@@ -22,8 +22,8 @@ export function validateAllenBradleySettings(settings: DeviceSettings): string[]
   return /^\d{1,3}(,\d{1,3})+$/.test(route) && components.length % 2 === 0 && components.every(part => Number(part) <= 255) ? [] : ["ControlLogix and CompactLogix require numeric port/link route pairs such as 1,0."];
 }
 export const isDeviceType = (type: string): type is DeviceConnectionType => deviceTypes.includes(type as DeviceConnectionType);
-export const isEquipmentType = (type: string) => type === "opcua" || isDeviceType(type);
-export const connectionTypeName = (type: Connection["type"]) => ({ opcua: "OPC UA client", sqlite: "SQLite", sqlserver: "SQL Server", "modbus-tcp": "Modbus TCP", "ab-eip": "Allen Bradley EtherNet/IP", "siemens-s7": "Siemens S7", "beckhoff-ads": "Beckhoff ADS" })[type];
+export const isEquipmentType = (type: string) => type === "opcua" || isDeviceType(type) || ["mtconnect", "i3x", "mqtt"].includes(type);
+export const connectionTypeName = (type: Connection["type"]) => ({ opcua: "OPC UA client", sqlite: "SQLite", sqlserver: "SQL Server", "modbus-tcp": "Modbus TCP", "ab-eip": "Allen Bradley EtherNet/IP", "siemens-s7": "Siemens S7", "beckhoff-ads": "Beckhoff ADS", mtconnect: "MTConnect agent", i3x: "i3X source", mqtt: "MQTT subscriber" })[type];
 export const defaultDeviceSettings = (type: DeviceConnectionType): DeviceSettings => ({ host: "192.168.1.10", port: type === "modbus-tcp" ? 502 : type === "ab-eip" ? 44818 : type === "siemens-s7" ? 102 : 851, points: [],
   ...(type === "modbus-tcp" ? { unitId: 1 } : type === "ab-eip" ? { controllerFamily: "ControlLogix", route: "1,0" } : type === "siemens-s7" ? { controllerFamily: "S71200", rack: 0, slot: 0 } : { localAmsNetId: "", targetAmsNetId: "" }) });
 export const pointAddressHint = (type: DeviceConnectionType, family?: string) => type === "modbus-tcp" ? "Zero-based address: holdingRegister:0, inputRegister:0, coil:0 or discreteInput:0."
@@ -62,7 +62,9 @@ export function validateDevicePoints(type: DeviceConnectionType, value: unknown,
     if (Object.keys(item).some(key => !fields.has(key))) errors.push(`${at}: unrecognized point fields.`);
     if (typeof item.id !== "string" || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(item.id)) errors.push(`${at}: ID must start with a letter and use at most 64 letters, digits, underscores or hyphens.`);
     else if (ids.has(item.id)) errors.push(`${at}: duplicate ID ${item.id}.`); else ids.add(item.id);
+    // eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
     if (typeof item.name !== "string" || !item.name.trim() || item.name.length > 256 || /[\u0000-\u001f\u007f-\u009f]/.test(item.name)) errors.push(`${at}: enter a name of 1–256 characters without control characters.`);
+    // eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
     if (typeof item.address !== "string" || !item.address.trim() || item.address.length > 512 || /[\u0000-\u001f\u007f-\u009f&=;]/.test(item.address)) errors.push(`${at}: enter an address of 1–512 characters without control characters or &, =, ;.`);
     if (!scalarTypes.includes(item.dataType as TagWriteDataType)) errors.push(`${at}: choose a supported scalar data type.`);
     const storageType = item.rawDataType ?? item.dataType;

@@ -25,6 +25,7 @@ interface AuthContextValue {
   audience: AuthAudience;
   projectId: string | null;
   epoch: number;
+  identityEpoch: number;
   publicOperatorBaseUrl: string;
   signOut: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -60,6 +61,8 @@ export function AuthProvider({ audience, projectId, children }: { audience: Auth
   const [phase, setPhase] = useState<AuthContextValue["phase"]>("checking");
   const [notice, setNotice] = useState("");
   const [epoch, setEpoch] = useState(0);
+  const [identityEpoch, setIdentityEpoch] = useState(0), principal = useRef("");
+  const [sessionProject, setSessionProject] = useState<string | null | undefined>(undefined);
   const serial = useRef(0), fingerprint = useRef(""), signedOut = useRef(false), authenticating = useRef(false), loggingOut = useRef(false);
   const changingPassword = useRef(false);
   const active = useRef(true), lifecycle = useRef(0), channel = useRef<BroadcastChannel | null>(null);
@@ -68,6 +71,9 @@ export function AuthProvider({ audience, projectId, children }: { audience: Auth
     const key = next?.user ? JSON.stringify([next.user, next.permissions, next.csrfToken]) : "anonymous";
     configureAuthSession({ audience, projectId, csrfToken: next?.csrfToken ?? null, key });
     if (fingerprint.current !== key) { fingerprint.current = key; setEpoch(value => value + 1); }
+    const identity = next?.user ? JSON.stringify([audience, next.user, next.csrfToken]) : "anonymous";
+    if (principal.current !== identity) { principal.current = identity; setIdentityEpoch(value => value + 1); }
+    setSessionProject(projectId);
     setSession(next);
   }, [audience, projectId]);
 
@@ -178,11 +184,11 @@ export function AuthProvider({ audience, projectId, children }: { audience: Auth
     user: session?.user ?? null, gatewayAdmin: Boolean(session?.user?.gatewayAdmin), permissions: session?.permissions ?? noPermissions,
     gatewayCapabilities: session?.gatewayCapabilities ?? noGatewayCapabilities,
     gatewayAccess: Boolean(session?.user?.gatewayAdmin || Object.values(session?.gatewayCapabilities ?? noGatewayCapabilities).some(Boolean)),
-    csrfToken: session?.csrfToken ?? null, audience, projectId, epoch, publicOperatorBaseUrl: session?.operatorBaseUrl ?? "",
-    signOut, changePassword, refresh, phase, setupRequired: session?.setupRequired ?? false, notice,
+    csrfToken: session?.csrfToken ?? null, audience, projectId, epoch, identityEpoch, publicOperatorBaseUrl: session?.operatorBaseUrl ?? "",
+    signOut, changePassword, refresh, phase: sessionProject === projectId ? phase : "checking", setupRequired: session?.setupRequired ?? false, notice,
     signIn: (username, password) => authenticate("login", { audience, username, password, ...(projectId ? { projectId } : {}) }),
     setup: (username, displayName, password, setupCode) => authenticate("setup", { username, displayName, password, setupCode }),
-  }), [session, audience, projectId, epoch, signOut, changePassword, refresh, phase, notice, authenticate]);
+  }), [session, audience, projectId, epoch, identityEpoch, sessionProject, signOut, changePassword, refresh, phase, notice, authenticate]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

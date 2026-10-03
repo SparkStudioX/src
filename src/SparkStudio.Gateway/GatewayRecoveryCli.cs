@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 
 namespace SparkStudio.Gateway;
@@ -6,6 +5,7 @@ namespace SparkStudio.Gateway;
 /// <summary>Offline commands run before ASP.NET, stores, connectors or scripts are initialized.</summary>
 public static class GatewayRecoveryCli
 {
+    private static readonly JsonSerializerOptions ReportJson = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     public static bool IsRequested(string[] args) => args.Any(argument => argument.Equals("--recovery", StringComparison.OrdinalIgnoreCase)
         || argument.StartsWith("--recovery=", StringComparison.OrdinalIgnoreCase));
 
@@ -31,7 +31,7 @@ public static class GatewayRecoveryCli
                 "restore" => await GatewayRecovery.RestoreAsync(archive, options["data-dir"], passphrase, cancellation.Token),
                 _ => throw new ArgumentException("Recovery action must be backup, inspect or restore.")
             };
-            Console.WriteLine(JsonSerializer.Serialize(new { action, verified = true, quarantined = action == "restore", report }, new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true }));
+            Console.WriteLine(JsonSerializer.Serialize(new { action, verified = true, quarantined = action == "restore", report }, ReportJson));
             return 0;
         }
         catch (OperationCanceledException) { Console.Error.WriteLine("Recovery was cancelled; no existing data directory was replaced."); return 130; }

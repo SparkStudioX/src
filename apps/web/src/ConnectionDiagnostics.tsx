@@ -3,17 +3,27 @@ import { api } from "./api";
 import type { Connection } from "./types";
 import { isEquipmentType } from "./deviceConnections";
 
+interface SourceStatus {
+  state: string; generation?: number; bindingRevision?: number; reason?: string | null; message?: string | null;
+  nativeStatus?: string | null; lostUpdates?: number; diagnostics?: Record<string, unknown>;
+}
+interface SourceTransport extends SourceStatus {
+  lastAcceptedAt?: string | null; acceptedValues?: number; globalMemory?: Record<string, number>;
+  peakGlobalMemory?: Record<string, number>; effectiveLimits?: Record<string, number>;
+}
 interface Diagnostics {
   capturedAt: string; revision: number; enabled: boolean; dependencyCount: number; omittedDependencies: number; omittedValues: number;
   dependencies: { scope: string; projectId?: string; projectName?: string; id: string; name: string }[];
   values: { path: string; quality: string; dataType: string; timestamp: string; displayValue: string }[];
   subscriptions: { publishingIntervalMs: number; tagCount: number; state: string; lastNotificationAt?: string }[];
+  source?: { transport: SourceTransport; state?: SourceStatus | null; acquisitionFailure?: string | null; ownership: number };
 }
 
-export default function ConnectionDiagnostics({ connection, expanded, onExpandedChange }: {
+export default function ConnectionDiagnostics({ connection, expanded, onExpandedChange, embedded = false }: {
   connection: Connection;
   expanded: boolean;
   onExpandedChange: (value: boolean) => void;
+  embedded?: boolean;
 }) {
   const [snapshot, setSnapshot] = useState<Diagnostics | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -48,17 +58,18 @@ export default function ConnectionDiagnostics({ connection, expanded, onExpanded
   }, [refresh, expanded]);
   const stale = Boolean(error) || now - receivedAt > 30_000;
   const tagCount = snapshot ? snapshot.values.length + snapshot.omittedValues : 0;
+  const source = snapshot?.source;
+  const acquisition = source?.state ?? source?.transport;
   const summary = snapshot ? [
     snapshot.dependencyCount > 0 ? `${snapshot.dependencyCount} reference${snapshot.dependencyCount === 1 ? "" : "s"}` : "",
     isEquipmentType(connection.type) && tagCount > 0 ? `${tagCount} tag${tagCount === 1 ? "" : "s"}` : "",
   ].filter(Boolean).join(" · ") || "No saved references" : "Loading…";
-  return <details className="connection-diagnostics" open={expanded} onToggle={event => onExpandedChange(event.currentTarget.open)}>
-    <summary><strong>Diagnostics</strong><span className="connection-diagnostics-summary">{error ? "Unavailable" : summary}</span></summary>
-    <div className="connection-diagnostics-body">
+  const body = <div className="connection-diagnostics-body">
     {error && <div className="inline-error connection-diagnostics-error" role="alert"><p>{error}</p><button type="button" className="button" disabled={busy} onClick={() => void refresh(true)}>Retry diagnostics</button></div>}
     {!snapshot && !error && <p role="status">Loading connection diagnostics…</p>}
     {snapshot && <>
       <p className={`connection-diagnostics-status${stale ? " is-stale" : ""}`} role="status">{snapshot.enabled ? "" : "Disabled · "}{stale ? "Last update may be outdated" : "Updated"} {new Date(snapshot.capturedAt).toLocaleTimeString()}</p>
+      {source && acquisition && <><h4>Source acquisition</h4><p>{acquisition.state} · generation {acquisition.generation ?? "—"} · binding revision {acquisition.bindingRevision ?? "—"}{acquisition.reason ? ` · ${acquisition.reason}` : ""}</p>{acquisition.message && <p>{acquisition.message}</p>}{source.acquisitionFailure && <p className="inline-error" role="alert">{source.acquisitionFailure}</p>}<p className="muted">Transport {source.transport.state}. Transport health and value freshness are separate. Last accepted delivery {source.transport.lastAcceptedAt ? new Date(source.transport.lastAcceptedAt).toLocaleString() : "not received"} · {source.transport.acceptedValues ?? 0} values · {acquisition.lostUpdates ?? 0} known lost updates · {source.ownership} owned leaves.</p>{source.transport.diagnostics && <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Diagnostic</th><th>Value</th></tr></thead><tbody>{Object.entries(source.transport.diagnostics).map(([key, value]) => <tr key={key}><td>{key}</td><td style={{ overflowWrap: "anywhere" }}>{typeof value === "object" ? JSON.stringify(value) : String(value ?? "—")}</td></tr>)}</tbody></table></div>}<details><summary>Effective limits and gateway memory</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify({ limits: source.transport.effectiveLimits, globalMemory: source.transport.globalMemory, peakGlobalMemory: source.transport.peakGlobalMemory }, null, 2)}</pre></details></>}
       {snapshot.dependencies.length > 0 && <><h4>Used by</h4><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Resource</th><th>Project</th><th>Type</th></tr></thead><tbody>
         {snapshot.dependencies.map((item, index) => <tr key={`${item.scope}:${item.projectId}:${item.id}:${index}`}><td>{item.name}</td><td>{item.projectName || "Gateway"}</td><td>{item.scope}</td></tr>)}
       </tbody></table></div></>}
@@ -71,6 +82,12 @@ export default function ConnectionDiagnostics({ connection, expanded, onExpanded
         {snapshot.omittedValues > 0 && <p>{snapshot.omittedValues} additional tag values are omitted.</p>}
       </>}
     </>}
-    </div>
+    </div>;
+  return embedded ? <section className="connection-diagnostics">
+    <div className="connection-diagnostics-heading"><h3>Diagnostics</h3><span className="connection-diagnostics-summary">{error ? "Unavailable" : summary}</span></div>
+    {body}
+  </section> : <details className="connection-diagnostics" open={expanded} onToggle={event => onExpandedChange(event.currentTarget.open)}>
+    <summary><strong>Diagnostics</strong><span className="connection-diagnostics-summary">{error ? "Unavailable" : summary}</span></summary>
+    {body}
   </details>;
 }

@@ -2,6 +2,8 @@
 // cache and distribution, never in this source repository.
 const family = (names, repository, revision, license, files) => names.map(name => [name, { repository, revision, license, files }]);
 export const reviewedSupplements = new Map([
+  ['Scriban/7.5.0', { repository: 'scriban/scriban', revision: 'b916a431461ec8a6dcd1d6819e304726308242d3', license: 'BSD-2-Clause',
+    files: [['license.txt', '7423242b4ae72bccdf19a06cd3c20790df8519a164a08f37b31cb4a40034d827']] }],
   ['libplctag/1.5.2', { repository: 'libplctag/libplctag.NET', revision: '343d1b0edeb7fcbae5d56e81477af7b3dc5b05fa', license: 'MPL-2.0',
     files: [['LICENSE', '1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5']],
     sourceAvailability: ['https://github.com/libplctag/libplctag.NET/tree/343d1b0edeb7fcbae5d56e81477af7b3dc5b05fa'] }],

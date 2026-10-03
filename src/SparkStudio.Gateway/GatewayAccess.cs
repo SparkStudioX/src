@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-using Microsoft.AspNetCore.Routing;
 
 namespace SparkStudio.Gateway;
 
@@ -8,6 +7,8 @@ public sealed record GatewayAccessRequirement(string Permission, string Audience
 
 public static class GatewayAccess
 {
+    private static readonly string[] ApplicationAliases = ["/api/project", "/api/queries", "/api/scripts", "/api/assets", "/api/runtime", "/api/preview"];
+    private static readonly System.Text.Json.JsonSerializerOptions PermissionJson = new(System.Text.Json.JsonSerializerDefaults.Web);
     private const string ActorKey = "spark.actor";
     private const string ProjectKey = "spark.project";
     private const string AudienceKey = "spark.audience";
@@ -45,10 +46,11 @@ public static class GatewayAccess
             var store = context.RequestServices.GetRequiredService<SecurityStore>();
             var actor = await GatewaySecurity.AuthenticateAsync(context, audience);
             if (actor is null) { await Reject(context, 401, "Sign in to continue."); return; }
+            RequireExpectedUser(context, actor);
             var catalog = context.RequestServices.GetRequiredService<ProjectCatalog>();
             // Legacy application aliases always resolve the default project in DI.
             // A routing header must never authorize another project's grant for them.
-            var alias = route is not null && new[] { "/api/project", "/api/queries", "/api/scripts", "/api/assets", "/api/runtime", "/api/preview" }
+            var alias = route is not null && ApplicationAliases
                 .Any(prefix => route == prefix || route.StartsWith(prefix + "/", StringComparison.Ordinal));
             var projectId = context.Request.RouteValues["projectId"]?.ToString()
                 ?? (alias ? catalog.DefaultId : context.Request.Headers["X-SPARK-PROJECT"].FirstOrDefault()
@@ -126,6 +128,13 @@ public static class GatewayAccess
     }
 
     public static SecurityUser Actor(HttpContext context) => (SecurityUser)context.Items[ActorKey]!;
+    /// <summary>An optional identity fence only restricts an already authenticated request; it never authenticates or grants access.</summary>
+    public static void RequireExpectedUser(HttpContext context, SecurityUser? actor)
+    {
+        if (!context.Request.Headers.TryGetValue("X-SPARK-EXPECTED-USER", out var expected)) return;
+        if (expected.Count != 1 || string.IsNullOrEmpty(expected[0]) || actor is null || !string.Equals(expected[0], actor.Id, StringComparison.Ordinal))
+            throw new BadHttpRequestException("The operator account changed. Sign in with the engineering account before runtime testing.", 403);
+    }
     public static string ProjectId(HttpContext context) => (string)context.Items[ProjectKey]!;
     public static bool IsOperator(HttpContext context) => context.Items[AudienceKey]?.ToString() == "operator";
 
@@ -140,7 +149,7 @@ public static class GatewayAccess
             {
                 var item = project.DeepClone().AsObject();
                 item["permissions"] = System.Text.Json.JsonSerializer.SerializeToNode(
-                    security.GetPermissions(actor, item["id"]!.GetValue<string>()), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+                    security.GetPermissions(actor, item["id"]!.GetValue<string>()), PermissionJson);
                 return item;
             }).ToArray();
         // An inaccessible default ID is never a redirect into an unauthorized project.

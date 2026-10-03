@@ -97,7 +97,7 @@ internal static class UnifiedPublicationChecks
             using var tags = new TagEngine(catalog.GatewayStore, connectors, NullLogger<TagEngine>.Instance);
             var executor = new QueryExecutor(store, connectors);
             var runner = new PythonRunner(tags, executor, scripts, new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["Python:Executable"] = pythonPath }).Build());
-            var actionResult = await runner.RunAsync(captured["code"]!.GetValue<string>(), null, null, CancellationToken.None, captured["queries"]!.AsArray(), libraries: captured["libraries"]!.AsObject().ToDictionary(pair => pair.Key, pair => pair.Value!.GetValue<string>()));
+            var actionResult = await runner.RunAsync(captured["code"]!.GetValue<string>(), null, null, captured["queries"]!.AsArray(), CancellationToken.None, libraries: captured["libraries"]!.AsObject().ToDictionary(pair => pair.Key, pair => pair.Value!.GetValue<string>()));
             Check(actionResult["success"]!.GetValue<bool>() && actionResult["result"]!.GetValue<string>() == "A", "CPython executes previously captured action with its matching library");
             using var events = new ScriptEventService(scripts, runner, NullLogger<ScriptEventService>.Instance, tags);
             await events.StartAsync(CancellationToken.None);

@@ -138,7 +138,7 @@ internal sealed class ModbusDeviceSession : IDeviceSession
     }
     private async Task<byte[]> ExchangeAsync(byte[] pdu, CancellationToken cancellation, Action? beforeDispatch = null)
     {
-        using var deadline = DeviceScalarCodec.Deadline(cancellation, _settings.TimeoutMs);
+        using var deadline = DeviceScalarCodec.Deadline(_settings.TimeoutMs, cancellation);
         if (_client is null)
         {
             _client = new TcpClient { NoDelay = true };

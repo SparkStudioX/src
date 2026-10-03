@@ -51,6 +51,28 @@ generated = spawnSync(process.execPath, command, { encoding: 'utf8' });
 assert.equal(generated.status, 0, generated.stderr);
 assert.equal(fs.readFileSync(path.join(stage, 'sbom.cdx.json'), 'utf8'), first, 'Inventory is deterministic for identical payload and commit.');
 assert.equal(sbom.components.some(item => item.name === 'Microsoft Visual C Runtime'), false, 'A runtime absent from a non-industrial synthetic payload is not inventoried.');
+// Dependencies deployed only beside the isolated source worker must reach the
+// merged installer SBOM. This uses authored metadata, never package/runtime code.
+fs.mkdirSync(path.join(stage, 'source-worker'));
+write('source-worker/SparkStudio.SourceWorker.deps.json', { libraries: { ...dependencies.libraries, 'SparkStudio.SourceWorker/1.0.0': { type: 'project' }, 'Scriban/7.5.0': { type: 'package', sha512: 'sha512-' + Buffer.alloc(64, 3).toString('base64') } } });
+write('THIRD-PARTY-NOTICES/package-inventory.json', [
+  { name: 'Example.Library/2.3.4', license: 'MIT', licenseType: 'expression', requiresLicenseReview: true },
+  { name: 'Scriban/7.5.0', reviewedLicense: 'BSD-2-Clause', requiresLicenseReview: false },
+]);
+generated = spawnSync(process.execPath, command, { encoding: 'utf8' });
+assert.equal(generated.status, 0, generated.stderr);
+const withWorker = JSON.parse(fs.readFileSync(path.join(stage, 'sbom.cdx.json'), 'utf8'));
+assert.equal(withWorker.components.length, sbom.components.length + 1);
+assert.equal(withWorker.components.filter(item => item.name === 'Example.Library').length, 1, 'Shared gateway/worker packages are inventoried once.');
+const scriban = withWorker.components.find(item => item.name === 'Scriban');
+assert.equal(scriban.version, '7.5.0'); assert.equal(scriban.purl, 'pkg:nuget/Scriban@7.5.0');
+assert.equal(scriban.licenses[0].expression, 'BSD-2-Clause'); assert.equal(scriban.hashes[0].content, '03'.repeat(64));
+assert.equal(scriban.properties.find(item => item.name === 'sparkstudio:license-review-required').value, 'false');
+assert.ok(withWorker.dependencies[0].dependsOn.includes(scriban['bom-ref']));
+assert.ok(!withWorker.components.some(item => item.name === 'SparkStudio.SourceWorker'), 'Project dependencies do not become third-party library entries.');
+fs.unlinkSync(path.join(stage, 'source-worker/SparkStudio.SourceWorker.deps.json'));
+fs.rmdirSync(path.join(stage, 'source-worker'));
+write('THIRD-PARTY-NOTICES/package-inventory.json', [{ name: 'Example.Library/2.3.4', license: 'MIT', licenseType: 'expression', requiresLicenseReview: true }]);
 // These negative cases need no Windows runtime or network access, so Linux CI
 // verifies the same fail-closed industrial packaging gates as Windows CI.
 const vcRuntime = path.join(stage, 'runtimes/python/windows-x64/vcruntime140.dll');

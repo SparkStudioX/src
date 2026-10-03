@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using libplctag;
@@ -48,8 +49,8 @@ public sealed class EthernetIpDeviceSession : IDeviceSession
     {
         var match = Regex.Match(point.Address, @"^(ST|N|B|F|L)(\d{1,3}):(\d{1,5})(?:/(\d{1,2}))?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         if (!match.Success) throw new ArgumentException("Use a supported PCCC file address such as N7:0, B3:0/2, F8:0 or ST9:0.");
-        var address = new PcccAddress(match.Groups[1].Value.ToUpperInvariant(), int.Parse(match.Groups[2].Value), int.Parse(match.Groups[3].Value),
-            match.Groups[4].Success ? int.Parse(match.Groups[4].Value) : null);
+        var address = new PcccAddress(match.Groups[1].Value.ToUpperInvariant(), int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture), int.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture),
+            match.Groups[4].Success ? int.Parse(match.Groups[4].Value, CultureInfo.InvariantCulture) : null);
         if (address.File > 255 || address.Element > 65535 || address.Bit > 15)
             throw new ArgumentException("PCCC files must be 0–255, elements 0–65535 and word bits 0–15.");
         var raw = DeviceScalarCodec.StorageType(point);
@@ -100,8 +101,8 @@ public sealed class EthernetIpDeviceSession : IDeviceSession
     private async Task TestCoreAsync(CancellationToken cancellation)
     {
         if (HasNativeBrowse(settings.ControllerFamily)) { _ = await BrowseNativeAsync(null, cancellation); return; }
-        var point = settings.Points.FirstOrDefault() ?? throw new ArgumentException("Add a saved point before testing this family; the connection test reads that point.");
-        using var deadline = DeviceScalarCodec.Deadline(cancellation, settings.TimeoutMs);
+        var point = (settings.Points.Count > 0 ? settings.Points[0] : null) ?? throw new ArgumentException("Add a saved point before testing this family; the connection test reads that point.");
+        using var deadline = DeviceScalarCodec.Deadline(settings.TimeoutMs, cancellation);
         deadline.Token.ThrowIfCancellationRequested(); EmbeddedPlcRuntime.EnsureAvailable(dataDirectory);
         using var tag = CreateTag(point);
         await tag.ReadAsync(deadline.Token);
@@ -131,7 +132,7 @@ public sealed class EthernetIpDeviceSession : IDeviceSession
         if (!string.IsNullOrEmpty(parent) && !Regex.IsMatch(parent, @"^Program:[A-Za-z_][A-Za-z0-9_]*$"))
             throw new ArgumentException("Choose a controller or program symbol catalog.");
         cancellation.ThrowIfCancellationRequested(); EmbeddedPlcRuntime.EnsureAvailable(dataDirectory);
-        using var deadline = DeviceScalarCodec.Deadline(cancellation, settings.TimeoutMs);
+        using var deadline = DeviceScalarCodec.Deadline(settings.TimeoutMs, cancellation);
         using var listing = new Tag<TagInfoPlcMapper, TagInfo[]>
         {
             Name = string.IsNullOrEmpty(parent) ? "@tags" : parent + ".@tags", Gateway = Gateway,
@@ -213,7 +214,7 @@ public sealed class EthernetIpDeviceSession : IDeviceSession
     public async Task<IReadOnlyList<ConnectorValue>> ReadAsync(IReadOnlyList<DevicePoint> points, CancellationToken cancellation)
     {
         var result = new List<ConnectorValue>();
-        using var deadline = DeviceScalarCodec.Deadline(cancellation, settings.TimeoutMs);
+        using var deadline = DeviceScalarCodec.Deadline(settings.TimeoutMs, cancellation);
         foreach (var point in points)
         {
             deadline.Token.ThrowIfCancellationRequested();
@@ -247,7 +248,7 @@ public sealed class EthernetIpDeviceSession : IDeviceSession
     {
         if (!point.Writable) throw new ArgumentException("This point does not permit writes.");
         var raw = DeviceScalarCodec.Encode(point, value);
-        using var deadline = DeviceScalarCodec.Deadline(cancellation, settings.TimeoutMs);
+        using var deadline = DeviceScalarCodec.Deadline(settings.TimeoutMs, cancellation);
         deadline.Token.ThrowIfCancellationRequested(); EmbeddedPlcRuntime.EnsureAvailable(dataDirectory);
         using var tag = CreateTag(point);
         await tag.ReadAsync(deadline.Token);

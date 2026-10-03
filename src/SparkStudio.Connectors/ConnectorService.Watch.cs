@@ -12,7 +12,8 @@ public sealed partial class ConnectorService
     {
         Func<Task>? opcCleanup = null;
         var deviceCleanup = _deviceSessions.PrepareConnectionRemoval(id, () => opcCleanup = _sessions.PrepareConnectionRemoval(id, commit));
-        return async () => { await deviceCleanup(); await opcCleanup!(); };
+        FenceSourceConnection(id);
+        return async () => { await RemoveSourceAsync(id); await deviceCleanup(); await opcCleanup!(); };
     }
     /// <summary>
     /// Watches one immutable connection configuration until cancellation. Owns its secure session;
@@ -54,7 +55,7 @@ public sealed partial class ConnectorService
                 {
                     await WatchSessionAsync(connection, requests, publishingIntervalMs,
                         values => InvokeWatchCallback(() => onValues(values)),
-                        () => { connectedFor.Start(); Status("Connected"); }, stopping.Token, settings);
+                        () => { connectedFor.Start(); Status("Connected"); }, settings, stopping.Token);
                 }
                 catch (OperationCanceledException) when (stopping.IsCancellationRequested) { break; }
                 catch (Exception error) when (error is ServiceResultException or IOException or SocketException or TimeoutException or OperationCanceledException or InvalidOperationException)
@@ -104,7 +105,7 @@ public sealed partial class ConnectorService
     }
 
     private async Task WatchSessionAsync(ConnectionDefinition connection, ReadValueIdCollection requests,
-        int interval, Action<IReadOnlyList<ConnectorValue>> onValues, Action onConnected, CancellationToken ct, IReadOnlyDictionary<string, OpcMonitorSettings>? settings)
+        int interval, Action<IReadOnlyList<ConnectorValue>> onValues, Action onConnected, IReadOnlyDictionary<string, OpcMonitorSettings>? settings, CancellationToken ct)
     {
         ISession? session = null;
         Subscription? subscription = null;

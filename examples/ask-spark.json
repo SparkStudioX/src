@@ -1,0 +1,16 @@
+{
+  "name": "Ask Spark workshop",
+  "parameters": {},
+  "screens": [{
+    "id": "ask-spark-workshop", "name": "Ask Spark workshop", "width": 1200, "height": 760,
+    "components": [
+      { "id": "background", "type": "rectangle", "x": 24, "y": 24, "width": 1152, "height": 704, "props": { "backgroundColor": "#202634", "borderColor": "#46516b", "borderWidth": 1 } },
+      { "id": "heading", "type": "label", "x": 56, "y": 56, "width": 1080, "height": 48, "props": { "text": "Ask Spark · authoring workshop", "fontSize": 30, "color": "#edf1ff" } },
+      { "id": "instructions", "type": "label", "x": 56, "y": 122, "width": 1080, "height": 80, "props": { "text": "Ask Spark to align these readouts in one batch, then capture and check this canvas. Try Undo, dictation, Markdown answers or approved crops from your own screenshot.", "fontSize": 18, "color": "#b4c1df" } },
+      { "id": "speed", "type": "label", "x": 74, "y": 246, "width": 320, "height": 70, "props": { "text": "Speed · 72 units/min", "fontSize": 24, "color": "#a3bbff", "backgroundColor": "#293248" } },
+      { "id": "temperature", "type": "label", "x": 108, "y": 340, "width": 400, "height": 70, "props": { "text": "Temperature · 23 °C", "fontSize": 24, "color": "#a3bbff", "backgroundColor": "#293248" } },
+      { "id": "count", "type": "label", "x": 58, "y": 438, "width": 350, "height": 70, "props": { "text": "Count · 128 pieces", "fontSize": 24, "color": "#a3bbff", "backgroundColor": "#293248" } },
+      { "id": "note", "type": "label", "x": 56, "y": 614, "width": 1080, "height": 66, "props": { "text": "Synthetic display values. No equipment, database, scripts or gateway tags. Saving changes the draft; publication is a separate review.", "fontSize": 16, "color": "#b4c1df" } }
+    ]
+  }]
+}

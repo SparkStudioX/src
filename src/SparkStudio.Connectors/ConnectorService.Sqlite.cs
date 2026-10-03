@@ -72,7 +72,7 @@ public sealed partial class ConnectorService
                 // WAL permits a table transaction and readers to proceed together.
                 // Existing databases are upgraded on the first writable open.
                 command.CommandText = "PRAGMA journal_mode = WAL";
-                if (!string.Equals(Convert.ToString(command.ExecuteScalar()), "wal", StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(Convert.ToString(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture), "wal", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("The managed SQLite database could not enable WAL journaling.");
                 command.CommandText = "PRAGMA synchronous = FULL";
                 command.ExecuteNonQuery();
@@ -82,7 +82,7 @@ public sealed partial class ConnectorService
         catch { client.Dispose(); throw; }
     }
 
-    private async Task<T> RunSqliteAsync<T>(CancellationToken cancellationToken, Func<CancellationToken, T> operation)
+    private async Task<T> RunSqliteAsync<T>(Func<CancellationToken, T> operation, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
@@ -142,7 +142,7 @@ public sealed partial class ConnectorService
     {
         SqlQueryGuard.Validate(sql);
         var path = SqlitePath(connection, true);
-        return RunSqliteAsync(ct, cancellation =>
+        return RunSqliteAsync(cancellation =>
         {
             var stopwatch = Stopwatch.StartNew();
             using var client = OpenSqlite(path, true);
@@ -169,13 +169,13 @@ public sealed partial class ConnectorService
                 rows.Add(row);
             }
             return new QueryResult(columns, rows, stopwatch.Elapsed.TotalMilliseconds);
-        });
+        }, ct);
     }
 
     private Task<ExecuteResult> ExecuteSqliteAsync(ConnectionDefinition connection, string sql, IReadOnlyList<QueryParameter> parameters, CancellationToken ct)
     {
         var path = SqlitePath(connection, true);
-        return RunSqliteAsync(ct, cancellation =>
+        return RunSqliteAsync(cancellation =>
         {
             var stopwatch = Stopwatch.StartNew();
             using var client = OpenSqlite(path, false);
@@ -186,14 +186,14 @@ public sealed partial class ConnectorService
             cancellation.ThrowIfCancellationRequested();
             var count = command.ExecuteNonQuery();
             return new ExecuteResult(count, stopwatch.Elapsed.TotalMilliseconds);
-        });
+        }, ct);
     }
 
     public Task<ConnectionTestResult> CreateSqliteDatabaseAsync(ConnectionDefinition connection, bool initializeSampleData, CancellationToken ct)
     {
         _ensureOperationsAllowed?.Invoke();
         var path = SqlitePath(connection, false);
-        return RunSqliteAsync(ct, cancellation =>
+        return RunSqliteAsync(cancellation =>
         {
             if (File.Exists(path) || Directory.Exists(path)) throw new InvalidOperationException("Managed SQLite database already exists; creation never overwrites existing data.");
             var directory = Path.GetDirectoryName(path)!;
@@ -231,14 +231,14 @@ public sealed partial class ConnectorService
                 return new ConnectionTestResult(true, initializeSampleData ? "Managed SQLite database created with synthetic production_records sample data." : "Empty managed SQLite database created.");
             }
             finally { if (File.Exists(staging)) File.Delete(staging); }
-        });
+        }, ct);
     }
 
     public Task<IReadOnlyList<DatabaseTable>> BrowseSqliteSchemaAsync(ConnectionDefinition connection, CancellationToken ct)
     {
         _ensureOperationsAllowed?.Invoke();
         var path = SqlitePath(connection, true);
-        return RunSqliteAsync<IReadOnlyList<DatabaseTable>>(ct, cancellation =>
+        return RunSqliteAsync<IReadOnlyList<DatabaseTable>>(cancellation =>
         {
             using var client = OpenSqlite(path, true);
             RestrictSqlite(client, false, cancellation, schema: true);
@@ -265,6 +265,6 @@ public sealed partial class ConnectorService
                 tables.Add(new(name, columns));
             }
             return tables;
-        });
+        }, ct);
     }
 }

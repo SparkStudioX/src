@@ -1,3 +1,4 @@
+// eslint-disable-next-line no-control-regex -- This character filter intentionally matches control characters.
 const controls = /[\u0000-\u001f\u007f-\u009f]/;
 const fields = new Set(["key", "label", "visible", "width", "align", "format", "precision", "suffix"]);
 const formats = new Set(["auto", "text", "number", "boolean", "datetime"]);

@@ -6,9 +6,11 @@ using SparkStudio.Connectors;
 
 namespace SparkStudio.Gateway;
 
-public record TagValue(string Path, object? Value, string DataType, string Quality, DateTimeOffset Timestamp, string Source, bool Writable = false);
+public record TagValue(string Path, object? Value, string DataType, string Quality, DateTimeOffset Timestamp, string Source, bool Writable = false,
+    DateTimeOffset? SourceTimestamp = null, DateTimeOffset? ReceiptTimestamp = null, string? NativeStatus = null,
+    long? AcquisitionGeneration = null, long? BindingRevision = null, long? MonotonicReceipt = null);
 
-public sealed class TagEngine(ProjectStore store, ConnectorService connectors, ILogger<TagEngine> logger, RecoveryQuarantine? recovery = null, bool enableDemoTags = false) : BackgroundService
+public sealed partial class TagEngine(ProjectStore store, ConnectorService connectors, ILogger<TagEngine> logger, RecoveryQuarantine? recovery = null, bool enableDemoTags = false) : BackgroundService
 {
     public bool DemoMode => enableDemoTags;
     private readonly ConcurrentDictionary<string, TagValue> values = new(StringComparer.Ordinal);
@@ -23,6 +25,12 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
         using (ChangeState())
         {
             values.TryGetValue(next.Path, out var previous);
+            if (next.AcquisitionGeneration is null && sourceValueBytes.Remove(next.Path, out var releasedBytes))
+            {
+                sourceValueTotalBytes -= releasedBytes;
+                if (sourceValueOwners.Remove(next.Path, out var releasedOwner)) sourceConnectionValueBytes[releasedOwner] -= releasedBytes;
+                sourceValueBudget.SetBytes("values", sourceValueTotalBytes);
+            }
             values[next.Path] = next;
             var handlers = ValueChanged;
             if (handlers is null || previous is not null && previous.Quality == next.Quality && previous.Timestamp == next.Timestamp
@@ -34,7 +42,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     private readonly Queue<(TagValue? Previous, TagValue Current, Action<TagValue?, TagValue> Handlers)> notifications = new();
     private int mutationDepth;
     private bool drainingNotifications;
-    private IDisposable ChangeState()
+    private Mutation ChangeState()
     {
         Monitor.Enter(stateGate); mutationDepth++;
         return new Mutation(this);
@@ -64,7 +72,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                     // cannot receive older queued updates after their atomic snapshot.
                     foreach (Action<TagValue?, TagValue> handler in notice.Handlers.GetInvocationList())
                         try { handler(notice.Previous, notice.Current); }
-                        catch (Exception error) { logger.LogWarning("Tag event subscriber failed ({ErrorType}).", error.GetType().Name); }
+                        catch (Exception error) { GatewayLog.TagSubscriberFailed(logger, error.GetType().Name, null); }
                 }
             }
             finally { drainingNotifications = false; }
@@ -77,6 +85,11 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             if (!values.TryGetValue(path, out var previous)) return;
             SetValue(previous with { Value = null, Quality = "Bad_NotFound", Timestamp = DateTimeOffset.UtcNow });
             values.TryRemove(path, out _);
+            if (sourceValueBytes.Remove(path, out var removedBytes)) {
+                sourceValueTotalBytes -= removedBytes;
+                if (sourceValueOwners.Remove(path, out var removedOwner)) sourceConnectionValueBytes[removedOwner] -= removedBytes;
+                sourceValueBudget.SetBytes("values", sourceValueTotalBytes);
+            }
         }
     }
     private long configurationGeneration;
@@ -103,9 +116,13 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             cachedDefinitionPaths = cachedDefinitions.Select(definition => ProjectStore.Required(definition, "path")).ToHashSet(StringComparer.Ordinal);
             cachedDisabledConnections = store.GetConnections().OfType<JsonObject>().Where(item => item["enabled"]?.GetValue<bool>() == false)
                 .Select(item => ProjectStore.Required(item, "id")).ToHashSet(StringComparer.Ordinal);
+            var sourceIds = store.GetConnections().OfType<JsonObject>().Where(item => SourceConfiguration.IsSource(ProjectStore.Required(item, "type")))
+                .Select(item => ProjectStore.Required(item, "id")).ToHashSet(StringComparer.Ordinal);
             cachedPlans = BuildWatchPlans(cachedDefinitions.Where(definition => recovery?.Active != true && TagDefinitionValidator.IsDeviceSource(definition) && definition["enabled"]?.GetValue<bool>() != false
-                    && !cachedDisabledConnections.Contains(ProjectStore.Required(definition, "connectionId"))), id => store.GetConnection(id, allowDisabled: true))
+                    && !cachedDisabledConnections.Contains(ProjectStore.Required(definition, "connectionId"))
+                    && !sourceIds.Contains(ProjectStore.Required(definition, "connectionId"))), id => store.GetConnection(id, allowDisabled: true))
                 .ToDictionary(plan => plan.Key, StringComparer.Ordinal);
+            RefreshSourceBindings();
             capacityWarnings.RemoveWhere(key => !cachedPlans.ContainsKey(key));
             definitionGeneration = generation; cachedRecovery = recovery?.Active == true; DefinitionBuildCount++;
         }
@@ -162,6 +179,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
         {
             var saved = store.SaveTag(definition);
             var path = ProjectStore.Required(saved, "path");
+            FenceAllSourceBindings();
             InvalidateWatches(watch => watch.Plan.Bindings.Any(binding => binding.Path == path));
             configurationGeneration++;
             if (ProjectStore.Required(saved, "kind") == "memory") SetValue(MemoryValue(saved, DateTimeOffset.UtcNow));
@@ -184,6 +202,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
         using (ChangeState())
         {
             var result = store.ApplyTagImport(request);
+            FenceAllSourceBindings();
             var changed = result.Changes.Where(item => item.Action != "unchanged").Select(item => item.Path).ToHashSet(StringComparer.Ordinal);
             InvalidateWatches(watch => watch.Plan.Bindings.Any(binding => changed.Contains(binding.Path)));
             foreach (var removed in result.Changes.Where(item => item.Action == "remove" && item.Path.StartsWith("[default]", StringComparison.Ordinal))) RemoveValue(removed.Path);
@@ -202,6 +221,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
         using (ChangeState())
         {
             if (!store.DeleteTag(path)) return false;
+            FenceAllSourceBindings();
             InvalidateWatches(watch => watch.Plan.Bindings.Any(binding => binding.Path == path));
             configurationGeneration++;
             RemoveValue(path);
@@ -214,9 +234,17 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
         {
             var saved = store.SaveConnection(connection);
             var id = ProjectStore.Required(saved, "id");
+            if (SourceConfiguration.IsSource(ProjectStore.Required(saved, "type")))
+            {
+                var next = store.GetConnection(id, true);
+                connectors.AcceptSourceConfiguration(id, next.ConfigurationRevision ?? 0);
+                if (saved["enabled"]?.GetValue<bool>() == false || !sourceTransportFingerprints.TryGetValue(id, out var fingerprint)
+                    || fingerprint != SourceConfiguration.TransportFingerprint(next)) connectors.FenceSourceConnection(id, next.ConfigurationRevision);
+                else connectors.FenceSourceBindings(id);
+            }
             InvalidateWatches(watch => watch.Plan.Connection.Id == id);
-            foreach (var definition in store.GetRuntimeTagDefinitions().OfType<JsonObject>().Where(item => ProjectStore.Optional(item, "connectionId") == id))
-                SetUnavailable(ProjectStore.Required(definition, "path"), recovery?.Active == true ? "Bad_RecoveryMode" : saved["enabled"]?.GetValue<bool>() == false || definition["enabled"]?.GetValue<bool>() == false ? "Bad_Disabled" : "Bad_WaitingForInitialData");
+            foreach (var binding in store.ConnectionRuntimeBindings(id))
+                SetUnavailable(binding.Path, recovery?.Active == true ? "Bad_RecoveryMode" : saved["enabled"]?.GetValue<bool>() == false || !binding.Enabled ? "Bad_Disabled" : "Bad_WaitingForInitialData");
             configurationGeneration++;
             return saved;
         }
@@ -240,6 +268,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             // Pool admission and persistence share one reservation. Failed writes leave
             // both configuration and transports intact; graceful close runs outside locks.
             cleanup = connectors.PrepareConnectionRemoval(id, () => store.DeleteConnection(id, revision));
+            if (SourceConfiguration.IsSource(ProjectStore.Required(connection, "type"))) connectors.FenceSourceConnection(id, int.MaxValue);
             configurationGeneration++;
         }
         try { await cleanup(); }
@@ -247,7 +276,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
         {
             // The durable removal already succeeded. Do not report a retryable
             // configuration failure or restore credentials after disposal failed.
-            logger.LogWarning("A removed connection's transport cleanup failed ({ErrorType}).", error.GetType().Name);
+            GatewayLog.RemovedTransportCleanupFailed(logger, error.GetType().Name, null);
         }
     }
     private void InvalidateWatches(Func<WatchRegistration, bool> matches)
@@ -263,11 +292,14 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
     public object SubscriptionSnapshot()
     {
         lock (stateGate)
-            return watches.Values.Select(watch => new
+            return watches.Values.Select(watch => (object)new
             {
                 connectionId = watch.Plan.Connection.Id, publishingIntervalMs = watch.Plan.Interval,
                 tagCount = watch.Plan.Bindings.Length, state = watch.State, lastNotificationAt = watch.LastNotification
-            }).ToArray();
+            }).Concat(sourceBindings.Select(item => (object)new {
+                connectionId = item.Key, publishingIntervalMs = 0, tagCount = item.Value.Values.Sum(bindings => bindings.Length),
+                state = sourceStatuses.GetValueOrDefault(item.Key)?.State ?? "Connecting", lastNotificationAt = sourceLastValues.GetValueOrDefault(item.Key)
+            })).ToArray();
     }
     public object ProviderSnapshot()
     {
@@ -388,7 +420,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
             await Task.Delay(1000, stoppingToken);
             try { store.FlushMemoryValues(); }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-            { logger.LogError("Memory tag checkpoint failed ({ErrorType}); the in-memory values remain active.", error.GetType().Name); }
+            { GatewayLog.MemoryTagCheckpointFailed(logger, error.GetType().Name, null); }
         }
     }
     private async Task ExpressionLoop(CancellationToken stoppingToken)
@@ -492,7 +524,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                         if (watches.ContainsKey(plan.Key)) continue;
                         if (watches.Count >= 32)
                         {
-                            if (capacityWarnings.Add(plan.Key)) logger.LogWarning("Device acquisition group capacity (32) reached; {TagCount} tags in connection {ConnectionId} cannot acquire.", plan.Bindings.Length, plan.Connection.Id);
+                            if (capacityWarnings.Add(plan.Key)) GatewayLog.DeviceGroupCapacityReached(logger, plan.Bindings.Length, plan.Connection.Id, null);
                             foreach (var binding in plan.Bindings) SetUnavailable(binding.Path, "Bad_ResourceUnavailable");
                             continue;
                         }
@@ -503,19 +535,30 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
                         watch.Completion = RunWatch(watch);
                     }
                 }
+                await SynchronizeSourceAcquisitionAsync(stoppingToken);
                 await Task.Delay(500, stoppingToken);
             }
+        }
+        catch (Exception error) when (!stoppingToken.IsCancellationRequested)
+        {
+            // Unexpected errors may include remote payloads or connection
+            // secrets. Diagnostics expose a bounded error type, not its text.
+            Volatile.Write(ref sourceAcquisitionFailure, error.GetType().Name + ": acquisition loop stopped; see gateway diagnostics.");
+            GatewayLog.TagAcquisitionLoopFailed(logger, error.GetType().Name, null);
+            throw;
         }
         finally
         {
             await Task.WhenAll(watches.Values.Select(StopWatch));
             watches.Clear();
+            await connectors.SynchronizeSourcesAsync([], store.TagConfigurationGeneration, id => new SourceTagSink(this, id), CancellationToken.None);
         }
     }
 
     private void SetUnavailable(string path, string quality)
     {
         values.TryGetValue(path, out var previous);
+        if (previous?.AcquisitionGeneration is not null) { SetValue(previous with { Quality = quality, Writable = false }); return; }
         var definition = cachedDefinitionsByPath.GetValueOrDefault(path);
         var source = previous?.Source ?? (definition is null ? "opcua" : TagDefinitionValidator.Kind(definition));
         var dataType = previous?.DataType ?? (definition is null ? null : ProjectStore.Optional(definition, "dataType")) ?? "Unknown";
@@ -554,7 +597,7 @@ public sealed class TagEngine(ProjectStore store, ConnectorService connectors, I
         catch (OperationCanceledException) when (watch.Cancellation.IsCancellationRequested) { }
         catch (Exception error)
         {
-            logger.LogWarning("Device acquisition failed ({ErrorType}); a new acquisition will be attempted.", error.GetType().Name);
+            GatewayLog.DeviceAcquisitionFailed(logger, error.GetType().Name, null);
             using (ChangeState())
             {
                 watch.State = "Error";

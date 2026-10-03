@@ -7,6 +7,7 @@ namespace SparkStudio.Gateway;
 /// <summary>Typed browser-local state declarations and validation of explicit referenced scalar data.</summary>
 internal static class ProjectStateValidator
 {
+    private static readonly string[] PropertyBindingFields = ["bindings", "parameterBindings"];
     private const double MaximumSafeInteger = 9007199254740991;
     private static readonly Regex Identifier = new(@"\A[A-Za-z_][A-Za-z0-9_]{0,63}\z", RegexOptions.CultureInvariant);
 
@@ -160,7 +161,7 @@ internal static class ProjectStateValidator
                 var (scope, key, expectedType) = InputBinding(component);
                 if (scope == "screen") ValidateBoundDeclaration(component, declarations, key, expectedType, "Screen");
             }
-            foreach (var binding in new[] { "bindings", "parameterBindings" }
+            foreach (var binding in PropertyBindingFields
                 .SelectMany(field => component["props"]?[field] is JsonObject bindings ? bindings.Select(pair => pair.Value).OfType<JsonObject>() : [])
                 .Concat(ComponentQueryBindingValidator.ParameterExpressions(component)))
                     if (binding["references"] is JsonObject references)

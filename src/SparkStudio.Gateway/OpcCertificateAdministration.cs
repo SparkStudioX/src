@@ -98,7 +98,7 @@ public sealed class OpcCertificateAdministration(string dataDirectory)
         }
     }
 
-    private IEnumerable<string> Files(string store)
+    private string[] Files(string store)
     {
         if (!Stores.Contains(store, StringComparer.Ordinal)) throw new ArgumentException("Choose a public OPC certificate store.");
         var folder = Path.Combine(root, store, "certs"); RecoveryFileSystem.RejectLinks(folder);

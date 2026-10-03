@@ -45,6 +45,15 @@ if (args.Contains("--opc-integration") || gatewayAddress is not null) suites.Add
 suites.Add(("Connector reliability", ConnectorReliabilityChecks.RunAsync));
 suites.Add(("Industrial devices", DeviceConnectorChecks.RunAsync));
 suites.Add(("Native industrial drivers", NativeDeviceChecks.RunAsync));
+suites.Add(("MTConnect source", MtConnectSourceChecks.RunAsync));
+suites.Add(("i3X source", I3xSourceChecks.RunAsync));
+suites.Add(("MQTT source", MqttSourceChecks.RunAsync));
+suites.Add(("Source extraction scripts", SourceScriptChecks.RunAsync));
+if (args.Contains("--sources-only") || args.Contains("--source-protocols-only")) {
+    var protocolsOnly = args.Contains("--source-protocols-only");
+    suites.RemoveAll(suite => !new[] { "MTConnect source", "i3X source", "MQTT source", "Source extraction scripts" }.Contains(suite.Name)
+        || protocolsOnly && suite.Name == "Source extraction scripts");
+}
 await TestReport.RunAsync("Connectors", args, suites);
 
 static async Task<int> RunModelChecks()

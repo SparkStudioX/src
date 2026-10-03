@@ -3,6 +3,13 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using SparkStudio.Gateway;
 
+if (args.Contains("--source-load-test"))
+{
+    try { await SourceLoadProbe.RunAsync(args); }
+    catch (Exception error) { Console.Error.WriteLine($"Source load probe failed: {error}"); Environment.ExitCode = 1; }
+    return;
+}
+
 if (args.Contains("--load-test"))
 {
     try { await GatewayLoadProbe.RunAsync(args); }

@@ -62,7 +62,7 @@ public sealed class ProjectRuntimeRegistry(ProjectCatalog catalog, TagEngine tag
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or InvalidOperationException or ArgumentException)
             {
                 lock (gate) startupFailures[id] = "Project resources are unreadable; files were preserved for recovery.";
-                loggers.CreateLogger<ProjectRuntimeRegistry>().LogError("Project {ProjectId} could not start ({ErrorType}); other projects remain available.", id, error.GetType().Name);
+                GatewayLog.ProjectStartFailed(loggers.CreateLogger<ProjectRuntimeRegistry>(), id, error.GetType().Name, null);
             }
         }
         return Task.CompletedTask;
@@ -74,7 +74,7 @@ public sealed class ProjectRuntimeRegistry(ProjectCatalog catalog, TagEngine tag
         lock (gate) runtimes.Remove(id, out runtime);
         if (runtime is null) return;
         try { await runtime.Events.StopAsync(cancellationToken); }
-        finally { runtime.Events.Dispose(); }
+        finally { runtime.Events.Dispose(); runtime.Actions.CloseComponentEvents(); }
     }
 
     public async Task<System.Text.Json.Nodes.JsonObject> SetArchivedAsync(string id, bool archived)
@@ -104,7 +104,7 @@ public sealed class ProjectRuntimeRegistry(ProjectCatalog catalog, TagEngine tag
     {
         lock (gate)
         {
-            foreach (var runtime in runtimes.Values) runtime.Events.Dispose();
+            foreach (var runtime in runtimes.Values) { runtime.Events.Dispose(); runtime.Actions.CloseComponentEvents(); }
             runtimes.Clear();
         }
     }

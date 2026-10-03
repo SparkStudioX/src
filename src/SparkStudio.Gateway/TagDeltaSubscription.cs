@@ -57,7 +57,7 @@ public sealed class TagDeltaSubscription : IDisposable
     public void Dispose() { engine.ValueChanged -= OnChanged; lock (gate) { disposed = true; pending.Clear(); } }
 }
 
-public static class TagEventStream
+public static class TagEventEndpoint
 {
     public static async Task WriteHeartbeatAsync(HttpResponse response, CancellationToken cancellation)
     {
@@ -104,6 +104,8 @@ public static class TagEventStream
         context.Response.Headers.CacheControl = "no-store";
         context.Response.Headers["X-Accel-Buffering"] = "no";
         var json = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        json.Converters.Add(new ExactInt64JsonConverter());
+        json.Converters.Add(new ExactUInt64JsonConverter());
         async Task<bool> Write(string name, object value, long revision)
         {
             var frame = $"event: {name}\ndata: {JsonSerializer.Serialize(value, json)}\n\n";

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "Scriban": {
+        "type": "Direct",
+        "requested": "[7.5.0, )",
+        "resolved": "7.5.0",
+        "contentHash": "5Dk6VXG6dimWQFRtCs202cYYkdE1GeOqpUgCwNSp4C4NhpjeMaVNssxe6Ifb1Z3HCfabvrbk9XLbvQXeZXG91w=="
+      }
+    },
+    "net10.0/win-x64": {}
+  }
+}

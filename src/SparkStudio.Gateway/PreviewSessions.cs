@@ -97,7 +97,7 @@ public static class PreviewCommunication
             // syntax checking are safe POST reads; neither executes authored scripts.
             // Even a live capability cannot authorize generic script execution or editing.
             if (policy is null && !HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method)
-                && route != "/api/tags/read" && route is not ("/api/scripts/validate" or "/api/projects/{projectId}/scripts/validate"))
+                && route is not ("/api/tags/read" or "/api/projects/{projectId}/tags/read" or "/api/scripts/validate" or "/api/projects/{projectId}/scripts/validate"))
                 throw new BadHttpRequestException("This operation is unavailable from Designer Preview. Exit Preview before editing gateway or project configuration.", 403);
         }
         await next();

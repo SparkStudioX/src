@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http.Features;
 using SparkStudio.Connectors;
@@ -73,6 +72,7 @@ public sealed partial class ProjectStore
     private void PersistTagModel(JsonObject next)
     {
         var expanded = TagModel.Expand(next, NormalizeTag);
+        ValidateOwnedNamespaces(expanded);
         var prior = expandedTagDefinitions ?? TagModel.Expand(tagModel, NormalizeTag);
         var previous = prior.OfType<JsonObject>().ToDictionary(tag => Required(tag, "path"), StringComparer.Ordinal);
         Persist("tags.json", next);
@@ -144,19 +144,20 @@ public sealed partial class ProjectStore
             var connection = connections.OfType<JsonObject>().FirstOrDefault(item => Optional(item, "id") == id)
                 ?? throw new ArgumentException("An existing device connection is required.");
             if (kind == "opcua" && Optional(connection, "type") != "opcua") throw new ArgumentException("OPC tag bindings require an OPC UA connection.");
-            if (kind == "device" && !DeviceConfiguration.IsDevice(Required(connection, "type"))) throw new ArgumentException("Device tag bindings require an industrial device connection.");
+            if (kind == "device" && !DeviceConfiguration.IsDevice(Required(connection, "type")) && !SourceConfiguration.IsSource(Required(connection, "type"))) throw new ArgumentException("Device tag bindings require a supported point connection.");
             node["connectionId"] = id;
             node["nodeId"] = kind == "opcua" ? TagDefinitionValidator.NodeIdentifier(value) : TagDefinitionValidator.DevicePointIdentifier(value);
             node["absoluteDeadband"] = TagDefinitionValidator.AbsoluteDeadband(value);
             node["queueSize"] = TagDefinitionValidator.MonitorQueueSize(value);
             if (kind == "device")
             {
-                var settings = connection["device"]?.Deserialize<DeviceSettings>(Json) ?? throw new ArgumentException("The device connection has no point map.");
-                var point = settings.Points.SingleOrDefault(item => item.Id == Required(node, "nodeId")) ?? throw new ArgumentException("Select a saved point from the device connection's map.");
+                var point = PointCatalog.Point(GetConnection(id, allowDisabled: true), Required(node, "nodeId"));
                 var dataType = value.ContainsKey("dataType") ? TagDefinitionValidator.DataType(value) : point.DataType;
                 if (dataType != point.DataType) throw new ArgumentException("The tag data type must match the saved device point.");
                 node["dataType"] = dataType;
                 node["writable"] = point.Writable;
+                if (SourceConfiguration.IsSource(Required(connection, "type")) && value["writable"]?.GetValue<bool>() == true)
+                    throw new ArgumentException("Read-source tags cannot be writable.");
             }
             else if (value.ContainsKey("dataType")) node["dataType"] = TagDefinitionValidator.DataType(value);
         }
@@ -262,7 +263,18 @@ public sealed partial class ProjectStore
         }
         var previous = GetTagDefinitions().OfType<JsonObject>().ToDictionary(tag => Required(tag, "path"), StringComparer.Ordinal);
         JsonArray expanded; string[] conflicts = [];
-        try { expanded = TagModel.Expand(next, NormalizeTag); }
+        var ownedDefinitions = SourceOwnedDefinitions();
+        try {
+            expanded = TagModel.Expand(next, NormalizeTag);
+            ValidateOwnedNamespaces(expanded);
+            // Engineering packages edit authored definitions. Source-owned
+            // definitions remain part of the resulting complete runtime model.
+            foreach (var owned in ownedDefinitions.OfType<JsonObject>()) {
+                var candidate = (JsonObject)owned.DeepClone();
+                candidate["effectiveEnabled"] = TagDefinitionValidator.Enabled(next["provider"]!.AsObject());
+                expanded.Add(candidate);
+            }
+        }
         catch (ArgumentException error) when (number == 2) { expanded = []; conflicts = [error.Message]; }
         if (conflicts.Length == 0)
         {
@@ -279,7 +291,7 @@ public sealed partial class ProjectStore
             foreach (var old in previous.Values) changes.Add(new(Required(old, "path"), "remove", TagDefinitionValidator.Kind(old)));
         }
         var revision = Hash(tagModel.ToJsonString());
-        var token = Hash(revision + "\n" + connections.ToJsonString() + "\n" + package.ToJsonString());
+        var token = Hash(revision + "\n" + connections.ToJsonString() + "\n" + ownedDefinitions.ToJsonString() + "\n" + package.ToJsonString());
         return (next, new(revision, token, expanded.Count, changes.ToArray(), conflicts));
     }
     private static string Hash(string text) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
