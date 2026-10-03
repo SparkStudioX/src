@@ -1,6 +1,6 @@
 # Build process and quality checks
 
-This guide describes the build policy implemented and verified in the updated development workspace on **October 2, 2026**. The updated build tooling is not yet part of the published application source or released Windows/Docker packages. Publishing this guide does not add that tooling to an older checkout. Use a development checkout containing `tools/build-quality.mjs` and `Directory.Build.targets`; for an older revision, follow its own README.
+This guide describes the build policy in the published application source used for **Windows preview.13**, reviewed on **October 3, 2026**. That release passed the frontend/backend lint, offline tests and cyclomatic complexity gates described below. Building requires a source checkout containing `tools/build-quality.mjs` and `Directory.Build.targets`; the installer contains the built application and runtimes. Older source revisions and releases retain their own build instructions and recorded verification. This Windows release does not update the existing Docker edition.
 
 Run application commands from the application repository root, which is `source/` in the shared workspace. The website has a separate repository and publication process. Building application files does not publish a release.
 
