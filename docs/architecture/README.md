@@ -14,6 +14,7 @@ The MQTT, MTConnect and i3X setup walkthroughs were reviewed against the develop
 - [Windows installer](WINDOWS_INSTALLER.md)
 - [Docker deployment](DOCKER_RELEASE.md)
 - [Preview release cycle](RELEASE_PROCESS.md)
+- [Build process and quality checks](BUILD_PROCESS.md)
 - [Security and accounts](SECURITY.md)
 - [Verification and roadmap](PARITY.md)
 - [Synthetic gateway load testing](LOAD_TESTING.md)
