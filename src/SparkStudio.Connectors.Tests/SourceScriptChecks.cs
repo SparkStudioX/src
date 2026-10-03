@@ -103,14 +103,20 @@ internal static class SourceScriptChecks
         }
         var beforeOomWorkers = SourceMemoryBudget.Snapshot().GetValueOrDefault("workers");
         await using (var oom = SourceScriptHost.ForFixture("--fixture-oom")) {
-            using var startup = new CancellationTokenSource(TimeSpan.FromSeconds(5)); await oom.WarmAsync(startup.Token);
+            using (var startup = new CancellationTokenSource(TimeSpan.FromSeconds(5))) await oom.WarmAsync(startup.Token);
+            Check(oom.EnforcedProcessLimitBytes == SourceScriptHost.ProcessBytes, "Over-cap allocation runs inside the enforced 256 MiB process boundary");
+            var clock = Stopwatch.StartNew();
             var failed = false;
             try { await oom.EvaluateAsync(Request("", "1"), 100, CancellationToken.None); }
-            catch (Exception error) when (error is IOException or InvalidDataException) { failed = true; }
-            Check(failed && SourceMemoryBudget.Snapshot().GetValueOrDefault("workers") == beforeOomWorkers,
-                "Over-cap allocation terminates the worker and releases its process reservation");
+            // Allocation/GC failure and its IPC notification race the supervisor's
+            // whole-evaluation deadline. Either boundary must retire the worker.
+            catch (Exception error) when (error is IOException or InvalidDataException or TimeoutException) { failed = true; }
+            Check(failed && clock.Elapsed < TimeSpan.FromSeconds(2) && !oom.WorkerReady
+                && SourceMemoryBudget.Snapshot().GetValueOrDefault("workers") == beforeOomWorkers,
+                "Over-cap allocation is rejected with bounded cleanup and releases its process reservation");
             await RejectDuringCooldown(oom, "OOM worker");
-            oom.EndFixtureMode(); await WaitForReplacement(oom); await oom.WarmAsync(startup.Token);
+            oom.EndFixtureMode(); await WaitForReplacement(oom);
+            using (var recoveryStartup = new CancellationTokenSource(TimeSpan.FromSeconds(5))) await oom.WarmAsync(recoveryStartup.Token);
             var recovered = await oom.EvaluateAsync(Request("", "42"), 100, CancellationToken.None);
             Check(recovered.Success && recovered.Result!.Value.GetInt32() == 42 && oom.WorkerStarts == 2, "OOM replacement succeeds only after its monotonic cooldown");
         }
