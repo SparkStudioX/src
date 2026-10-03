@@ -6,6 +6,46 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Preview.13 exact release verification, 2026-10-03
+
+The unsigned Windows x64 [`v0.2.0-preview.13` prerelease](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.13) was built from clean application source [`51d19ffb78a63f9e136a031e46b6a544c21c2d50`](https://github.com/SparkStudioX/src/commit/51d19ffb78a63f9e136a031e46b6a544c21c2d50), Windows file version `0.2.0.13`. This build revision identifies the installer and workshop bundle. Later commits containing this evidence or documentation navigation fixes do not identify rebuilt installer bytes; the releases-repository tag identifies the assets repository separately.
+
+All **125 aggregate suites** passed with zero failures, including **91 browser suites**, **32 gateway suites / 1,978 checks** and **9 connector suites / 822 checks**. Frontend/backend lint and the cyclomatic complexity gates passed. [Source-boundary CI](https://github.com/SparkStudioX/src/actions/runs/37137378690) and [Windows/Linux product CI](https://github.com/SparkStudioX/src/actions/runs/37137378678) passed for the exact build commit. Local offline reports supplement that commit-bound CI evidence; they do not independently identify a rebuilt artifact.
+
+The exact installer passed **9 integration groups**, all **867 payload hashes**, bundled .NET/Python readiness and **all 37 portable workshop import, explicit publication and re-export round trips**. The workshop ZIP and installer share the clean build source revision. The native-module check loaded the two bundled industrial runtime modules from the verified private cache without a host Visual C++ runtime. Separate production-default checks confirmed demo simulation disabled, no inherited demo opt-in and bundled Python available in the owned extracted process.
+
+The packaged browser review passed **9 groups** against that extracted installer: engineering sign-in and build provenance; AI defaults, usage cards and settings persistence; the unconfigured Ask Spark launcher, draft retention, keyboard close and image attachment; Layers single/toggle/range/additive selection and Escape; reviewed multi-delete and Undo; the last-screen deletion explanation; and Ask Spark availability during read-only Preview. It recorded no browser console/page errors, failed requests or unexpected requests. These tests made **no Gemini requests** and left AI usage unchanged. They did not exercise microphone permission, live provider recovery, operator runtime actions or service installation.
+
+All **17 public release assets** were downloaded separately and matched the reviewed byte sizes and SHA-256 hashes. All 17 anonymous public download URLs returned HTTP 200 with matching sizes. The release is published as a prerelease, not a draft.
+
+The portable ZIP contains **37 projects**; the source catalog's **21 setup-required examples**, including Ask Spark and read-only sources, remain outside that ZIP. Downloaded Markdown guides use build-commit-pinned links for their source-relative document references.
+
+| Public asset | Bytes | SHA-256 |
+| --- | ---: | --- |
+| [SparkStudio-Setup-0.2.0-preview.13-windows-x64-unsigned.exe](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/SparkStudio-Setup-0.2.0-preview.13-windows-x64-unsigned.exe) | 114,528,368 | `59ada2f52c5290d0c1e2e4f11059d40f28e3a7a7826d32284237d4f4d17fcbd7` |
+| [SparkStudio-Setup-0.2.0-preview.13-windows-x64-unsigned.exe.sha256](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/SparkStudio-Setup-0.2.0-preview.13-windows-x64-unsigned.exe.sha256) | 127 | `85f2efee02b84b5e6d6cf46169d39ce20a03c6b2fe48813d52d248df72e7223b` |
+| [SparkStudio-Windows-Installation-Guide.md](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/SparkStudio-Windows-Installation-Guide.md) | 26,639 | `93b1ccda4d32be0b02e0366f384e467e2238bbfb68cb4c8e08146c818a26a212` |
+| [SparkStudio-Workshops-0.2.0-preview.13.zip](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/SparkStudio-Workshops-0.2.0-preview.13.zip) | 416,172 | `d7f6164df5a8615e34267fbcb348e9de4ebf77dcf18c6fc95235cf5be5e19df4` |
+| [SparkStudio-Workshops-0.2.0-preview.13.zip.sha256](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/SparkStudio-Workshops-0.2.0-preview.13.zip.sha256) | 109 | `2c6dff11ab0550b2bda200e5a67d40e283b21d34fdb6e6cb6a8f30b972ec8dc7` |
+| [SparkStudio-Package-Manifest-0.2.0-preview.13.json](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/SparkStudio-Package-Manifest-0.2.0-preview.13.json) | 159,371 | `94eac27eb1a12592f520c1d83ca49a665a5a973afa25a26bf9076dd382385a83` |
+| [NETWORK_ACCESS.md](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/NETWORK_ACCESS.md) | 12,020 | `9774467167741d4606f8594d4e359a06541154c24f1f402e6532fdd9df428521` |
+| [SCHEDULED_BACKUPS.md](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/SCHEDULED_BACKUPS.md) | 13,126 | `67c29cd823db50cf1a9a56471f0365404981edabc6ee16f3fb3d229a4afe890d` |
+| [GATEWAY_RECOVERY.md](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/GATEWAY_RECOVERY.md) | 11,453 | `31e70a82922f5ecdd7b842b70d8b3217ff82c12672f0ad4287a12ec203388a59` |
+| [INDUSTRIAL_DEVICE_CONNECTIONS.md](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/INDUSTRIAL_DEVICE_CONNECTIONS.md) | 17,586 | `06f795cef32346e3c98de7faa0ffca369668a62acb37a254a214dc82c119654d` |
+| [ASK_SPARK.md](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/ASK_SPARK.md) | 30,769 | `bebcd51b789fe38742594977d9e53f1d48a07f92edecf543e5f8a30b4252098a` |
+| [DATA_SOURCES.md](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/DATA_SOURCES.md) | 17,684 | `83b01670a1a5fac3a250d52214b39d083547c46ae8ac71cc5839e4b850fea1ba` |
+| [MQTT_SETUP.md](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/MQTT_SETUP.md) | 22,775 | `782ad8cc5da6c0a0b461de010c41be5f5ccd09b64b532965dbd2a0f09c5dba51` |
+| [MTCONNECT_SETUP.md](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/MTCONNECT_SETUP.md) | 25,380 | `3024fa98d3e4f2209c340b8caddf34c2049db813944510bf79fb0e41ed84898d` |
+| [I3X_SETUP.md](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/I3X_SETUP.md) | 26,132 | `95b674f5ac37f022bb0a1882e29e4f2c0bbaccca8ed88ba36d5d23121c965bf5` |
+| [BUILD_PROCESS.md](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/BUILD_PROCESS.md) | 14,220 | `a27813faeadf3c9b12d8b3e4efb653493b6a635c98ead2c8a399a177570a0a3b` |
+| [SHA256SUMS](https://github.com/SparkStudioX/releases/releases/download/v0.2.0-preview.13/SHA256SUMS) | 1,553 | `b16d639f3cdb9298fa554f431d2b495e1a0f9bd7aaa2893dd5eb0364990e7610` |
+
+Ask Spark defaults remain **100 model steps per message**, **unlimited monthly allowance** until configured, and raw provider logging **enabled** with timestamped exchange files and **no logging size cap or automatic deletion**. Provider logs remain plaintext; filesystem access is restricted separately from encrypted per-user conversations. The guide explains how to disable new records and manage retained files. No logs, conversations, credentials or development projects are release assets.
+
+These checks establish software and artifact provenance, not universal provider or deployment acceptance. Fake-provider fixtures do not establish live Gemini model availability, caching support or the final-answer-without-tools request against a real endpoint. Canvas capture checks rendered appearance rather than transparent overlay geometry or runtime button behavior. Physical controllers, real broker/agent/i3X interoperability, real SQL Server, elevated preview.13 installation/upgrade/uninstall, LocalService secret/ACL lifecycle, remote TLS/browser trust, rollback and complete real-data preservation remain separate gates. Broader load/soak behavior, actual domain SMB, trusted external FTPS and real S3 account-policy/delivery acceptance remain pending. Current-user extraction does not establish those results. The installer remains unsigned; no new Docker image or macOS package is claimed.
+
+Website/docs publication is recorded separately after its deployment and live checks.
+
 ## Preview.13 release-candidate review, 2026-10-03
 
 The Windows `0.2.0-preview.13` candidate uses file version `0.2.0.13`. This entry describes reviewed source scope and outstanding release gates; it does not claim that candidate artifacts have passed verification or been published. The clean build source revision, aggregate results, source CI, installer/workshop hashes, exact-package acceptance and website deployment must be recorded from this candidate's evidence before release completion. Earlier preview.12 results below apply only to that earlier package.

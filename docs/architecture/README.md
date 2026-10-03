@@ -72,6 +72,7 @@ Preview.13 adds [Ask Spark](ASK_SPARK.md) and the [MQTT](MQTT_SETUP.md), [MTConn
 
 ## Data source setup
 
+- [Read-only sources: architecture and workshop](DATA_SOURCES.md)
 - [MQTT setup walkthrough](MQTT_SETUP.md)
 - [MTConnect setup walkthrough](MTCONNECT_SETUP.md)
 - [i3X setup walkthrough](I3X_SETUP.md)
