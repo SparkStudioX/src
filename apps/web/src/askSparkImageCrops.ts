@@ -5,8 +5,8 @@ import type { AskSparkImage } from "./askSparkImages";
 import type { Asset } from "./types";
 
 export interface AskSparkCrop { sourceImageId: string; name: string; box: { x: number; y: number; width: number; height: number } }
-export interface AskSparkCropUpload { name: string; contentType: "image/png"; dataBase64: string }
-export interface AskSparkCropAsset { index: number; sourceImageId: string; requestedName: string; asset: Asset }
+export interface AskSparkCropUpload { name: string; contentType: "image/png" | "image/webp"; dataBase64: string }
+export interface AskSparkCropAsset { index: number; sourceImageId: string; requestedName: string; sourceBox: AskSparkCrop["box"]; resized: boolean; asset: Asset }
 export interface AskSparkCropReceipt {
   status: "completed" | "partial" | "failed" | "cancelled"; requested: number; created: AskSparkCropAsset[];
   notAttempted: string[]; error?: string; failed?: { index: number; name: string; outcome: "rejected" | "unknown" };
@@ -17,6 +17,7 @@ export interface AskSparkCropOptions {
   listAssets?: (projectId: string, signal: AbortSignal) => Promise<Asset[]>;
 }
 export const askSparkCropLimits = { count: 16, bytes: 512 * 1024, side: 8192, pixels: 16_777_216 };
+interface PreparedCrop { crop: AskSparkCrop; upload: AskSparkCropUpload; resized: boolean }
 
 /** All rectangles and source identities are validated before preparing or uploading any asset. */
 export function validateCropRequests(value: unknown, resolveImage: AskSparkCropOptions["resolveImage"]): { crop: AskSparkCrop; source: AskSparkImage }[] {
@@ -60,23 +61,67 @@ export async function cropRetainedImages(options: AskSparkCropOptions): Promise<
   const existing = await (options.listAssets || listProjectAssets)(projectId, signal);
   const existingNames = new Set(existing.map(asset => asset.name.trim().toLowerCase()));
   if (selected.some(({ crop }) => existingNames.has(crop.name.toLowerCase()))) throw new Error("A requested asset name already exists in this project. Choose unique names for the new crops.");
-  const prepared: { crop: AskSparkCrop; upload: AskSparkCropUpload }[] = [];
-  for (const { crop, source } of selected) { assertCurrent(session, signal); prepared.push({ crop, upload: await prepareCrop(source, crop, signal) }); }
+  const prepared: PreparedCrop[] = [];
+  for (const { crop, source } of selected) { assertCurrent(session, signal); prepared.push({ crop, ...await prepareCrop(source, crop, session, signal) }); }
   return uploadCrops(projectId, prepared, options.uploadAsset || uploadProjectAsset, session, signal);
 }
 
-async function prepareCrop(source: AskSparkImage, crop: AskSparkCrop, signal: AbortSignal): Promise<AskSparkCropUpload> {
+async function prepareCrop(source: AskSparkImage, crop: AskSparkCrop, session: number, signal: AbortSignal): Promise<Omit<PreparedCrop, "crop">> {
   const image = await loadImage(source, signal);
+  const canvas = document.createElement("canvas");
   try {
+    assertCurrent(session, signal);
     if (image.naturalWidth !== source.width || image.naturalHeight !== source.height) throw new Error("The source image dimensions changed. Attach and send the image again.");
-    const canvas = document.createElement("canvas"); canvas.width = crop.box.width; canvas.height = crop.box.height;
+    canvas.width = crop.box.width; canvas.height = crop.box.height;
     const context = canvas.getContext("2d"); if (!context) throw new Error("Image cropping is not supported by this browser.");
     context.drawImage(image, crop.box.x, crop.box.y, crop.box.width, crop.box.height, 0, 0, crop.box.width, crop.box.height);
-    const blob = await abortable(canvasBlob(canvas), signal);
-    if (blob.size > askSparkCropLimits.bytes) throw new Error(`Crop “${crop.name}” exceeds the 512 KiB asset limit. Choose a smaller crop.`);
+    const { blob, width, height } = await boundedCrop(canvas, crop.name, session, signal);
+    const contentType = cropContentType(blob);
     const data = await abortable(blobDataUrl(blob), signal);
-    return { name: crop.name, contentType: "image/png", dataBase64: data.split(",", 2)[1] };
-  } finally { image.src = ""; }
+    assertCurrent(session, signal);
+    return { upload: { name: crop.name, contentType, dataBase64: data.split(",", 2)[1] }, resized: width !== crop.box.width || height !== crop.box.height };
+  } finally { image.src = ""; canvas.width = 0; canvas.height = 0; }
+}
+
+function cropContentType(blob: Blob): AskSparkCropUpload["contentType"] {
+  if (blob.type !== "image/png" && blob.type !== "image/webp") throw new Error("The browser returned an unsupported image encoding.");
+  return blob.type;
+}
+
+/** Keep exact PNG pixels when possible; only lower resolution after full-size WebP attempts. */
+async function boundedCrop(original: HTMLCanvasElement, name: string, session: number, signal: AbortSignal) {
+  for (let attempt = 0; attempt <= 8; attempt++) {
+    assertCurrent(session, signal);
+    const canvas = attempt === 0 ? original : scaledCrop(original, 0.7 ** attempt);
+    try {
+      const blob = await encodeCrop(canvas, session, signal);
+      if (blob) return { blob, width: canvas.width, height: canvas.height };
+    } finally { if (canvas !== original) { canvas.width = 0; canvas.height = 0; } }
+  }
+  throw new Error(`Crop “${name}” could not fit the 512 KiB asset limit after compression. Choose a smaller source image.`);
+}
+
+function scaledCrop(original: HTMLCanvasElement, scale: number): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.floor(original.width * scale)); canvas.height = Math.max(1, Math.floor(original.height * scale));
+  const context = canvas.getContext("2d"); if (!context) throw new Error("Image resizing is not supported by this browser.");
+  context.imageSmoothingEnabled = true; context.imageSmoothingQuality = "high";
+  context.drawImage(original, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+async function encodeCrop(canvas: HTMLCanvasElement, session: number, signal: AbortSignal): Promise<Blob | null> {
+  const png = await abortable(canvasBlob(canvas), signal);
+  assertCurrent(session, signal); cropContentType(png);
+  if (png.size > 0 && png.size <= askSparkCropLimits.bytes) return png;
+  for (const quality of [0.92, 0.82, 0.72]) {
+    const blob = await abortable(new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/webp", quality)), signal);
+    assertCurrent(session, signal);
+    // Browsers without WebP encoding return PNG or null. The PNG above already exceeds the limit.
+    if (!blob || cropContentType(blob) !== "image/webp") return null;
+    if (blob.size > 0 && blob.size <= askSparkCropLimits.bytes) return blob;
+  }
+  return null;
 }
 
 function loadImage(source: AskSparkImage, signal: AbortSignal): Promise<HTMLImageElement> {
@@ -92,14 +137,14 @@ function loadImage(source: AskSparkImage, signal: AbortSignal): Promise<HTMLImag
   });
 }
 
-async function uploadCrops(projectId: string, prepared: { crop: AskSparkCrop; upload: AskSparkCropUpload }[], upload: NonNullable<AskSparkCropOptions["uploadAsset"]>, session: number, signal: AbortSignal): Promise<AskSparkCropReceipt> {
+async function uploadCrops(projectId: string, prepared: PreparedCrop[], upload: NonNullable<AskSparkCropOptions["uploadAsset"]>, session: number, signal: AbortSignal): Promise<AskSparkCropReceipt> {
   const created: AskSparkCropAsset[] = [];
   for (const [index, item] of prepared.entries()) {
     let dispatched = false;
     try {
       assertCurrent(session, signal); dispatched = true;
       const asset = await upload(projectId, item.upload, signal);
-      created.push({ index, sourceImageId: item.crop.sourceImageId, requestedName: item.crop.name, asset });
+      created.push({ index, sourceImageId: item.crop.sourceImageId, requestedName: item.crop.name, sourceBox: { ...item.crop.box }, resized: item.resized, asset });
     } catch (reason) {
       const rejected = !dispatched || reason instanceof ApiError && reason.status >= 400 && reason.status < 500;
       return { status: created.length ? "partial" : signal.aborted ? "cancelled" : "failed", requested: prepared.length, created,

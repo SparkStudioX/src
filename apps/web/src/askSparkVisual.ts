@@ -2,7 +2,7 @@ import { toCanvas } from "html-to-image";
 import { authHeaders, authenticatedFetch, assertAuthResponseCurrent } from "./api";
 import { authSessionRevision } from "./authSession";
 
-export interface AskSparkCapturedCanvas { data: string; mimeType: "image/png"; name: string; width: number; height: number; canvasWidth: number; canvasHeight: number }
+export interface AskSparkCapturedCanvas { data: string; mimeType: "image/png" | "image/webp"; name: string; width: number; height: number; canvasWidth: number; canvasHeight: number }
 export const askSparkVisualLimits = { bytes: 5 * 1024 * 1024, side: 2048, pixels: 4_194_304, nodes: 10_000 };
 const excluded = ".canvas-component-selection,.canvas-group-bounds,.canvas-marquee,.canvas-precision-guides,.component-selection-label,.resize-handle,.empty-canvas,[data-ask-spark-private],input[type=password],input[type=hidden],input[autocomplete=current-password],input[autocomplete=new-password],iframe";
 
@@ -28,7 +28,7 @@ export async function captureDesignerCanvas(element: HTMLElement, signal: AbortS
     const captured = await abortable(renderCanvas(element, canvasWidth, canvasHeight, dimensions, deadline.signal), deadline.signal);
     if (session !== authSessionRevision()) throw new Error("The signed-in session changed during canvas capture.");
     signal.throwIfAborted();
-    return { ...captured, canvasWidth, canvasHeight, name: "Current canvas.png", mimeType: "image/png" };
+    return { ...captured, canvasWidth, canvasHeight, name: captured.mimeType === "image/webp" ? "Current canvas.webp" : "Current canvas.png" };
   } finally { clearTimeout(timer); signal.removeEventListener("abort", abort); }
 }
 
@@ -44,7 +44,7 @@ async function renderCanvas(element: HTMLElement, width: number, height: number,
     onImageErrorHandler: () => { throw new Error("A canvas image could not be captured. Check its loading state and access permissions."); },
   });
   signal.throwIfAborted();
-  return boundedPng(canvas, signal);
+  return encodeCanvasCapture(canvas, signal);
 }
 
 async function validateCanvasImages(element: HTMLElement, signal: AbortSignal): Promise<void> {
@@ -104,19 +104,38 @@ async function embeddedFonts(element: HTMLElement, signal: AbortSignal): Promise
   return embedded.join("\n");
 }
 
-async function boundedPng(original: HTMLCanvasElement, signal: AbortSignal) {
+/** Compact inspection frames only; original pasted references and crop sources are never re-encoded. */
+export async function encodeCanvasCapture(original: HTMLCanvasElement, signal: AbortSignal): Promise<Pick<AskSparkCapturedCanvas, "data" | "mimeType" | "width" | "height">> {
   let canvas = original;
-  for (let attempt = 0; attempt < 6; attempt++) {
-    signal.throwIfAborted();
-    const blob = await canvasBlob(canvas);
-    if (blob.size <= askSparkVisualLimits.bytes) return { data: (await blobDataUrl(blob)).split(",", 2)[1], width: canvas.width, height: canvas.height };
-    const next = document.createElement("canvas"); next.width = Math.max(1, Math.floor(canvas.width * 0.75)); next.height = Math.max(1, Math.floor(canvas.height * 0.75));
-    const context = next.getContext("2d"); if (!context) throw new Error("Canvas capture is not supported by this browser.");
-    context.drawImage(canvas, 0, 0, next.width, next.height); canvas = next;
-  }
+  try {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      signal.throwIfAborted();
+      const blob = await captureBlob(canvas, signal);
+      if (blob.size <= askSparkVisualLimits.bytes) {
+        const data = await abortable(blobDataUrl(blob), signal);
+        return { data: data.split(",", 2)[1], mimeType: blob.type === "image/webp" ? "image/webp" : "image/png", width: canvas.width, height: canvas.height };
+      }
+      if (canvas !== original) { canvas.width = 0; canvas.height = 0; }
+      canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.floor(original.width * 0.75 ** (attempt + 1))); canvas.height = Math.max(1, Math.floor(original.height * 0.75 ** (attempt + 1)));
+      const context = canvas.getContext("2d"); if (!context) throw new Error("Canvas capture is not supported by this browser.");
+      context.imageSmoothingEnabled = true; context.imageSmoothingQuality = "high";
+      context.drawImage(original, 0, 0, canvas.width, canvas.height);
+    }
+  } finally { if (canvas !== original) { canvas.width = 0; canvas.height = 0; } }
   throw new Error("The canvas image exceeds the capture size limit.");
 }
 
-export function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> { return new Promise((resolve, reject) => { try { canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("This canvas could not be encoded as PNG.")), "image/png"); } catch { reject(new Error("This canvas contains an image the browser cannot export. Import external images into the project first.")); } }); }
+async function captureBlob(canvas: HTMLCanvasElement, signal: AbortSignal): Promise<Blob> {
+  const png = await abortable(canvasBlob(canvas), signal);
+  // Small diagrams keep exact pixels. Large rendered screens usually compress much
+  // better as high-quality WebP, which retains transparency and the same resolution.
+  if (png.size <= 128 * 1024) return png;
+  const webp = await abortable(canvasBlob(canvas, "image/webp", 0.9), signal);
+  // Unsupported WebP encoders return PNG. Keep the smaller supported payload.
+  return webp.type === "image/webp" && webp.size < png.size ? webp : png;
+}
+
+export function canvasBlob(canvas: HTMLCanvasElement, type = "image/png", quality?: number): Promise<Blob> { return new Promise((resolve, reject) => { try { canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("This canvas could not be encoded as an image.")), type, quality); } catch { reject(new Error("This canvas contains an image the browser cannot export. Import external images into the project first.")); } }); }
 export function blobDataUrl(blob: Blob): Promise<string> { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onerror = () => reject(new Error("The captured image could not be read.")); reader.onload = () => resolve(String(reader.result)); reader.readAsDataURL(blob); }); }
 export function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> { return new Promise((resolve, reject) => { const abort = () => reject(signal.reason || new DOMException("Aborted", "AbortError")); if (signal.aborted) { abort(); return; } signal.addEventListener("abort", abort, { once: true }); promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort)); }); }

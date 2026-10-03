@@ -11,6 +11,7 @@ public static class AskSparkEndpoints
     public static IServiceCollection AddAskSpark(this IServiceCollection services, string dataDirectory)
     {
         services.AddSingleton(provider => new AskSparkSettings(dataDirectory, provider.GetRequiredService<IDataProtectionProvider>()));
+        services.AddSingleton(provider => new AskSparkRawLog(dataDirectory, provider.GetRequiredService<AskSparkSettings>(), provider.GetRequiredService<ILogger<AskSparkRawLog>>()));
         services.AddSingleton(_ => new AskSparkUsage(dataDirectory));
         services.AddSingleton(provider => new AskSparkConversations(dataDirectory, provider.GetRequiredService<IDataProtectionProvider>()));
         // Explicit factory prevents DI choosing the synthetic IEnumerable constructor with an empty registration set.

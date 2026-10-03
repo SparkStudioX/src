@@ -1,4 +1,7 @@
 using System.Net;
+using System.Security.AccessControl;
+using System.Security.Principal;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.DataProtection;
@@ -31,7 +34,9 @@ internal static class AskSparkChecks
             await ContextChecks(service, model, conversations, admin, projects.DefaultId);
             CorruptedHistoryChecks(conversations, admin, directory);
             await ProviderChecks(settings);
+            await RawLogChecks(directory, settings, protection);
             SchemaChecks();
+            ContextProjectionChecks();
             AuthoringChecks(projects.Get(projects.DefaultId).Store);
             await BackupChecks(directory, protection);
             PermissionChecks(security, admin, projects.DefaultId);
@@ -44,10 +49,33 @@ internal static class AskSparkChecks
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }
 
+    private static void ContextProjectionChecks()
+    {
+        var tool = Tool("read_fixture", "read", false, true);
+        var definition = JsonSerializer.SerializeToNode(tool, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        var contents = new JsonArray(
+            new JsonObject { ["role"] = "model", ["parts"] = new JsonArray(new JsonObject
+            { ["thoughtSignature"] = "fixture-signed-part", ["functionCall"] = new JsonObject { ["id"] = "discover-1", ["name"] = "find_tools", ["args"] = new JsonObject { ["query"] = "read_fixture" } } }) },
+            new JsonObject { ["role"] = "user", ["parts"] = new JsonArray(new JsonObject
+            { ["functionResponse"] = new JsonObject { ["id"] = "discover-1", ["name"] = "find_tools", ["response"] = new JsonObject
+                { ["result"] = new JsonObject { ["tools"] = new JsonArray(definition), ["total"] = 1, ["availableFrom"] = "next model round" } } } }) });
+        var before = contents.ToJsonString();
+        var projected = AskSparkContext.ForProvider(contents, [tool]);
+        var response = projected[1]!["parts"]![0]!["functionResponse"]!;
+        var compact = response["response"]!["result"]!["tools"]![0]!;
+        Check(compact["parameters"] is null && compact["description"] is null && compact["definitionSource"] is not null
+            && compact["name"]!.GetValue<string>() == tool.Name, "loaded discovery definitions are not repeated in provider history");
+        Check(JsonNode.DeepEquals(projected[0], contents[0]) && response["id"]!.GetValue<string>() == "discover-1"
+            && before == contents.ToJsonString(), "projection preserves signed model parts, call pairing and complete stored discovery results");
+        Check(AskSparkContext.ForProvider(contents, []).ToJsonString() == before, "undeclared or final-answer tool definitions remain available in history");
+        Check(AskSparkContext.ForProvider(contents, [tool with { Description = "Changed definition" }]).ToJsonString() == before,
+            "a different current definition cannot silently replace the historical definition");
+    }
+
     private static AskSparkSettings Settings(string directory, IDataProtectionProvider protection)
     {
         var settings = new AskSparkSettings(directory, protection);
-        Check(settings.Snapshot().Model == "gemini-3.8-flash" && !settings.Snapshot().HasApiKey, "default model and empty key");
+        Check(settings.Snapshot().Model == "gemini-3.8-flash" && !settings.Snapshot().HasApiKey && settings.Snapshot().LoggingEnabled, "default model, empty key and enabled raw logging");
         Reject(() => settings.Save(new("0", true, AskSparkSettings.DefaultModel)), "enabled without key");
         var saved = settings.Save(new("0", true, AskSparkSettings.DefaultModel, ApiKey: " \t" + FixtureApiKey + "\r\n "));
         Check(settings.Credentials().Key == FixtureApiKey, "pasted dotted key trims surrounding whitespace before encryption");
@@ -233,10 +261,212 @@ internal static class AskSparkChecks
         var archive = Path.Combine(work, "ask-fixture.sparkbak");
         var report = await ConfigurationBackupSnapshot.CreateAsync(directory, archive, "Synthetic-Ask-Backup-Passphrase-123");
         Check(report.ExcludedPaths?.Contains("ask-spark-conversations/") == true, "configuration backup excludes private conversations");
+        Check(report.ExcludedPaths?.Contains(AskSparkRawLog.DirectoryName + "/") == true, "configuration backup excludes raw provider exchange logs");
+        Check(report.ExcludedPaths?.Contains("ask-spark-provider.log") == true, "configuration backup also excludes any retained legacy rolling log");
         var restored = Path.Combine(directory, "restored-fixture");
         await GatewayRecovery.RestoreAsync(archive, restored, "Synthetic-Ask-Backup-Passphrase-123");
         var settings = new AskSparkSettings(restored, protection);
         Check(settings.Credentials().Key == FixtureApiKey && !Directory.Exists(Path.Combine(restored, "ask-spark-conversations")), "configuration restore retains protected AI settings without private chat history");
+        Check(!Directory.Exists(Path.Combine(restored, AskSparkRawLog.DirectoryName)) && !File.Exists(Path.Combine(restored, "ask-spark-provider.log")),
+            "configuration restore includes neither per-exchange nor legacy provider payload logs");
+    }
+
+    private static async Task RawLogChecks(string directory, AskSparkSettings settings, IDataProtectionProvider protection)
+    {
+        using var log = new AskSparkRawLog(directory, settings);
+        var legacyDirectory = Path.Combine(directory, "raw-log-legacy"); Directory.CreateDirectory(legacyDirectory);
+        var legacy = JsonNode.Parse(File.ReadAllText(Path.Combine(directory, "ask-spark-settings.json")))!.AsObject();
+        legacy.Remove("loggingEnabled");
+        File.WriteAllText(Path.Combine(legacyDirectory, "ask-spark-settings.json"), legacy.ToJsonString());
+        Check(new AskSparkSettings(legacyDirectory, protection).Snapshot().LoggingEnabled, "existing AI settings without a logging field default to enabled");
+        var legacyLog = Path.Combine(directory, "ask-spark-provider.log");
+        const string legacyContent = "Synthetic legacy rolling log: preserve this file unchanged.\n";
+        File.WriteAllText(legacyLog, legacyContent);
+        const string payload = " {\n  \"text\": \"Synthetic Ω image data and script output\",\n  \"inlineData\": \"YWJjZA==\"\n}\n";
+        var started = DateTimeOffset.UtcNow;
+        await log.WriteAsync("generateContent", "synthetic-exchange", "request", payload);
+        await log.WriteAsync("generateContent", "synthetic-exchange", "response", "{\"text\":\"fixture response\"}", 200);
+        var folder = Path.Combine(directory, AskSparkRawLog.DirectoryName);
+        var path = Directory.GetFiles(folder, "*.txt").Single();
+        var records = ReadRawLog(path);
+        Check(records.Count == 2 && records[0].Body == payload, "one exchange file retains exact request whitespace, Unicode and base64 plus its reply");
+        Check(records.All(record => record.Header["exchangeId"]!.GetValue<string>() == "synthetic-exchange")
+            && records[0].Header["direction"]!.GetValue<string>() == "request"
+            && records[1].Header["direction"]!.GetValue<string>() == "response"
+            && records[1].Header["statusCode"]!.GetValue<int>() == 200, "request and status-bearing reply correlate in the same text file");
+        RawLogFilenameCheck(path, "synthetic-exchange", started, DateTimeOffset.UtcNow);
+        RawLogPermissionCheck(folder, path);
+        await RawLogExistingPermissionsCheck(directory, settings);
+        await log.WriteAsync("countTokens", "second-exchange", "request", "{\"synthetic\":true}");
+        await log.WriteAsync("countTokens", "second-exchange", "response", "{\"totalTokens\":12}", 200);
+        Check(Directory.GetFiles(folder, "*.txt").Length == 2 && ReadRawLog(path).Count == 2,
+            "two exchanges create two files without mixing or appending to an earlier completed exchange");
+        await RawLogDisabledChecks(log, directory, folder, path, settings, protection);
+        await RawLogProviderHeadersCheck(log, folder, settings);
+        var large = await RawLogLargeExchangeChecks(log, folder);
+        await RawLogConcurrentChecks(log, folder);
+        Check(large.Digest.SequenceEqual(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(large.Path))),
+            "subsequent requests never trim, replace or delete earlier full exchange logs");
+        Check(File.ReadAllText(legacyLog) == legacyContent, "per-exchange logging leaves the old rolling log untouched");
+        var blocked = Path.Combine(directory, "raw-log-blocked"); Directory.CreateDirectory(blocked);
+        var blockedFolder = Path.Combine(blocked, AskSparkRawLog.DirectoryName);
+        File.WriteAllText(blockedFolder, "synthetic file blocks log directory creation");
+        using var unavailable = new AskSparkRawLog(blocked, settings);
+        await unavailable.WriteAsync("generateContent", "unwritable", "request", "fixture");
+        Check(File.ReadAllText(blockedFolder) == "synthetic file blocks log directory creation", "filesystem logging failure does not fail the provider operation");
+    }
+
+    private static async Task RawLogDisabledChecks(AskSparkRawLog log, string directory, string folder, string path,
+        AskSparkSettings settings, IDataProtectionProvider protection)
+    {
+        settings.Save(new(settings.Snapshot().Revision, true, AskSparkSettings.DefaultModel, LoggingEnabled: false));
+        Check(!new AskSparkSettings(directory, protection).Snapshot().LoggingEnabled, "disabled raw logging persists");
+        var before = File.ReadAllBytes(path);
+        var fileCount = Directory.GetFiles(folder, "*.txt").Length;
+        await log.WriteAsync("countTokens", "disabled", "request", "must not be logged");
+        await log.WriteAsync("countTokens", "disabled", "response", "must not be logged", 200);
+        Check(before.SequenceEqual(File.ReadAllBytes(path)) && Directory.GetFiles(folder, "*.txt").Length == fileCount,
+            "disabled logging creates no exchange file and preserves existing logs");
+        settings.Save(new(settings.Snapshot().Revision, true, AskSparkSettings.DefaultModel, LoggingEnabled: true));
+        using var canceled = new CancellationTokenSource(); canceled.Cancel();
+        await log.WriteAsync("generateContent", "canceled", "request", "not logged", cancellation: canceled.Token);
+        Check(before.SequenceEqual(File.ReadAllBytes(path)) && Directory.GetFiles(folder, "*.txt").Length == fileCount,
+            "canceled diagnostic writes do not fail the caller or create a file");
+    }
+
+    private static async Task RawLogExistingPermissionsCheck(string directory, AskSparkSettings settings)
+    {
+        var existing = Path.Combine(directory, "raw-log-existing");
+        var folder = Path.Combine(existing, AskSparkRawLog.DirectoryName);
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, "previous-exchange.txt");
+        const string payload = "Previously captured exchange remains unchanged.";
+        File.WriteAllText(path, payload);
+        using var log = new AskSparkRawLog(existing, settings);
+        await log.WriteAsync("generateContent", "upgraded", "request", "synthetic request");
+        RawLogPermissionCheck(folder, path);
+        Check(File.ReadAllText(path) == payload, "securing an existing log folder preserves historical exchange contents");
+    }
+
+    private static void RawLogPermissionCheck(string folder, string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var identities = new[] { WindowsIdentity.GetCurrent().User!.Value,
+                new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null).Value,
+                new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null).Value }.ToHashSet(StringComparer.Ordinal);
+            var directoryAcl = new DirectoryInfo(folder).GetAccessControl();
+            var fileAcl = new FileInfo(path).GetAccessControl();
+            foreach (var acl in new FileSystemSecurity[] { directoryAcl, fileAcl })
+            {
+                var rules = acl.GetAccessRules(true, true, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>().ToArray();
+                Check(acl.AreAccessRulesProtected && rules.Length > 0 && rules.All(rule =>
+                    rule.AccessControlType == AccessControlType.Allow && identities.Contains(rule.IdentityReference.Value)
+                    && rule.FileSystemRights == FileSystemRights.FullControl), "provider logs allow only service identity, Administrators and SYSTEM");
+            }
+        }
+        else
+        {
+            Check(File.GetUnixFileMode(folder) == (UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute)
+                && File.GetUnixFileMode(path) == (UnixFileMode.UserRead | UnixFileMode.UserWrite), "provider logs use private 0700 directories and 0600 files");
+        }
+    }
+
+    private static async Task RawLogProviderHeadersCheck(AskSparkRawLog log, string folder, AskSparkSettings settings)
+    {
+        var before = Directory.GetFiles(folder, "*.txt").ToHashSet(StringComparer.Ordinal);
+        using var handler = new FixtureHandler();
+        using var client = new HttpClient(handler);
+        using var provider = new AskSparkGemini(client, settings, rawLog: log);
+        await provider.TestAsync(CancellationToken.None);
+        var path = Directory.GetFiles(folder, "*.txt").Single(file => !before.Contains(file));
+        var text = File.ReadAllText(path);
+        Check(handler.Key == FixtureApiKey && ReadRawLog(path).Count == 2,
+            "fake provider receives the authentication header while its actual request and reply bodies share a log file");
+        Check(!text.Contains(FixtureApiKey, StringComparison.Ordinal)
+            && !text.Contains("x-goog-api-key", StringComparison.OrdinalIgnoreCase)
+            && !text.Contains("Authorization", StringComparison.OrdinalIgnoreCase), "provider traffic logs omit API keys and authentication headers");
+    }
+
+    private static async Task<(string Path, byte[] Digest)> RawLogLargeExchangeChecks(AskSparkRawLog log, string folder)
+    {
+        var request = " {\"image\":\"" + new string('A', 12 * 1024 * 1024 + 123) + "\",\"unicode\":\"Ω🙂\",\"tail\":\"retained\"}\n";
+        var reply = "\n{\"text\":\"" + new string('r', 1_000_001) + "Ω\"}\n";
+        var before = Directory.GetFiles(folder, "*.txt").Length;
+        await log.WriteAsync("generateContent", "large-image-exchange", "request", request);
+        await log.WriteAsync("generateContent", "large-image-exchange", "response", reply, 200);
+        var path = Directory.GetFiles(folder, "*-large-image-exchange.txt").Single();
+        var records = ReadRawLog(path);
+        Check(Directory.GetFiles(folder, "*.txt").Length == before + 1 && records.Count == 2
+            && records[0].Body == request && records[1].Body == reply,
+            "a request larger than 12 MiB and its complete reply remain together without truncation");
+        Check(new FileInfo(path).Length > 13_000_000 && records.All(record => record.Header["omittedBytes"]!.GetValue<int>() == 0
+            && record.Header["bodyBytes"]!.GetValue<int>() == Encoding.UTF8.GetByteCount(record.Body)
+            && record.Header["retainedBytes"]!.GetValue<int>() == Encoding.UTF8.GetByteCount(record.Body)),
+            "per-exchange logs retain every UTF-8 payload byte without the former 10 MB cap");
+        return (path, System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)));
+    }
+
+    private static async Task RawLogConcurrentChecks(AskSparkRawLog log, string folder)
+    {
+        var before = Directory.GetFiles(folder, "*.txt").Length;
+        var started = DateTimeOffset.UtcNow;
+        await Task.WhenAll(Enumerable.Range(0, 20).Select(index => Task.Run(async () =>
+        {
+            var exchangeId = "parallel-" + index;
+            await log.WriteAsync("cache.create", exchangeId, "request", "request-" + index);
+            await Task.Yield();
+            await log.WriteAsync("cache.create", exchangeId, "response", "reply-" + index, 200);
+        })));
+        var completed = DateTimeOffset.UtcNow;
+        var files = Directory.GetFiles(folder, "*-parallel-*.txt");
+        Check(files.Length == 20 && Directory.GetFiles(folder, "*.txt").Length == before + 20,
+            "concurrent exchanges each create a unique timestamped file");
+        for (var index = 0; index < 20; index++)
+        {
+            var exchangeId = "parallel-" + index;
+            var path = Directory.GetFiles(folder, "*-" + exchangeId + ".txt").Single();
+            var records = ReadRawLog(path);
+            Check(records.Count == 2 && records[0].Body == "request-" + index && records[1].Body == "reply-" + index
+                && records.All(record => record.Header["exchangeId"]!.GetValue<string>() == exchangeId),
+                "interleaved requests and replies retain their own exchange correlation");
+            RawLogFilenameCheck(path, exchangeId, started, completed);
+        }
+        await log.WriteAsync("cache.delete", "empty-exchange", "request", null);
+        await log.WriteAsync("cache.delete", "empty-exchange", "response", null, 204);
+        var empty = ReadRawLog(Directory.GetFiles(folder, "*-empty-exchange.txt").Single());
+        Check(empty.Count == 2 && empty.All(record => record.Body.Length == 0)
+            && empty[1].Header["statusCode"]!.GetValue<int>() == 204, "empty request and reply bodies still form a complete exchange file");
+    }
+
+    private static void RawLogFilenameCheck(string path, string exchangeId, DateTimeOffset started, DateTimeOffset completed)
+    {
+        var name = Path.GetFileName(path);
+        Check(name.Length > 25 && name[24] == '-' && name.EndsWith("-" + exchangeId + ".txt", StringComparison.Ordinal)
+            && DateTimeOffset.TryParseExact(name[..24], "yyyyMMdd'T'HHmmss.fffffff'Z'", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var timestamp)
+            && timestamp.Offset == TimeSpan.Zero && timestamp >= started && timestamp <= completed,
+            "exchange filename carries a precise UTC request timestamp and its unique exchange ID");
+    }
+
+    private static List<(JsonObject Header, string Body)> ReadRawLog(string path)
+    {
+        var data = File.ReadAllBytes(path);
+        var records = new List<(JsonObject Header, string Body)>();
+        var utf8 = new UTF8Encoding(false, true);
+        var offset = 0;
+        while (offset < data.Length)
+        {
+            var end = Array.IndexOf(data, (byte)'\n', offset);
+            var line = utf8.GetString(data, offset, end - offset);
+            if (!line.StartsWith("ASK_SPARK_RAW_V1 ", StringComparison.Ordinal)) throw new InvalidDataException("Invalid raw log fixture header.");
+            var header = JsonNode.Parse(line["ASK_SPARK_RAW_V1 ".Length..])!.AsObject();
+            var count = header["retainedBytes"]!.GetValue<int>();
+            records.Add((header, utf8.GetString(data, end + 1, count)));
+            offset = end + 1 + count + 1;
+            if (data[offset - 1] != (byte)'\n') throw new InvalidDataException("Invalid raw log fixture frame.");
+        }
+        return records;
     }
 
     private static void PermissionChecks(SecurityStore security, SecurityUser admin, string projectId)

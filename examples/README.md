@@ -63,7 +63,7 @@ build; preview.10 installers do not support it.
 | [Component lifecycle and property events](component-events.json) | Compare user/property events, popup cleanup and deliberate bounded failures. | None |
 | [Named-query property bindings](query-properties.json) | Drive values, layout and visibility from synthetic query results. | Read-only refresh button |
 
-Use the companion **0.2.0-preview.12** release or a newer compatible gateway for the complete 37-project collection. The catalog retains older minimum versions for individual exercises; runtime property bindings and visitor check-in require preview.11. Each generated bundle records its actual source revision and release label. A workshop may be distributed as an individual `.sparkproj` with its guide or as part of the collection accompanying a release. Exact frozen-bundle verification is recorded in the [release ledger](../docs/architecture/PARITY.md).
+Use the companion **0.2.0-preview.13** release or a newer compatible gateway for the complete 37-project collection. The catalog retains older minimum versions for individual exercises; runtime property bindings and visitor check-in require preview.11. Each generated bundle records its actual source revision and release label. A workshop may be distributed as an individual `.sparkproj` with its guide or as part of the collection accompanying a release. Exact frozen-bundle verification is recorded in the [release ledger](../docs/architecture/PARITY.md).
 
 ## Examples that require gateway setup
 
@@ -90,7 +90,7 @@ The dedicated `tools/load-backup-example.mjs` creates a new Scheduled backup wor
 
 The dedicated `tools/load-industrial-devices-example.mjs` creates only a new unpublished Industrial devices workshop project. It creates no connections or tags. Configure isolated lab profiles separately and explicitly publish after checking each mapped address. Profiles you leave unconfigured remain unavailable.
 
-The dedicated `tools/load-data-sources-example.mjs` creates only a new unpublished Read-only data sources workshop project. Start `tools/run-data-source-simulators.mjs`, then configure MTConnect, i3X and MQTT through Connections. Review point/tag imports and automatic ownership separately. This workshop requires a build containing the source-session implementation; earlier preview.12 assets lack these additions.
+The dedicated `tools/load-data-sources-example.mjs` creates only a new unpublished Read-only data sources workshop project. Start `tools/run-data-source-simulators.mjs`, then configure MTConnect, i3X and MQTT through Connections. Review point/tag imports and automatic ownership separately. This workshop requires Windows preview.13 or a compatible build containing the source-session implementation; earlier preview.12 assets lack these additions.
 
 The generic `tools/load-example.mjs <id>` loader is a development tool for an authenticated local gateway on port 5090 or 5091. It backs up and adds missing resources to the **default project**, preserves existing resource IDs and tag values, and leaves the draft unpublished unless `--publish` is supplied. It cannot retarget an arbitrary project. Prefer portable imports for the collection above. The [security verification guide](../docs/architecture/SECURITY.md#verification-commands) describes authentication for an isolated test gateway; there is no unauthenticated loader bypass.
 

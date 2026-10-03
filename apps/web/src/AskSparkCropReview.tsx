@@ -19,7 +19,7 @@ export function cropPreview(value: unknown, resolveImage: AskSparkCropReviewProp
 export function AskSparkCropReview({ crops, resolveImage }: AskSparkCropReviewProps) {
   if (!Array.isArray(crops) || crops.length < 1 || crops.length > askSparkCropLimits.count) return <p className="ask-spark-crop-error">A crop batch needs between 1 and 16 images.</p>;
   return <section className="ask-spark-crop-review" aria-label="Image crops to create">
-    <p>These crops will be added to the project asset library after approval. Coordinates use the original image pixels.</p>
+    <p>Approve to add these crops to the project asset library. Large crops are compressed or resized to fit 512 KiB, preserving transparency and the selected area. Dimensions below show the source crop; the result includes saved dimensions.</p>
     <div className="ask-spark-crop-grid">{crops.map((value, index) => <CropTile key={index} value={value} index={index} resolveImage={resolveImage} />)}</div>
   </section>;
 }
@@ -33,6 +33,6 @@ function CropTile({ value, index, resolveImage }: { value: unknown; index: numbe
     <div className="ask-spark-crop-frame"><div className="ask-spark-crop-clip" style={{ width: crop.box.width * scale, height: crop.box.height * scale }}>
       <img src={source.preview} alt={`Proposed crop: ${crop.name}`} draggable={false} style={{ width: source.width * scale, height: source.height * scale, left: -crop.box.x * scale, top: -crop.box.y * scale }} />
     </div></div>
-    <figcaption><strong>{crop.name}</strong><span>{crop.box.width} × {crop.box.height} px</span><span>x {crop.box.x}, y {crop.box.y} · {source.name}</span></figcaption>
+    <figcaption><strong>{crop.name}</strong><span>{crop.box.width} × {crop.box.height} px source area</span><span>x {crop.box.x}, y {crop.box.y} · {source.name}</span></figcaption>
   </figure>;
 }

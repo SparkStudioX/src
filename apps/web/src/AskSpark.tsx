@@ -102,7 +102,7 @@ export function AskSparkPanel({ className = "", onOpenSettings }: { className?: 
       {!ask.messages.length && <Suggestions />}{ask.messages.map(message => <Message key={message.id} message={message} />)}
       {ask.actions.length > 0 && <details className="ask-spark-actions" open><summary>Tool activity · {ask.actions.length}</summary><ol>{ask.actions.map(action => <ToolAction key={action.id} action={action} />)}</ol></details>}
       <ApprovalCard />{ask.busy && !ask.approval && <p className="ask-spark-working" role="status"><span />Working… <small>Stopping does not undo completed actions.</small></p>}
-      {ask.error && <div className="ask-spark-error" role="alert">{ask.error}<button type="button" onClick={() => void ask.refreshStatus()}>Check connection</button></div>}<div ref={end} />
+      {ask.error && <div className="ask-spark-error" role="alert">{ask.error}{ask.errorCanRefreshStatus && <button type="button" onClick={() => void ask.refreshStatus()}>Refresh AI status</button>}<button type="button" onClick={ask.clearError}>Dismiss</button></div>}<div ref={end} />
     </div><Composer /><footer className="ask-spark-footer"><span>{ask.status?.model || "Gemini"}</span><span>{ask.pinned ? "Context pinned" : "Follows your workspace"}</span></footer>
   </aside>;
 }

@@ -10,7 +10,7 @@ namespace SparkStudio.Gateway;
 public sealed class AskSparkSettings
 {
     public const string DefaultModel = "gemini-3.8-flash";
-    private sealed record Document(string Revision, bool Enabled, string Model, int ParallelLimit, string? ProtectedApiKey, long MonthlyTokenLimit = 0, int ModelStepLimit = 100);
+    private sealed record Document(string Revision, bool Enabled, string Model, int ParallelLimit, string? ProtectedApiKey, long MonthlyTokenLimit = 0, int ModelStepLimit = 100, bool LoggingEnabled = true);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly Regex ModelName = new(@"\Agemini-[a-zA-Z0-9][a-zA-Z0-9._-]{0,90}\z", RegexOptions.CultureInvariant);
     private readonly string path;
@@ -32,7 +32,7 @@ public sealed class AskSparkSettings
     public AskSparkSettingsSnapshot Snapshot()
     {
         lock (GatewayConfigurationLock.SyncRoot)
-            return new(document.Revision, document.Enabled, document.Model, document.ProtectedApiKey is not null, document.ParallelLimit, document.MonthlyTokenLimit, document.ModelStepLimit);
+            return new(document.Revision, document.Enabled, document.Model, document.ProtectedApiKey is not null, document.ParallelLimit, document.MonthlyTokenLimit, document.ModelStepLimit, document.LoggingEnabled);
     }
 
     public AskSparkSettingsSnapshot Save(AskSparkSettingsRequest request)
@@ -45,7 +45,7 @@ public sealed class AskSparkSettings
             var secret = request.ClearApiKey ? null : document.ProtectedApiKey;
             if (!string.IsNullOrEmpty(key)) secret = protector.Protect(key);
             if (request.Enabled && secret is null) throw new ArgumentException("Configure an API key before enabling Ask Spark.");
-            var next = new Document(Guid.NewGuid().ToString("N"), request.Enabled, request.Model, request.ParallelLimit, secret, request.MonthlyTokenLimit, request.ModelStepLimit);
+            var next = new Document(Guid.NewGuid().ToString("N"), request.Enabled, request.Model, request.ParallelLimit, secret, request.MonthlyTokenLimit, request.ModelStepLimit, request.LoggingEnabled);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             DurableJsonFile.Write(path, JsonSerializer.SerializeToNode(next, Json)!);
             document = next;

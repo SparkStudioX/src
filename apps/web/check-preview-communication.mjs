@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import React from 'react';
 import ts from 'typescript';
 const source = stripTypeScriptTypes(await readFile(new URL('./src/previewRequest.ts', import.meta.url), 'utf8'));
-const { setPreviewRequestContext, preparePreviewRequest } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const { setPreviewRequestContext, preparePreviewRequest, previewRequestState } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 const session = mode => ({ token: mode === 'read-only' ? 'a'.repeat(64) : 'b'.repeat(64), mode, expiresAt: new Date(Date.now() + 60000).toISOString() });
 let passed = 0;
 function check(name, run) { setPreviewRequestContext(null, false); run(); passed++; console.log(`PASS ${name}`); }
@@ -49,6 +49,27 @@ check('completed requests detach caller cancellation listeners', () => {
 });
 check('session control calls cannot inherit another preview capability', () => {
   setPreviewRequestContext(session('live-actions')); const request = preparePreviewRequest('/preview/sessions'); assert.deepEqual(request.headers, {}); request.finish();
+});
+check('assistant conversation controls remain authenticated engineering requests across preview transitions', () => {
+  const routes = ['/ask-spark/status', '/ask-spark/tools?projectId=one', '/ask-spark/turn', '/ask-spark/confirm', '/ask-spark/transcribe', '/ask-spark/conversations', `/ask-spark/conversations/${'a'.repeat(32)}`];
+  for (const value of [session('read-only'), session('live-actions'), { ...session('read-only'), expiresAt: new Date(0).toISOString() }, null]) {
+    setPreviewRequestContext(value);
+    for (const path of routes) {
+      const controller = new AbortController(), request = preparePreviewRequest(path, controller.signal);
+      assert.equal(request.path, path); assert.deepEqual(request.headers, {}); assert.equal(request.signal, controller.signal);
+      request.assertCurrent(); request.finish();
+    }
+  }
+  const request = preparePreviewRequest('/ask-spark/turn'); setPreviewRequestContext(null, false); request.assertCurrent();
+});
+check('assistant exemptions cannot remove preview restrictions from configuration or unknown routes', () => {
+  setPreviewRequestContext(session('read-only'));
+  for (const path of ['/gateway/ai', '/gateway/ai/test', '/project', '/ask-spark/configuration', '/ask-spark/turn/extra', '/ask-spark/conversations/not-a-conversation']) {
+    const request = preparePreviewRequest(path); assert.equal(request.headers['X-SPARK-PREVIEW'], 'a'.repeat(64)); request.finish();
+  }
+  assert.deepEqual(previewRequestState(), { previewActive: true, previewMode: 'read-only' });
+  setPreviewRequestContext(null); assert.deepEqual(previewRequestState(), { previewActive: true, previewMode: 'unavailable' });
+  setPreviewRequestContext(null, false); assert.equal(previewRequestState().previewActive, false);
 });
 setPreviewRequestContext(null, false);
 

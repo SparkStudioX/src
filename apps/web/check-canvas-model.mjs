@@ -13,7 +13,7 @@ const validationUrl = asModule(compile(source('inputValidation')));
 const cameraUrl = asModule(compile(source('computerCameraModel')));
 const inputsUrl = asModule(compile(source('inputs')).replaceAll('"./api"', JSON.stringify(apiUrl)).replaceAll('"./listTreeModel"', JSON.stringify(listTreeUrl)).replaceAll('"./inputValidation"', JSON.stringify(validationUrl)).replaceAll('"./computerCameraModel"', JSON.stringify(cameraUrl)));
 const compiled = compile(source('canvasEditing')).replaceAll('"./inputs"', JSON.stringify(inputsUrl));
-const { selectionBounds, snapToGrid, moveSelected, resizeComponent, alignSelected, distributeSelected, duplicateSelected, marqueeBounds, marqueeSelection, checkpoint, restoreHistory, projectContent, expandGroupSelection, toggleGroupSelection, groupSelected, ungroupSelected, deleteSelected, resizeGroup, arrangementCount, selectComponentType, parseGridSize, matchSelectedSize } =
+const { selectionBounds, snapToGrid, moveSelected, resizeComponent, alignSelected, distributeSelected, duplicateSelected, marqueeBounds, marqueeSelection, checkpoint, restoreHistory, projectContent, expandGroupSelection, toggleGroupSelection, selectLayerRange, groupSelected, ungroupSelected, deleteSelected, resizeGroup, arrangementCount, selectComponentType, parseGridSize, matchSelectedSize } =
   await import(asModule(compiled));
 
 let checks = 0;
@@ -528,6 +528,39 @@ check('a size command is one reversible history transaction and preserves server
   assert.equal(undone.history.past.length, 0);
   const redone = restoreHistory(undone.history, undone.project, 'redo');
   assert.equal(projectContent(redone.project), projectContent(edited));
+});
+
+check('layer clicks replace selection, while Ctrl and Command toggle without changing layer order', () => {
+  const items = ['a', 'b', 'c', 'd'].map((id, index) => component(id, index * 50, 0));
+  assert.deepEqual(selectLayerRange(items, ['a', 'd'], 'b', 'a'), { selectedIds: ['b'], anchorId: 'b' });
+  assert.deepEqual(selectLayerRange(items, ['d'], 'b', 'd', { ctrlKey: true }), { selectedIds: ['b', 'd'], anchorId: 'b' });
+  assert.deepEqual(selectLayerRange(items, ['b', 'd'], 'b', 'd', { metaKey: true }), { selectedIds: ['d'], anchorId: 'b' });
+});
+
+check('Shift layer ranges include both endpoints and retain the anchor when expanding or shrinking', () => {
+  const items = ['a', 'b', 'c', 'd', 'e'].map((id, index) => component(id, index * 50, 0));
+  const forward = selectLayerRange(items, ['b'], 'e', 'b', { shiftKey: true });
+  assert.deepEqual(forward, { selectedIds: ['b', 'c', 'd', 'e'], anchorId: 'b' });
+  assert.deepEqual(selectLayerRange(items, forward.selectedIds, 'c', forward.anchorId, { shiftKey: true }), { selectedIds: ['b', 'c'], anchorId: 'b' });
+  assert.deepEqual(selectLayerRange(items, ['e'], 'b', 'e', { shiftKey: true }), { selectedIds: ['b', 'c', 'd', 'e'], anchorId: 'e' });
+  assert.deepEqual(selectLayerRange(items, ['a', 'd'], 'e', 'd', { shiftKey: true, ctrlKey: true }).selectedIds, ['a', 'd', 'e']);
+});
+
+check('layer ranges recover from missing anchors and stale selections without selecting another document', () => {
+  const items = ['a', 'b', 'c'].map((id, index) => component(id, index * 50, 0));
+  assert.deepEqual(selectLayerRange(items, ['missing', 'b'], 'c', 'missing', { shiftKey: true }), { selectedIds: ['b', 'c'], anchorId: 'b' });
+  assert.deepEqual(selectLayerRange(items, [], 'b', null, { shiftKey: true }), { selectedIds: ['b'], anchorId: 'b' });
+  assert.deepEqual(selectLayerRange(items, ['missing', 'a'], 'gone', 'gone'), { selectedIds: ['a'], anchorId: null });
+  assert.deepEqual(selectLayerRange([], ['a'], 'a', 'a', { shiftKey: true }), { selectedIds: [], anchorId: null });
+});
+
+check('layer ranges and toggles keep groups atomic, and bulk deletion removes exactly the selected groups', () => {
+  const items = [component('a', 0, 0), { ...component('b', 50, 0), groupId: 'pair' }, component('c', 100, 0), { ...component('d', 150, 0), groupId: 'pair' }, component('e', 200, 0)];
+  const range = selectLayerRange(items, ['a'], 'b', 'a', { shiftKey: true });
+  assert.deepEqual(range.selectedIds, ['a', 'b', 'd']);
+  assert.deepEqual(selectLayerRange(items, range.selectedIds, 'd', 'a', { ctrlKey: true }).selectedIds, ['a']);
+  assert.deepEqual(deleteSelected(items, range.selectedIds).map(item => item.id), ['c', 'e']);
+  assert.deepEqual(items.map(item => item.id), ['a', 'b', 'c', 'd', 'e']);
 });
 
 console.log(`${checks}/${checks} canvas model checks passed.`);

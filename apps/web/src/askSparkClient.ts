@@ -1,4 +1,5 @@
-import { api } from "./api";
+import { api, ApiError } from "./api";
+import { previewRequestState } from "./previewRequest";
 
 export type AskSparkContext = Record<string, unknown> & { surface?: string; projectId?: string; projectName?: string; documentId?: string; documentName?: string; documentKind?: string; selectedComponentIds?: string[]; revision?: number; section?: string; connectionId?: string; connectionName?: string; connectionSection?: string; connectionHasUnsavedChanges?: boolean };
 export interface AskSparkToolCall { id: string; name: string; arguments: Record<string, unknown>; kind: string; target?: string; confirmation?: boolean | string; parallelSafe?: boolean; approvalToken?: string; authorized?: boolean }
@@ -8,15 +9,17 @@ export interface AskSparkTurn { conversationId: string; reply?: string; toolCall
 export interface AskSparkStatus { enabled: boolean; configured?: boolean; hasApiKey?: boolean; model: string; parallelLimit?: number; available?: boolean }
 export interface AskSparkConversation { id: string; title?: string; updatedAt?: string }
 export interface AskSparkStoredMessage { role: string; content?: string; text?: string; context?: AskSparkContext; images?: { name: string }[] }
-export interface AskSparkSettings { revision: string; enabled: boolean; model: string; hasApiKey: boolean; parallelLimit: number; monthlyTokenLimit: number; modelStepLimit: number }
-export interface AskSparkUsage { month: string; limit: number; usedTokens: number; cachedTokens: number; totalTokens: number; requests: number; uncertainRequests: number; resetsAt: string }
+export interface AskSparkSettings { revision: string; enabled: boolean; model: string; hasApiKey: boolean; parallelLimit: number; monthlyTokenLimit: number; modelStepLimit: number; loggingEnabled: boolean }
+export interface AskSparkUsage { month: string; limit: number; usedTokens: number; cachedTokens: number; totalTokens: number; requests: number; uncertainRequests: number; resetsAt: string; inputTokens: number | null; outputTokens: number | null; thoughtTokens: number | null; unclassifiedTokens: number }
 export const defaultAskSparkModel = "gemini-3.8-flash";
 export const askSparkRequest = <T,>(path: string, method = "GET", body?: unknown, signal?: AbortSignal) => api<T>(`/ask-spark${path}`, method, body, signal);
 export const askSparkError = (error: unknown) => error instanceof Error ? error.message : String(error);
+/** Tool, context, permission and size errors are not provider connection failures. */
+export const askSparkErrorCanRefreshStatus = (error: unknown) => error instanceof ApiError && [502, 503, 504].includes(error.status);
 
 /** Only bounded JSON context is transmitted. Secrets and execution callbacks stay outside it. */
 export function captureAskSparkContext(context: AskSparkContext): AskSparkContext {
-  const allowed = ["surface", "editorAvailable", "snapshotToken", "projectId", "projectName", "documentId", "documentName", "documentKind", "selectedComponentIds", "selectedComponentNames", "revision", "scriptsRevision", "section", "connectionId", "connectionName", "connectionSection", "connectionHasUnsavedChanges", "tagPaths", "selection", "screenId", "screenName", "templateId", "unsavedChanges", "availableImageIds"];
+  const allowed = ["surface", "editorAvailable", "snapshotToken", "projectId", "projectName", "documentId", "documentName", "documentKind", "selectedComponentIds", "selectedComponentNames", "revision", "scriptsRevision", "section", "connectionId", "connectionName", "connectionSection", "connectionHasUnsavedChanges", "tagPaths", "selection", "screenId", "screenName", "templateId", "unsavedChanges", "availableImageIds", "previewActive", "previewMode"];
   const captured: AskSparkContext = {};
   for (const key of allowed) {
     const value = context[key];
@@ -25,6 +28,16 @@ export function captureAskSparkContext(context: AskSparkContext): AskSparkContex
     else if (Array.isArray(value)) captured[key] = value.filter(item => typeof item === "string").slice(0, 100).map(item => item.slice(0, 512));
   }
   return captured;
+}
+
+/** Preview is live UI state, even when the user pins older document context. */
+export function captureAskSparkExecutionContext(context: AskSparkContext): AskSparkContext {
+  return captureAskSparkContext({ ...context, ...previewRequestState() });
+}
+
+export function requireAskSparkPreviewPermission(call: Pick<AskSparkToolCall, "name" | "kind">): void {
+  if (previewRequestState().previewActive && (call.kind !== "read" || call.name === "spark_open_project"))
+    throw new Error("Exit Designer Preview before editing, saving, publishing, running actions, or opening another project. Ask Spark can still inspect the current screen and discuss it.");
 }
 
 /** Connection context contains display metadata only, never editable credentials or configuration. */

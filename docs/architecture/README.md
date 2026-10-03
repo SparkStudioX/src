@@ -1,10 +1,10 @@
 # Architecture and feature documentation
 
-These guides describe the current SparkStudio source, including development work that may be newer than the downloadable installer. The source/documentation review date is **September 30, 2026**. A documented implementation is not a claim that every browser, deployment, integration or failure condition has passed acceptance.
+These guides describe the current SparkStudio source, including development work that may be newer than the downloadable installer. The preview.13 release-guide and navigation review date is **October 3, 2026**; the broader source/documentation audit remains dated September 30. A documented implementation is not a claim that every browser, deployment, integration or failure condition has passed acceptance.
 
-Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md). For installation, use the guide attached to your exact release; [Windows installation](WINDOWS_INSTALLER.md) describes preview.11. [Verification and roadmap](PARITY.md) records package verification and release status, separating dated observations from current capability summaries and remaining gates. Earlier ledger entries retain the facts and limitations of their original checks; they are not instructions to start an old development package or assertions about the currently running gateway.
+Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md). For installation, use the guide attached to your exact release; [Windows installation](WINDOWS_INSTALLER.md) describes preview.13. [Verification and roadmap](PARITY.md) records package verification and release status, separating dated observations from current capability summaries and remaining gates. Earlier ledger entries retain the facts and limitations of their original checks; they are not instructions to start an old development package or assertions about the currently running gateway.
 
-The MQTT, MTConnect and i3X setup walkthroughs were reviewed against the development source on **October 2, 2026**. They explain creating tags from a connection's reviewed import or later in Tags. These three source clients are newer than the published Windows preview.12 and Docker preview.11-docker.1; each guide identifies the required connection menu choice.
+Preview.13 adds [Ask Spark](ASK_SPARK.md) and the [MQTT](MQTT_SETUP.md), [MTConnect](MTCONNECT_SETUP.md) and [i3X](I3X_SETUP.md) source clients. The source walkthroughs explain creating tags from a connection's reviewed import or later in Tags. Windows preview.12 and Docker preview.11-docker.1 do not include these features; this Windows release does not update the published Docker image. Consult the ledger for the candidate's publication and acceptance status.
 
 ## Overview and installation
 
@@ -62,6 +62,7 @@ The MQTT, MTConnect and i3X setup walkthroughs were reviewed against the develop
 
 ## Project tools and diagnostics
 
+- [Ask Spark: setup, voice, tools and workshop](ASK_SPARK.md)
 - [Project search](PROJECT_SEARCH.md)
 - [Resource changes](RESOURCE_CHANGES.md)
 - [Bulk replacement](BULK_REPLACEMENT.md)
@@ -90,7 +91,7 @@ The MQTT, MTConnect and i3X setup walkthroughs were reviewed against the develop
 
 ## Workshops and verification
 
-Use [the example catalog and build instructions](../../examples/README.md) for independently authored workshops. Portable examples import as unpublished projects; setup-required examples also need the documented gateway resources. Match a workshop to its companion build. The preview.11 collection has 37 portable projects, including runtime property bindings and [visitor check-in with camera capture](VISITOR_CHECKIN.md). Visitor check-in additionally needs a webcam and Labelary access. Preview.10's earlier bundle has 35 portable projects and lacks these two additions. Python component events and lifecycle/session messaging require preview.9 or newer; preview.8 and earlier do not include those features.
+Use [the example catalog and build instructions](../../examples/README.md) for independently authored workshops. Portable examples import as unpublished projects; setup-required examples also need the documented gateway resources. Match a workshop to its companion build. The preview.13 collection retains 37 portable projects, including runtime property bindings and [visitor check-in with camera capture](VISITOR_CHECKIN.md). Ask Spark and read-only data sources are setup-required exercises with their own prerequisites. Visitor check-in additionally needs a webcam and Labelary access. Preview.10's earlier bundle has 35 portable projects and lacks these two additions. Python component events and lifecycle/session messaging require preview.9 or newer; preview.8 and earlier do not include those features.
 
 `artifacts/sparkproj/` is the only maintained location for loose `.sparkproj` packages, with guides and provenance in `index.json`. It is ignored by Git. `node tools/build-workshops.mjs --version <version>` updates this directory and creates an immutable ZIP, manifest and checksums under `artifacts/workshops/<version>/`, without duplicate loose packages. Example loaders import authored JSON directly. Historical artifact paths in dated verification records may have been archived or removed; use the current package directory or the frozen release ZIP.
 

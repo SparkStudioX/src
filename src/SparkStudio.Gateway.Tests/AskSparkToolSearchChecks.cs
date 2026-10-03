@@ -16,6 +16,11 @@ internal static class AskSparkToolSearchChecks
         await DiscoveryChecks(fixture);
         await MixedChecks(fixture);
         await HiddenInvocationChecks(fixture);
+        await UnloadedArgumentsChecks(fixture);
+        await AssetRecoveryChecks(fixture);
+        await RecoveryBatchChecks(fixture);
+        await InvalidBatchChecks(fixture);
+        await RecoveryLimitChecks(fixture);
         await RoundPolicyChecks(fixture);
         await ServerRoundLimitChecks(fixture);
         await RefilterChecks(fixture);
@@ -34,6 +39,13 @@ internal static class AskSparkToolSearchChecks
         conversation.ToolContext = new JsonObject { ["section"] = "connections" };
         loaded = AskSparkToolSearch.LoadForRound(conversation, shipped);
         Check(loaded.Any(tool => tool.Name == "connections_delete") && loaded.Any(tool => tool.Name == "mqtt_mapping_save"), "current connections pane loads connection and source categories");
+        foreach (var section in new[] { "designer", "screens", "templates" })
+        {
+            var designer = new AskSparkConversation { ProjectId = fixture.Projects.DefaultId,
+                ToolContext = new JsonObject { ["section"] = section, ["editorAvailable"] = true } };
+            var designerTools = AskSparkToolSearch.LoadForRound(designer, shipped);
+            Check(!designerTools.Any(tool => tool.Category == "assets"), section + " keeps asset tools available through discovery without preloading the category");
+        }
         var directory = AskSparkToolSearch.Directory(shipped);
         Check(shipped.All(tool => directory.Contains(tool.Name + " [", StringComparison.Ordinal)), "directory names every allowed tool");
         Check(!directory.Contains("\"properties\"", StringComparison.Ordinal), "directory omits parameter schemas");
@@ -47,6 +59,8 @@ internal static class AskSparkToolSearchChecks
         var allowed = fixture.Catalog.Allowed(fixture.Security, fixture.Actor, null, false);
         Check(!AskSparkToolSearch.Directory(allowed).Contains("final important qualifier", StringComparison.Ordinal), "directory uses concise first-sentence summaries instead of full descriptions");
         var found = AskSparkToolSearch.Find(new JsonObject { ["query"] = "hidden_read" }, conversation, allowed);
+        Check(found["tools"]!.AsArray().Count == 1 && found["total"]!.GetValue<int>() == 1,
+            "exact-name discovery loads only the requested definition instead of unrelated fuzzy matches");
         var definition = found["tools"]![0]!.AsObject();
         Check(definition["description"]!.GetValue<string>() == Fixture.Description, "discovery preserves the complete long description");
         Check(JsonNode.DeepEquals(definition["parameters"], Tool("hidden_read", "remote").Parameters), "discovery preserves the entire parameter schema");
@@ -102,13 +116,115 @@ internal static class AskSparkToolSearchChecks
 
     private static async Task HiddenInvocationChecks(Fixture fixture)
     {
-        var direct = new FakeModel(); direct.Replies.Enqueue(Calls(Call("hidden_read")));
-        await RejectAsync(() => fixture.Service(direct).TurnAsync(fixture.Actor, new(Message: "Bypass discovery"), CancellationToken.None), "undeclared tool invocation");
+        var direct = new FakeModel();
+        direct.Replies.Enqueue(Calls(Call("hidden_read", new JsonObject(), "native-unloaded")));
+        direct.Replies.Enqueue(Calls(Call("find_tools", new JsonObject { ["query"] = "hidden_read" }, "native-recovery-find")));
+        direct.Replies.Enqueue(Calls(Call("hidden_read", id: "native-retry")));
+        var service = fixture.Service(direct);
+        var recovered = await service.TurnAsync(fixture.Actor, new(Message: "Recover an undeclared read"), CancellationToken.None);
+        Check(recovered.ToolCalls.Single().Name == "hidden_read" && direct.Seen.Count == 3, "undeclared authorized call automatically continues through discovery to a fresh invocation");
+        Check(!direct.Seen[1].Tools.Any(tool => tool.Name == "hidden_read") && direct.Seen[2].Tools.Any(tool => tool.Name == "hidden_read"), "recovery never loads a definition before successful explicit discovery");
+        var response = Responses(direct.Seen[1]).Single();
+        Check(response["id"]!.GetValue<string>() == "native-unloaded" && RecoveryResult(response, "hidden_read"), "unloaded invocation with missing arguments returns a paired native-ID receipt with discovery instructions");
+        Check(direct.Seen[1].Contents.ToJsonString().Contains("synthetic-thought-signature", StringComparison.Ordinal), "recovery preserves the provider thought signature");
+        var pending = fixture.Conversations.Read(fixture.Actor.Id, recovered.ConversationId).Pending.Single();
+        Check(pending.NativeId == "native-retry" && pending.Call.Authorized, "only the newly declared retry is authorized for client execution");
+        direct.Replies.Enqueue(Text("Recovered read complete"));
+        var completed = await Continue(service, fixture.Actor, recovered);
+        Check(completed.Reply == "Recovered read complete", "recovered read completes through the normal client receipt path");
         var mixed = new FakeModel();
-        mixed.Replies.Enqueue(Calls(Call("find_tools", new JsonObject { ["query"] = "hidden_read" }), Call("hidden_read")));
-        await RejectAsync(() => fixture.Service(mixed).TurnAsync(fixture.Actor, new(Message: "Discover and invoke too early"), CancellationToken.None), "newly discovered tool cannot be invoked in the same response");
+        mixed.Replies.Enqueue(Calls(Call("find_tools", new JsonObject { ["query"] = "hidden_read" }, "native-too-early-find"), Call("hidden_read", id: "native-too-early-read")));
+        mixed.Replies.Enqueue(Text("I must discover before invoking"));
+        var deferred = await fixture.Service(mixed).TurnAsync(fixture.Actor, new(Message: "Discover and invoke too early"), CancellationToken.None);
+        Check(deferred.ToolCalls.Length == 0 && !mixed.Seen[1].Tools.Any(tool => tool.Name == "hidden_read"), "same-round discovery and invocation executes neither call and loads nothing");
+        var receipts = Responses(mixed.Seen[1]);
+        Check(receipts.Length == 2 && receipts[0]["id"]!.GetValue<string>() == "native-too-early-find"
+            && receipts[1]["id"]!.GetValue<string>() == "native-too-early-read" && receipts.All(item => RecoveryResult(item, "hidden_read")), "same-round discovery failure pairs every receipt in original native-ID order");
         var excessive = new FakeModel(); excessive.Replies.Enqueue(Calls(Enumerable.Range(0, 17).Select(index => Call("read_core", id: "call-" + index)).ToArray()));
         await RejectAsync(() => fixture.Service(excessive).TurnAsync(fixture.Actor, new(Message: "Too many calls"), CancellationToken.None), "per-response sixteen-call bound");
+    }
+
+    private static async Task RecoveryBatchChecks(Fixture fixture)
+    {
+        var model = new FakeModel();
+        model.Replies.Enqueue(Calls(Call("write_core", id: "native-deferred-write"), Call("hidden_read", id: "native-deferred-read")));
+        model.Replies.Enqueue(Text("Inspect before proposing the write again"));
+        var turn = await fixture.Service(model).TurnAsync(fixture.Actor, new(Message: "Batch a loaded write and an undeclared read"), CancellationToken.None);
+        Check(turn.ToolCalls.Length == 0 && turn.ContinuationToken is null, "loaded mutation is not offered for approval or execution when its batch contains an undeclared call");
+        var receipts = Responses(model.Seen[1]);
+        Check(receipts.Length == 2 && receipts[0]["name"]!.GetValue<string>() == "write_core"
+            && receipts[0]["id"]!.GetValue<string>() == "native-deferred-write" && receipts[1]["id"]!.GetValue<string>() == "native-deferred-read"
+            && receipts.All(item => RecoveryResult(item, "hidden_read")), "mixed recovery states that neither the loaded write nor undeclared read executed");
+        var saved = fixture.Conversations.Read(fixture.Actor.Id, turn.ConversationId);
+        Check(saved.Pending.Length == 0 && saved.ContinuationToken is null && saved.Actions.Count == 2
+            && saved.Actions.All(action => action.Status == "error"), "recovery leaves no approval token or pending calls and records both actions as errors");
+    }
+
+    private static async Task UnloadedArgumentsChecks(Fixture fixture)
+    {
+        var model = new FakeModel();
+        model.Replies.Enqueue(Calls(Call("hidden_read", new JsonObject { ["label"] = 7 }, "native-unseen-schema")));
+        model.Replies.Enqueue(Text("Load the declaration before supplying arguments"));
+        var turn = await fixture.Service(model).TurnAsync(fixture.Actor, new(Message: "Recover arguments for an unseen tool"), CancellationToken.None);
+        Check(turn.ToolCalls.Length == 0 && model.Seen.Count == 2 && RecoveryResult(Responses(model.Seen[1]).Single(), "hidden_read"),
+            "an undeclared allowed tool with wrong argument types can discover its schema without executing the invalid call");
+    }
+
+    private static async Task AssetRecoveryChecks(Fixture fixture)
+    {
+        var model = new FakeModel();
+        model.Replies.Enqueue(Calls(Call("assets_list", new JsonObject(), "native-assets-unloaded")));
+        model.Replies.Enqueue(Calls(Call("find_tools", new JsonObject { ["query"] = "assets_list", ["limit"] = 1 }, "native-assets-discovery")));
+        model.Replies.Enqueue(Calls(Call("assets_list", new JsonObject(), "native-assets-retry")));
+        var service = new AskSparkService(fixture.Settings, fixture.Conversations, new AskSparkCatalog(), model, fixture.Security, fixture.Projects);
+        var turn = await service.TurnAsync(fixture.Actor, new(Message: "Reuse project images in this screen", Context: new JsonObject
+            { ["projectId"] = fixture.Projects.DefaultId, ["editorAvailable"] = true, ["section"] = "designer" }), CancellationToken.None);
+        Check(turn.ToolCalls.Single().Name == "assets_list" && model.Seen.Count == 3
+            && !model.Seen[0].Tools.Any(tool => tool.Name == "assets_list") && model.Seen[2].Tools.Any(tool => tool.Name == "assets_list"),
+            "real Designer asset inspection recovers by discovery rather than enlarging the initial tool set");
+        Check(RecoveryResult(Responses(model.Seen[1]).Single(), "assets_list")
+            && !model.Seen[2].Tools.Any(tool => tool.Name == "assets_upload"), "exact asset lookup reports the missing tool and does not load unrelated asset mutations");
+    }
+
+    private static async Task InvalidBatchChecks(Fixture fixture)
+    {
+        foreach (var invalid in new[] { Call("unknown_tool"), Call("write_core", new JsonObject { ["label"] = 7 }) })
+        {
+            var model = new FakeModel();
+            model.Replies.Enqueue(Calls(Call("find_tools", new JsonObject { ["query"] = "hidden_read" }, "native-rejected-find"), Call("write_core", id: "native-rejected-write"), invalid));
+            await RejectAsync(() => fixture.Service(model).TurnAsync(fixture.Actor, new(Message: "Reject the whole invalid batch"), CancellationToken.None), "unknown tool or malformed loaded tool");
+            Check(model.Seen.Count == 1, "unknown tools and malformed loaded calls cannot trigger automatic recovery or further provider rounds");
+        }
+        var engineer = fixture.Security.CreateUser(new("recovery-engineer", "Synthetic-recovery-password-123", ProjectGrants: new() { [fixture.Projects.DefaultId] = new(Design: true) }));
+        var unauthorized = new FakeModel();
+        unauthorized.Replies.Enqueue(Calls(Call("find_tools", new JsonObject { ["query"] = "hidden_read" }, "native-forbidden-find"), Call("hidden_read", id: "native-forbidden-read")));
+        await RejectAsync(() => fixture.Service(unauthorized).TurnAsync(engineer, new(Message: "Recover a forbidden read",
+            Context: new JsonObject { ["projectId"] = fixture.Projects.DefaultId, ["editorAvailable"] = true }), CancellationToken.None), "unauthorized undeclared tool");
+        Check(unauthorized.Seen.Count == 1, "permission rejection never becomes a discovery recovery round");
+    }
+
+    private static async Task RecoveryLimitChecks(Fixture fixture)
+    {
+        try
+        {
+            foreach (var stepLimit in new[] { 100, 1 })
+            {
+                fixture.Settings.Save(new(fixture.Settings.Snapshot().Revision, true, AskSparkSettings.DefaultModel, ModelStepLimit: stepLimit));
+                var attempts = Math.Min(3, stepLimit);
+                var model = new FakeModel();
+                for (var index = 0; index < attempts; index++) model.Replies.Enqueue(Calls(Call("hidden_read", id: "native-repeated-" + index)));
+                model.Replies.Enqueue(Text("Unable to recover this request"));
+                var turn = await fixture.Service(model).TurnAsync(fixture.Actor, new(Message: "Repeated undeclared calls"), CancellationToken.None);
+                Check(turn.ToolCalls.Length == 0 && turn.Reply == "Unable to recover this request" && model.Seen.Count == attempts + 1,
+                    "repeated recovery stops after three attempts or the smaller configured step budget and receives a final answer round");
+                Check(model.Seen.Take(attempts).All(round => !round.FinalAnswer) && model.Seen[attempts].FinalAnswer
+                    && model.Seen.All(round => !round.Tools.Any(tool => tool.Name == "hidden_read")), "recovery cannot bypass either limit or silently load repeated tool names");
+                var saved = fixture.Conversations.Read(fixture.Actor.Id, turn.ConversationId);
+                Check(saved.Calls == attempts && saved.Pending.Length == 0 && saved.Actions.Count == attempts && saved.Actions.All(action => action.Status == "error"),
+                    "unexecuted recovery attempts count toward the bounded conversation and remain recorded as errors");
+            }
+        }
+        finally { fixture.Settings.Save(new(fixture.Settings.Snapshot().Revision, true, AskSparkSettings.DefaultModel)); }
     }
 
     private static async Task RoundPolicyChecks(Fixture fixture)
@@ -156,8 +272,9 @@ internal static class AskSparkToolSearchChecks
         Check(loaded.Any(tool => tool.Name == "designer_hidden") && !loaded.Any(tool => tool.Name == "hidden_read"), "persisted names are rechecked against current role");
         loaded = AskSparkToolSearch.LoadForRound(conversation, fixture.Catalog.Allowed(fixture.Security, engineer, fixture.Projects.DefaultId, false));
         Check(!loaded.Any(tool => tool.Name == "designer_hidden"), "inactive editor removes previously discovered designer tools");
-        var model = new FakeModel(); model.Replies.Enqueue(Calls(Call("designer_hidden")));
-        await RejectAsync(() => fixture.Service(model).TurnAsync(engineer, new(Message: "Undiscovered designer call", Context: new JsonObject { ["projectId"] = fixture.Projects.DefaultId, ["editorAvailable"] = true }), CancellationToken.None), "allowed but unloaded designer call");
+        var model = new FakeModel(); model.Replies.Enqueue(Calls(Call("designer_hidden"))); model.Replies.Enqueue(Text("Discover the Designer tool first"));
+        var recovered = await fixture.Service(model).TurnAsync(engineer, new(Message: "Undiscovered designer call", Context: new JsonObject { ["projectId"] = fixture.Projects.DefaultId, ["editorAvailable"] = true }), CancellationToken.None);
+        Check(recovered.ToolCalls.Length == 0 && model.Seen.Count == 2 && RecoveryResult(Responses(model.Seen[1]).Single(), "designer_hidden"), "allowed but unloaded designer call can recover without granting broader permissions");
         var scope = AskSparkToolSearch.Scope(fixture.Actor, conversation);
         conversation.ToolContext["section"] = "connections";
         Check(scope != AskSparkToolSearch.Scope(fixture.Actor, conversation), "page change separates model cache scope");
@@ -176,6 +293,16 @@ internal static class AskSparkToolSearchChecks
     private static Task<AskSparkTurnResponse> Continue(AskSparkService service, SecurityUser actor, AskSparkTurnResponse turn)
         => service.TurnAsync(actor, new(turn.ConversationId, ToolResults: turn.ToolCalls.Select(call => new AskSparkToolResult(call.Id, call.Name, new JsonObject { ["ok"] = true })).ToArray(),
             ContinuationToken: turn.ContinuationToken), CancellationToken.None);
+    private static JsonObject[] Responses(SeenRound round)
+        => round.Contents.Last()!["parts"]!.AsArray().Select(part => part!["functionResponse"]!.AsObject()).ToArray();
+    private static bool RecoveryResult(JsonObject response, string requiredTool)
+    {
+        if (response["response"]?["result"] is not JsonObject result) return false;
+        return result["code"]?.GetValue<string>() == "tool_not_loaded" && result["executed"]?.GetValue<bool>() == false
+            && result["error"]?.GetValue<string>() is { Length: > 0 }
+            && result["requiredTools"]!.AsArray().Any(name => name?.GetValue<string>() == requiredTool)
+            && result["nextStep"]?["tool"]?.GetValue<string>() == "find_tools";
+    }
     private static AskSparkTool Tool(string name, string category, string target = "gateway", string permission = "admin", bool write = false)
         => new(name, Fixture.Description, new JsonObject { ["type"] = "object", ["properties"] = new JsonObject { ["label"] = new JsonObject { ["type"] = "string", ["description"] = "Complete nested argument guidance." } },
             ["required"] = new JsonArray("label"), ["additionalProperties"] = false }, category, write ? "write" : "read", target, permission, write, !write);

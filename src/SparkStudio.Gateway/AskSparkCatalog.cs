@@ -23,13 +23,12 @@ public sealed class AskSparkCatalog
         }
     }
 
-    public AskSparkTool[] Allowed(SecurityStore security, SecurityUser actor, string? projectId, bool editorAvailable)
-        => tools.Values.Where(tool => IsAllowed(tool, security, actor, projectId, editorAvailable)).OrderBy(tool => tool.Name, StringComparer.Ordinal).ToArray();
+    public AskSparkTool[] Allowed(SecurityStore security, SecurityUser actor, string? projectId, bool editorAvailable, bool previewActive = false)
+        => tools.Values.Where(tool => IsAllowed(tool, security, actor, projectId, editorAvailable, previewActive)).OrderBy(tool => tool.Name, StringComparer.Ordinal).ToArray();
 
-    public AskSparkTool Require(string name, JsonObject arguments, SecurityStore security, SecurityUser actor, string? projectId, bool editorAvailable)
+    public AskSparkTool Require(string name, JsonObject arguments, SecurityStore security, SecurityUser actor, string? projectId, bool editorAvailable, bool previewActive = false)
     {
-        if (!tools.TryGetValue(name, out var tool) || !IsAllowed(tool, security, actor, projectId, editorAvailable))
-            throw new BadHttpRequestException("This Ask Spark tool is unavailable in your current context or permissions.", 403);
+        var tool = RequireAvailable(name, security, actor, projectId, editorAvailable, previewActive);
         AskSparkSchema.Validate(arguments, tool.Parameters);
         // Navigation may address another project; opening its live Designer also requires an explicit grant below.
         if (tool.Name is not ("navigate_workspace" or "spark_open_project") && arguments["projectId"] is JsonValue supplied && supplied.GetValue<string>() != projectId)
@@ -39,8 +38,16 @@ public sealed class AskSparkCatalog
         return tool;
     }
 
-    private static bool IsAllowed(AskSparkTool tool, SecurityStore security, SecurityUser actor, string? projectId, bool editorAvailable)
+    public AskSparkTool RequireAvailable(string name, SecurityStore security, SecurityUser actor, string? projectId, bool editorAvailable, bool previewActive = false)
     {
+        if (!tools.TryGetValue(name, out var tool) || !IsAllowed(tool, security, actor, projectId, editorAvailable, previewActive))
+            throw new BadHttpRequestException("This Ask Spark tool is unavailable in your current context or permissions.", 403);
+        return tool;
+    }
+
+    private static bool IsAllowed(AskSparkTool tool, SecurityStore security, SecurityUser actor, string? projectId, bool editorAvailable, bool previewActive)
+    {
+        if (previewActive && (tool.Kind != "read" || tool.Name == "spark_open_project")) return false;
         if (tool.Target == "designer" && (!editorAvailable || projectId is null)) return false;
         // Runtime testing uses a separately authenticated same-account operator session at execution time.
         // Engineering discovery itself also requires design and the exact existing runtime grant.

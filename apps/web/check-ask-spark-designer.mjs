@@ -21,6 +21,105 @@ const target = { documentId: 'home', documentKind: 'screen' };
 let passed = 1;
 async function check(name, work) { reset(); await work(); passed++; console.log(`PASS ${name}`); }
 await check('read tools do not edit or save', async () => { const result = await run('inspect_context'); assert.equal(result.result.snapshotToken, 'initial'); assert.equal(commits, 0); });
+await check('component discovery and creation declarations enumerate every real component type', async () => {
+  const result = (await run('component_schema')).result;
+  const declaredTypes = [...fs.readFileSync(new URL('./src/types.ts', import.meta.url), 'utf8').match(/^export type ComponentType =([\s\S]*?);/)[1].matchAll(/"([^"]+)"/g)].map(match => match[1]);
+  const creation = declarations.find(tool => tool.name === 'spark_designer_create_components').parameters.properties.components;
+  assert.deepEqual([...result.supportedComponentTypes].sort(), [...declaredTypes].sort());
+  assert.deepEqual([...creation.items.properties.type.enum].sort(), [...declaredTypes].sort());
+  assert.equal(creation.minItems, 1); assert.equal(creation.maxItems, 200);
+  assert.deepEqual(creation.items.required, ['id', 'type', 'x', 'y', 'width', 'height', 'props']);
+  for (const type of declaredTypes) {
+    const schema = (await run('component_schema', { type })).result;
+    assert.equal(schema.component.example.type, type); assert.equal(schema.examples[0].type, type);
+    assert.ok(schema.component.example.props && typeof schema.component.example.props === 'object');
+  }
+  await assert.rejects(run('component_schema', { type: 'html' }), /Unsupported component type/);
+  assert.equal(commits, 0);
+});
+await check('button schema exposes exact native actions and truthful Python notification examples', async () => {
+  const schema = (await run('component_schema', { type: 'button', include: ['actions', 'scripts'] })).result;
+  assert.deepEqual(schema.actions.schema.enum, ['navigate', 'script', 'openPopup', 'closePopup', 'message', 'setTagValue']);
+  assert.equal(schema.actions.schema.type, 'string');
+  assert.equal(schema.scripts.clickToast.nativeToastAction, false);
+  assert.deepEqual(schema.scripts.clickToast.propsExample, { text: 'Add item', action: 'script', script: "result = {'message': 'Item selected.'}" });
+  assert.match(schema.scripts.clickToast.requirements, /gateway administrator/);
+  assert.match(schema.scripts.clickToast.requirements, /Do not call published runtime action tools/);
+  assert.match(schema.scripts.javascript.notice, /not the application-level click toast/);
+  const message = schema.actions.variants.find(item => item.action === 'message');
+  assert.deepEqual(message.fields.properties.message.required, ['messageType', 'scope', 'payload']);
+  assert.equal(message.fields.properties.message.additionalProperties, false);
+  assert.match(message.rules, /does not show a toast/);
+  assert.deepEqual(message.example.message, { messageType: 'order.changed', scope: 'screen', payload: { item: 'Sample' } });
+});
+await check('input and component event discovery uses exact supported names and handler formats', async () => {
+  const include = ['events', 'componentEvents'];
+  const button = (await run('component_schema', { type: 'button', include })).result;
+  assert.equal(button.sections.events.supported, false);
+  assert.ok(!button.sections.componentEvents.supportedEvents.includes('click'));
+  assert.ok(!button.sections.componentEvents.supportedEvents.includes('change'));
+  assert.deepEqual(button.sections.componentEvents.schema.properties.pointerUp.required, ['language', 'code']);
+  assert.equal(button.sections.componentEvents.schema.properties.pointerUp.additionalProperties, false);
+  assert.deepEqual(button.sections.componentEvents.schema.properties.propertyChange.oneOf[0].required, ['language', 'code', 'properties']);
+  const input = (await run('component_schema', { type: 'textInput', include })).result;
+  assert.equal(input.sections.events.supported, true);
+  assert.deepEqual(Object.keys(input.sections.events.schema.properties), ['change', 'commit']);
+  const password = (await run('component_schema', { type: 'passwordInput', include })).result;
+  assert.equal(password.sections.events.schema.properties.change.properties.language.const, 'javascript');
+  const watched = password.sections.componentEvents.schema.properties.propertyChange.oneOf;
+  assert.ok(watched.every(item => !item.properties.properties.items.enum.includes('value')));
+  assert.ok(!watched[1].properties.properties.items.enum.includes('text'));
+});
+await check('discovery explains transparent hex, all replaceable sections, and bounded asset references', async () => {
+  const schema = (await run('component_schema', { type: 'rectangle', detail: 'full' })).result;
+  assert.equal(schema.colors.transparent, '#00000000'); assert.match(schema.colors.note, /Named CSS colors/);
+  assert.equal(schema.properties.find(item => item.path === 'x').location, 'x');
+  assert.equal(schema.properties.find(item => item.path === 'backgroundColor').location, 'props.backgroundColor');
+  const sectionNames = declarations.find(tool => tool.name === 'spark_designer_set_component_section').parameters.properties.section.enum;
+  for (const name of sectionNames) assert.ok(schema.sections[name].schema, `Missing ${name} format`);
+  assert.deepEqual(schema.sections.messageHandlers.schema.items.required, ['id', 'messageType', 'scope', 'language', 'code']);
+  assert.equal(schema.sections.messageHandlers.schema.maxItems, 16);
+  assert.match(schema.sectionEditing, /shallow-merges/);
+  assert.ok(JSON.stringify(schema).length < 180_000);
+});
+await check('compact schemas preserve property constraints without repeating unrelated reference sections', async () => {
+  for (const type of ['button', 'image']) {
+    const compact = (await run('component_schema', { type })).result;
+    const full = (await run('component_schema', { type, detail: 'full' })).result;
+    assert.equal(compact.sections, undefined); assert.equal(compact.scripts, undefined);
+    if (type === 'image') {
+      assert.equal(compact.existingResources.assetCount, 0);
+      assert.deepEqual(compact.existingResources.assets, full.existingResources.assets);
+      assert.equal(compact.existingResources.screens, undefined);
+      assert.equal(compact.existingResources.templates, undefined);
+    } else assert.equal(compact.existingResources, undefined);
+    assert.deepEqual(compact.properties, full.properties.map(({ components: _components, ...property }) => property));
+    assert.deepEqual(compact.colors, full.colors); assert.deepEqual(compact.component, full.component);
+    assert.ok(JSON.stringify(compact).length < JSON.stringify(full).length / 2, `${type} compact response must omit duplicate reference material`);
+    assert.ok(compact.detailLookup.available.includes('bindings'));
+  }
+  const button = (await run('component_schema', { type: 'button' })).result;
+  assert.equal(button.actions.schema.type, 'string');
+  assert.deepEqual(button.actions.examples.script, { action: 'script', script: "result = {'message': 'Item selected.'}" });
+  assert.match(button.actions.script, /Never use published runtime tools to test an unsaved draft/);
+  assert.ok(button.overlayAppearance.propsExample.text.trim());
+  assert.equal(button.overlayAppearance.propsExample.foregroundColor, '#00000000');
+  assert.match(button.overlayAppearance.note, /shadow remains/);
+  const parameters = declarations.find(tool => tool.name === 'spark_designer_component_schema').parameters;
+  assert.deepEqual(parameters.properties.include.items.enum, button.detailLookup.available);
+  assert.equal((await run('component_schema', { type: 'image' })).result.actions, undefined);
+});
+await check('targeted schema lookup returns the complete requested definition and rejects misspelled sections', async () => {
+  const partial = (await run('component_schema', { type: 'table', include: ['tableEdit', 'dataSource'] })).result;
+  const full = (await run('component_schema', { type: 'table', detail: 'full' })).result;
+  assert.deepEqual(Object.keys(partial.sections).sort(), ['dataSource', 'tableEdit']);
+  assert.deepEqual(partial.sections.tableEdit, full.sections.tableEdit);
+  assert.deepEqual(partial.sections.dataSource, full.sections.dataSource);
+  assert.equal(partial.actions, undefined); assert.equal(partial.scripts, undefined);
+  await assert.rejects(run('component_schema', { type: 'button', include: ['click'] }), /Schema include/);
+  await assert.rejects(run('component_schema', { type: 'button', include: 'events' }), /Schema include/);
+  await assert.rejects(run('component_schema', { type: 'button', detail: 'unknown' }), /Schema detail/);
+});
 await check('selected background preserves document Z order', async () => { await run('update_components', { ...target, snapshotToken: token, componentIds: ['background'], patch: { props: { backgroundColor: '#112233' } } }); assert.deepEqual(state.screens[0].components.map(item => item.id), ['background', 'first', 'second']); assert.equal(validations, 1); });
 await check('align and Undo preserve the exact prior draft', async () => { const before = JSON.stringify(state); const receipt = await run('arrange_components', { ...target, snapshotToken: token, componentIds: ['first', 'second'], operation: 'align', value: 'left' }); assert.equal(state.screens[0].components[1].x, state.screens[0].components[2].x); assert.equal(receipt.result.snapshotToken, token); receipt.undo(); assert.equal(JSON.stringify(state), before); });
 await check('stale snapshot never applies', async () => { await assert.rejects(run('update_document', { ...target, snapshotToken: 'outdated', patch: { name: 'Wrong' } }), /draft changed/); assert.equal(commits, 0); });

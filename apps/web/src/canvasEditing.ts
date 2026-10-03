@@ -83,6 +83,27 @@ export function toggleGroupSelection(components: readonly CanvasComponent[], sel
   return components.filter(component => selected.has(component.id)).map(component => component.id);
 }
 
+export interface LayerSelectionModifiers { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean }
+
+/** Layer ranges follow the displayed z-order and preserve the canvas's atomic groups. */
+export function selectLayerRange(
+  components: readonly CanvasComponent[], selectedIds: ComponentSelection, componentId: string,
+  anchorId: string | null, modifiers: LayerSelectionModifiers = {},
+): { selectedIds: string[]; anchorId: string | null } {
+  const current = expandGroupSelection(components, selectedIds);
+  const clickedIndex = components.findIndex(component => component.id === componentId);
+  if (clickedIndex < 0) return { selectedIds: current, anchorId: null };
+  const additive = Boolean(modifiers.ctrlKey || modifiers.metaKey);
+  if (!modifiers.shiftKey) return {
+    selectedIds: additive ? toggleGroupSelection(components, current, componentId) : expandGroupSelection(components, [componentId]),
+    anchorId: componentId,
+  };
+  const anchor = components.some(component => component.id === anchorId) ? anchorId! : current[0] ?? componentId;
+  const anchorIndex = components.findIndex(component => component.id === anchor);
+  const range = components.slice(Math.min(anchorIndex, clickedIndex), Math.max(anchorIndex, clickedIndex) + 1).map(component => component.id);
+  return { selectedIds: expandGroupSelection(components, additive ? [...current, ...range] : range), anchorId: anchor };
+}
+
 /** Type selection is local to one document and keeps saved groups atomic. */
 export function selectComponentType(components: readonly CanvasComponent[], type: string): string[] {
   return expandGroupSelection(components, components.filter(component => component.type === type).map(component => component.id));

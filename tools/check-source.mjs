@@ -307,6 +307,7 @@ function allowedPath(file) {
     'apps/web/check-ask-spark.mjs', 'apps/web/check-ask-spark-markdown.mjs', 'apps/web/check-ask-spark-designer.mjs', 'apps/web/check-ask-spark-gateway-tools.mjs',
     'apps/web/check-ask-spark-designer-ui.mjs', 'apps/web/check-ask-spark-runtime-tools.mjs', 'apps/web/check-ask-spark-visual.mjs',
     'src/SparkStudio.Gateway.Tests/AskSparkChecks.cs', 'src/SparkStudio.Gateway.Tests/AskSparkToolSearchChecks.cs',
+    'src/SparkStudio.Gateway.Tests/AskSparkGenerationChecks.cs',
     'src/SparkStudio.Gateway.Tests/AskSparkCacheChecks.cs', 'src/SparkStudio.Gateway.Tests/AskSparkUsageChecks.cs', 'src/SparkStudio.Gateway.Tests/AskSparkWorkspaceChecks.cs',
     'examples/ask-spark.json', 'docs/architecture/ASK_SPARK.md'].includes(file)) return true;
   if (['examples/data-sources.json', 'docs/architecture/DATA_SOURCES.md'].includes(file)) return true;

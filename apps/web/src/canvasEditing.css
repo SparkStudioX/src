@@ -36,6 +36,15 @@
 .canvas-precision-guides .vertical { top: 0; bottom: 0; border-left: 1px dashed var(--accent); }
 .canvas-precision-guides .horizontal { left: 0; right: 0; border-top: 1px dashed var(--accent); }
 .layer-group-marker { display: inline-flex; flex: 0 0 auto; color: var(--muted); }
+.designer-layers .section-heading { gap: 6px; flex-wrap: wrap; }
+.designer-layer-actions { display: flex; align-items: center; gap: 5px; margin-left: auto; flex-shrink: 0; }
+.designer-layer-delete { padding: 4px 5px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-secondary); font-size: 10px; white-space: nowrap; }
+.designer-layer-delete:hover:not(:disabled) { color: var(--danger, #d95d68); background: var(--surface-subtle); }
+.designer-layer-delete:disabled { opacity: .45; cursor: default; }
+.designer-layers .layer-item { user-select: none; }
+.designer-layers .layer-item.selected:hover { background: var(--accent-soft); color: var(--accent-dark); }
+.designer-layers button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.designer-layer-hint { margin: 8px 12px 12px; color: var(--text-secondary); font-size: 10px; line-height: 1.55; }
 .redo-icon { display: flex; transform: scaleX(-1); }
 .multi-selection-panel p { font-size: 11px; line-height: 1.65; color: var(--text-secondary); }
 .multi-selection-panel ul { padding-left: 18px; font-size: 11px; line-height: 1.8; max-height: 220px; overflow: auto; }

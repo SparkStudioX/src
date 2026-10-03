@@ -8,7 +8,7 @@ using System.Text.Json.Nodes;
 namespace SparkStudio.Gateway;
 
 /// <summary>Provider cache for immutable instructions and authorized schemas, never conversation contents.</summary>
-public sealed class AskSparkCache(HttpClient client, TimeProvider? timeProvider = null) : IDisposable
+public sealed class AskSparkCache(HttpClient client, TimeProvider? timeProvider = null, AskSparkRawLog? rawLog = null) : IDisposable
 {
     private sealed record Entry(string? Name, string Credential, DateTimeOffset ExpiresAt, DateTimeOffset LastUsed, bool Usable);
     private const string Origin = "https://generativelanguage.googleapis.com/v1beta/";
@@ -89,7 +89,7 @@ public sealed class AskSparkCache(HttpClient client, TimeProvider? timeProvider 
         prefix["displayName"] = "SparkStudio " + identity[..16];
         using var request = Request(HttpMethod.Post, "cachedContents", key);
         request.Content = new StringContent(prefix.ToJsonString(), Encoding.UTF8, "application/json");
-        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellation);
+        using var response = await AskSparkProviderExchange.SendAsync(client, request, "cache.create", rawLog, 65_536, cancellation);
         if (!response.IsSuccessStatusCode)
         {
             // Includes below-minimum prefixes and models/accounts without explicit cache support.
@@ -112,7 +112,7 @@ public sealed class AskSparkCache(HttpClient client, TimeProvider? timeProvider 
             .OrderBy(item => item.Value.LastUsed).FirstOrDefault();
         if (candidate.Key is null) return false;
         using var request = Request(HttpMethod.Delete, candidate.Value.Name!, key);
-        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellation);
+        using var response = await AskSparkProviderExchange.SendAsync(client, request, "cache.delete", rawLog, 65_536, cancellation);
         if (!response.IsSuccessStatusCode && response.StatusCode is not (HttpStatusCode.NotFound or HttpStatusCode.Gone)) return false;
         entries.Remove(candidate.Key);
         return true;

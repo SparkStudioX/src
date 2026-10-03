@@ -4,6 +4,15 @@ let context: { session: PreviewSession | null; generation: number } | null = nul
 let generation = 0;
 const requests = new Set<AbortController>();
 
+/** Nonsecret UI mode only; assistant context must never contain the preview capability. */
+export function previewRequestState(): { previewActive: boolean; previewMode: PreviewMode | "unavailable" } {
+  return { previewActive: context !== null, previewMode: context?.session && Date.parse(context.session.expiresAt) > Date.now() ? context.session.mode : "unavailable" };
+}
+
+function assistantConversationPath(path: string): boolean {
+  return /^\/ask-spark\/(?:status|tools|turn|confirm|transcribe|conversations(?:\/[a-f0-9]{32})?)$/.test(path.split("?", 1)[0]);
+}
+
 /** Browser event code has this origin's privileges; read-only never starts it. */
 export function requirePreviewScriptPermission(): void {
   if (!previewScriptsAllowed())
@@ -23,7 +32,9 @@ export function setPreviewRequestContext(session: PreviewSession | null, active 
 
 export function preparePreviewRequest(path: string, signal?: AbortSignal) {
   const current = context;
-  if (!current || path === "/preview/sessions") return { path, signal, headers: {} as Record<string, string>, finish() {}, assertCurrent() {} };
+  // Assistant conversation controls use the engineering session and CSRF, not the
+  // draft-runtime capability. Tool execution retains its separate Preview fences.
+  if (!current || path === "/preview/sessions" || assistantConversationPath(path)) return { path, signal, headers: {} as Record<string, string>, finish() {}, assertCurrent() {} };
   if (!current.session || Date.parse(current.session.expiresAt) <= Date.now())
     throw new Error("The Designer preview session is unavailable or expired. Exit and reopen Preview.");
   const mapped = /^\/queries\/[^/]+\/execute$/.test(path) ? `/preview${path}`

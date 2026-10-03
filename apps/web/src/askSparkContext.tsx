@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { useAuth } from "./Auth";
 import { executeGatewayTool, supportsGatewayTool } from "./askSparkGatewayTools";
 import { useAskSparkPrivateInputs } from "./askSparkPrivateInputs";
-import { askSparkError, askSparkRequest, askSparkStorageKey, captureAskSparkContext, executeAskSparkCalls, isAskSparkShortcut, readAskSparkSession, writeAskSparkSession } from "./askSparkClient";
+import { askSparkError, askSparkErrorCanRefreshStatus, askSparkRequest, askSparkStorageKey, captureAskSparkContext, captureAskSparkExecutionContext, executeAskSparkCalls, isAskSparkShortcut, readAskSparkSession, requireAskSparkPreviewPermission, writeAskSparkSession } from "./askSparkClient";
 import type { AskSparkContext, AskSparkConversation, AskSparkStatus, AskSparkStoredMessage, AskSparkToolCall, AskSparkToolImage, AskSparkToolResult, AskSparkTurn } from "./askSparkClient";
 import { prepareAskSparkImage, type AskSparkImage } from "./askSparkImages";
 import { openAskSparkProject, registerAskSparkNavigationContext } from "./askSparkProjectNavigation";
@@ -21,7 +21,7 @@ interface AskSparkValue {
   context: AskSparkContext; activeContext: AskSparkContext; pinned: boolean; togglePinned: () => void; removeContext: (keys: string[]) => void; refreshContext: () => void; restoreContext: () => void;
   registerContext: (ownerId: string, getter: () => AskSparkContext, priority?: number) => () => void; registerExecutor: (executor: AskSparkExecutor) => () => void;
   registerMutationListener: (ownerId: string, listener: MutationListener) => () => void;
-  draft: string; setDraft: (text: string) => void; messages: AskSparkMessage[]; actions: AskSparkAction[]; busy: boolean; error: string;
+  draft: string; setDraft: (text: string) => void; messages: AskSparkMessage[]; actions: AskSparkAction[]; busy: boolean; error: string; errorCanRefreshStatus: boolean; clearError: () => void;
   images: AskSparkImage[]; addImages: (files: File[]) => Promise<void>; removeImage: (id: string) => void; imagesBusy: boolean;
   retainedImagePreview: (id: string) => Pick<AskSparkImage, "preview" | "width" | "height" | "name"> | undefined;
   status: AskSparkStatus | null; refreshStatus: () => Promise<void>; send: () => Promise<void>; stop: () => void;
@@ -46,7 +46,8 @@ export function AskSparkProvider({ children }: { children: ReactNode }) {
   const [context, setContext] = useState<AskSparkContext>({}), [pinned, setPinned] = useState(false);
   const [activeContext, setActiveContext] = useState<AskSparkContext>({});
   const [messages, setMessages] = useState<AskSparkMessage[]>([]), [actions, setActions] = useState<AskSparkAction[]>([]);
-  const [status, setStatus] = useState<AskSparkStatus | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const [status, setStatus] = useState<AskSparkStatus | null>(null), [busy, setBusy] = useState(false), [errorReason, setError] = useState<unknown>("");
+  const error = askSparkError(errorReason), errorCanRefreshStatus = askSparkErrorCanRefreshStatus(errorReason);
   const [approval, setApproval] = useState<AskSparkToolCall | null>(null), [conversations, setConversations] = useState<AskSparkConversation[]>([]);
   const [images, setImages] = useState<AskSparkImage[]>([]), [imagesBusy, setImagesBusy] = useState(false);
   const [loadedIdentity, setLoadedIdentity] = useState("");
@@ -66,7 +67,7 @@ export function AskSparkProvider({ children }: { children: ReactNode }) {
   }, []);
   const refreshContext = useCallback(() => {
     const merged = Object.assign({}, ...[...contexts.current.values()].sort((a, b) => a.priority - b.priority).map(entry => entry.getter()));
-    const active = captureAskSparkContext(merged);
+    const active = captureAskSparkExecutionContext(merged);
     setActiveContext(previous => JSON.stringify(previous) === JSON.stringify(active) ? previous : active);
     if (pin.current) return;
     const next = { ...active };
@@ -80,13 +81,13 @@ export function AskSparkProvider({ children }: { children: ReactNode }) {
   }, [refreshContext]);
   const registerExecutor = useCallback((executor: AskSparkExecutor) => { executors.current.set(executor.id, executor); return () => { if (executors.current.get(executor.id) === executor) executors.current.delete(executor.id); }; }, []);
   const registerMutationListener = useCallback((ownerId: string, listener: MutationListener) => { mutationListeners.current.set(ownerId, listener); return () => { if (mutationListeners.current.get(ownerId) === listener) mutationListeners.current.delete(ownerId); }; }, []);
-  const workspaceContext = useCallback((): AskSparkContext => captureAskSparkContext(Object.assign({}, ...[...contexts.current.values()].sort((a, b) => a.priority - b.priority).map(entry => entry.getter()))), []);
+  const workspaceContext = useCallback((): AskSparkContext => captureAskSparkExecutionContext(Object.assign({}, ...[...contexts.current.values()].sort((a, b) => a.priority - b.priority).map(entry => entry.getter()))), []);
   useEffect(() => registerAskSparkNavigationContext(workspaceContext), [workspaceContext]);
   const stop = useCallback(() => { controller.current?.abort(); controller.current = null; approvalWait.current?.resolve(false); approvalWait.current = null; setApproval(null); inputs.cancel(); setBusy(false); }, [inputs.cancel]);
   const refreshStatus = useCallback(async () => {
     const run = lifecycle.current;
     try { const next = await askSparkRequest<AskSparkStatus>("/status"); if (run === lifecycle.current) { setStatus(next); setError(""); } }
-    catch (reason) { if (run === lifecycle.current) setError(askSparkError(reason)); }
+    catch (reason) { if (run === lifecycle.current) setError(reason); }
   }, []);
   const openConversation = useCallback(async (id: string) => {
     if (controller.current) return;
@@ -96,7 +97,7 @@ export function AskSparkProvider({ children }: { children: ReactNode }) {
       if (run !== lifecycle.current || abort.signal.aborted) return;
       conversation.current = id; releaseSentImages(); setMessages(storedMessages(next.messages)); setActions([]); undoActions.current.clear();
       if (currentStorage.current) writeAskSparkSession(currentStorage.current, id, ""); setDraft("");
-    } catch (reason) { if (run === lifecycle.current && !abort.signal.aborted) setError(askSparkError(reason)); }
+    } catch (reason) { if (run === lifecycle.current && !abort.signal.aborted) setError(reason); }
     finally { if (controller.current === abort) { controller.current = null; setBusy(false); } }
   }, [releaseSentImages]);
   useEffect(() => {
@@ -137,6 +138,7 @@ export function AskSparkProvider({ children }: { children: ReactNode }) {
       summary: documentError ? `Project opened; document needs attention: ${documentError}` : "Opened project in Designer." };
   };
   const executeTool = async (call: AskSparkToolCall, captured: AskSparkContext, signal: AbortSignal, batch: { id: string; index: number }): Promise<AskSparkExecutionResult> => {
+    requireAskSparkPreviewPermission(call);
     if (call.name === "spark_open_project") return openProjectTool(call, signal);
     if (call.name === "spark_designer_crop_image_assets") {
       if (!captured.projectId || workspaceContext().projectId !== captured.projectId) throw new Error("Open the target project before saving image crops.");
@@ -172,6 +174,7 @@ export function AskSparkProvider({ children }: { children: ReactNode }) {
   const runTool = async (call: AskSparkToolCall, captured: AskSparkContext, conversationId: string, signal: AbortSignal, batch: { id: string; index: number }): Promise<AskSparkToolResult> => {
     setActions(current => [...current, { id: call.id, name: call.name, kind: call.kind, status: "running" }]);
     try {
+      requireAskSparkPreviewPermission(call);
       if (call.confirmation && !await confirm(call, conversationId, signal)) throw new Error("User declined this operation.");
       if (!call.confirmation && call.authorized !== true) throw new Error("The gateway did not authorize this operation.");
       signal.throwIfAborted(); updateAction(call.id, { status: "running" });
@@ -198,21 +201,22 @@ export function AskSparkProvider({ children }: { children: ReactNode }) {
       const batchId = uniqueId();
       const toolResults = await executeAskSparkCalls(calls, call => runTool(call, captured, response.conversationId, signal, { id: batchId, index: calls.indexOf(call) }), status?.parallelLimit || 1, signal);
       signal.throwIfAborted();
+      Object.assign(captured, captureAskSparkExecutionContext(captured));
       response = await askSparkRequest<AskSparkTurn>("/turn", "POST", { conversationId: response.conversationId, context: captured, continuationToken: response.continuationToken, toolResults }, signal);
     }
     throw new Error("This request reached its tool-step limit. Review the completed changes before continuing.");
   };
   const send = async () => {
     if (controller.current || (!draft.trim() && !imageDraft.current.length) || !identity || imageQueue.current || !status?.enabled || !status.configured) return;
-    const text = draft.trim() || "Describe the attached image(s)."; refreshContext(); const captured = captureAskSparkContext(currentContext.current);
+    const text = draft.trim() || "Describe the attached image(s)."; refreshContext(); const captured = captureAskSparkExecutionContext(currentContext.current);
     const attached = [...imageDraft.current]; retainedImages.current.add(attached); captured.availableImageIds = retainedImages.current.ids(); imageDraft.current = []; setImages([]);
     const abort = new AbortController(); controller.current = abort; setBusy(true); setError(""); setDraft("");
     setMessages(current => [...current, { id: uniqueId(), role: "user", text, context: captureAskSparkContext(captured), images: attached.map(image => ({ name: image.name, preview: image.preview })) }]);
     try { const response = await askSparkRequest<AskSparkTurn>("/turn", "POST", { conversationId: conversation.current, message: text, context: captured, images: attached.map(({ data, mimeType, name, id }) => ({ data, mimeType, name, id })) }, abort.signal); await runTurns(response, captured, abort.signal); }
-    catch (reason) { if (!abort.signal.aborted) setError(askSparkError(reason)); }
+    catch (reason) { if (!abort.signal.aborted) setError(reason); }
     finally { if (controller.current === abort) { controller.current = null; setBusy(false); setApproval(null); } }
   };
-  const loadHistory = async () => { const run = lifecycle.current; try { const result = await askSparkRequest<{ conversations: AskSparkConversation[] }>("/conversations"); if (run === lifecycle.current) setConversations(result.conversations); } catch (reason) { if (run === lifecycle.current) setError(askSparkError(reason)); } };
+  const loadHistory = async () => { const run = lifecycle.current; try { const result = await askSparkRequest<{ conversations: AskSparkConversation[] }>("/conversations"); if (run === lifecycle.current) setConversations(result.conversations); } catch (reason) { if (run === lifecycle.current) setError(reason); } };
   const deleteConversation = async (id: string): Promise<boolean> => {
     if (controller.current) return false;
     const run = lifecycle.current, abort = new AbortController(); controller.current = abort; setBusy(true); setError("");
@@ -225,18 +229,18 @@ export function AskSparkProvider({ children }: { children: ReactNode }) {
         if (identity) writeAskSparkSession(identity, undefined, draft);
       }
       return true;
-    } catch (reason) { if (run === lifecycle.current && !abort.signal.aborted) setError(askSparkError(reason)); return false; }
+    } catch (reason) { if (run === lifecycle.current && !abort.signal.aborted) setError(reason); return false; }
     finally { if (controller.current === abort) { controller.current = null; setBusy(false); } }
   };
   const newConversation = () => { if (controller.current) return; conversation.current = undefined; releaseSentImages(); setMessages([]); setActions([]); setError(""); undoActions.current.clear(); if (identity) writeAskSparkSession(identity, undefined, draft); };
-  const undo = async (id: string) => { const action = undoActions.current.get(id); if (!action || controller.current || undoing.current) return; undoing.current = true; try { await action(); undoActions.current.delete(id); updateAction(id, { status: "undone", canUndo: false, summary: "Draft changes undone" }); refreshContext(); } catch (reason) { setError(askSparkError(reason)); } finally { undoing.current = false; } };
+  const undo = async (id: string) => { const action = undoActions.current.get(id); if (!action || controller.current || undoing.current) return; undoing.current = true; try { await action(); undoActions.current.delete(id); updateAction(id, { status: "undone", canUndo: false, summary: "Draft changes undone" }); refreshContext(); } catch (reason) { setError(reason); } finally { undoing.current = false; } };
   const togglePinned = () => { pin.current = !pin.current; setPinned(pin.current); if (!pin.current) { excluded.current = []; refreshContext(); } };
   const removeContext = (keys: string[]) => { excluded.current.push(...keys); const next = { ...currentContext.current }; keys.forEach(key => delete next[key]); currentContext.current = next; setContext(next); };
   const restoreContext = () => { excluded.current = []; pin.current = false; setPinned(false); refreshContext(); };
   const addImages = async (files: File[]) => {
     if (imageQueue.current) return; const run = lifecycle.current; imageQueue.current = true; setImagesBusy(true); setError("");
     try { for (const file of files) { const image = await prepareAskSparkImage(file, imageDraft.current); if (run !== lifecycle.current) { URL.revokeObjectURL(image.preview); return; } try { retainedImages.current.assertCapacity([...imageDraft.current, image]); } catch (reason) { URL.revokeObjectURL(image.preview); throw reason; } imageUrls.current.add(image.preview); imageDraft.current = [...imageDraft.current, image]; setImages(imageDraft.current); } }
-    catch (reason) { if (run === lifecycle.current) setError(askSparkError(reason)); }
+    catch (reason) { if (run === lifecycle.current) setError(reason); }
     finally { imageQueue.current = false; if (run === lifecycle.current) setImagesBusy(false); }
   };
   const removeImage = (id: string) => { const image = imageDraft.current.find(item => item.id === id); if (image) { URL.revokeObjectURL(image.preview); imageUrls.current.delete(image.preview); } imageDraft.current = imageDraft.current.filter(item => item.id !== id); setImages(imageDraft.current); };
@@ -246,9 +250,9 @@ export function AskSparkProvider({ children }: { children: ReactNode }) {
     catch { return undefined; }
   };
   const value: AskSparkValue = { open, setOpen, voiceRequest, requestVoice: () => { setOpen(true); setVoiceRequest(value => value + 1); }, consumeVoiceRequest: () => setVoiceRequest(0),
-    context, activeContext, pinned, togglePinned, removeContext, refreshContext, restoreContext, registerContext, registerExecutor, registerMutationListener, draft, setDraft, messages, actions, busy, error, status, refreshStatus, send, stop,
+    context, activeContext, pinned, togglePinned, removeContext, refreshContext, restoreContext, registerContext, registerExecutor, registerMutationListener, draft, setDraft, messages, actions, busy, error, errorCanRefreshStatus, clearError: () => setError(""), status, refreshStatus, send, stop,
     approval, approve: approved => approvalWait.current?.resolve(approved), undo, conversations, loadHistory, openConversation, deleteConversation, newConversation, images, imagesBusy, addImages, removeImage, retainedImagePreview };
   // Do not expose the previous account's state during the render before effect cleanup.
-  if (loadedIdentity !== identity) Object.assign(value, { open: false, draft: "", messages: [], actions: [], images: [], conversations: [], approval: null, status: null, error: "", busy: false });
+  if (loadedIdentity !== identity) Object.assign(value, { open: false, draft: "", messages: [], actions: [], images: [], conversations: [], approval: null, status: null, error: "", errorCanRefreshStatus: false, busy: false });
   return <Context.Provider value={value}>{children}{loadedIdentity === identity && auth.user ? inputs.dialog : null}</Context.Provider>;
 }

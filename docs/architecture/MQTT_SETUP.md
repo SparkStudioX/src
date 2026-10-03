@@ -2,7 +2,7 @@
 
 Use an MQTT subscriber connection to turn broker publications into read-only gateway tags. This walkthrough starts with one numeric topic, creates its tag through a reviewed import, and checks the result before using it on a screen.
 
-**Build availability:** these steps require a SparkStudio build whose **New Connection** menu includes **MQTT subscriber**. The published Windows `v0.2.0-preview.12` and Docker `0.2.0-preview.11-docker.1` do not include this source feature. This is a development-build guide, reviewed October 2, 2026.
+**Build availability:** use Windows `v0.2.0-preview.13` or a later compatible build whose **New Connection** menu includes **MQTT subscriber**. Windows preview.12 and Docker `0.2.0-preview.11-docker.1` do not include this feature. See the [release ledger](PARITY.md) for exact-package verification and real-source acceptance limits. The walkthrough was reviewed October 2, with release compatibility updated October 3, 2026.
 
 ## Where do I create the tags?
 

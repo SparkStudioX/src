@@ -60,6 +60,7 @@ public static class AskSparkData
 
     public static void Trim(AskSparkConversation conversation)
     {
+        AskSparkToolImages.CompactCaptures(conversation.Contents);
         while (conversation.Messages.Count > 60) conversation.Messages.RemoveAt(0);
         while (conversation.Actions.Count > 200) conversation.Actions.RemoveAt(0);
         // Remove whole completed user/tool exchanges, never individual signed parts or tool responses.

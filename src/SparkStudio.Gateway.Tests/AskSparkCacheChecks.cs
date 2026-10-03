@@ -19,6 +19,7 @@ internal static class AskSparkCacheChecks
         await ConcurrentChecks();
         await ProviderChecks();
         await BudgetChecks();
+        await RejectedBodyChecks();
         return checks;
     }
 
@@ -185,6 +186,49 @@ internal static class AskSparkCacheChecks
         Check(handler.Counts.Count == countCalls && usage.Snapshot(0).UsedTokens == used + 52, "unlimited allowance skips counting request while retaining actual usage");
     }
 
+    private static async Task RejectedBodyChecks()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "SparkStudio.AskSparkRejectedBody." + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var settings = new AskSparkSettings(directory, new EphemeralDataProtectionProvider());
+            settings.Save(new("0", true, AskSparkSettings.DefaultModel, ApiKey: Key, MonthlyTokenLimit: 20_000));
+            var usage = new AskSparkUsage(directory);
+            using var rawLog = new AskSparkRawLog(directory, settings);
+            using var handler = new FixtureHandler(new FixtureClock(DateTimeOffset.UtcNow));
+            using var client = new HttpClient(handler);
+            using var provider = new AskSparkGemini(client, settings, usage: usage, rawLog: rawLog);
+            var oversized = new string('x', 2 * 1024 * 1024 + 32);
+            handler.GenerationReplies.Enqueue((HttpStatusCode.BadRequest, oversized));
+            await RejectAsync(() => provider.TestAsync(CancellationToken.None), "known 400 with oversized diagnostic body");
+            Check(usage.Snapshot(20_000).UsedTokens == 0 && usage.Snapshot(20_000).UncertainRequests == 0, "oversized 400 body preserves known rejection and releases its token reservation");
+            Check(handler.Generations.Count == 1, "oversized rejection does not retry generation");
+            Check(Directory.EnumerateFiles(Path.Combine(directory, AskSparkRawLog.DirectoryName), "*.txt")
+                .Any(path => File.ReadAllText(path).Contains("response-incomplete", StringComparison.Ordinal)), "bounded rejected body remains marked in raw diagnostics");
+            var contents = new JsonArray(AskSparkGemini.TextContent("user", "Synthetic capture error"));
+            var context = new AskSparkModelContext("Fixture directory", "rejected-body-scope");
+            handler.GenerationReplies.Enqueue((HttpStatusCode.BadRequest, "{malformed provider error"));
+            await RejectAsync(() => provider.GenerateAsync(contents, [Tool()], false, context, CancellationToken.None), "cached 400 with malformed diagnostic JSON");
+            Check(handler.Generations.Count == 2 && handler.Generations.Last()["cachedContent"] is not null, "malformed cached 400 cannot prove cache expiration and is not retried");
+            Check(usage.Snapshot(20_000).UsedTokens == 0 && usage.Snapshot(20_000).UncertainRequests == 0, "malformed cached rejection releases its token reservation");
+            foreach (var diagnostic in new[] { "{\"error\":{\"message\":42}}", "{\"error\":\"bad\"}" })
+            {
+                handler.GenerationReplies.Enqueue((HttpStatusCode.BadRequest, diagnostic));
+                var attempts = handler.Generations.Count;
+                await RejectAsync(() => provider.GenerateAsync(contents, [Tool()], false, context, CancellationToken.None), "cached 400 with wrong-shaped diagnostic JSON");
+                Check(handler.Generations.Count == attempts + 1 && usage.Snapshot(20_000).UsedTokens == 0 && usage.Snapshot(20_000).UncertainRequests == 0,
+                    "wrong-shaped cached error stays a known rejection without retry or uncertain token charge");
+            }
+            handler.GenerationReplies.Enqueue((HttpStatusCode.NotFound, oversized));
+            var before = handler.Generations.Count;
+            await provider.GenerateAsync(contents, [Tool()], false, context, CancellationToken.None);
+            Check(handler.Generations.Count == before + 2 && handler.Generations.Last()["cachedContent"] is null, "known cached 404 retains the single safe fallback even when its body exceeds the diagnostic limit");
+            Check(usage.Snapshot(20_000).UsedTokens == 52 && usage.Snapshot(20_000).UncertainRequests == 0, "cache fallback accounts only the measured successful generation");
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
     private static void UsageChecks()
     {
         Check(AskSparkGemini.ReadUsage(new JsonObject()) is null, "absent usage does not release uncertain allowance");
@@ -223,6 +267,7 @@ internal static class AskSparkCacheChecks
         public List<JsonObject> Creates { get; } = [];
         public List<JsonObject> Generations { get; } = [];
         public List<JsonObject> Counts { get; } = [];
+        public Queue<(HttpStatusCode Status, string Body)> GenerationReplies { get; } = new();
         public List<string> Deletes { get; } = [];
         public List<string> Headers { get; } = [];
         public List<Uri> Uris { get; } = [];
@@ -254,6 +299,7 @@ internal static class AskSparkCacheChecks
                 return Create(body);
             }
             Generations.Add(body);
+            if (GenerationReplies.TryDequeue(out var reply)) return new HttpResponseMessage(reply.Status) { Content = new StringContent(reply.Body) };
             if (ExpireNext && body["cachedContent"] is not null)
             { ExpireNext = false; return Response(HttpStatusCode.NotFound, new JsonObject()); }
             return Response(GenerationStatus, new JsonObject

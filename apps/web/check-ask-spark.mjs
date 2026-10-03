@@ -6,7 +6,7 @@ import ts from 'typescript';
 import { createTestModuleFiles } from './test-module-files.mjs';
 
 const require = createRequire(import.meta.url), moduleFile = createTestModuleFiles();
-const mockApi = moduleFile('let run=async()=>({}); export const setRequest=fn=>{run=fn}; export const api=(...args)=>run(...args);');
+const mockApi = moduleFile('let run=async()=>({}); export const setRequest=fn=>{run=fn}; export const api=(...args)=>run(...args); export class ApiError extends Error { constructor(message,status) { super(message); this.status=status; this.name="ApiError"; } }');
 function loadSource(name, replacements = {}) {
   const source = fs.readFileSync(new URL(`src/${name}`, import.meta.url), 'utf8');
   const output = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX } }).outputText
@@ -14,7 +14,8 @@ function loadSource(name, replacements = {}) {
     .replace(/(from\s+|import\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, name) => prefix + JSON.stringify(replacements[name] || (name === './api' ? mockApi : pathToFileURL(require.resolve(name)).href)));
   return moduleFile(output);
 }
-const clientUrl = loadSource('askSparkClient.ts'), client = await import(clientUrl);
+const previewUrl = loadSource('previewRequest.ts'), preview = await import(previewUrl);
+const clientUrl = loadSource('askSparkClient.ts', { './previewRequest': previewUrl }), client = await import(clientUrl);
 const imagesUrl = loadSource('askSparkImages.ts'), images = await import(imagesUrl);
 const retainedUrl = loadSource('askSparkRetainedImages.ts'), retained = await import(retainedUrl);
 const navigationUrl = loadSource('askSparkProjectNavigation.ts'), navigation = await import(navigationUrl);
@@ -62,8 +63,21 @@ const providerUrl=loadSource('askSparkContext.tsx',{react:hooksUrl,'./Auth':auth
 const {AskSparkProvider}=await import(providerUrl);
 globalThis.window={addEventListener(){},removeEventListener(){}};
 let state;function render(){hooks.begin();state=AskSparkProvider({children:null}).props.value;return state;}
-async function beginProvider(request){hooks.reset();storage.clear();auth.setAuth({user:{id:'test-one'},audience:'engineering',epoch:1});api.setRequest(request);render();hooks.flush();await tick();render();hooks.flush();render();}
+async function beginProvider(request){hooks.reset();preview.setPreviewRequestContext(null,false);storage.clear();auth.setAuth({user:{id:'test-one'},audience:'engineering',epoch:1});api.setRequest(request);render();hooks.flush();await tick();render();hooks.flush();render();}
 const status={enabled:true,configured:true,model:'test-model',parallelLimit:3};
+await check('tool-loading errors retain their message without presenting a connection failure action',async()=>{
+  await beginProvider(async(path)=>{if(path.endsWith('/status'))return status;throw new api.ApiError('This tool was not loaded for the current round. Use find_tools first.',403)});
+  state.setDraft('Create the screen');render();await state.send();render();
+  assert.match(state.error,/not loaded/);assert.equal(state.errorCanRefreshStatus,false);assert.equal(state.messages.at(-1).text,'Create the screen');
+  state.clearError();render();assert.equal(state.error,'');assert.equal(state.messages.at(-1).text,'Create the screen');
+});
+await check('provider failures offer a status refresh while context and validation errors do not',async()=>{
+  for(const statusCode of [400,401,403,409,413,429,502,503,504]){
+    await beginProvider(async(path)=>{if(path.endsWith('/status'))return status;throw new api.ApiError('Request needs attention',statusCode)});
+    state.setDraft('Continue');render();await state.send();render();
+    assert.equal(state.errorCanRefreshStatus,[502,503,504].includes(statusCode),`HTTP ${statusCode}`);
+  }
+});
 await check('resource context priority is independent of parent registration order and clears hidden canvas selection',async()=>{
   await beginProvider(async()=>status);
   const removeResource=state.registerContext('resource:connection',()=>client.connectionAskSparkContext('connection-a','Plant broker','security',false),20);
@@ -91,6 +105,28 @@ await check('provider freezes submitted context and executes registered draft co
   await beginProvider(async(path,method,body)=>{requests.push({path,method,body});if(path.endsWith('/status'))return status;if(body?.message)return{conversationId:'c1',continuationToken:'next',toolCalls:[{id:'call1',name:'draft_edit',arguments:{text:'new'},kind:'write',authorized:true}]};return{conversationId:'c1',reply:'Updated draft.'}});
   state.registerContext('designer',()=>({surface:'designer',projectId:'one',selectedComponentIds:selected,snapshotToken:'snap'}));state.registerExecutor({id:'designer',supports:name=>name==='draft_edit',execute:async(name,args,context)=>{executed.push({name,args,context});selected=['later'];return{result:{changed:1},summary:'Changed label',undo:()=>{undo++}}}});
   state.setDraft('Change this label');render();await state.send();render();assert.equal(executed.length,1);assert.deepEqual(executed[0].context.selectedComponentIds,['original']);assert.deepEqual(requests.find(item=>item.body?.toolResults).body.context.selectedComponentIds,['original']);assert.equal(state.messages.at(-1).text,'Updated draft.');assert.equal(state.actions[0].canUndo,true);await state.undo('call1');render();assert.equal(undo,1);assert.equal(state.actions[0].status,'undone');
+});
+await check('opening Preview continues the same conversation with fresh pinned-mode context and blocks later writes before approval', async()=>{
+  const requests=[],executed=[];let confirmations=0;
+  await beginProvider(async(path,_method,body)=>{
+    if(path.endsWith('/status'))return status;
+    if(path.endsWith('/confirm')){confirmations++;throw new Error('Preview must reject before confirmation');}
+    requests.push(structuredClone(body));
+    if(body?.message)return{conversationId:'preview-chat',continuationToken:'preview-round',toolCalls:[
+      {id:'preview',name:'spark_designer_preview',arguments:{},kind:'draft',authorized:true},
+      {id:'write',name:'gateway_save',arguments:{},kind:'write',confirmation:true,approvalToken:'must-not-use'}]};
+    if(requests.length===2)return{conversationId:'preview-chat',continuationToken:'inspect-round',toolCalls:[{id:'inspect',name:'inspect_canvas',arguments:{},kind:'read',authorized:true}]};
+    return{conversationId:'preview-chat',reply:'Preview is open. The screen is ready to inspect.'};
+  });
+  state.registerContext('designer',()=>({surface:'designer',projectId:'one',editorAvailable:true,snapshotToken:'snap'}));state.togglePinned();
+  state.registerExecutor({id:'preview-test',supports:()=>true,execute:async name=>{executed.push(name);if(name==='spark_designer_preview')preview.setPreviewRequestContext({token:'a'.repeat(64),mode:'read-only',expiresAt:new Date(Date.now()+60000).toISOString()});return{result:{preview:true}}}});
+  state.setDraft('Preview this screen');render();await state.send();render();
+  assert.deepEqual(executed,['spark_designer_preview','inspect_canvas']);assert.equal(confirmations,0);assert.equal(state.approval,null);assert.equal(state.error,'');
+  assert.equal(requests[0].context.previewActive,false);assert.equal(requests[1].context.previewActive,true);assert.equal(requests[1].context.previewMode,'read-only');assert.equal(requests[1].context.snapshotToken,'snap');
+  assert.match(requests[1].toolResults[1].result.error,/Exit Designer Preview/);assert.equal(JSON.stringify(requests).includes('a'.repeat(64)),false);assert.match(state.messages.at(-1).text,/Preview is open/);
+  for(const kind of ['draft','write','destructive'])assert.throws(()=>client.requireAskSparkPreviewPermission({name:'mutation',kind}),/Exit Designer Preview/);
+  assert.throws(()=>client.requireAskSparkPreviewPermission({name:'spark_open_project',kind:'read'}),/Exit Designer Preview/);
+  preview.setPreviewRequestContext(null,false);client.requireAskSparkPreviewPermission({name:'mutation',kind:'write'});
 });
 await check('approval pauses exact proposed operation and declining never invokes its executor', async()=>{
   let executed=0;const requests=[];
@@ -201,13 +237,13 @@ const aiUrl=loadSource('AISettings.tsx',{react:hooksUrl,'./Auth':authUrl,'./askS
 const nodes=node=>!node||typeof node!=='object'?[]:[node,...[node.props?.children].flat(3).flatMap(nodes)];
 let aiTree;const renderAi=()=>{hooks.begin();aiTree=AISettings()};
 await check('AI settings retain an opaque revision and preserve a saved key when the password field is blank',async()=>{
-  hooks.reset();auth.setAuth({gatewayAdmin:true});const calls=[],saved={revision:'opaque-revision',enabled:true,hasApiKey:true,model:'gemini-test',parallelLimit:3,modelStepLimit:100,monthlyTokenLimit:0};window.dispatchEvent=()=>{};
+  hooks.reset();auth.setAuth({gatewayAdmin:true});const calls=[],saved={revision:'opaque-revision',enabled:true,hasApiKey:true,model:'gemini-test',parallelLimit:3,modelStepLimit:100,monthlyTokenLimit:0,loggingEnabled:true};window.dispatchEvent=()=>{};
   api.setRequest(async(path,method,body)=>{calls.push({path,method,body});return saved});renderAi();hooks.flush();await tick();renderAi();
   const password=nodes(aiTree).find(node=>node.type==='input'&&node.props.type==='password');assert.equal(password.props.value,'');assert.match(password.props.placeholder,/key is saved/);assert.equal(password.props.autoComplete,'new-password');
   nodes(aiTree).find(node=>node.type==='form').props.onSubmit({preventDefault(){}});await tick();renderAi();const put=calls.find(call=>call.method==='PUT');assert.equal(put.body.revision,'opaque-revision');assert.equal(Object.hasOwn(put.body,'apiKey'),false);assert.equal(Object.hasOwn(put.body,'clearApiKey'),false);
 });
 await check('AI key entry is sent only in a gateway save and cleared after it completes',async()=>{
-  const calls=[],saved={revision:'rev',enabled:true,hasApiKey:true,model:'gemini-test',parallelLimit:3,modelStepLimit:100,monthlyTokenLimit:0};api.setRequest(async(path,method,body)=>{calls.push({path,method,body});return saved});
+  const calls=[],saved={revision:'rev',enabled:true,hasApiKey:true,model:'gemini-test',parallelLimit:3,modelStepLimit:100,monthlyTokenLimit:0,loggingEnabled:true};api.setRequest(async(path,method,body)=>{calls.push({path,method,body});return saved});
   nodes(aiTree).find(node=>node.type==='input'&&node.props.type==='password').props.onChange({target:{value:'test-key-not-a-real-secret'}});renderAi();nodes(aiTree).find(node=>node.type==='form').props.onSubmit({preventDefault(){}});await tick();renderAi();assert.equal(calls.length,1);assert.equal(calls[0].path,'/gateway/ai');assert.equal(calls[0].body.apiKey,'test-key-not-a-real-secret');assert.equal(nodes(aiTree).find(node=>node.type==='input'&&node.props.type==='password').props.value,'');
 });
 await check('AI model steps default to 100 and both allowance controls validate before saving',async()=>{
@@ -219,14 +255,22 @@ await check('AI model steps default to 100 and both allowance controls validate 
   inputFor('Monthly AI token allowance').props.onChange({target:{value:'-1'}});renderAi();nodes(aiTree).find(node=>node.type==='form').props.onSubmit({preventDefault(){}});await tick();renderAi();assert.equal(calls.length,0);
   inputFor('Monthly AI token allowance').props.onChange({target:{value:'100000'}});renderAi();nodes(aiTree).find(node=>node.type==='form').props.onSubmit({preventDefault(){}});await tick();renderAi();assert.equal(calls.length,1);assert.equal(calls[0].body.modelStepLimit,65);assert.equal(calls[0].body.monthlyTokenLimit,100000);
 });
+await check('raw Gemini logging defaults enabled and the optional switch is saved without exposing the provider key',async()=>{
+  const calls=[];api.setRequest(async(path,method,body)=>{calls.push({path,method,body});return{...body,hasApiKey:true}});
+  const logging=()=>nodes(nodes(aiTree).find(node=>node.type==='label'&&nodes(node).some(child=>child.type==='strong'&&child.props.children==='Log raw Gemini requests and responses'))).find(node=>node.type==='input');
+  assert.equal(logging().props.checked,true);
+  logging().props.onChange({target:{checked:false}});renderAi();hooks.flush();assert.deepEqual(aiContext.snapshot(),{unsavedChanges:true});
+  nodes(aiTree).find(node=>node.type==='form').props.onSubmit({preventDefault(){}});await tick();renderAi();hooks.flush();
+  assert.equal(calls.length,1);assert.equal(calls[0].path,'/gateway/ai');assert.equal(calls[0].body.loggingEnabled,false);assert.equal(Object.hasOwn(calls[0].body,'apiKey'),false);assert.equal(logging().props.checked,false);assert.deepEqual(aiContext.snapshot(),{unsavedChanges:false});
+});
 hooks.reset();
 await check('pasted AI keys discard surrounding whitespace without changing the key',async()=>{
-  const calls=[],saved={revision:'rev',enabled:true,hasApiKey:true,model:'gemini-test',parallelLimit:3,modelStepLimit:100,monthlyTokenLimit:0};auth.setAuth({gatewayAdmin:true});api.setRequest(async(path,method,body)=>{calls.push({path,method,body});return saved});renderAi();hooks.flush();await tick();renderAi();calls.length=0;
+  const calls=[],saved={revision:'rev',enabled:true,hasApiKey:true,model:'gemini-test',parallelLimit:3,modelStepLimit:100,monthlyTokenLimit:0,loggingEnabled:true};auth.setAuth({gatewayAdmin:true});api.setRequest(async(path,method,body)=>{calls.push({path,method,body});return saved});renderAi();hooks.flush();await tick();renderAi();calls.length=0;
   const key='AQ.synthetic_pasted-key';nodes(aiTree).find(node=>node.type==='input'&&node.props.type==='password').props.onChange({target:{value:` \t\r\n\u00a0${key}\r\n `}});renderAi();
   nodes(aiTree).find(node=>node.type==='form').props.onSubmit({preventDefault(){}});await tick();renderAi();assert.equal(calls.length,1);assert.equal(calls[0].body.apiKey,key);assert.equal(nodes(aiTree).find(node=>node.type==='input'&&node.props.type==='password').props.value,'');
 });
 await check('opaque provider key punctuation is preserved instead of imposing a provider format',async()=>{
-  const calls=[],saved={revision:'rev',enabled:true,hasApiKey:true,model:'gemini-test',parallelLimit:3,modelStepLimit:100,monthlyTokenLimit:0};api.setRequest(async(path,method,body)=>{calls.push({path,method,body});return saved});
+  const calls=[],saved={revision:'rev',enabled:true,hasApiKey:true,model:'gemini-test',parallelLimit:3,modelStepLimit:100,monthlyTokenLimit:0,loggingEnabled:true};api.setRequest(async(path,method,body)=>{calls.push({path,method,body});return saved});
   for(const key of ['AQ.synthetic.dotted-key', 'synthetic:opaque/+key==', 'S'.repeat(512)]) {
     nodes(aiTree).find(node=>node.type==='input'&&node.props.type==='password').props.onChange({target:{value:key}});renderAi();
     nodes(aiTree).find(node=>node.type==='form').props.onSubmit({preventDefault(){}});await tick();renderAi();assert.equal(calls.at(-1).body.apiKey,key);
@@ -243,7 +287,7 @@ await check('invalid pasted keys remain rejected and editing clears the stale va
 });
 hooks.reset();
 await check('AI settings block project navigation for unsaved settings, private key entry and removal without exposing values',async()=>{
-  auth.setAuth({gatewayAdmin:true});const saved={revision:'guard-revision',enabled:true,hasApiKey:true,model:'gemini-test',parallelLimit:3,modelStepLimit:100,monthlyTokenLimit:0};
+  auth.setAuth({gatewayAdmin:true});const saved={revision:'guard-revision',enabled:true,hasApiKey:true,model:'gemini-test',parallelLimit:3,modelStepLimit:100,monthlyTokenLimit:0,loggingEnabled:true};
   api.setRequest(async(_path,method,body)=>method==='PUT'?{...saved,...body,hasApiKey:!body.clearApiKey,apiKey:undefined}:saved);
   renderAi();hooks.flush();await tick();renderAi();hooks.flush();assert.deepEqual(aiContext.snapshot(),{unsavedChanges:false});
   assert.equal(aiContext.entries().find(entry=>entry.owner==='gateway:ai-settings').priority,20);

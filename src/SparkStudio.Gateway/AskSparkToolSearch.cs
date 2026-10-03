@@ -28,7 +28,7 @@ public static class AskSparkToolSearch
     };
 
     public static AskSparkTool Declaration() => new("find_tools",
-        "Search the available tool directory by capability, category, or exact tool name. Returns complete matching definitions and loads them for the next model round. It never executes the discovered tools. Use * with offset to page through all tools you may use.",
+        "Search the available tool directory by capability, category, or exact tool name. An exact name returns only that tool. Returns complete matching definitions and loads them for the next model round. It never executes the discovered tools. Use * with offset to page through all tools you may use.",
         new JsonObject
         {
             ["type"] = "object", ["properties"] = new JsonObject
@@ -62,7 +62,8 @@ public static class AskSparkToolSearch
         {
             ["actorId"] = actor.Id, ["actorRevision"] = actor.Revision, ["projectId"] = conversation.ProjectId,
             ["surface"] = conversation.ToolContext["surface"]?.DeepClone(), ["section"] = conversation.ToolContext["section"]?.DeepClone(),
-            ["editorAvailable"] = conversation.ToolContext["editorAvailable"]?.DeepClone()
+            ["editorAvailable"] = conversation.ToolContext["editorAvailable"]?.DeepClone(),
+            ["previewActive"] = conversation.ToolContext["previewActive"]?.DeepClone()
         };
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToJsonString())));
     }
@@ -73,7 +74,9 @@ public static class AskSparkToolSearch
         var query = arguments["query"]!.GetValue<string>().Trim();
         if (query.Length == 0) throw new ArgumentException("Enter a capability, category, or tool name to find.");
         var terms = Words(query);
-        var matches = allowed.Select(tool => (Tool: tool, Score: Score(tool, query, terms)))
+        var exact = allowed.FirstOrDefault(tool => string.Equals(tool.Name, query, StringComparison.OrdinalIgnoreCase));
+        IEnumerable<AskSparkTool> candidates = exact is null ? allowed : [exact];
+        var matches = candidates.Select(tool => (Tool: tool, Score: Score(tool, query, terms)))
             .Where(item => item.Score > 0).OrderByDescending(item => item.Score).ThenBy(item => item.Tool.Name, StringComparer.Ordinal).ToArray();
         var offset = arguments["offset"]?.GetValue<int>() ?? 0;
         var limit = arguments["limit"]?.GetValue<int>() ?? 6;

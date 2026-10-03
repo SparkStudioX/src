@@ -84,6 +84,7 @@ import { reconcileNavigationAfterScreenChange } from "./runtimeNavigation";
 import { closeDesignerDocument, documentKey, openDesignerDocument, restoreDesignerDocuments } from "./designerDocuments";
 import type { DesignerDocument, DesignerDocuments } from "./designerDocuments";
 import ProjectNavigation from "./ProjectNavigation";
+import DesignerLayers from "./DesignerLayers";
 import ProjectSearch from "./ProjectSearchDialog";
 import { buildProjectSearch } from "./projectSearch";
 import type { ScriptSearchResource, SearchTarget } from "./projectSearch";
@@ -1630,6 +1631,32 @@ export default function App() {
     </div>);
   }
 
+  function renderDocumentDeleteActions(project: Project) {
+    if (!screen) return null;
+    const lastRegularScreen = !editingTemplate && screen.kind !== "popup"
+      && project.screens.filter(item => item.kind !== "popup").length < 2;
+    const screenDeleteReason = "This is the project's only regular screen. Add another screen before deleting it, or select layers to remove its contents.";
+    return <div className="inspector-section">
+      <button
+        type="button"
+        className="button danger subtle"
+        disabled={lastRegularScreen || Boolean(previewActionBusy)}
+        title={lastRegularScreen ? screenDeleteReason : undefined}
+        aria-describedby={lastRegularScreen ? "screen-delete-reason" : undefined}
+        onClick={() => previewResourceChange({ action: "delete", target: { kind: editingTemplate ? "template" : "screen", id: screen.id } })}
+      >
+        <Icon name="trash" size={15} />
+        {editingTemplate ? "Delete template" : "Delete screen"}
+      </button>
+      {lastRegularScreen && <>
+        <p id="screen-delete-reason">{screenDeleteReason}</p>
+        <button type="button" className="button" disabled={Boolean(previewActionBusy)} onClick={addScreen}>
+          <Icon name="plus" size={15} /> Add another screen
+        </button>
+      </>}
+    </div>;
+  }
+
   function renderPropertiesPane(project: Project) {
     return (<aside id="designer-properties-panel" className={`inspector${selected ? " property-sheet-inspector" : ""}`}>
       <div className="inspector-heading">
@@ -1742,22 +1769,7 @@ export default function App() {
             onRename={() => previewResourceChange({ action: "rename", target: { kind: editingTemplate ? "template" : "screen", id: screen.id }, name: screen.name })}
             notify={notify}
           />}
-          {screen && <div className="inspector-section">
-            <button
-              className="button danger subtle"
-              disabled={
-                !screen || !editingTemplate &&
-                screen?.kind !== "popup" &&
-                project.screens.filter(
-                  (item) => item.kind !== "popup",
-                ).length < 2
-              }
-              onClick={() => previewResourceChange({ action: "delete", target: { kind: editingTemplate ? "template" : "screen", id: screen.id } })}
-            >
-              <Icon name="trash" size={15} />
-              {editingTemplate ? "Delete template" : "Delete screen"}
-            </button>
-          </div>}
+          {renderDocumentDeleteActions(project)}
           <div className="inspector-tip">
             <div className="inspector-tip-heading">
               <span className="tip-icon">
@@ -2115,41 +2127,11 @@ export default function App() {
                 )}
               </div>
             </div>
-            <div className="component-tree">
-              <div className="section-heading">
-                <span>
-                  LAYERS <em>{screen?.components.length || 0}</em>
-                </span>
-                <button
-                  className="icon-button"
-                  title="Add a component"
-                  onClick={() => setLeftTab("components")}
-                >
-                  <Icon name="plus" size={16} />
-                </button>
-              </div>
-              <div className="project-document-list" aria-label="Document layers">{screen?.components.map((component) => (
-                <button
-                  className={`layer-item ${selectedIds.includes(component.id) ? "selected" : ""}`}
-                  key={component.id}
-                  title={`Component ID: ${component.id}`}
-                  onClick={() => setSelectedId(component.id)}
-                >
-                  <Icon name={typeIcon[component.type]} size={15} />
-                  <span>{component.props.text?.trim() || component.id}</span>
-                  {component.groupId && <span className="layer-group-marker" title="Member of a persistent group"><Icon name="layers" size={12} /></span>}
-                  {component.props.tagPath && (
-                    <Icon name="link" size={12} />
-                  )}
-                </button>
-              ))}
-                {!screen?.components.length && (
-                  <p className="panel-empty">
-                    {screen ? "Add a component to start building this screen." : "Open a screen or template to view its layers."}
-                  </p>
-                )}
-              </div>
-            </div>
+            <DesignerLayers key={`${project.id}:${documents.active ?? "no-document"}`}
+              components={screen?.components ?? []} selectedIds={selectedIds} typeIcons={typeIcon}
+              hasDocument={Boolean(screen)} disabled={preview || Boolean(previewActionBusy)}
+              onSelect={ids => { setSearchLocation(null); setSelectedIds(ids); }}
+              onDelete={deleteSelection} onAdd={() => setLeftTab("components")} />
           </ProjectNavigation>
         </>
       ) : leftTab === "components" ? (

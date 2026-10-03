@@ -1,6 +1,6 @@
 # Read-only data sources and workshop
 
-Connections includes **MTConnect agent**, **i3X source** and **MQTT subscriber**. These require a build containing the source-session implementation; older preview.12 installers do not include them. The three drivers have a separate source configuration and share stable point catalogs with PLC connections. A saved tag uses `kind: "device"`, its connection ID and the saved point ID. Raw MTConnect identities, opaque i3X element IDs and MQTT topics remain separate from display paths and structured selectors.
+Windows preview.13 Connections includes **MTConnect agent**, **i3X source** and **MQTT subscriber**. Older preview.12 installers and Docker preview.11-docker.1 do not include them; see the [release ledger](PARITY.md) for exact-package verification and acceptance limits. The three drivers have a separate source configuration and share stable point catalogs with PLC connections. A saved tag uses `kind: "device"`, its connection ID and the saved point ID. Raw MTConnect identities, opaque i3X element IDs and MQTT topics remain separate from display paths and structured selectors.
 
 These are current-state sources. Their latest-value delivery may coalesce updates after protocol reduction. They do not provide a lossless event journal. All three are read-only at the catalog, command dispatcher and protocol adapter. MQTT sends no Publish or Will configuration. Use subscribe/read-only broker credentials when configuring a real broker.
 

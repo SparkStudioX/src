@@ -63,12 +63,74 @@
   },
   {
     "name": "spark_designer_component_schema",
-    "description": "Read supported component properties, validation bounds and binding/script/state examples.",
+    "description": "Read a compact authoritative schema for one component type: examples, exact property constraints, color formats and basic native action guidance. Load it once per needed type and reuse it. Request include:[actions], include:[scripts], or include:[sectionName] before authoring those advanced features; detail:full returns the entire reference only when needed. Never guess action or event names.",
     "parameters": {
       "type": "object",
       "properties": {
         "type": {
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "alarmStatusTable",
+            "alarmJournalTable",
+            "historicalTrend",
+            "chart",
+            "sparkline",
+            "equipmentCommand",
+            "label",
+            "value",
+            "gauge",
+            "button",
+            "table",
+            "list",
+            "treeView",
+            "textInput",
+            "formattedInput",
+            "barcodeInput",
+            "viewContainer",
+            "passwordInput",
+            "multiStateButton",
+            "multiStateIndicator",
+            "ledDisplay",
+            "progressBar",
+            "cylindricalTank",
+            "levelIndicator",
+            "thermometer",
+            "textArea",
+            "numberInput",
+            "spinner",
+            "slider",
+            "checkbox",
+            "toggle",
+            "select",
+            "radioGroup",
+            "dateTimeInput",
+            "template",
+            "repeater",
+            "image",
+            "computerCamera",
+            "icon",
+            "line",
+            "rectangle",
+            "ellipse",
+            "polyline",
+            "pipe",
+            "equipmentSymbol"
+          ],
+          "description": "Exact component type to inspect. Omit for the component directory and basic button guidance."
+        },
+        "detail": {
+          "type": "string",
+          "enum": ["compact", "full"],
+          "description": "Default compact. Full loads every action, script API, structured section and resource summary; prefer targeted include to avoid unrelated context."
+        },
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["actions", "scripts", "resources", "events", "componentEvents", "messageHandlers", "customProperties", "stateBinding", "dataSource", "tableEdit", "rowsSource", "parameterBindings", "parameters", "viewLayout", "optionsSource", "bindings", "queryBindings"]
+          },
+          "maxItems": 17,
+          "description": "Return complete definitions only for these advanced features alongside the type's basic schema. Examples: [componentEvents] for lifecycle/interaction scripts, [events] for input change/commit, [bindings] for expressions."
         }
       },
       "required": [],
@@ -436,7 +498,7 @@
   },
   {
     "name": "spark_designer_create_components",
-    "description": "Add component(s) in supplied Z order. Existing components remain.",
+    "description": "Add components in supplied Z order (later is above earlier). For large layouts, generate at most 10 components per call and continue with the returned snapshotToken; the API supports up to 200 simple components but large generated calls can be truncated or malformed. Existing components remain. Read component_schema for the chosen types and dependencies first. For clickable buttons, use a supported string props.action with its companion fields; props.script is Python.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -456,10 +518,173 @@
         },
         "components": {
           "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
           "items": {
             "type": "object",
-            "additionalProperties": true,
-            "description": "{id,type,x,y,width,height,props}"
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "alarmStatusTable",
+                  "alarmJournalTable",
+                  "historicalTrend",
+                  "chart",
+                  "sparkline",
+                  "equipmentCommand",
+                  "label",
+                  "value",
+                  "gauge",
+                  "button",
+                  "table",
+                  "list",
+                  "treeView",
+                  "textInput",
+                  "formattedInput",
+                  "barcodeInput",
+                  "viewContainer",
+                  "passwordInput",
+                  "multiStateButton",
+                  "multiStateIndicator",
+                  "ledDisplay",
+                  "progressBar",
+                  "cylindricalTank",
+                  "levelIndicator",
+                  "thermometer",
+                  "textArea",
+                  "numberInput",
+                  "spinner",
+                  "slider",
+                  "checkbox",
+                  "toggle",
+                  "select",
+                  "radioGroup",
+                  "dateTimeInput",
+                  "template",
+                  "repeater",
+                  "image",
+                  "computerCamera",
+                  "icon",
+                  "line",
+                  "rectangle",
+                  "ellipse",
+                  "polyline",
+                  "pipe",
+                  "equipmentSymbol"
+                ]
+              },
+              "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 8192
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 8192
+              },
+              "width": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 8192
+              },
+              "height": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 8192
+              },
+              "groupId": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}$"
+              },
+              "props": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Use component_schema(type) for properties and basic actions; request include for advanced action/event/binding formats. action is a string; script is Python source. Colors are hex, including #00000000 for transparency.",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "navigate",
+                      "script",
+                      "openPopup",
+                      "closePopup",
+                      "message",
+                      "setTagValue"
+                    ]
+                  },
+                  "script": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 65536
+                  },
+                  "targetScreenId": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "object",
+                    "properties": {
+                      "messageType": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "instance",
+                          "screen",
+                          "session"
+                        ]
+                      },
+                      "payload": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "required": [
+                      "messageType",
+                      "scope",
+                      "payload"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "backgroundColor": {
+                    "type": "string",
+                    "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
+                  },
+                  "foregroundColor": {
+                    "type": "string",
+                    "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
+                  },
+                  "events": {
+                    "type": "object",
+                    "description": "Input components only: change/commit => {language:\"javascript\"|\"python\",code:string}. Password change/commit supports JavaScript only. Never use for button clicks.",
+                    "additionalProperties": true
+                  },
+                  "componentEvents": {
+                    "type": "object",
+                    "description": "mount/unmount/propertyChange/focus/blur/keyDown/keyUp/doubleClick/pointerDown/pointerUp => {language,code}; propertyChange also requires properties:string[]. No click/onClick event.",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "x",
+              "y",
+              "width",
+              "height",
+              "props"
+            ],
+            "additionalProperties": false
           }
         }
       },
@@ -480,7 +705,7 @@
   },
   {
     "name": "spark_designer_update_components",
-    "description": "Patch layout or component properties for explicit IDs. Props shallow-merge; use set_binding for bindings.",
+    "description": "Apply the same layout/property patch to all explicit componentIds in one call. Prefer this to many apply_edits operations for a shared appearance change. Send only changed props; do not repeat unchanged scripts or geometry. Props shallow-merge, so include every sibling of a nested object being replaced. Read component_schema(type,include:[sectionName]) for advanced actions/events. Use set_binding for individual bindings.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -507,7 +732,81 @@
         "patch": {
           "type": "object",
           "additionalProperties": true,
-          "description": "Allowed: x,y,width,height,groupId,props. Use props for actions, scripting, tagPath, templates, tables, chart/history/alarms, assetId, drawings and other authored settings."
+          "description": "Allowed: x,y,width,height,groupId,props. Use props for actions, scripting, tagPath, templates, tables, chart/history/alarms, assetId, drawings and other authored settings.",
+          "properties": {
+            "props": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Use component_schema(type) for properties and basic actions; request include for advanced action/event/binding formats. action is a string; script is Python source. Colors are hex, including #00000000 for transparency.",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "navigate",
+                    "script",
+                    "openPopup",
+                    "closePopup",
+                    "message",
+                    "setTagValue"
+                  ]
+                },
+                "script": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 65536
+                },
+                "targetScreenId": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "object",
+                  "properties": {
+                    "messageType": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "instance",
+                        "screen",
+                        "session"
+                      ]
+                    },
+                    "payload": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "messageType",
+                    "scope",
+                    "payload"
+                  ],
+                  "additionalProperties": false
+                },
+                "backgroundColor": {
+                  "type": "string",
+                  "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
+                },
+                "foregroundColor": {
+                  "type": "string",
+                  "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
+                },
+                "events": {
+                  "type": "object",
+                  "description": "Input components only: change/commit => {language:\"javascript\"|\"python\",code:string}. Password change/commit supports JavaScript only. Never use for button clicks.",
+                  "additionalProperties": true
+                },
+                "componentEvents": {
+                  "type": "object",
+                  "description": "mount/unmount/propertyChange/focus/blur/keyDown/keyUp/doubleClick/pointerDown/pointerUp => {language,code}; propertyChange also requires properties:string[]. No click/onClick event.",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
         }
       },
       "required": [
@@ -729,7 +1028,7 @@
   },
   {
     "name": "spark_designer_set_component_section",
-    "description": "Replace one component's script/events, messaging, custom properties, state binding, dataset, table editing, template parameters or view layout section. Code is saved as draft; never executes here.",
+    "description": "Replace one entire structured component section using the exact format from component_schema(type,include:[sectionName]). Events are input change/commit only; componentEvents has supported lifecycle/interaction names with {language,code}. For button actions or Python script use update_components.patch.props instead. Code remains draft and does not execute here.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -767,7 +1066,9 @@
             "optionsSource"
           ]
         },
-        "value": {}
+        "value": {
+          "description": "The complete replacement value in the selected section’s documented schema; object or array as specified by component_schema. Do not invent event/action names or omit language/code."
+        }
       },
       "required": [
         "snapshotToken",
@@ -1033,7 +1334,7 @@
   },
   {
     "name": "spark_designer_apply_edits",
-    "description": "Apply 1–100 ordered draft edits atomically using one current snapshotToken. Validate the final project once, create one Undo action, and never save or publish. Prefer this for creating a screen and its components together. Each operation uses the named tool arguments without snapshotToken; inspect its tool schema first.",
+    "description": "Apply 1–100 ordered draft edits atomically using one current snapshotToken. Validate the final project once, create one Undo action, and never save or publish. Prefer this for creating a screen and components together. For a shared property change use one update_components operation with all componentIds instead of repeating the same patch/scripts. Keep generated payloads small enough for a complete model response. Each operation uses the named tool arguments without snapshotToken; inspect its tool schema first.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -1142,7 +1443,7 @@
   },
   {
     "name": "spark_designer_crop_image_assets",
-    "description": "Crop retained images in this conversation into named project image assets. Supply 1–16 crops using sourceImageId and natural prepared-image pixel coordinates. One explicit confirmation covers the batch. Assets upload sequentially; any partial success is reported. No external URLs are accepted.",
+    "description": "Crop retained images in this conversation into named project image assets. Supply 1–16 crops using sourceImageId and natural prepared-image pixel coordinates. One explicit confirmation covers the batch, including automatic encoding to fit the 512 KiB asset cap: keep PNG when it fits, otherwise try WebP at the original dimensions, then proportionally reduce resolution if needed (PNG fallback without WebP support). Transparency and the selected source rectangle are preserved. Each created receipt includes sourceBox, resized, and asset.width/height/contentType; use the actual saved dimensions when inspecting assets and the source rectangle for original layout proportions. Assets upload sequentially without retries; any partial success is reported. No external URLs are accepted.",
     "parameters": {
       "type": "object",
       "properties": {

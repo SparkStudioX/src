@@ -1,5 +1,5 @@
 import catalog from "./askSparkDesignerTools.json";
-import { runtimePropertyDefinitions } from "./runtimePropertyCatalog";
+import { designerComponentSchema } from "./askSparkDesignerSchema";
 import { buildProjectSearch, findProjectReferences } from "./projectSearch";
 import type { SearchReference } from "./projectSearch";
 import { collectDesignerDiagnostics } from "./designerDiagnostics";
@@ -22,11 +22,7 @@ const readers: Record<string, Reader> = {
   spark_designer_get_document: (snapshot, args) => ({ snapshotToken: snapshot.token, document: documentFor(snapshot, args) }),
   spark_designer_get_project_settings: snapshot => ({ snapshotToken: snapshot.token, parameters: snapshot.project.parameters, navigation: snapshot.project.navigation,
     sessionState: snapshot.project.sessionState, styles: snapshot.project.styles, localization: snapshot.project.localization, authoringDefaults: snapshot.project.authoringDefaults, commands: snapshot.project.commands }),
-  spark_designer_component_schema: (_snapshot, args) => ({ properties: runtimePropertyDefinitions.filter(item => !args.type || item.components.includes("*") || item.components.includes(String(args.type))),
-    structure: "Component {id,type,x,y,width,height,groupId?,props}. Props may also contain bindings, queryBindings, events, componentEvents, messageHandlers, customProperties, dataSource, stateBinding, templateId, parameters, parameterBindings, viewLayout, rowsSource, optionsSource, tableEdit, action, targetScreenId, script, tagWrite. Read current components as examples. All edits run the gateway authoring validators.",
-    bindingExample: { expression: "temperature * 1.8 + 32", references: { temperature: { kind: "tag", path: "[default]Temperature" } } },
-    eventsExample: { change: { language: "javascript", code: "// event handler" } },
-    stateExample: { target: { type: "number", value: 0 } } }),
+  spark_designer_component_schema: designerComponentSchema,
   spark_designer_search: (snapshot, args) => {
     const query = textArg(args, "query").toLowerCase();
     return buildProjectSearch(snapshot.project, snapshot.queries, snapshot.scripts).filter(entry => JSON.stringify(entry).toLowerCase().includes(query)).slice(0, 100);

@@ -71,7 +71,7 @@ await check('approval preview renders named crop tiles and safely displays malfo
   const {renderToStaticMarkup}=await import('react-dom/server');const {createElement}=await import('react');
   const render=crops=>renderToStaticMarkup(createElement(review.AskSparkCropReview,{crops,resolveImage:()=>({...source,preview:'blob:synthetic-preview'})}));
   const html=render([rectangle('Red'),rectangle('Blue',{x:16,y:0,width:16,height:16})]);
-  assert.match(html,/Red/);assert.match(html,/Blue/);assert.match(html,/left:-16px/);assert.match(html,/16 × 16 px/);assert.doesNotMatch(html,/<button|<input/);
+  assert.match(html,/Red/);assert.match(html,/Blue/);assert.match(html,/left:-16px/);assert.match(html,/16 × 16 px source area/);assert.match(html,/512 KiB/);assert.match(html,/compressed or resized/);assert.match(html,/saved dimensions/);assert.doesNotMatch(html,/<button|<input/);
   const malformed=render([{sourceImageId:'not a URL',name:'bad'}]);assert.match(malformed,/Crop 1/);assert.doesNotMatch(malformed,/<img/);
   assert.doesNotMatch(render([rectangle('Outside',{x:32,y:0,width:16,height:16})]),/<img/);
   assert.match(render([]),/between 1 and 16/);
@@ -95,7 +95,7 @@ async function browserChecks() {
     const page=await browser.newPage({viewport:{width:1000,height:800}});
     await page.goto(`http://127.0.0.1:${server.address().port}/designer/project-a`);
     const result=await page.evaluate(async()=>{
-      const {captureDesignerCanvas,cropRetainedImages,configureAuthSession,ApiError}=window.visualTest;
+      const {captureDesignerCanvas,encodeCanvasCapture,cropRetainedImages,configureAuthSession,ApiError}=window.visualTest;
       const passed=[];
       const check=async(name,run)=>{await run();passed.push(name);};
       const ok=(condition,message)=>{if(!condition)throw new Error(message);};
@@ -108,20 +108,39 @@ async function browserChecks() {
       const source={id:'sent-image',name:'Synthetic.png',mimeType:'image/png',data:url.split(',')[1],preview:'blob:never-use',width:32,height:16};
       const resolveImage=id=>id===source.id?source:undefined;
       const crop=(name,x=0)=>({sourceImageId:source.id,name,box:{x,y:0,width:16,height:16}});
-      const pixels=async(data)=>{const image=new Image();image.src=`data:image/png;base64,${data}`;await image.decode();const canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);return{width:canvas.width,height:canvas.height,at:(x,y)=>[...ctx.getImageData(x,y,1,1).data]};};
+      const pixels=async(data,mimeType='image/png')=>{const image=new Image();image.src=`data:${mimeType};base64,${data}`;await image.decode();const canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);return{width:canvas.width,height:canvas.height,at:(x,y)=>[...ctx.getImageData(x,y,1,1).data]};};
+      const noisySource=()=>{const canvas=document.createElement('canvas');canvas.width=512;canvas.height=512;const context=canvas.getContext('2d'),image=context.createImageData(512,512);let seed=17;for(let i=0;i<image.data.length;i++){seed=(seed*1664525+1013904223)>>>0;image.data[i]=seed>>>24;}context.putImageData(image,0,0);context.clearRect(0,0,8,8);return{...source,width:512,height:512,data:canvas.toDataURL('image/png').split(',')[1]};};
       const rgb=(value,expected)=>ok(value.slice(0,3).join(',')===expected.join(','),`Expected ${expected}, got ${value}`);
       document.body.insertAdjacentHTML('beforeend',`<style>*{box-sizing:border-box}.screen-canvas{position:relative;width:320px;height:160px;background:white;transform:scale(.5);transform-origin:top left;font-family:Arial,sans-serif}.screen-canvas button{position:absolute;left:10px;top:10px;width:80px;height:35px;background:rgb(0,128,0);color:white;border:0}.screen-canvas input{position:absolute;left:110px;top:10px;width:80px;height:35px;background:rgb(0,0,0);color:red;border:0}.screen-canvas img{position:absolute;left:10px;top:60px;width:32px;height:16px}.canvas-component-selection{position:absolute;inset:0;background:rgb(255,0,255);z-index:999}.screen-canvas .private{position:absolute;left:210px;top:10px;width:80px;height:35px;background:black}</style><div style="height:30px;background:red">Editor toolbar outside canvas</div><div class="screen-canvas snap-grid"><button>Actual button</button><input type="password" value="synthetic-secret"><div data-ask-spark-private class="private">private text</div><img src="${url}"><div class="canvas-component-selection">Selection</div></div>`);
       const canvas=document.querySelector('.screen-canvas');
       await check('real DOM capture keeps native dimensions, button and image pixels while excluding editor overlays and private inputs',async()=>{
-        const capture=await captureDesignerCanvas(canvas,signal()), image=await pixels(capture.data);
+        const capture=await captureDesignerCanvas(canvas,signal()), image=await pixels(capture.data,capture.mimeType);
         ok(capture.canvasWidth===320&&capture.canvasHeight===160&&image.width===320&&image.height===160,'Capture must undo editor zoom');
         rgb(image.at(15,15),[0,128,0]);rgb(image.at(15,65),[255,0,0]);rgb(image.at(35,65),[0,0,255]);rgb(image.at(115,15),[255,255,255]);rgb(image.at(215,15),[255,255,255]);
         ok(canvas.querySelector('input').value==='synthetic-secret'&&canvas.querySelector('.canvas-component-selection'),'Capture must not mutate source DOM');
       });
+      await check('large inspection frames use smaller WebP without changing dimensions, alpha or source pixels',async()=>{
+        const source=noisySource(),image=new Image();image.src=`data:${source.mimeType};base64,${source.data}`;await image.decode();
+        const original=document.createElement('canvas');original.width=512;original.height=512;original.getContext('2d').drawImage(image,0,0);
+        const before=original.toDataURL(),encoded=await encodeCanvasCapture(original,signal()),decoded=await pixels(encoded.data,encoded.mimeType);
+        ok(encoded.mimeType==='image/webp'&&atob(encoded.data).length<atob(source.data).length,'Inspection frame was not compressed');
+        ok(encoded.width===512&&encoded.height===512&&decoded.width===512&&decoded.height===512,'Compression unexpectedly resized the frame');
+        ok(decoded.at(0,0)[3]===0&&original.toDataURL()===before,'Inspection compression lost alpha or changed its source');
+      });
+      await check('inspection frame encoding falls back to original-size PNG when WebP is unsupported',async()=>{
+        const source=noisySource(),image=new Image();image.src=`data:${source.mimeType};base64,${source.data}`;await image.decode();
+        const original=document.createElement('canvas');original.width=512;original.height=512;original.getContext('2d').drawImage(image,0,0);
+        const native=HTMLCanvasElement.prototype.toBlob;
+        HTMLCanvasElement.prototype.toBlob=function(callback,type,quality){return native.call(this,callback,type==='image/webp'?'image/png':type,quality);};
+        try {
+          const encoded=await encodeCanvasCapture(original,signal()),decoded=await pixels(encoded.data,encoded.mimeType);
+          ok(encoded.mimeType==='image/png'&&decoded.width===512&&decoded.height===512&&decoded.at(0,0)[3]===0,'Unsupported encoding lost pixels or advertised the wrong MIME type');
+        } finally { HTMLCanvasElement.prototype.toBlob=native; }
+      });
       await check('browser crop encodes exact source rectangles and uploads in sequence',async()=>{
         const uploads=[];let active=0;
-        const receipt=await cropRetainedImages({projectId:'project-a',crops:[crop('Red'),crop('Blue',16)],resolveImage,signal:signal(),listAssets:async()=>[],uploadAsset:async(projectId,upload)=>{ok(projectId==='project-a','Explicit project missing');ok(++active===1,'Uploads overlapped');const image=await pixels(upload.dataBase64);ok(image.width===16&&image.height===16,'Crop rescaled');rgb(image.at(8,8),upload.name==='Red'?[255,0,0]:[0,0,255]);uploads.push(upload.name);active--;return{id:'a'.repeat(64),name:upload.name,contentType:'image/png',size:100,width:16,height:16};}});
-        ok(receipt.status==='completed'&&receipt.created.length===2&&uploads.join(',')==='Red,Blue','Missing ordered receipts');
+        const receipt=await cropRetainedImages({projectId:'project-a',crops:[crop('Red'),crop('Blue',16)],resolveImage,signal:signal(),listAssets:async()=>[],uploadAsset:async(projectId,upload)=>{ok(projectId==='project-a','Explicit project missing');ok(++active===1,'Uploads overlapped');ok(upload.contentType==='image/png','Small crop should keep lossless PNG');const image=await pixels(upload.dataBase64,upload.contentType);ok(image.width===16&&image.height===16,'Crop rescaled');rgb(image.at(8,8),upload.name==='Red'?[255,0,0]:[0,0,255]);uploads.push(upload.name);active--;return{id:'a'.repeat(64),name:upload.name,contentType:'image/png',size:100,width:16,height:16};}});
+        ok(receipt.status==='completed'&&receipt.created.length===2&&uploads.join(',')==='Red,Blue','Missing ordered receipts');ok(receipt.created.every(item=>!item.resized&&item.sourceBox.width===16),'Small crops must retain source coordinates and resolution');
       });
       await check('all crop validation completes before the first upload',async()=>{
         let writes=0;const uploadAsset=async()=>{writes++;throw new Error('unexpected write');};
@@ -147,11 +166,26 @@ async function browserChecks() {
         const receipt=await cropRetainedImages({projectId:'project-a',crops:[crop('First'),crop('Second')],resolveImage,signal:signal(),listAssets:async()=>[],uploadAsset:async(_project,upload)=>{writes++;configureAuthSession({audience:'engineering',projectId:'project-a',csrfToken:'other-synthetic-csrf',key:'different-user'});return{id:'a'.repeat(64),name:upload.name};}});
         ok(writes===1&&receipt.status==='partial'&&/session changed/.test(receipt.error),'Account change crossed upload boundary');
       });
-      await check('oversized crop PNGs fail before any upload',async()=>{
-        const noise=document.createElement('canvas');noise.width=512;noise.height=512;const ctx=noise.getContext('2d'),image=ctx.createImageData(512,512);let seed=17;for(let i=0;i<image.data.length;i++){seed=(seed*1664525+1013904223)>>>0;image.data[i]=seed>>>24;}ctx.putImageData(image,0,0);
-        const large={...source,width:512,height:512,data:noise.toDataURL('image/png').split(',')[1]};let writes=0;
-        await expectError(()=>cropRetainedImages({projectId:'project-a',crops:[{...crop('Noise'),box:{x:0,y:0,width:512,height:512}}],resolveImage:()=>large,signal:signal(),listAssets:async()=>[],uploadAsset:async()=>{writes++;}}),/512 KiB/);
-        ok(writes===0,'Oversized crop uploaded');
+      await check('oversized crop PNGs use WebP at the original dimensions before downscaling',async()=>{
+        const large=noisySource();let writes=0;ok(atob(large.data).length>512*1024,'Fixture must exceed the PNG asset cap');
+        const receipt=await cropRetainedImages({projectId:'project-a',crops:[{...crop('Noise'),box:{x:0,y:0,width:512,height:512}}],resolveImage:()=>large,signal:signal(),listAssets:async()=>[],uploadAsset:async(_project,upload)=>{writes++;const image=await pixels(upload.dataBase64,upload.contentType),size=atob(upload.dataBase64).length;ok(upload.contentType==='image/webp'&&size<=512*1024,'Upload must use actual bounded WebP');ok(image.width===512&&image.height===512,'Compression should precede resizing');ok(image.at(0,0)[3]===0,'Transparency was lost');return{id:'a'.repeat(64),name:upload.name,contentType:upload.contentType,size,width:image.width,height:image.height};}});
+        ok(writes===1&&receipt.status==='completed'&&!receipt.created[0].resized&&receipt.created[0].asset.width===512,'Missing original-size encoded receipt');
+      });
+      await check('unsupported WebP falls back to bounded PNG without changing the selected rectangle',async()=>{
+        const large=noisySource(),native=HTMLCanvasElement.prototype.toBlob;let writes=0;
+        HTMLCanvasElement.prototype.toBlob=function(callback,type,quality){return native.call(this,callback,type==='image/webp'?'image/png':type,quality);};
+        try {
+          const receipt=await cropRetainedImages({projectId:'project-a',crops:[{...crop('PNG fallback'),box:{x:0,y:0,width:512,height:512}}],resolveImage:()=>large,signal:signal(),listAssets:async()=>[],uploadAsset:async(_project,upload)=>{writes++;const image=await pixels(upload.dataBase64,upload.contentType),size=atob(upload.dataBase64).length;ok(upload.contentType==='image/png'&&size<=512*1024,'Fallback MIME or cap is incorrect');ok(image.width<512&&image.width===image.height,'Fallback must downscale proportionally');ok(image.at(0,0)[3]===0,'Fallback lost transparency');return{id:'a'.repeat(64),name:upload.name,contentType:upload.contentType,size,width:image.width,height:image.height};}});
+          ok(writes===1&&receipt.status==='completed'&&receipt.created[0].resized&&receipt.created[0].sourceBox.width===512,'Fallback must report saved dimensions and original source area');
+        } finally { HTMLCanvasElement.prototype.toBlob=native; }
+      });
+      await check('compression failures prepare the whole batch before uploading and never retry uploads',async()=>{
+        const native=HTMLCanvasElement.prototype.toBlob;let encodes=0,writes=0;
+        HTMLCanvasElement.prototype.toBlob=function(callback,type,quality){const oversized=++encodes>1;return native.call(this,blob=>callback(oversized?new Blob([blob,new Uint8Array(512*1024)],{type:blob.type}):blob),type,quality);};
+        try {
+          await expectError(()=>cropRetainedImages({projectId:'project-a',crops:[crop('Prepared'),crop('Cannot fit')],resolveImage,signal:signal(),listAssets:async()=>[],uploadAsset:async()=>{writes++;}}),/512 KiB/);
+          ok(writes===0&&encodes<=37,'Compression must be bounded and precede every upload');
+        } finally { HTMLCanvasElement.prototype.toBlob=native; }
       });
       await check('external canvas resources fail closed before export',async()=>{
         const part=document.createElement('div');part.style.backgroundImage='url(https://example.invalid/external.png)';canvas.append(part);
@@ -170,7 +204,7 @@ async function browserChecks() {
       const imageData=await page.evaluate(()=>{const canvas=document.createElement('canvas');canvas.width=4;canvas.height=4;const context=canvas.getContext('2d');context.fillStyle='#f00';context.fillRect(0,0,4,4);return canvas.toDataURL().split(',')[1];});
       const requests=[];
       await page.route('**/protected.png',async route=>{requests.push(route.request().headers());await route.fulfill({status:200,contentType:'image/png',body:Buffer.from(imageData,'base64')});});
-      const result=await page.evaluate(async()=>{const root=document.querySelector('.screen-canvas'),image=root.querySelector('img');image.src='/protected.png';await image.decode();const capture=await window.visualTest.captureDesignerCanvas(root,new AbortController().signal);const decoded=new Image();decoded.src=`data:image/png;base64,${capture.data}`;await decoded.decode();const canvas=document.createElement('canvas');canvas.width=decoded.naturalWidth;canvas.height=decoded.naturalHeight;const context=canvas.getContext('2d');context.drawImage(decoded,0,0);return[...context.getImageData(15,65,1,1).data];});
+      const result=await page.evaluate(async()=>{const root=document.querySelector('.screen-canvas'),image=root.querySelector('img');image.src='/protected.png';await image.decode();const capture=await window.visualTest.captureDesignerCanvas(root,new AbortController().signal);const decoded=new Image();decoded.src=`data:${capture.mimeType};base64,${capture.data}`;await decoded.decode();const canvas=document.createElement('canvas');canvas.width=decoded.naturalWidth;canvas.height=decoded.naturalHeight;const context=canvas.getContext('2d');context.drawImage(decoded,0,0);return[...context.getImageData(15,65,1,1).data];});
       assert.deepEqual(result,[255,0,0,255]);assert.ok(requests.filter(headers=>headers['x-spark-audience']==='engineering').length>=2,'Preflight and embed should carry engineering authentication');
     });
   } finally { await browser?.close(); await new Promise(resolve=>server.close(resolve)); }

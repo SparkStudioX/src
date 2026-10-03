@@ -23,8 +23,9 @@ public sealed class AskSparkService(AskSparkSettings settings, AskSparkConversat
             conversation.ProjectId = context.ProjectId;
         }
         else StartMessage(conversation, request, context.ProjectId, settings.Snapshot().ModelStepLimit);
-        conversation.ToolContext = context.Tools;
+        UpdateToolContext(conversation, context.Tools);
         // Persist accepted receipts before another provider request, including a request which later fails.
+        AskSparkData.Trim(conversation);
         conversations.Save(actor.Id, conversation);
         return await RunRounds(actor, conversation, context.EditorAvailable, sessionValid, cancellation);
     }
@@ -42,37 +43,71 @@ public sealed class AskSparkService(AskSparkSettings settings, AskSparkConversat
             || pending.Call.Arguments["projectId"]?.GetValue<string>() != projectId || !JsonNode.DeepEquals(result?["opened"], JsonValue.Create(true))
             || !JsonNode.DeepEquals(result?["projectId"], JsonValue.Create(projectId)) || result!.ContainsKey("error"))
             throw new BadHttpRequestException("Project switching requires the successful receipt for the exact authorized open-project call.", 409);
-        catalog.Require(pending.Call.Name, pending.Call.Arguments, security, actor, conversation.ProjectId, false);
+        catalog.Require(pending.Call.Name, pending.Call.Arguments, security, actor, conversation.ProjectId, false, PreviewActive(conversation));
     }
 
     private async Task<AskSparkTurnResponse> RunRounds(SecurityUser actor, AskSparkConversation conversation, bool editorAvailable,
         Func<bool>? sessionValid, CancellationToken cancellation)
     {
         var messages = new List<string>();
+        var unloadedRounds = 0;
+        var generationFailures = 0;
         while (true)
         {
             cancellation.ThrowIfCancellationRequested();
             RequireCurrent(actor, sessionValid);
             CheckContextSize(conversation);
-            var allowed = catalog.Allowed(security, actor, conversation.ProjectId, editorAvailable);
+            var allowed = catalog.Allowed(security, actor, conversation.ProjectId, editorAvailable, PreviewActive(conversation));
             var declarations = AskSparkToolSearch.LoadForRound(conversation, allowed);
-            var finalAnswer = conversation.Rounds >= conversation.StepLimit;
+            var finalAnswer = conversation.Rounds >= conversation.StepLimit || unloadedRounds >= 3;
+            if (finalAnswer) AskSparkGeneration.AddFinalNotice(conversation.Contents, conversation.Rounds >= conversation.StepLimit);
             var modelContext = new AskSparkModelContext(AskSparkToolSearch.Directory(allowed), AskSparkToolSearch.Scope(actor, conversation));
             var reply = await model.GenerateAsync(conversation.Contents, declarations, finalAnswer, modelContext, cancellation);
             RequireCurrent(actor, sessionValid);
             conversation.Rounds++;
             conversation.Tokens += Math.Clamp(reply.Tokens, 0, 1_000_000);
+            if (AskSparkGeneration.Failure(reply) is { } failure)
+            {
+                generationFailures++;
+                var retry = !finalAnswer && conversation.Rounds < conversation.StepLimit
+                    && generationFailures < AskSparkGeneration.MaximumFailures && AskSparkGeneration.CanRetry(failure);
+                RecordGenerationFailure(actor, conversation, failure, generationFailures, finalAnswer, retry, messages);
+                if (retry) continue;
+                return new(conversation.Id, string.Join('\n', messages), [], null, conversation.Actions.ToArray(), settings.Snapshot().ParallelLimit);
+            }
+            generationFailures = 0;
             conversation.Contents.Add(reply.Content.DeepClone());
             var calls = PrepareCalls(actor, conversation, reply.Content, editorAvailable, finalAnswer, declarations, allowed);
-            var discoveryOnly = conversation.Pending.Length > 0 && calls.Length == 0;
+            if (conversation.Pending.Any(pending => pending.ServerResult is JsonObject result
+                && result["code"]?.GetValue<string>() == "tool_not_loaded")) unloadedRounds++;
+            var serverOnly = conversation.Pending.Length > 0 && calls.Length == 0;
             RecordReply(conversation, reply.Content, messages, conversation.Pending.Length == 0);
-            if (discoveryOnly) CompleteServerRound(conversation);
+            if (serverOnly) CompleteServerRound(conversation);
             conversation.UpdatedAt = DateTimeOffset.UtcNow;
             AskSparkData.Trim(conversation);
             conversations.Save(actor.Id, conversation);
-            if (!discoveryOnly) return new(conversation.Id, messages.Count == 0 ? null : string.Join('\n', messages), calls,
+            if (!serverOnly) return new(conversation.Id, messages.Count == 0 ? null : string.Join('\n', messages), calls,
                 conversation.ContinuationToken, conversation.Actions.ToArray(), settings.Snapshot().ParallelLimit);
         }
+    }
+
+    private void RecordGenerationFailure(SecurityUser actor, AskSparkConversation conversation, string reason, int failures,
+        bool finalAnswer, bool retry, List<string> messages)
+    {
+        // The failed provider candidate is retained by raw exchange logging only. Its tool-like
+        // content has never been authorized or sent to the browser, so none of it may execute.
+        conversation.Pending = []; conversation.ContinuationToken = null;
+        if (retry) AskSparkGeneration.AddRecovery(conversation.Contents, reason);
+        else
+        {
+            var text = AskSparkGeneration.Stopped(reason, failures, conversation.Rounds >= conversation.StepLimit, finalAnswer);
+            var notice = AskSparkGemini.TextContent("model", text);
+            conversation.Contents.Add(notice);
+            RecordReply(conversation, notice, messages, true);
+        }
+        conversation.UpdatedAt = DateTimeOffset.UtcNow;
+        AskSparkData.Trim(conversation);
+        conversations.Save(actor.Id, conversation);
     }
 
     private static void CheckContextSize(AskSparkConversation conversation)
@@ -100,7 +135,7 @@ public sealed class AskSparkService(AskSparkSettings settings, AskSparkConversat
         if (index < 0 || string.IsNullOrEmpty(request.Token)) throw new BadHttpRequestException("This approval is expired, already used or belongs to another request.", 409);
         var pending = conversation.Pending[index];
         if (pending.ExpiresAt <= DateTimeOffset.UtcNow) throw new BadHttpRequestException("This approval expired. Review a new proposal.", 409);
-        catalog.Require(pending.Call.Name, pending.Call.Arguments, security, actor, conversation.ProjectId, true);
+        catalog.Require(pending.Call.Name, pending.Call.Arguments, security, actor, conversation.ProjectId, true, PreviewActive(conversation));
         var call = pending.Call with { Authorized = request.Approved, ApprovalToken = null };
         conversation.Pending[index] = pending with { Call = call, Token = null, Decided = true, Declined = !request.Approved };
         security.Audit(actor, "ask-spark.confirm", conversation.ProjectId, request.Approved ? "Approved" : "Declined", resource: pending.Call.Name);
@@ -128,14 +163,26 @@ public sealed class AskSparkService(AskSparkSettings settings, AskSparkConversat
         }
         var current = context ?? previousTools ?? new JsonObject();
         var editorAvailable = current["editorAvailable"]?.GetValue<bool>() == true;
-        var tools = new JsonObject { ["editorAvailable"] = editorAvailable };
-        foreach (var key in new[] { "surface", "section" })
+        var tools = new JsonObject { ["editorAvailable"] = editorAvailable, ["previewActive"] = current["previewActive"]?.GetValue<bool>() == true };
+        foreach (var key in new[] { "surface", "section", "previewMode" })
         {
             var value = current[key]?.GetValue<string>();
             if (value?.Length > 128) throw new ArgumentException("Assistant page context exceeds its length limit.");
             tools[key] = value;
         }
         return (projectId, editorAvailable, tools);
+    }
+
+    private static bool PreviewActive(AskSparkConversation conversation) => conversation.ToolContext["previewActive"]?.GetValue<bool>() == true;
+
+    private static void UpdateToolContext(AskSparkConversation conversation, JsonObject context)
+    {
+        if (PreviewActive(conversation) != (context["previewActive"]?.GetValue<bool>() == true)
+            && conversation.Contents.LastOrDefault()?["parts"] is JsonArray parts)
+            parts.Add(new JsonObject { ["text"] = context["previewActive"]?.GetValue<bool>() == true
+                ? "Current UI state: Designer Preview is active. Only inspection tools are available. Editing, saving, publishing, live actions and project switching require the user to exit Preview first."
+                : "Current UI state: Designer Preview is closed. Normal authorized tools are available again." });
+        conversation.ToolContext = context;
     }
 
     private static void StartMessage(AskSparkConversation conversation, AskSparkTurnRequest request, string? projectId, int stepLimit)
@@ -183,7 +230,7 @@ public sealed class AskSparkService(AskSparkSettings settings, AskSparkConversat
     {
         if (pending.Call.Confirmation && !pending.Decided) throw new BadHttpRequestException("Approve or decline the exact proposed tool call before continuing.", 409);
         if (pending.ExpiresAt <= DateTimeOffset.UtcNow) throw new BadHttpRequestException("This tool round expired. Start a new request and inspect any uncertain changes.", 409);
-        catalog.Require(pending.Call.Name, pending.Call.Arguments, security, actor, conversation.ProjectId, editorAvailable);
+        catalog.Require(pending.Call.Name, pending.Call.Arguments, security, actor, conversation.ProjectId, editorAvailable, PreviewActive(conversation));
         var value = pending.Declined ? new JsonObject { ["error"] = "The user declined this action. Do not retry it." } : AskSparkData.Redact(result.Result);
         if (value?.ToJsonString().Length > 262_144) throw new ArgumentException("A tool result exceeds 256 KiB. Return a bounded summary.");
         var status = pending.Declined ? "declined" : value is JsonObject obj && obj.ContainsKey("error") ? "error" : "completed";
@@ -199,8 +246,14 @@ public sealed class AskSparkService(AskSparkSettings settings, AskSparkConversat
         if (finalAnswer || raw.Length > 16)
             throw new BadHttpRequestException("The assistant reached its tool limit. No new calls were executed. Start another request.", 409);
         var loaded = declarations.Select(tool => tool.Name).ToHashSet(StringComparer.Ordinal);
-        // Validate the entire response against the declarations supplied to that round before discovery can load anything.
-        conversation.Pending = raw.Select(call => PrepareCall(actor, conversation, call!, editorAvailable, loaded)).ToArray();
+        // Validate all permissions and every loaded schema before discovery or browser actions.
+        // An unloaded tool must first expose its definition, not reject guessed arguments.
+        var prepared = raw.Select(call => PrepareCall(actor, conversation, call!, editorAvailable, loaded)).ToArray();
+        var unloaded = prepared.Where(pending => !loaded.Contains(pending.Call.Name)).Select(pending => pending.Call.Name)
+            .Distinct(StringComparer.Ordinal).ToArray();
+        conversation.Calls += raw.Length;
+        if (unloaded.Length > 0) return RecoverUnloaded(conversation, prepared, unloaded);
+        conversation.Pending = prepared;
         if (conversation.Pending.Any(pending => pending.Call.Name == "spark_open_project") && conversation.Pending.Count(pending => pending.Call.Target != "server") != 1)
             throw new ArgumentException("Open a project in its own tool round before invoking tools in the destination workspace.");
         for (var index = 0; index < conversation.Pending.Length; index++)
@@ -211,18 +264,37 @@ public sealed class AskSparkService(AskSparkSettings settings, AskSparkConversat
             conversation.Pending[index] = pending with { ServerHandled = true, ServerResult = result };
             conversation.Actions.Add(new(pending.Call.Id, pending.Call.Name, pending.Call.Kind, "completed", DateTimeOffset.UtcNow));
         }
-        conversation.Calls += raw.Length;
         conversation.ContinuationToken = Token();
         return conversation.Pending.Where(pending => !pending.ServerHandled).Select(pending => pending.Call).ToArray();
+    }
+
+    private static AskSparkToolCall[] RecoverUnloaded(AskSparkConversation conversation, AskSparkPending[] prepared, string[] unloaded)
+    {
+        conversation.Pending = prepared.Select(pending => pending with
+        {
+            Call = pending.Call with { Authorized = false, ApprovalToken = null }, Token = null, Decided = true,
+            ServerHandled = true, ServerResult = new JsonObject
+            {
+                ["error"] = "This round requested a tool whose definition was not loaded. No calls from this round were executed. Discover each required tool with find_tools using its exact name, then submit fresh calls using the returned schemas. Do not retry this same batch before discovery.",
+                ["code"] = "tool_not_loaded", ["executed"] = false,
+                ["requiredTools"] = new JsonArray(unloaded.Select(name => (JsonNode)JsonValue.Create(name)!).ToArray()),
+                ["nextStep"] = new JsonObject { ["tool"] = "find_tools", ["query"] = unloaded[0], ["limit"] = 1 }
+            }
+        }).ToArray();
+        conversation.ContinuationToken = null;
+        foreach (var pending in conversation.Pending)
+            conversation.Actions.Add(new(pending.Call.Id, pending.Call.Name, pending.Call.Kind, "error", DateTimeOffset.UtcNow));
+        return [];
     }
 
     private AskSparkPending PrepareCall(SecurityUser actor, AskSparkConversation conversation, JsonObject raw, bool editorAvailable, HashSet<string> loaded)
     {
         var name = raw["name"]?.GetValue<string>() ?? throw new ArgumentException("The model requested an unnamed tool.");
-        if (!loaded.Contains(name)) throw new BadHttpRequestException("This tool was not loaded for the current round. Use find_tools first.", 403);
         var args = raw["args"] as JsonObject ?? new JsonObject();
-        var tool = catalog.Require(name, args, security, actor, conversation.ProjectId, editorAvailable);
-        if (name == "spark_open_project") _ = projects.Get(args["projectId"]!.GetValue<string>());
+        var declared = loaded.Contains(name);
+        var tool = declared ? catalog.Require(name, args, security, actor, conversation.ProjectId, editorAvailable, PreviewActive(conversation))
+            : catalog.RequireAvailable(name, security, actor, conversation.ProjectId, editorAvailable, PreviewActive(conversation));
+        if (declared && name == "spark_open_project") _ = projects.Get(args["projectId"]!.GetValue<string>());
         var token = tool.Confirmation ? Token() : null;
         var call = new AskSparkToolCall(Guid.NewGuid().ToString("N"), name, args.DeepClone().AsObject(), tool.Kind, tool.Target, tool.Confirmation, tool.ParallelSafe, token, !tool.Confirmation);
         return new(call, token, DateTimeOffset.UtcNow.AddMinutes(15), !tool.Confirmation, false, raw["id"]?.GetValue<string>());
