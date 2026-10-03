@@ -160,8 +160,20 @@ async function api(route, options = {}) {
 }
 const login = () => api('/api/auth/login', { method: 'POST', body: { audience: 'engineering', ...identity } });
 
+function validateHealthVersion(value, version, revision) {
+  assert.equal(typeof value, 'string', 'Health must report its informational version.');
+  const [product, metadata, ...extra] = value.split('+');
+  assert.equal(product, version, 'Health product version differs from the expected release.');
+  assert.equal(extra.length, 0, 'Health informational version has invalid build metadata.');
+  // The SDK can append SourceRevisionId to an explicit InformationalVersion.
+  // Accept repeated revisions only when every full component is the reviewed SHA.
+  assert.ok(metadata?.split('.').every(component => component === revision), 'Every health build-metadata component must match the reviewed source revision.');
+}
+
 async function verifyCurrentConfiguration() {
-  assert.equal((await api('/api/health')).version, `${expected.version}+${expectedSourceCommit}`);
+  const healthVersion = (await api('/api/health')).version;
+  validateHealthVersion(healthVersion, expected.version, expectedSourceCommit);
+  evidence.healthVersion = healthVersion;
   const settings = await api('/api/gateway/ai');
   assert.equal(settings.enabled, false); assert.equal(settings.hasApiKey, false);
   assert.equal(settings.model, 'gemini-3.8-flash'); assert.equal(settings.modelStepLimit, 100);
@@ -225,6 +237,10 @@ try {
   assert.equal(state.Config.User, 'app'); assert.equal(state.HostConfig.ReadonlyRootfs, true);
   assert.equal(state.State.Health.Status, 'healthy');
   evidence.imageId = state.Image;
+  assert.match(state.ImageManifestDescriptor?.digest ?? '', /^sha256:[a-f0-9]{64}$/, 'Docker must expose the selected platform manifest digest.');
+  assert.equal(state.ImageManifestDescriptor.platform.os, 'linux');
+  assert.equal(state.ImageManifestDescriptor.platform.architecture, platform.split('/')[1]);
+  evidence.platformManifestDigest = state.ImageManifestDescriptor.digest;
   const manifest = JSON.parse((await exec(['cat', '/app/container-manifest.json'])).stdout);
   assert.equal(manifest.product, 'SparkStudio'); assert.equal(manifest.platform, platform);
   assert.equal(manifest.containerEdition, expected.containerEdition); assert.equal(manifest.version, expected.version);

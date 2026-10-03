@@ -2,7 +2,7 @@
 
 Connect to an i3X 1.0 API, browse its elements, and create read-only tags for selected current values. Start with polling and one element so you can verify the API address, authentication and data type before adding a larger model.
 
-**Build availability:** use Windows `v0.2.0-preview.13` or a compatible build whose **New Connection** menu includes **i3X source**, including the Docker `0.2.0-preview.13-docker.1` candidate. Windows preview.12 and Docker `0.2.0-preview.11-docker.1` do not include this feature. See the [release ledger](PARITY.md) for publication status, exact-package verification and real-source acceptance limits. The walkthrough was reviewed October 2, with release compatibility updated October 3, 2026.
+**Build availability:** use Windows `v0.2.0-preview.13` or a compatible build whose **New Connection** menu includes **i3X source**, including Docker `0.2.0-preview.13-docker.1`. Windows preview.12 and Docker `0.2.0-preview.11-docker.1` do not include this feature. See the [release ledger](PARITY.md) for publication status, exact-package verification and real-source acceptance limits. The walkthrough was reviewed October 2, with release compatibility updated October 3, 2026.
 
 ## Where do I create the tags?
 
