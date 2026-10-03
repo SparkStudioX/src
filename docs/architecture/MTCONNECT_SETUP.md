@@ -2,7 +2,7 @@
 
 Connect an MTConnect agent, browse its devices and turn selected observations into read-only gateway tags. This walkthrough uses an example CNC named `Mill01`; replace the example URL and names with your agent's values.
 
-**Build availability:** use Windows `v0.2.0-preview.13` or a later compatible build whose **New Connection** menu includes **MTConnect agent**. Windows preview.12 and Docker `0.2.0-preview.11-docker.1` do not include this feature. See the [release ledger](PARITY.md) for exact-package verification and real-source acceptance limits. The walkthrough was reviewed October 2, with release compatibility updated October 3, 2026.
+**Build availability:** use Windows `v0.2.0-preview.13` or a compatible build whose **New Connection** menu includes **MTConnect agent**, including the Docker `0.2.0-preview.13-docker.1` candidate. Windows preview.12 and Docker `0.2.0-preview.11-docker.1` do not include this feature. See the [release ledger](PARITY.md) for publication status, exact-package verification and real-source acceptance limits. The walkthrough was reviewed October 2, with release compatibility updated October 3, 2026.
 
 ## Where do I create the tags?
 
@@ -185,7 +185,7 @@ Leave **Effective limits and timeouts** at the defaults during initial setup. By
 
 | What you see | What to check |
 | --- | --- |
-| MTConnect agent is missing from New Connection | Use Windows preview.13 or a later compatible build containing source sessions. |
+| MTConnect agent is missing from New Connection | Use Windows preview.13 or a compatible build containing source sessions; see the Docker guide and release ledger for container availability. |
 | Test connection, browsing or import is disabled | Save the draft, enable the connection and save that change. |
 | Probe/version error | Use the agent base URL and confirm it serves a supported 2.5–2.8 XML namespace, rather than an HTML page or a login redirect. |
 | Unauthorized or certificate error | Match the agent's authentication mode/header and HTTPS certificate requirements. |

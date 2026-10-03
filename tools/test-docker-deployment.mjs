@@ -1,30 +1,107 @@
 #!/usr/bin/env node
 // Each invocation owns a fresh Compose project and volume. It never reuses gateway data.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
-import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises';
+import { readFile, readdir, realpath, mkdir, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readZip, sha256 } from './workshop-packages.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const image = process.argv[2];
-const platform = process.argv[3];
-assert.ok(image && /^[a-zA-Z0-9][a-zA-Z0-9./_:@-]+$/.test(image), 'Specify the exact candidate image or published digest.');
-assert.ok(['linux/amd64', 'linux/arm64'].includes(platform), 'Specify linux/amd64 or linux/arm64.');
+// Keep image, platform and optional workshop directory/ZIP positional for existing release commands.
+// Host ports can differ from Compose's fixed internal ports when another gateway is running.
+function deploymentOptions(arguments_) {
+  const [image, platform, ...remaining] = arguments_;
+  assert.ok(image && /^[a-zA-Z0-9][a-zA-Z0-9./_:@-]+$/.test(image), 'Specify the exact candidate image or published digest.');
+  assert.ok(['linux/amd64', 'linux/arm64'].includes(platform), 'Specify linux/amd64 or linux/arm64.');
+  const options = { image, platform, workshopDirectory: 'artifacts/sparkproj', httpPort: '8090', httpsPort: '8443' };
+  const flags = new Map([['--http-port', 'httpPort'], ['--https-port', 'httpsPort'], ['--expected-source-commit', 'expectedSourceCommit']]);
+  const seen = new Set();
+  while (remaining.length) {
+    const argument = remaining.shift();
+    const name = flags.get(argument);
+    if (name) {
+      assert.ok(!seen.has(name) && remaining[0] && !remaining[0].startsWith('--'), `Provide ${argument} once, followed by its value.`);
+      seen.add(name); options[name] = remaining.shift();
+    } else {
+      assert.ok(!argument.startsWith('--') && !seen.has('workshopDirectory'), `Unknown or repeated argument: ${argument}`);
+      seen.add('workshopDirectory'); options.workshopDirectory = argument;
+    }
+  }
+  for (const name of ['httpPort', 'httpsPort']) {
+    assert.ok(/^[1-9]\d{3,4}$/.test(options[name]) && Number(options[name]) >= 1024 && Number(options[name]) <= 65535,
+      `${name} must be an integer host port from 1024 to 65535.`);
+  }
+  assert.notEqual(options.httpPort, options.httpsPort, 'HTTP and HTTPS host ports must differ.');
+  if (options.expectedSourceCommit !== undefined) assert.match(options.expectedSourceCommit, /^[a-f0-9]{40}$/, 'Expected source commit must be a full lowercase SHA-1.');
+  return options;
+}
+function sourceCommit(explicit) {
+  if (explicit) return explicit;
+  const git = (...arguments_) => execFileSync('git', arguments_, { cwd: root, encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  assert.equal(git('status', '--porcelain', '--untracked-files=all'), '', 'Verify a clean checkout, or provide --expected-source-commit for a previously built image.');
+  const revision = git('rev-parse', 'HEAD');
+  assert.match(revision, /^[a-f0-9]{40}$/);
+  return revision;
+}
+async function expectedRelease() {
+  const [gateway, composeSource] = await Promise.all([
+    readFile(path.join(root, 'src/SparkStudio.Gateway/SparkStudio.Gateway.csproj'), 'utf8'), readFile(path.join(root, 'compose.yaml'), 'utf8'),
+  ]);
+  const version = gateway.match(/<Version>([^<]+)<\/Version>/)?.[1];
+  const containerEdition = composeSource.match(/image: \$\{SPARKSTUDIO_IMAGE:-ladder99\/sparkstudio:([^}]+)\}/)?.[1];
+  assert.match(version ?? '', /^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/, 'Gateway project must declare a release version.');
+  assert.ok(containerEdition?.startsWith(`${version}-docker.`) && /^\d+$/.test(containerEdition.slice(version.length + 8)), 'Compose Docker edition must match the gateway product version.');
+  return { version, containerEdition };
+}
+const options = deploymentOptions(process.argv.slice(2));
+const { image, platform, httpPort, httpsPort } = options;
+const expectedSourceCommit = sourceCommit(options.expectedSourceCommit);
+const expected = await expectedRelease();
 const project = `sparkstudio-docker-test-${randomUUID().slice(0, 8)}`;
 const environment = { ...process.env, SPARKSTUDIO_IMAGE: image, DOCKER_DEFAULT_PLATFORM: platform,
   SPARKSTUDIO_BIND_ADDRESS: '127.0.0.1', SPARKSTUDIO_PUBLIC_HOST: 'localhost',
-  SPARKSTUDIO_HTTP_PORT: '8090', SPARKSTUDIO_HTTPS_PORT: '8443',
+  SPARKSTUDIO_HTTP_PORT: httpPort, SPARKSTUDIO_HTTPS_PORT: httpsPort,
   SPARKSTUDIO_TLS_NAMES: 'localhost,127.0.0.1,::1', SPARKSTUDIO_COOKIE_NAMESPACE: 'SparkStudioDockerTest' };
 for (const name of ['DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH']) delete environment[name];
 const composeArguments = ['compose', '--project-name', project, '--file', path.join(root, 'compose.yaml')];
 const password = randomBytes(24).toString('base64url');
 const identity = { username: 'docker-test-admin', password };
-const evidence = { image, platform, hostArchitecture: null, project, testedAt: new Date().toISOString(), checks: [] };
+const evidence = { image, platform, expectedVersion: expected.version, expectedContainerEdition: expected.containerEdition, expectedSourceCommit,
+  httpPort: Number(httpPort), httpsPort: Number(httpsPort), hostArchitecture: null, project, testedAt: new Date().toISOString(), checks: [] };
 let container, volume, ca, agent, cookies = new Map(), csrf, localContext;
+
+async function workshopPackages() {
+  const artifactRoot = await realpath(path.join(root, 'artifacts'));
+  const input = await realpath(path.resolve(root, options.workshopDirectory));
+  assert.ok(input.startsWith(artifactRoot + path.sep), 'Workshop packages must be inside this checkout artifacts directory.');
+  const zipInput = path.extname(input).toLowerCase() === '.zip';
+  const directory = zipInput ? path.dirname(input) : input;
+  const files = await readdir(directory);
+  if (files.includes('manifest.json')) {
+    // Reuse the full frozen-bundle hash verifier; never substitute current loose packages.
+    execFileSync(process.execPath, [path.join(root, 'tools/test-workshop-packages.mjs'), directory, '--verify-only'], { cwd: root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const manifest = JSON.parse(await readFile(path.join(directory, 'manifest.json'), 'utf8'));
+    assert.equal(manifest.version, expected.version, 'Frozen workshops must match the product version.');
+    const bundlePath = path.join(directory, `SparkStudio-Workshops-${manifest.version}.zip`);
+    if (zipInput) assert.equal(input, await realpath(bundlePath), 'Choose the ZIP named by the frozen workshop manifest.');
+    const archiveBytes = await readFile(bundlePath);
+    const archive = readZip(archiveBytes);
+    evidence.workshopBundle = { version: manifest.version, sha256: sha256(archiveBytes), sourceRevision: manifest.sourceRevision };
+    return manifest.workshops.map(workshop => ({ filename: path.basename(workshop.package.path), bytes: archive.get(workshop.package.path) }));
+  }
+  assert.equal(zipInput, false, 'A frozen workshop ZIP requires its manifest and checksum sidecars.');
+  return Promise.all(files.filter(name => name.endsWith('.sparkproj')).sort().map(async filename => {
+    const file = await realpath(path.join(directory, filename));
+    assert.ok(file.startsWith(directory + path.sep), 'Workshop packages must not resolve outside their directory.');
+    return { filename, bytes: await readFile(file) };
+  }));
+}
+const packages = await workshopPackages();
+assert.ok(packages.length >= 37, 'Build the current portable workshop collection before release verification.');
 
 function docker(arguments_, input) {
   return new Promise((resolve, reject) => {
@@ -56,7 +133,7 @@ function request(route, { method = 'GET', body, headers = {}, plain = false, aut
     const sent = { ...(bytes ? { 'Content-Type': Buffer.isBuffer(body) ? 'application/octet-stream' : 'application/json', 'Content-Length': bytes.length } : {}),
       ...(authenticated ? { 'X-SPARK-AUDIENCE': audience, Cookie: [...cookies].map(([name, value]) => `${name}=${value}`).join('; '),
         ...(method !== 'GET' && csrf ? { 'X-SPARK-CSRF': csrf } : {}) } : {}), ...headers };
-    const call = (plain ? http : https).request({ hostname: '127.0.0.1', port: plain ? 8090 : 8443,
+    const call = (plain ? http : https).request({ hostname: '127.0.0.1', port: plain ? Number(httpPort) : Number(httpsPort),
       path: route, method, headers: sent, ...(plain ? {} : { agent }), timeout }, response => {
       const parts = [];
       response.on('data', part => parts.push(part));
@@ -83,6 +160,49 @@ async function api(route, options = {}) {
 }
 const login = () => api('/api/auth/login', { method: 'POST', body: { audience: 'engineering', ...identity } });
 
+async function verifyCurrentConfiguration() {
+  assert.equal((await api('/api/health')).version, `${expected.version}+${expectedSourceCommit}`);
+  const settings = await api('/api/gateway/ai');
+  assert.equal(settings.enabled, false); assert.equal(settings.hasApiKey, false);
+  assert.equal(settings.model, 'gemini-3.8-flash'); assert.equal(settings.modelStepLimit, 100);
+  assert.equal(settings.loggingEnabled, true); assert.equal(settings.parallelLimit, 4);
+  assert.equal(Object.hasOwn(settings, 'apiKey'), false);
+  const status = await api('/api/ask-spark/status');
+  assert.equal(status.configured, false); assert.equal(status.enabled, false);
+  const usage = await api('/api/gateway/ai/usage');
+  for (const name of ['limit', 'usedTokens', 'cachedTokens', 'totalTokens', 'requests', 'uncertainRequests', 'inputTokens', 'outputTokens', 'thoughtTokens', 'unclassifiedTokens'])
+    assert.equal(usage[name], 0, `Fresh AI usage ${name} must be zero.`);
+  assert.ok(Number.isFinite(Date.parse(usage.resetsAt)));
+  evidence.askSpark = { model: settings.model, modelStepLimit: settings.modelStepLimit, loggingEnabled: settings.loggingEnabled,
+    hasApiKey: settings.hasApiKey, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, thoughtTokens: usage.thoughtTokens, providerRequestsMade: false };
+
+  // Validate saved HTTP source contracts without contacting external devices.
+  for (const type of ['mtconnect', 'i3x']) {
+    const saved = await api('/api/connections', { method: 'POST', body: { id: `docker-${type}`, name: `Docker ${type} fixture`, type, enabled: false,
+      source: { endpoint: 'http://127.0.0.1:1', acquisition: 'poll', points: [], authentication: { mode: 'none' } } } });
+    assert.equal(saved.type, type); assert.equal(saved.enabled, false); assert.deepEqual(saved.source.points, []);
+  }
+  // No broker is needed for a mapping preview. Script warm-up must fail closed in
+  // the ordinary unprivileged Compose container, while scalar decoding still works.
+  const mapping = { id: 'extraction', topicFilter: 'docker/value', root: '[default]DockerSource', tags: 'review', payload: 'script', script: 'json(payload).value', dataType: 'Int32' };
+  const mqtt = await api('/api/connections', { method: 'POST', body: { id: 'docker-mqtt', name: 'Docker MQTT fixture', type: 'mqtt', enabled: true,
+    source: { endpoint: 'mqtt://127.0.0.1:1', acquisition: 'subscribe', points: [], mqtt: { mappings: [mapping] } } } });
+  const route = '/api/connections/docker-mqtt/source';
+  const capabilities = (await api(route + '/test', { method: 'POST', body: { revision: mqtt.revision } })).capabilities;
+  assert.equal(capabilities.driver, 'mqtt'); assert.equal(capabilities.canWrite, false);
+  assert.deepEqual(capabilities.acquisitionModes, ['subscribe']);
+  assert.ok(capabilities.supportedRepresentations.includes('scalar') && capabilities.supportedRepresentations.includes('script'));
+  const body = { revision: mqtt.revision, mappingId: mapping.id, topic: 'docker/value', payload: '42', mapping: { ...mapping, payload: 'scalar', script: null } };
+  const scalar = await api(route + '/script/test', { method: 'POST', body });
+  assert.equal(scalar.success, true); assert.equal(scalar.skip, false);
+  assert.equal(scalar.discoveries.length, 1); assert.equal(scalar.discoveries[0].value, 42);
+  const expression = await api(route + '/script/test', { method: 'POST', body: { ...body, payload: '{"value":42}', mapping } });
+  assert.equal(expression.success, false); assert.match(expression.error, /Scripting is disabled: delegate a cgroup-v2 memory controller/);
+  evidence.sources = { configured: ['mtconnect', 'i3x', 'mqtt'], mqttCapabilities: capabilities, scalarPreview: true,
+    expressionSandboxAvailable: false, expressionSandboxReason: expression.error, liveSourceServersTested: false };
+  await api('/api/connections', { method: 'POST', body: { ...mqtt, enabled: false } });
+}
+
 try {
   const context = JSON.parse((await docker(['context', 'inspect'])).stdout)[0];
   assert.match(context.Endpoints.docker.Host, /^(npipe:\/\/|unix:\/\/)/, 'Use the laptop engine, never a remote Docker endpoint.');
@@ -93,7 +213,8 @@ try {
   const service = configuration.services.gateway;
   assert.equal(service.image, image); assert.equal(service.read_only, true); assert.equal(service.init, true);
   assert.deepEqual(service.cap_drop, ['ALL']); assert.ok(service.security_opt.includes('no-new-privileges:true'));
-  assert.deepEqual(service.ports.map(port => [port.host_ip, String(port.published), port.target]), [['127.0.0.1', '8090', 8090], ['127.0.0.1', '8443', 8443]]);
+  assert.deepEqual(service.ports.map(port => [port.host_ip, String(port.published), port.target]), [['127.0.0.1', httpPort, 8090], ['127.0.0.1', httpsPort, 8443]]);
+  assert.equal(service.environment.SPARKSTUDIO_HTTPS_PORT, httpsPort);
   volume = configuration.volumes['sparkstudio-data'].name;
   assert.ok(volume.startsWith(`${project}_`));
   // Binding conflicts fail here. The verifier never stops another application to free ports.
@@ -105,8 +226,9 @@ try {
   assert.equal(state.State.Health.Status, 'healthy');
   evidence.imageId = state.Image;
   const manifest = JSON.parse((await exec(['cat', '/app/container-manifest.json'])).stdout);
-  assert.equal(manifest.platform, platform); assert.equal(manifest.containerEdition, '0.2.0-preview.11-docker.1');
-  assert.equal(manifest.version, '0.2.0-preview.11'); assert.match(manifest.sourceCommit, /^[a-f0-9]{40}$/);
+  assert.equal(manifest.product, 'SparkStudio'); assert.equal(manifest.platform, platform);
+  assert.equal(manifest.containerEdition, expected.containerEdition); assert.equal(manifest.version, expected.version);
+  assert.equal(manifest.sourceCommit, expectedSourceCommit, 'Image source revision differs from the expected reviewed commit.');
   assert.equal(state.Config.Labels['org.opencontainers.image.revision'], manifest.sourceCommit);
   assert.equal(state.Config.Labels['org.opencontainers.image.version'], manifest.containerEdition);
   evidence.sourceCommit = manifest.sourceCommit; evidence.containerEdition = manifest.containerEdition;
@@ -127,10 +249,10 @@ try {
     assert.equal(session.json.setupRequired, true);
     assert.equal(session.headers['strict-transport-security'], undefined, 'Docker localhost TLS must not force parallel Windows HTTP ports onto HTTPS.');
     const redirect = await request('/runtime/example?x=1', { plain: true });
-    assert.ok([307, 308].includes(redirect.status)); assert.equal(redirect.headers.location, 'https://localhost:8443/runtime/example?x=1');
+    assert.ok([307, 308].includes(redirect.status)); assert.equal(redirect.headers.location, `https://localhost:${httpsPort}/runtime/example?x=1`);
     const spoof = await request('/designer/', { plain: true, headers: { Host: 'evil.invalid', 'X-Forwarded-Host': 'evil.invalid' } });
     assert.ok([400, 307, 308].includes(spoof.status));
-    if (spoof.headers.location) assert.equal(new URL(spoof.headers.location).origin, 'https://localhost:8443');
+    if (spoof.headers.location) assert.equal(new URL(spoof.headers.location).origin, `https://localhost:${httpsPort}`);
     assert.equal((await request('/api/auth/login', { plain: true, method: 'POST', body: {} })).status, 403);
     assert.equal((await request('/api/ready')).status, 403);
     assert.equal((await request('/api/health')).status, 401);
@@ -146,6 +268,7 @@ try {
     assert.ok(response.headers['set-cookie'].some(cookie => /; secure(?:;|$)/i.test(cookie) && /; httponly(?:;|$)/i.test(cookie) && /samesite=strict/i.test(cookie)));
     assert.equal((await request('/api/projects', { method: 'POST', body: { name: 'CSRF rejected' }, headers: { 'X-SPARK-AUDIENCE': 'engineering', Cookie: [...cookies].map(([name, value]) => `${name}=${value}`).join('; ') } })).status, 403);
   });
+  await check('current AI defaults and usage, source configuration and fail-closed expression sandbox', verifyCurrentConfiguration);
   const tagPath = '[default]DockerWorkshop/Counter';
   let projectId, publishedAt;
   await check('persisted memory tags, native SQLite queries and Python gateway actions', async () => {
@@ -179,13 +302,9 @@ try {
     await login();
   });
   await check('portable workshop import, publication and binary export', async () => {
-    const packageDirectory = path.resolve(root, process.argv[4] ?? 'artifacts/sparkproj');
-    assert.ok(packageDirectory.startsWith(path.join(root, 'artifacts') + path.sep));
-    const files = (await readdir(packageDirectory)).filter(name => name.endsWith('.sparkproj')).sort();
-    assert.ok(files.length >= 37, 'Build the current portable workshop collection before release verification.');
-    evidence.workshopCount = files.length;
-    for (const filename of files) {
-      const imported = await api(`/api/projects/import?name=${encodeURIComponent(`Docker ${filename}`)}`, { method: 'POST', body: await readFile(path.join(packageDirectory, filename)) });
+    evidence.workshopCount = packages.length;
+    for (const { filename, bytes } of packages) {
+      const imported = await api(`/api/projects/import?name=${encodeURIComponent(`Docker ${filename}`)}`, { method: 'POST', body: bytes });
       assert.equal(imported.published, false);
       const route = suffix => `/api/projects/${imported.id}${suffix}`;
       const review = await api(route('/project/publication-review'));

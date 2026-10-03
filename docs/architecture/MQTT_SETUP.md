@@ -2,7 +2,9 @@
 
 Use an MQTT subscriber connection to turn broker publications into read-only gateway tags. This walkthrough starts with one numeric topic, creates its tag through a reviewed import, and checks the result before using it on a screen.
 
-**Build availability:** use Windows `v0.2.0-preview.13` or a later compatible build whose **New Connection** menu includes **MQTT subscriber**. Windows preview.12 and Docker `0.2.0-preview.11-docker.1` do not include this feature. See the [release ledger](PARITY.md) for exact-package verification and real-source acceptance limits. The walkthrough was reviewed October 2, with release compatibility updated October 3, 2026.
+**Build availability:** use Windows `v0.2.0-preview.13` or a compatible build whose **New Connection** menu includes **MQTT subscriber**, including the Docker `0.2.0-preview.13-docker.1` candidate. Windows preview.12 and Docker `0.2.0-preview.11-docker.1` do not include this feature. See the [release ledger](PARITY.md) for publication status, exact-package verification and real-source acceptance limits. The walkthrough was reviewed October 2, with release compatibility updated October 3, 2026.
+
+**Default Docker profile:** use UTF-8 scalar payloads, receipt timestamps and arrival ordering without expressions. Scripted JSON/XML extraction and timestamp/sequence/epoch expressions require a separately qualified delegated cgroup v2 deployment. The shipped Compose profile does not provide it, and an enabled worker-dependent mapping can stop the connection from starting. See the [Docker source-expression limitation](DOCKER_RELEASE.md#source-expressions-in-the-default-container).
 
 ## Where do I create the tags?
 

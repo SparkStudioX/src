@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { readPackageMetadata, validateReviewedMetadata, verifyNugetIntegrity, writeDockerNotices } from './write-docker-notices.mjs';
+import { readPackageMetadata, validateBrowserLicense, validateReviewedMetadata, verifyNugetIntegrity, writeDockerNotices } from './write-docker-notices.mjs';
 import { reviewedSupplements } from './package-notice-supplements.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -54,6 +54,17 @@ assert.throws(() => validateReviewedMetadata('Scriban/7.5.0', { ...scribanMetada
 fs.mkdirSync(path.join(root, '.data'), { recursive: true });
 const fixture = fs.mkdtempSync(path.join(root, '.data/docker-notices-check-'));
 try {
+  const browserPackage = path.join(root, 'apps/web/node_modules/@ungap/structured-clone');
+  const browserMetadata = JSON.parse(fs.readFileSync(path.join(browserPackage, 'package.json'), 'utf8'));
+  assert.equal(validateBrowserLicense(browserMetadata, browserPackage), 'ISC', 'The exact installed Markdown dependency retains its original ISC license.');
+  assert.throws(() => validateBrowserLicense({ ...browserMetadata, version: '1.4.1' }, browserPackage), /requires a distribution license review/);
+  assert.throws(() => validateBrowserLicense({ ...browserMetadata, name: 'unreviewed-clone' }, browserPackage), /requires a distribution license review/);
+  assert.throws(() => validateBrowserLicense({ ...browserMetadata, license: 'MIT' }, browserPackage), /requires a distribution license review/);
+  assert.throws(() => validateBrowserLicense({ ...browserMetadata, license: 'GPL-3.0' }, browserPackage), /requires a distribution license review/);
+  assert.equal(validateBrowserLicense({ name: 'existing-mit-fixture', version: '1.0.0', license: 'MIT' }, fixture), 'MIT');
+  assert.throws(() => validateBrowserLicense(browserMetadata, fixture), /Original browser license differs/);
+  fs.writeFileSync(path.join(fixture, 'LICENSE'), 'An independently authored replacement is not the reviewed original.\n');
+  assert.throws(() => validateBrowserLicense(browserMetadata, fixture), /Original browser license differs/);
   if (process.platform === 'win32') {
     // Parse and invoke only the pure reviewed-spec function. Never run the
     // installer builder or require a clean checkout, compiler or privileges.
@@ -93,4 +104,4 @@ if (!$definition) { throw 'Reviewed notice lookup is missing.' }
 } finally {
   fs.rmSync(fixture, { recursive: true });
 }
-console.log('Docker notice guards: source-worker deployment and three-RID package pins, reviewed versions, license/repository changes, original-file and signed-package integrity, XML entities, architecture and immutable bases passed.');
+console.log('Docker notice guards: source-worker deployment and three-RID package pins, reviewed browser ISC original and unknown-license rejection, reviewed versions, license/repository changes, original-file and signed-package integrity, XML entities, architecture and immutable bases passed.');

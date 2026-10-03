@@ -4,7 +4,7 @@ These guides describe the current SparkStudio source, including development work
 
 Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md). For installation, use the guide attached to your exact release; [Windows installation](WINDOWS_INSTALLER.md) describes preview.13. [Verification and roadmap](PARITY.md) records package verification and release status, separating dated observations from current capability summaries and remaining gates. Earlier ledger entries retain the facts and limitations of their original checks; they are not instructions to start an old development package or assertions about the currently running gateway.
 
-Preview.13 adds [Ask Spark](ASK_SPARK.md) and the [MQTT](MQTT_SETUP.md), [MTConnect](MTCONNECT_SETUP.md) and [i3X](I3X_SETUP.md) source clients. The source walkthroughs explain creating tags from a connection's reviewed import or later in Tags. Windows preview.12 and Docker preview.11-docker.1 do not include these features; this Windows release does not update the published Docker image. Consult the ledger for the candidate's publication and acceptance status.
+Windows preview.13 and the Docker preview.13-docker.1 candidate include [Ask Spark](ASK_SPARK.md) and the [MQTT](MQTT_SETUP.md), [MTConnect](MTCONNECT_SETUP.md) and [i3X](I3X_SETUP.md) source clients. The source walkthroughs explain creating tags from a connection's reviewed import or later in Tags. Windows preview.12 and Docker preview.11-docker.1 do not include these features. The Docker edition is published independently; consult the [Docker guide](DOCKER_RELEASE.md) and ledger for candidate status, platform limitations and completed acceptance.
 
 ## Overview and installation
 

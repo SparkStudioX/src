@@ -163,6 +163,22 @@ async function nugetInventory(payload, nuget, notices, cache) {
   return packages;
 }
 
+// The Markdown dependency is the only reviewed non-MIT browser package.
+// Pin its original license bytes; another package/version must be reviewed.
+const reviewedBrowserLicenses = new Map([
+  ['@ungap/structured-clone/1.4.0', { license: 'ISC', file: 'LICENSE', sha256: 'dc6d4961d8b6ee747231582ae9c53ce1d66bf76bc9f5a28f554c0e97210953bf' }],
+]);
+
+export function validateBrowserLicense(metadata, directory) {
+  const identity = `${metadata.name}/${metadata.version}`;
+  const reviewed = reviewedBrowserLicenses.get(identity);
+  if (!reviewed && metadata.license === 'MIT') return metadata.license;
+  if (!reviewed || metadata.license !== reviewed.license) throw new Error(`Browser dependency requires a distribution license review: ${identity}`);
+  const original = relativeFile(directory, reviewed.file);
+  if (!fs.existsSync(original) || hash(fs.readFileSync(original)) !== reviewed.sha256) throw new Error(`Original browser license differs from its review: ${identity}`);
+  return reviewed.license;
+}
+
 function browserInventory(web, notices, version) {
   const lock = read(path.join(web, 'package-lock.json'));
   if (lock.packages['']?.version !== version) throw new Error('Browser and image product versions do not match.');
@@ -176,9 +192,9 @@ function browserInventory(web, notices, version) {
     if (!relative.startsWith('node_modules/') || relative.includes('../') || fs.lstatSync(directory).isSymbolicLink()) throw new Error('Browser dependency is outside its installed package directory.');
     const metadata = read(path.join(directory, 'package.json'));
     const locked = lock.packages[relative];
-    if (!locked || locked.version !== metadata.version || locked.dev || metadata.license !== 'MIT' || !/^sha512-[A-Za-z0-9+/]+=*$/.test(locked.integrity ?? '')) throw new Error(`Browser dependency requires review or differs from its lock: ${metadata.name}`);
+    if (!locked || locked.version !== metadata.version || locked.dev || !/^sha512-[A-Za-z0-9+/]+=*$/.test(locked.integrity ?? '')) throw new Error(`Browser dependency requires review or differs from its lock: ${metadata.name}`);
     if (!/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(metadata.name) || !/^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.+-]+)?$/.test(metadata.version)) throw new Error('Invalid browser package identity.');
-    const entry = { name: metadata.name, version: metadata.version, license: metadata.license, integrity: locked.integrity, notices: [], noticeHashes: [] };
+    const entry = { name: metadata.name, version: metadata.version, license: validateBrowserLicense(metadata, directory), integrity: locked.integrity, notices: [], noticeHashes: [] };
     for (const original of filesUnder(directory, true).filter(file => noticePattern.test(path.basename(file)) && ['', '.txt', '.md'].includes(path.extname(file).toLowerCase()))) {
       const relative = `browser/${metadata.name}/${metadata.version}/${slash(path.relative(directory, original))}`;
       entry.noticeHashes.push(copyNotice(original, relative, notices));

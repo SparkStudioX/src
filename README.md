@@ -205,6 +205,8 @@ The self-contained folder is generated under `artifacts/windows-x64`; the instal
 
 For Linux x86-64 and ARM64, use the [Docker deployment guide](docs/architecture/DOCKER_RELEASE.md) and [example Compose file](compose.yaml):
 
+The current Docker candidate is **0.2.0-preview.13-docker.1**, with application version **0.2.0-preview.13**. Consult the [release ledger](docs/architecture/PARITY.md) for publication and per-platform acceptance before pulling; the previously published Docker edition is preview.11-docker.1. This container release does not replace the Windows preview.13 installer or its workshop assets.
+
 ```powershell
 docker compose pull
 docker compose up -d --wait

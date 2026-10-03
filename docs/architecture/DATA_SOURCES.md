@@ -1,6 +1,6 @@
 # Read-only data sources and workshop
 
-Windows preview.13 Connections includes **MTConnect agent**, **i3X source** and **MQTT subscriber**. Older preview.12 installers and Docker preview.11-docker.1 do not include them; see the [release ledger](PARITY.md) for exact-package verification and acceptance limits. The three drivers have a separate source configuration and share stable point catalogs with PLC connections. A saved tag uses `kind: "device"`, its connection ID and the saved point ID. Raw MTConnect identities, opaque i3X element IDs and MQTT topics remain separate from display paths and structured selectors.
+Windows preview.13 and the Docker preview.13-docker.1 candidate include **MTConnect agent**, **i3X source** and **MQTT subscriber** in Connections. Older preview.12 installers and Docker preview.11-docker.1 do not include them; see the [Docker guide](DOCKER_RELEASE.md) and [release ledger](PARITY.md) for publication status, platform limitations, exact-package verification and acceptance limits. The three drivers have a separate source configuration and share stable point catalogs with PLC connections. A saved tag uses `kind: "device"`, its connection ID and the saved point ID. Raw MTConnect identities, opaque i3X element IDs and MQTT topics remain separate from display paths and structured selectors.
 
 These are current-state sources. Their latest-value delivery may coalesce updates after protocol reduction. They do not provide a lossless event journal. All three are read-only at the catalog, command dispatcher and protocol adapter. MQTT sends no Publish or Will configuration. Use subscribe/read-only broker credentials when configuring a real broker.
 
@@ -36,6 +36,8 @@ The gateway limits documents, scalar values, canonical state, queues, catalogs, 
 | Isolated script workers | 1 GiB |
 
 Per-connection ceilings apply in addition to these global budgets. Queue exhaustion and protocol gaps are visible; overload cannot create partial definitions or silently merge colliding identities. Script extraction runs in bounded isolated workers: Windows uses Job Objects; Linux requires a delegated cgroup memory profile. Script workers fail closed when their required containment is unavailable. Malformed input, missing fields, type changes, forbidden operations and limit failures appear as diagnostics and quality rather than silently changing types.
+
+The default Docker Compose profile does not delegate a writable cgroup v2 memory controller. Use MQTT UTF-8 scalar mappings with receipt timestamps, arrival ordering and no payload/timestamp/sequence/epoch expressions there. Enabling a worker-dependent mapping can prevent its connection from starting. Scripted JSON/XML extraction and order/timestamp expressions need a separately qualified delegated-cgroup deployment; see the [Docker limitation](DOCKER_RELEASE.md#source-expressions-in-the-default-container). MTConnect, i3X, ordinary gateway Python and Ask Spark are separate paths.
 
 ## Worker deployment and artifact sizes
 
