@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { askSparkError, askSparkRequest } from "./askSparkClient";
+import { askSparkError, askSparkProviderError, askSparkRequest } from "./askSparkClient";
 
 type VoicePhase = "idle" | "requesting" | "recording" | "transcribing";
 interface Recording { recorder: MediaRecorder; stream: MediaStream; chunks: Blob[]; cancelled: boolean; size: number; timer: number }
@@ -15,7 +15,7 @@ export function preferredAudioMime(): string | undefined {
 }
 
 export function useAskSparkVoice(onTranscript: (text: string) => void) {
-  const [phase, setPhase] = useState<VoicePhase>("idle"), [error, setError] = useState("");
+  const [phase, setPhase] = useState<VoicePhase>("idle"), [errorReason, setError] = useState<unknown>("");
   const active = useRef<Recording | null>(null), request = useRef<AbortController | null>(null), generation = useRef(0), callback = useRef(onTranscript), acquiring = useRef(false);
   callback.current = onTranscript;
   const release = useCallback((capture: Recording) => { window.clearTimeout(capture.timer); capture.stream.getTracks().forEach(track => track.stop()); }, []);
@@ -36,7 +36,7 @@ export function useAskSparkVoice(onTranscript: (text: string) => void) {
       const audio = await audioBase64(blob);
       const result = await askSparkRequest<{ text: string }>("/transcribe", "POST", { audio, mimeType: blob.type }, controller.signal);
       if (generation.current === run) { callback.current(result.text); setPhase("idle"); }
-    } catch (reason) { if (generation.current === run) { setError(askSparkError(reason)); setPhase("idle"); } }
+    } catch (reason) { if (generation.current === run) { setError(reason); setPhase("idle"); } }
     finally { if (request.current === controller) request.current = null; }
   }, [release]);
   const start = useCallback(async () => {
@@ -55,9 +55,9 @@ export function useAskSparkVoice(onTranscript: (text: string) => void) {
       recorder.onerror = () => { capture.cancelled = true; release(capture); active.current = null; setError("Microphone recording failed. Try again."); setPhase("idle"); };
       capture.timer = window.setTimeout(() => { if (recorder.state !== "inactive") recorder.stop(); }, 60_000);
       recorder.start(500); pendingStream = undefined; setPhase("recording");
-    } catch (reason) { pendingStream?.getTracks().forEach(track => track.stop()); if (generation.current === run) { active.current = null; setError(askSparkError(reason)); setPhase("idle"); } }
+    } catch (reason) { pendingStream?.getTracks().forEach(track => track.stop()); if (generation.current === run) { active.current = null; setError(reason); setPhase("idle"); } }
     finally { if (generation.current === run) acquiring.current = false; }
   }, [release, transcribe]);
   const stop = () => { const recorder = active.current?.recorder; if (recorder && recorder.state !== "inactive") recorder.stop(); };
-  return { phase, error, start, stop, cancel, busy: phase !== "idle" };
+  return { phase, error: askSparkError(errorReason), providerError: askSparkProviderError(errorReason), clearError: () => setError(""), start, stop, cancel, busy: phase !== "idle" };
 }

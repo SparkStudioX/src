@@ -3,10 +3,11 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { createTestModuleFiles } from './test-module-files.mjs';
 
 const require = createRequire(import.meta.url), moduleFile = createTestModuleFiles();
-const mockApi = moduleFile('let run=async()=>({}); export const setRequest=fn=>{run=fn}; export const api=(...args)=>run(...args); export class ApiError extends Error { constructor(message,status) { super(message); this.status=status; this.name="ApiError"; } }');
+const mockApi = moduleFile('let run=async()=>({}); export const setRequest=fn=>{run=fn}; export const api=(...args)=>run(...args); export class ApiError extends Error { constructor(message,status,aiProviderError) { super(message); this.status=status; this.aiProviderError=aiProviderError; this.name="ApiError"; } }');
 function loadSource(name, replacements = {}) {
   const source = fs.readFileSync(new URL(`src/${name}`, import.meta.url), 'utf8');
   const output = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX } }).outputText
@@ -24,6 +25,27 @@ const api = await import(mockApi);
 const tick = () => new Promise(resolve => setImmediate(resolve));
 let passed = 0;
 async function check(name, run) { await run(); passed++; console.log(`PASS ${name}`); }
+
+const transportUrl=moduleFile('let body,status;export const respond=(value,code)=>{body=value;status=code};export const authenticatedFetch=async()=>new Response(JSON.stringify(body),{status});export const assertAuthResponseCurrent=()=>{};export const authHeaders=()=>({});export const eventStreamUrl=value=>value;');
+const transport=await import(transportUrl),wireApi=await import(loadSource('api.ts',{'./authSession':transportUrl,'./previewRequest':previewUrl}));
+const demandError={provider:'Gemini',httpStatus:503,status:'UNAVAILABLE',message:'This model is experiencing high demand. Please try again later.',retryable:true};
+await check('API errors preserve gateway status and the bounded upstream Gemini rejection',async()=>{
+  transport.respond({error:'Gemini is busy. Try again later.',aiProviderError:demandError},502);
+  await assert.rejects(wireApi.api('/ask-spark/turn','POST',{}),error=>{
+    assert.ok(error instanceof wireApi.ApiError);assert.equal(error.status,502);assert.equal(error.message,'Gemini is busy. Try again later.');assert.deepEqual(error.aiProviderError,demandError);return true;
+  });
+  transport.respond({message:'Provider rejected the credential.',aiProviderError:{...demandError,httpStatus:401,status:'UNAUTHENTICATED'}},502);
+  await assert.rejects(wireApi.api('/ask-spark/turn'),error=>error.status===502&&error.aiProviderError.httpStatus===401);
+  transport.respond({error:'Bounded',aiProviderError:{...demandError,status:'S'.repeat(80),message:'m'.repeat(3000),internal:'omit'}},502);
+  await assert.rejects(wireApi.api('/ask-spark/turn'),error=>{assert.equal(error.aiProviderError.status.length,64);assert.equal(error.aiProviderError.message.length,2048);assert.equal(error.aiProviderError.internal,undefined);return true;});
+});
+await check('missing or malformed provider metadata preserves ordinary API error behavior',async()=>{
+  for(const metadata of [undefined,null,{},[],{...demandError,provider:'other'},{...demandError,httpStatus:'503'},{...demandError,httpStatus:503.5},{...demandError,httpStatus:399},{...demandError,httpStatus:600},{...demandError,retryable:'true'}]){
+    transport.respond({message:'Unrelated gateway failure',aiProviderError:metadata},503);
+    await assert.rejects(wireApi.api('/gateway/diagnostics'),error=>{assert.ok(error instanceof wireApi.ApiError);assert.equal(error.status,503);assert.equal(error.message,'Unrelated gateway failure');assert.equal(error.aiProviderError,undefined);return true;});
+  }
+  transport.respond({},403);await assert.rejects(wireApi.api('/gateway/ai'),error=>error.status===403&&error.message==='You do not have permission to perform this action.'&&!error.aiProviderError);
+});
 
 await check('only explicitly parallel-safe reads overlap and mutations remain ordered barriers', async () => {
   const calls = ['a','b','write','c','unsafe','d'].map(name => ({ id:name, name, arguments:{}, kind:name==='write'?'write':'read', parallelSafe:name!=='unsafe' }));
@@ -71,12 +93,35 @@ await check('tool-loading errors retain their message without presenting a conne
   assert.match(state.error,/not loaded/);assert.equal(state.errorCanRefreshStatus,false);assert.equal(state.messages.at(-1).text,'Create the screen');
   state.clearError();render();assert.equal(state.error,'');assert.equal(state.messages.at(-1).text,'Create the screen');
 });
-await check('provider failures offer a status refresh while context and validation errors do not',async()=>{
+await check('unclassified gateway failures retain status refresh while context and validation errors do not',async()=>{
   for(const statusCode of [400,401,403,409,413,429,502,503,504]){
     await beginProvider(async(path)=>{if(path.endsWith('/status'))return status;throw new api.ApiError('Request needs attention',statusCode)});
     state.setDraft('Continue');render();await state.send();render();
     assert.equal(state.errorCanRefreshStatus,[502,503,504].includes(statusCode),`HTTP ${statusCode}`);
   }
+});
+await check('explicit Gemini demand, quota and credential errors do not offer a configuration refresh',()=>{
+  for(const httpStatus of [400,401,403,429,500,503,504]){
+    const error=new api.ApiError('Provider request rejected',502,{...demandError,httpStatus});
+    assert.equal(client.askSparkErrorCanRefreshStatus(error),false);assert.equal(client.askSparkProviderError(error).httpStatus,httpStatus);
+  }
+  assert.equal(client.askSparkProviderError(new Error('Local failure')),undefined);
+});
+await check('Gemini failure after a mutation preserves draft, messages, completed actions and Undo without replay',async()=>{
+  let rejectContinuation,writes=0,undos=0;const calls=[],continuation=new Promise((_resolve,reject)=>{rejectContinuation=reject});
+  await beginProvider(async(path,_method,body)=>{
+    if(path.endsWith('/status'))return status;calls.push(body);
+    if(body?.message)return{conversationId:'provider-failure',reply:'I will add the button.',continuationToken:'next',toolCalls:[{id:'added-button',name:'spark_designer_add_components',kind:'write',arguments:{},authorized:true}]};
+    return continuation;
+  });
+  state.registerExecutor({id:'test',supports:()=>true,execute:async()=>{writes++;return{result:{added:['button-1']},summary:'Added one button',undo:async()=>{undos++}}}});
+  state.setDraft('Add three buttons');render();const pending=state.send();await tick();render();
+  assert.equal(state.actions[0].status,'done');assert.equal(state.actions[0].canUndo,true);
+  state.setDraft('Keep this next message');render();rejectContinuation(new api.ApiError('Gemini is busy. Try again later.',502,demandError));await pending;render();
+  assert.equal(state.busy,false);assert.equal(state.draft,'Keep this next message');assert.deepEqual(state.messages.map(message=>message.text),['Add three buttons','I will add the button.']);
+  assert.deepEqual(state.providerError,demandError);assert.equal(state.errorCanRefreshStatus,false);assert.equal(state.actions[0].status,'done');assert.equal(state.actions[0].canUndo,true);assert.equal(writes,1);assert.equal(calls.length,2);
+  state.clearError();render();assert.equal(state.error,'');assert.equal(state.providerError,undefined);assert.equal(state.draft,'Keep this next message');assert.equal(state.messages.length,2);
+  await state.undo('added-button');render();assert.equal(undos,1);assert.equal(writes,1);assert.equal(calls.length,2);
 });
 await check('resource context priority is independent of parent registration order and clears hidden canvas selection',async()=>{
   await beginProvider(async()=>status);
@@ -224,11 +269,45 @@ let voice;const renderVoice=()=>{hooks.begin();voice=useAskSparkVoice(text=>tran
 await check('microphone stop transcribes audio into editable text without sending a conversation',async()=>{
   hooks.reset();recorded=[];transcripts.length=0;voiceRequests.length=0;api.setRequest(async(path,_method,body)=>{voiceRequests.push({path,body});return{text:'Draft transcript'}});renderVoice();hooks.flush();await voice.start();renderVoice();assert.equal(voice.phase,'recording');voice.stop();await tick();await tick();renderVoice();assert.deepEqual(transcripts,['Draft transcript']);assert.equal(voiceRequests.length,1);assert.equal(voiceRequests[0].path,'/ask-spark/transcribe');assert.equal(voice.phase,'idle');assert.ok(stopped>0);
 });
+await check('transcription keeps Gemini failure details, releases recording and never resends audio',async()=>{
+  hooks.reset();transcripts.length=0;let calls=0;api.setRequest(async()=>{calls++;throw new api.ApiError('Gemini is busy. Try again later.',502,demandError)});
+  renderVoice();hooks.flush();await voice.start();voice.stop();await tick();await tick();renderVoice();
+  assert.equal(voice.phase,'idle');assert.equal(voice.busy,false);assert.match(voice.error,/Gemini is busy/);assert.deepEqual(voice.providerError,demandError);assert.deepEqual(transcripts,[]);assert.equal(calls,1);
+  voice.clearError();renderVoice();assert.equal(voice.error,'');assert.equal(voice.providerError,undefined);assert.equal(calls,1);
+});
 await check('microphone cancellation releases tracks and never transcribes cancelled audio',async()=>{
   hooks.reset();let calls=0;api.setRequest(async()=>{calls++;return{text:'must not arrive'}});renderVoice();hooks.flush();await voice.start();voice.cancel();await tick();renderVoice();assert.equal(calls,0);assert.equal(voice.phase,'idle');
 });
 await check('cancelling pending microphone permission releases a subsequently granted stream',async()=>{
   hooks.reset();let grant;const gate=new Promise(resolve=>{grant=resolve});navigator.mediaDevices.getUserMedia=()=>gate;let released=0;renderVoice();hooks.flush();const pending=voice.start();voice.cancel();grant({getTracks:()=>[{stop(){released++}}]});await pending;renderVoice();assert.equal(released,1);assert.equal(voice.phase,'idle');
+});
+hooks.reset();
+const alertHooksUrl=moduleFile(`export * from ${JSON.stringify(hooksUrl)};export const useId=()=>"alert-fixture";`);
+const panelContextUrl=moduleFile('export const useAskSpark=()=>globalThis.__panelAskSpark;');
+const panelUrl=loadSource('AskSpark.tsx',{react:alertHooksUrl,'./Auth':authUrl,'./askSparkContext':panelContextUrl,'./askSparkClient':clientUrl,'./askSparkVoice':voiceUrl,'./Icon':moduleFile('export default ()=>null;'),'./AskSparkMarkdown':moduleFile('export default ()=>null;'),'./AskSparkCropReview':moduleFile('export const AskSparkCropReview=()=>null;')});
+const {AskSparkErrorAlert,AskSparkPanel}=await import(panelUrl);
+const errorNodes=node=>!node||typeof node!=='object'?[]:[node,...[node.props?.children].flat(3).flatMap(errorNodes)];
+await check('provider alert renders Gemini 503 and literal details, scrolls into view and only offers dismissal',()=>{
+  hooks.reset();const scrolls=[];let dismissed=0,refreshed=0;
+  const props={message:'Gemini is busy. Try again later.',providerError:demandError,recovery:'Review completed tool activity before continuing.',onDismiss:()=>{dismissed++},onRefreshStatus:()=>{refreshed++}};
+  hooks.begin();const tree=AskSparkErrorAlert(props);tree.props.ref.current={scrollIntoView:value=>scrolls.push(value)};hooks.flush();
+  const html=renderToStaticMarkup(tree);assert.match(html,/role="alert"/);assert.match(html,/aria-atomic="true"/);assert.match(html,/Gemini · 503 UNAVAILABLE/);assert.match(html,/This model is experiencing high demand/);assert.match(html,/Try again later/);assert.match(html,/Review completed tool activity/);
+  assert.deepEqual(scrolls,[{block:'nearest'}]);assert.doesNotMatch(html,/Refresh AI status|>Retry</);
+  const buttons=errorNodes(tree).filter(node=>node.type==='button');assert.equal(buttons.length,1);assert.equal(buttons[0].props.children,'Dismiss');buttons[0].props.onClick();assert.equal(dismissed,1);assert.equal(refreshed,0);
+  hooks.begin();AskSparkErrorAlert({...props,providerError:{...demandError,httpStatus:429,status:'RESOURCE_EXHAUSTED'}});hooks.flush();assert.equal(scrolls.length,2);
+});
+await check('provider markup is escaped plain text and unrelated failures keep their existing action',()=>{
+  hooks.reset();hooks.begin();const tree=AskSparkErrorAlert({message:'Provider rejected the request.',providerError:{...demandError,message:'<script>alert(1)</script>\n<img src=x onerror=alert(1)>\n[Retry](javascript:alert(1))'},onDismiss(){}});
+  const html=renderToStaticMarkup(tree);assert.doesNotMatch(html,/<(?:script|img|a)\b/);assert.match(html,/&lt;script&gt;alert\(1\)&lt;\/script&gt;/);assert.match(html,/&lt;img src=x/);assert.match(html,/\[Retry\]\(javascript:alert\(1\)\)/);
+  hooks.reset();let refreshed=0;hooks.begin();const generic=AskSparkErrorAlert({message:'The gateway is unavailable.',onDismiss(){},onRefreshStatus:()=>{refreshed++}});
+  assert.doesNotMatch(renderToStaticMarkup(generic),/Gemini|503|Review completed/);errorNodes(generic).find(node=>node.type==='button'&&node.props.children==='Refresh AI status').props.onClick();assert.equal(refreshed,1);
+});
+await check('Designer panel connects structured provider failures to the visible alert without replacing conversation content',()=>{
+  hooks.reset();auth.setAuth({user:{id:'test-one'},audience:'engineering'});
+  globalThis.__panelAskSpark={open:true,messages:[{id:'message',role:'user',text:'Keep my request'}],actions:[{id:'tool',name:'add_button',kind:'write',status:'done',canUndo:true}],approval:null,status,context:{surface:'designer'},error:'Gemini is busy.',providerError:demandError,errorCanRefreshStatus:false,clearError(){}};
+  hooks.begin();const tree=AskSparkPanel({});const alert=errorNodes(tree).find(node=>node.type===AskSparkErrorAlert);
+  assert.equal(alert.props.message,'Gemini is busy.');assert.deepEqual(alert.props.providerError,demandError);assert.equal(alert.props.onRefreshStatus,undefined);assert.match(alert.props.recovery,/completed changes are kept/);
+  assert.ok(errorNodes(tree).some(node=>node.props?.message?.text==='Keep my request'));assert.ok(errorNodes(tree).some(node=>node.props?.action?.canUndo===true));
 });
 hooks.reset();
 const aiContextUrl=moduleFile('const registrations=new Map();const registerContext=(owner,getter,priority)=>{const entry={owner,getter,priority};registrations.set(owner,entry);return()=>{if(registrations.get(owner)===entry)registrations.delete(owner)}};const context={registerContext};export const useAskSpark=()=>context;export const entries=()=>[...registrations.values()];export const snapshot=()=>Object.assign({},...[...registrations.values()].sort((a,b)=>a.priority-b.priority).map(entry=>entry.getter()));');

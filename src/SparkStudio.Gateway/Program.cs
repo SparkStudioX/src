@@ -88,8 +88,7 @@ app.Use(async (context, next) =>
     try { await next(); }
     catch (Exception ex) when (!context.Response.HasStarted && ex is not OperationCanceledException)
     {
-        context.Response.StatusCode = ex switch { BadHttpRequestException bad => bad.StatusCode, UnauthorizedAccessException => 403, KeyNotFoundException => 404, ArgumentException or JsonException or FormatException => 400, InvalidOperationException => 409, ReadQueryTimeoutException => 504, _ => 502 };
-        await context.Response.WriteAsJsonAsync(new { error = ex.Message });
+        await WriteApiErrorAsync(context, ex);
     }
 });
 app.UseRouting();
@@ -153,6 +152,14 @@ projectRoutes.AddEndpointFilter(async (context, next) =>
 MapProjectEndpoints(projectRoutes);
 app.MapFallbackToFile("index.html");
 app.Run();
+
+static async Task WriteApiErrorAsync(HttpContext context, Exception error)
+{
+    context.Response.StatusCode = error switch { BadHttpRequestException bad => bad.StatusCode, UnauthorizedAccessException => 403, KeyNotFoundException => 404, ArgumentException or JsonException or FormatException => 400, InvalidOperationException => 409, ReadQueryTimeoutException => 504, _ => 502 };
+    if (error is AskSparkProviderException providerError)
+        await context.Response.WriteAsJsonAsync(new { error = error.Message, aiProviderError = providerError.Error });
+    else await context.Response.WriteAsJsonAsync(new { error = error.Message });
+}
 
 static void MapProjectEndpoints(RouteGroupBuilder routes)
 {

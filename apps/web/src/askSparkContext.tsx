@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { useAuth } from "./Auth";
 import { executeGatewayTool, supportsGatewayTool } from "./askSparkGatewayTools";
 import { useAskSparkPrivateInputs } from "./askSparkPrivateInputs";
-import { askSparkError, askSparkErrorCanRefreshStatus, askSparkRequest, askSparkStorageKey, captureAskSparkContext, captureAskSparkExecutionContext, executeAskSparkCalls, isAskSparkShortcut, readAskSparkSession, requireAskSparkPreviewPermission, writeAskSparkSession } from "./askSparkClient";
+import { askSparkError, askSparkErrorCanRefreshStatus, askSparkProviderError, askSparkRequest, askSparkStorageKey, captureAskSparkContext, captureAskSparkExecutionContext, executeAskSparkCalls, isAskSparkShortcut, readAskSparkSession, requireAskSparkPreviewPermission, writeAskSparkSession } from "./askSparkClient";
+import type { AiProviderError } from "./api";
 import type { AskSparkContext, AskSparkConversation, AskSparkStatus, AskSparkStoredMessage, AskSparkToolCall, AskSparkToolImage, AskSparkToolResult, AskSparkTurn } from "./askSparkClient";
 import { prepareAskSparkImage, type AskSparkImage } from "./askSparkImages";
 import { openAskSparkProject, registerAskSparkNavigationContext } from "./askSparkProjectNavigation";
@@ -21,7 +22,7 @@ interface AskSparkValue {
   context: AskSparkContext; activeContext: AskSparkContext; pinned: boolean; togglePinned: () => void; removeContext: (keys: string[]) => void; refreshContext: () => void; restoreContext: () => void;
   registerContext: (ownerId: string, getter: () => AskSparkContext, priority?: number) => () => void; registerExecutor: (executor: AskSparkExecutor) => () => void;
   registerMutationListener: (ownerId: string, listener: MutationListener) => () => void;
-  draft: string; setDraft: (text: string) => void; messages: AskSparkMessage[]; actions: AskSparkAction[]; busy: boolean; error: string; errorCanRefreshStatus: boolean; clearError: () => void;
+  draft: string; setDraft: (text: string) => void; messages: AskSparkMessage[]; actions: AskSparkAction[]; busy: boolean; error: string; providerError?: AiProviderError; errorCanRefreshStatus: boolean; clearError: () => void;
   images: AskSparkImage[]; addImages: (files: File[]) => Promise<void>; removeImage: (id: string) => void; imagesBusy: boolean;
   retainedImagePreview: (id: string) => Pick<AskSparkImage, "preview" | "width" | "height" | "name"> | undefined;
   status: AskSparkStatus | null; refreshStatus: () => Promise<void>; send: () => Promise<void>; stop: () => void;
@@ -48,6 +49,7 @@ export function AskSparkProvider({ children }: { children: ReactNode }) {
   const [messages, setMessages] = useState<AskSparkMessage[]>([]), [actions, setActions] = useState<AskSparkAction[]>([]);
   const [status, setStatus] = useState<AskSparkStatus | null>(null), [busy, setBusy] = useState(false), [errorReason, setError] = useState<unknown>("");
   const error = askSparkError(errorReason), errorCanRefreshStatus = askSparkErrorCanRefreshStatus(errorReason);
+  const providerError = askSparkProviderError(errorReason);
   const [approval, setApproval] = useState<AskSparkToolCall | null>(null), [conversations, setConversations] = useState<AskSparkConversation[]>([]);
   const [images, setImages] = useState<AskSparkImage[]>([]), [imagesBusy, setImagesBusy] = useState(false);
   const [loadedIdentity, setLoadedIdentity] = useState("");
@@ -250,9 +252,9 @@ export function AskSparkProvider({ children }: { children: ReactNode }) {
     catch { return undefined; }
   };
   const value: AskSparkValue = { open, setOpen, voiceRequest, requestVoice: () => { setOpen(true); setVoiceRequest(value => value + 1); }, consumeVoiceRequest: () => setVoiceRequest(0),
-    context, activeContext, pinned, togglePinned, removeContext, refreshContext, restoreContext, registerContext, registerExecutor, registerMutationListener, draft, setDraft, messages, actions, busy, error, errorCanRefreshStatus, clearError: () => setError(""), status, refreshStatus, send, stop,
+    context, activeContext, pinned, togglePinned, removeContext, refreshContext, restoreContext, registerContext, registerExecutor, registerMutationListener, draft, setDraft, messages, actions, busy, error, providerError, errorCanRefreshStatus, clearError: () => setError(""), status, refreshStatus, send, stop,
     approval, approve: approved => approvalWait.current?.resolve(approved), undo, conversations, loadHistory, openConversation, deleteConversation, newConversation, images, imagesBusy, addImages, removeImage, retainedImagePreview };
   // Do not expose the previous account's state during the render before effect cleanup.
-  if (loadedIdentity !== identity) Object.assign(value, { open: false, draft: "", messages: [], actions: [], images: [], conversations: [], approval: null, status: null, error: "", errorCanRefreshStatus: false, busy: false });
+  if (loadedIdentity !== identity) Object.assign(value, { open: false, draft: "", messages: [], actions: [], images: [], conversations: [], approval: null, status: null, error: "", providerError: undefined, errorCanRefreshStatus: false, busy: false });
   return <Context.Provider value={value}>{children}{loadedIdentity === identity && auth.user ? inputs.dialog : null}</Context.Provider>;
 }

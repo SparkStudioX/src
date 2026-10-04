@@ -2,14 +2,28 @@ import type { RuntimeParameters } from "./types";
 import { authenticatedFetch, assertAuthResponseCurrent } from "./authSession";
 import { preparePreviewRequest } from "./previewRequest";
 export { authenticatedFetch, assertAuthResponseCurrent, authHeaders, eventStreamUrl } from "./authSession";
+export interface AiProviderError { provider: "Gemini"; httpStatus: number; status?: string; message?: string; retryable: boolean }
 export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly aiProviderError?: AiProviderError,
   ) {
     super(message);
     this.name = "ApiError";
   }
+}
+
+/** Provider responses are untrusted text; retain only the bounded public error fields. */
+function readAiProviderError(value: unknown): AiProviderError | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const error = value as Record<string, unknown>;
+  if (error.provider !== "Gemini" || !Number.isInteger(error.httpStatus) || Number(error.httpStatus) < 400 || Number(error.httpStatus) > 599 || typeof error.retryable !== "boolean") return undefined;
+  return {
+    provider: "Gemini", httpStatus: Number(error.httpStatus), retryable: error.retryable,
+    status: typeof error.status === "string" ? error.status.slice(0, 64) : undefined,
+    message: typeof error.message === "string" ? error.message.slice(0, 2048) : undefined,
+  };
 }
 
 export type ProjectRoute = { kind: "home" } | { kind: "security" } | { kind: "gateway" } | { kind: "designer" | "runtime"; projectId: string | null } | { kind: "invalid" };
@@ -82,6 +96,7 @@ export async function api<T>(
       message?: string;
       error?: string;
       detail?: string;
+      aiProviderError?: unknown;
     } | null;
     throw new ApiError(
       error?.message ||
@@ -89,6 +104,7 @@ export async function api<T>(
         error?.detail ||
         (response.status === 403 ? "You do not have permission to perform this action." : response.status === 401 ? "Sign in to continue." : `Request failed (${response.status}). ${raw.slice(0, 160)}`),
       response.status,
+      readAiProviderError(error?.aiProviderError),
     );
   }
   if (data === null && raw)

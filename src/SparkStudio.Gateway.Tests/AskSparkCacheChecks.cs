@@ -251,7 +251,7 @@ internal static class AskSparkCacheChecks
     private static async Task RejectAsync(Func<Task> action, string name)
     {
         try { await action(); }
-        catch (Exception error) when (error is BadHttpRequestException or OperationCanceledException) { checks++; return; }
+        catch (Exception error) when (error is BadHttpRequestException or AskSparkProviderException or OperationCanceledException) { checks++; return; }
         throw new InvalidOperationException("Ask Spark cache check did not reject: " + name);
     }
 

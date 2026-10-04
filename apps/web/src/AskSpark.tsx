@@ -4,6 +4,7 @@ import Icon from "./Icon";
 import { useAuth } from "./Auth";
 import { useAskSpark } from "./askSparkContext";
 import type { AskSparkAction, AskSparkMessage } from "./askSparkContext";
+import type { AiProviderError } from "./api";
 import { contextChips } from "./askSparkClient";
 import { useAskSparkVoice } from "./askSparkVoice";
 import AskSparkMarkdown from "./AskSparkMarkdown";
@@ -12,6 +13,17 @@ import "./askSpark.css";
 
 function Microphone({ size = 16 }: { size?: number }) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3" /><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" /></svg>; }
 function ImageIcon() { return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="8" cy="8" r="1.5" /><path d="m3 17 6-6 4 4 3-3 5 5" /></svg>; }
+export function AskSparkErrorAlert({ message, providerError, recovery, onDismiss, onRefreshStatus }: { message: string; providerError?: AiProviderError; recovery?: string; onDismiss: () => void; onRefreshStatus?: () => void }) {
+  const alert = useRef<HTMLDivElement>(null);
+  useEffect(() => { alert.current?.scrollIntoView({ block: "nearest" }); }, [message, providerError]);
+  return <div ref={alert} className="ask-spark-error" role="alert" aria-label="Ask Spark error" aria-atomic="true">
+    {providerError && <strong className="ask-spark-error-title">{providerError.provider} · {providerError.httpStatus}{providerError.status ? ` ${providerError.status}` : ""}</strong>}
+    <p>{message}</p>
+    {providerError?.message && <p className="ask-spark-error-detail" tabIndex={0} aria-label="Gemini error details">{providerError.message}</p>}
+    {providerError && recovery && <p>{recovery}</p>}
+    <div className="ask-spark-error-actions">{onRefreshStatus && !providerError && <button type="button" onClick={onRefreshStatus}>Refresh AI status</button>}<button type="button" onClick={onDismiss}>Dismiss</button></div>
+  </div>;
+}
 export function AskSparkLauncher({ className = "" }: { className?: string }) {
   const ask = useAskSpark(), auth = useAuth();
   if (!auth.user || auth.audience !== "engineering") return null;
@@ -76,7 +88,7 @@ function Composer() {
     <label className="ask-spark-sr-only" htmlFor={`${id}-message`}>Message to Ask Spark</label>
     <textarea id={`${id}-message`} ref={textarea} value={ask.draft} maxLength={8000} rows={3} onPaste={paste} onKeyDown={key} onChange={event => ask.setDraft(event.target.value)} placeholder="Ask, describe a change, or paste an image…" aria-describedby={`${id}-privacy`} />
     {voice.busy && <div className="ask-spark-voice-state" role="status"><span className={voice.phase === "recording" ? "recording" : ""} />{voice.phase === "recording" ? "Listening · up to 60 seconds" : voice.phase === "requesting" ? "Waiting for microphone permission…" : "Transcribing…"}{voice.phase === "recording" && <button type="button" onClick={voice.stop}>Stop recording</button>}<button type="button" onClick={voice.cancel}>Cancel</button></div>}
-    {voice.error && <p role="alert" className="ask-spark-error">{voice.error}</p>}
+    {voice.error && <AskSparkErrorAlert message={voice.error} providerError={voice.providerError} onDismiss={voice.clearError} recovery="Your draft is unchanged. Record again when you are ready; the audio is not resent automatically." />}
     <div className="ask-spark-composer-actions"><input ref={files} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={event => { void ask.addImages([...event.target.files || []]); event.target.value = ""; }} />
       <button type="button" className="ask-spark-icon-button" title="Attach images (or paste a screenshot)" aria-label="Attach images" disabled={ask.imagesBusy || ask.images.length >= 4} onClick={() => files.current?.click()}><ImageIcon /></button>
       <button type="button" className="ask-spark-icon-button" title="Dictate, then edit and send" aria-label="Dictate a message" aria-pressed={voice.phase === "recording"} disabled={ask.busy || voice.busy || !ready} onClick={() => void voice.start()}><Microphone /></button><span>{ask.imagesBusy ? "Preparing image…" : "Shift+Enter for a new line"}</span>
@@ -102,7 +114,7 @@ export function AskSparkPanel({ className = "", onOpenSettings }: { className?: 
       {!ask.messages.length && <Suggestions />}{ask.messages.map(message => <Message key={message.id} message={message} />)}
       {ask.actions.length > 0 && <details className="ask-spark-actions" open><summary>Tool activity · {ask.actions.length}</summary><ol>{ask.actions.map(action => <ToolAction key={action.id} action={action} />)}</ol></details>}
       <ApprovalCard />{ask.busy && !ask.approval && <p className="ask-spark-working" role="status"><span />Working… <small>Stopping does not undo completed actions.</small></p>}
-      {ask.error && <div className="ask-spark-error" role="alert">{ask.error}{ask.errorCanRefreshStatus && <button type="button" onClick={() => void ask.refreshStatus()}>Refresh AI status</button>}<button type="button" onClick={ask.clearError}>Dismiss</button></div>}<div ref={end} />
+      {ask.error && <AskSparkErrorAlert message={ask.error} providerError={ask.providerError} onDismiss={ask.clearError} onRefreshStatus={ask.errorCanRefreshStatus ? () => void ask.refreshStatus() : undefined} recovery="Ask Spark has stopped. Your conversation and completed changes are kept. Review tool activity before sending a new message." />}<div ref={end} />
     </div><Composer /><footer className="ask-spark-footer"><span>{ask.status?.model || "Gemini"}</span><span>{ask.pinned ? "Context pinned" : "Follows your workspace"}</span></footer>
   </aside>;
 }

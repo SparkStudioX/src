@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
 
@@ -10,7 +9,6 @@ public sealed class AskSparkGemini(HttpClient client, AskSparkSettings settings,
     private readonly SemaphoreSlim admissions = new(4, 4);
     private readonly AskSparkCache cache = new(client, rawLog: rawLog);
     private const int MaximumResponseBytes = 2 * 1024 * 1024;
-    private static readonly string[] CacheRejectionWords = ["expired", "not found", "invalid", "deleted", "unsupported"];
     private const string SystemPrompt = """
         You are Ask Spark, the SparkStudio engineering assistant. Help build and diagnose gateway applications.
         Use the supplied typed tools for all facts and changes. Never invent IDs, tool results, successful execution,
@@ -194,7 +192,8 @@ public sealed class AskSparkGemini(HttpClient client, AskSparkSettings settings,
             if (ReadUsage(result) is { } measured) reservation?.Complete(measured);
             return result;
         }
-        catch (ProviderRejectedException error) { reservation?.Release(); throw ProviderFailure(error.Message); }
+        catch (AskSparkProviderException error) when (error.Error.HttpStatus is >= 400 and < 500)
+        { reservation?.Release(); throw; }
     }
 
     private async Task<long> CountReservationAsync(JsonObject body, (string Model, string Key) credentials, CancellationToken cancellation)
@@ -206,7 +205,7 @@ public sealed class AskSparkGemini(HttpClient client, AskSparkSettings settings,
         request.Headers.Add("x-goog-api-key", credentials.Key);
         request.Content = new StringContent(new JsonObject { ["generateContentRequest"] = generation }.ToJsonString(), Encoding.UTF8, "application/json");
         using var response = await AskSparkProviderExchange.SendAsync(client, request, "countTokens", rawLog, 65_536, cancellation);
-        if (!response.IsSuccessStatusCode) throw ProviderFailure(StatusMessage(response.StatusCode));
+        if (!response.IsSuccessStatusCode) throw await AskSparkProviderException.ReadAsync(response, credentials.Key, cancellation);
         var result = await ReadResponseAsync(response, 65_536, cancellation);
         if (result["totalTokens"] is not JsonValue value || !value.TryGetValue<long>(out var input) || input < 0 || input > 100_000_000)
             throw ProviderFailure("The AI provider could not measure this request's token allowance.");
@@ -235,29 +234,11 @@ public sealed class AskSparkGemini(HttpClient client, AskSparkSettings settings,
         using var response = await AskSparkProviderExchange.SendAsync(client, request, "generateContent", rawLog, MaximumResponseBytes, cancellation);
         if (!response.IsSuccessStatusCode)
         {
-            if (cached && await CacheRejectedAsync(response, cancellation)) throw new CacheRejectedException();
-            if ((int)response.StatusCode is >= 400 and < 500) throw new ProviderRejectedException(StatusMessage(response.StatusCode));
-            throw ProviderFailure(StatusMessage(response.StatusCode));
+            var failure = await AskSparkProviderException.ReadAsync(response, credentials.Key, cancellation);
+            if (cached && failure.RejectsCachedContent) throw new CacheRejectedException();
+            throw failure;
         }
         return await ReadResponseAsync(response, MaximumResponseBytes, cancellation);
-    }
-
-    private static async Task<bool> CacheRejectedAsync(HttpResponseMessage response, CancellationToken cancellation)
-    {
-        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone) return true;
-        if (response.StatusCode != HttpStatusCode.BadRequest) return false;
-        JsonObject error;
-        try { error = await ReadResponseAsync(response, 65_536, cancellation); }
-        catch (Exception failure) when (failure is System.Text.Json.JsonException or BadHttpRequestException or IOException or OperationCanceledException)
-        {
-            // An unreadable diagnostic body cannot prove a safe cache retry, but
-            // the known HTTP 400 still releases this rejected request's reservation.
-            return false;
-        }
-        if (error["error"] is not JsonObject details || details["message"] is not JsonValue value
-            || !value.TryGetValue<string>(out var message)) return false;
-        return message.Contains("cached", StringComparison.OrdinalIgnoreCase)
-            && CacheRejectionWords.Any(word => message.Contains(word, StringComparison.OrdinalIgnoreCase));
     }
 
     private static async Task<JsonObject> ReadResponseAsync(HttpResponseMessage response, int limit, CancellationToken cancellation)
@@ -274,17 +255,7 @@ public sealed class AskSparkGemini(HttpClient client, AskSparkSettings settings,
         return JsonNode.Parse(memory.ToArray()) as JsonObject ?? throw ProviderFailure("The AI response was invalid.");
     }
 
-    private static string StatusMessage(HttpStatusCode status) => status switch
-    {
-        HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => "The AI provider rejected the saved key or model access.",
-        HttpStatusCode.NotFound => "The configured Gemini model was not found. Check Gateway Settings → AI.",
-        HttpStatusCode.TooManyRequests => "The AI provider quota or rate limit was reached. Try later or review the provider account.",
-        HttpStatusCode.BadRequest => "The AI provider rejected the request. Check model compatibility and tool definitions.",
-        _ => "The AI provider returned an error. Try again later."
-    };
-
     private static BadHttpRequestException ProviderFailure(string message) => new(message, 502);
     private sealed class CacheRejectedException : Exception;
-    private sealed class ProviderRejectedException(string message) : Exception(message);
     public void Dispose() { cache.Dispose(); admissions.Dispose(); GC.SuppressFinalize(this); }
 }

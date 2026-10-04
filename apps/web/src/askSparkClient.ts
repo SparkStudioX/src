@@ -14,8 +14,9 @@ export interface AskSparkUsage { month: string; limit: number; usedTokens: numbe
 export const defaultAskSparkModel = "gemini-3.8-flash";
 export const askSparkRequest = <T,>(path: string, method = "GET", body?: unknown, signal?: AbortSignal) => api<T>(`/ask-spark${path}`, method, body, signal);
 export const askSparkError = (error: unknown) => error instanceof Error ? error.message : String(error);
+export const askSparkProviderError = (error: unknown) => error instanceof ApiError ? error.aiProviderError : undefined;
 /** Tool, context, permission and size errors are not provider connection failures. */
-export const askSparkErrorCanRefreshStatus = (error: unknown) => error instanceof ApiError && [502, 503, 504].includes(error.status);
+export const askSparkErrorCanRefreshStatus = (error: unknown) => error instanceof ApiError && !error.aiProviderError && [502, 503, 504].includes(error.status);
 
 /** Only bounded JSON context is transmitted. Secrets and execution callbacks stay outside it. */
 export function captureAskSparkContext(context: AskSparkContext): AskSparkContext {

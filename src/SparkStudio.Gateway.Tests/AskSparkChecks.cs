@@ -178,7 +178,11 @@ internal static class AskSparkChecks
         Check(handler.Body!["tools"]![0]!["functionDeclarations"]![0]!["name"]!.GetValue<string>() == "read_fixture", "trusted declarations sent");
         Check(handler.Body["tools"]![0]!["functionDeclarations"]![0]!["parametersJsonSchema"] is JsonObject, "declarations use supported JSON Schema field");
         handler.Status = HttpStatusCode.Forbidden;
-        await RejectAsync(() => provider.TestAsync(CancellationToken.None), "provider auth error");
+        try { await provider.TestAsync(CancellationToken.None); throw new InvalidOperationException("Ask Spark accepted provider auth error"); }
+        catch (AskSparkProviderException error)
+        {
+            Check(error.Error.HttpStatus == 403 && !error.Error.Retryable, "provider auth error preserves structured access failure");
+        }
     }
 
     private static void SchemaChecks()
