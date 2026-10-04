@@ -289,7 +289,7 @@ try {
   assert.equal(report.gateway.demoMode, false); assert.equal(report.gateway.pythonAvailable, true);
   // Chunk setup imports to remain below the unchanged 1 MiB HTTP request limit.
   for (let offset = 0; offset < paths.length; offset += 1000) {
-    const package_ = { format: 'sparkstudio.tags', version: 1, tags: paths.slice(offset, offset + 1000).map(tagPath => ({ path: tagPath, kind: 'memory', dataType: 'Double', value: 0 })) };
+    const package_ = { format: 'sparkstudio.tags', version: 3, tags: paths.slice(offset, offset + 1000).map(tagPath => ({ path: tagPath, kind: 'memory', dataType: 'Double', value: 0 })), scanGroups: [], udtDefinitions: [], instances: [], hierarchy: [] };
     const preview = await admin.api('/api/tag-engineering/preview', { method: 'POST', body: package_ });
     await admin.api('/api/tag-engineering/apply', { method: 'POST', body: { package: package_, revision: preview.revision, previewToken: preview.previewToken } });
   }

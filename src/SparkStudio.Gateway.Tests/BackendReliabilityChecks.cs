@@ -51,7 +51,8 @@ public static class BackendReliabilityChecks
             messaging.Disconnect(tab);
             Check(messaging.GetSessionInfo("project").Count == 0, "repeated stream disconnect remains idempotent after cancellation source cleanup");
             var store = new ProjectStore(directory, protection);
-            var package = new JsonObject { ["format"] = "sparkstudio.tags", ["version"] = 1,
+            var package = new JsonObject { ["format"] = "sparkstudio.tags", ["version"] = TagModel.FormatVersion,
+                ["scanGroups"] = new JsonArray(), ["udtDefinitions"] = new JsonArray(), ["instances"] = new JsonArray(), ["hierarchy"] = new JsonArray(),
                 ["tags"] = new JsonArray(Enumerable.Range(0, 100).Select(index => (JsonNode)new JsonObject
                 { ["path"] = $"[default]Perf/T{index}", ["kind"] = "memory", ["dataType"] = "Int32", ["value"] = 0 }).ToArray()) };
             var preview = store.PreviewTagImport(package);

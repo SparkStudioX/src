@@ -39,6 +39,15 @@ internal static class AskSparkToolSearchChecks
         conversation.ToolContext = new JsonObject { ["section"] = "connections" };
         loaded = AskSparkToolSearch.LoadForRound(conversation, shipped);
         Check(loaded.Any(tool => tool.Name == "connections_delete") && loaded.Any(tool => tool.Name == "mqtt_mapping_save"), "current connections pane loads connection and source categories");
+        var data = new AskSparkConversation { ToolContext = new JsonObject { ["section"] = "data" } };
+        var dataTools = AskSparkToolSearch.LoadForRound(data, shipped);
+        Check(dataTools.Any(tool => tool.Name == "connections_get") && dataTools.Any(tool => tool.Name == "mqtt_mapping_save"), "Gateway Data loads connection and source categories without renaming their permissions");
+        var certificates = new AskSparkConversation { ToolContext = new JsonObject { ["section"] = "certificates" } };
+        Check(AskSparkToolSearch.LoadForRound(certificates, shipped).Any(tool => tool.Name == "certificates_list"), "Gateway Data certificates pane loads certificate tools");
+        var models = new AskSparkConversation { ProjectId = fixture.Projects.DefaultId, ToolContext = new JsonObject { ["section"] = "models" } };
+        Check(AskSparkToolSearch.LoadForRound(models, shipped).Any(tool => tool.Name == "model_draft"), "top-level Models loads model tools immediately");
+        var tags = new AskSparkConversation { ProjectId = fixture.Projects.DefaultId, ToolContext = new JsonObject { ["section"] = "tags" } };
+        Check(!AskSparkToolSearch.LoadForRound(tags, shipped).Any(tool => tool.Name == "model_draft"), "Tags keeps model schemas available through discovery instead of preloading another workspace");
         foreach (var section in new[] { "designer", "screens", "templates" })
         {
             var designer = new AskSparkConversation { ProjectId = fixture.Projects.DefaultId,
@@ -51,6 +60,9 @@ internal static class AskSparkToolSearchChecks
         Check(!directory.Contains("\"properties\"", StringComparison.Ordinal), "directory omits parameter schemas");
         var navigation = new AskSparkCatalog().Require("navigate_workspace", new JsonObject { ["destination"] = "designer", ["projectId"] = "other-project" }, fixture.Security, fixture.Actor, null, false);
         Check(navigation.Kind == "read", "pure local navigation links may name a different project without granting access to it");
+        var dataNavigation = new AskSparkCatalog().Require("navigate_workspace", new JsonObject { ["destination"] = "data" }, fixture.Security, fixture.Actor, null, false);
+        Check(dataNavigation.Kind == "read", "Gateway Data is a supported navigation destination");
+        Reject(() => new AskSparkCatalog().Require("navigate_workspace", new JsonObject { ["destination"] = "configuration" }, fixture.Security, fixture.Actor, null, false), "removed Configuration navigation alias");
     }
 
     private static void SearchChecks(Fixture fixture)

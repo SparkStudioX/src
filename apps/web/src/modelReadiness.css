@@ -1,0 +1,10 @@
+.model-readiness { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; }
+.model-readiness.ready { color:var(--success,#80bc95); }
+.model-readiness.setup,.model-readiness.issue { color:var(--warning,#dcaa5c); }
+.model-readiness.waiting { color:var(--muted); }
+.model-row-resolution p { max-width:280px; margin:10px 0; line-height:1.45; }
+.model-readiness-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.model-issue-details { margin-top:14px; color:var(--muted); }
+.model-issue-details summary { cursor:pointer; font-size:13px; }
+.model-issue-details .model-facts { margin-top:12px; }
+.model-issue-value { color:var(--text); overflow-wrap:anywhere; }

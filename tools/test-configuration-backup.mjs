@@ -35,6 +35,9 @@ var security = new SecurityStore(source);
 var account = security.Setup(File.ReadAllText(Path.Combine(source, "security/setup-code.txt")).Trim(), new("fixture-admin", "synthetic-account-password"));
 catalog.GatewayStore.SaveConnection(new JsonObject { ["id"]="fixture-opc", ["name"]="Fixture", ["type"]="opcua", ["endpoint"]="opc.tcp://127.0.0.1:59999", ["password"]="synthetic-secret" });
 Put("backup-settings.json", "{\"protectedPassphrase\":\"synthetic-protected-canary\"}");
+var modelPublishing = new ModelPublishingStore(source, protection);
+modelPublishing.Save(new(0, new("fixture", "Fixture publisher", "mqtt://127.0.0.1:59999", ["[default]Fixture/Press"], Username: "fixture", Password: "synthetic-publisher-secret")));
+Put("model-publishing-queue/fixture.json", "outgoing-runtime-queue-canary");
 Put("backup-state.json", "operational-history-canary"); Put("notes.txt", "unknown-user-file-canary");
 Put("projects/" + project.Id + "/notes.txt", "unknown-project-file-canary");
 Put("databases/active.db", "NOT-A-SQLITE-SNAPSHOT"); Put("databases/active.db-wal", "LIVE-WAL");
@@ -49,7 +52,7 @@ var report = await ConfigurationBackupSnapshot.CreateAsync(source, archive, pass
 Assert(report.Scope == "configuration" && !report.SourceWasQuarantined, "Wrong snapshot scope/source state.");
 var exclusions = report.ExcludedPaths ?? throw new Exception("Missing explicit exclusions.");
 Assert(exclusions.Contains("databases/") && exclusions.Contains("backup-work/") && exclusions.Contains("backup-state.json")
-    && exclusions.Contains("security/audit.jsonl") && exclusions.Contains("notes.txt"), "Exclusions were not explicit.");
+    && exclusions.Contains("security/audit.jsonl") && exclusions.Contains("notes.txt") && exclusions.Contains("model-publishing-queue/"), "Exclusions were not explicit.");
 var restored = Path.Combine(fixture, "restored"); await GatewayRecovery.RestoreAsync(archive, restored, password);
 Assert(!Directory.Exists(Path.Combine(restored,"databases")) && !File.Exists(Path.Combine(restored,"security/audit.jsonl")), "Online backup copied active operational data.");
 Assert(!File.Exists(Path.Combine(restored,"notes.txt")) && !Directory.Exists(Path.Combine(restored,"backup-work")), "Excluded content leaked into configuration snapshot.");
@@ -65,6 +68,8 @@ var recovered = new ProjectCatalog(restored, recoveredProtection);
 Assert(recovered.Get(project.Id).Store.GetProject()["name"]!.GetValue<string>() == "Unpublished configuration draft", "Unpublished draft was lost.");
 Assert(recovered.Get(project.Id).Publication.GetProject()["name"]!.GetValue<string>() == "Online configuration lab", "Publication did not retain its own state.");
 Assert(recovered.GatewayStore.GetConnection("fixture-opc").Password == "synthetic-secret", "Protected keyring and connection credential did not round-trip.");
+Assert(new ModelPublishingStore(restored, recoveredProtection).Runtime("fixture").Password == "synthetic-publisher-secret", "Publisher configuration or protected password did not round-trip.");
+Assert(!Directory.Exists(Path.Combine(restored,"model-publishing-queue")) || !Directory.EnumerateFiles(Path.Combine(restored,"model-publishing-queue")).Any(), "Online configuration backup copied runtime publications.");
 Assert(new SecurityStore(restored).Login("fixture-admin","synthetic-account-password","127.0.0.1").Id == account.Id, "Account hashes/grants did not survive.");
 Console.WriteLine("PASS running-host configuration snapshot restores drafts/publications/scripts/accounts/DPAPI/certificates and explicitly excludes active databases/audit/cache/unknown files");
 

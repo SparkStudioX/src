@@ -8,7 +8,8 @@ namespace SparkStudio.Gateway;
 
 public record TagValue(string Path, object? Value, string DataType, string Quality, DateTimeOffset Timestamp, string Source, bool Writable = false,
     DateTimeOffset? SourceTimestamp = null, DateTimeOffset? ReceiptTimestamp = null, string? NativeStatus = null,
-    long? AcquisitionGeneration = null, long? BindingRevision = null, long? MonotonicReceipt = null);
+    long? AcquisitionGeneration = null, long? BindingRevision = null, long? MonotonicReceipt = null,
+    string? SourceQuality = null, ModelFieldIssue[]? ModelIssues = null);
 
 public sealed partial class TagEngine(ProjectStore store, ConnectorService connectors, ILogger<TagEngine> logger, RecoveryQuarantine? recovery = null, bool enableDemoTags = false) : BackgroundService
 {
@@ -24,6 +25,7 @@ public sealed partial class TagEngine(ProjectStore store, ConnectorService conne
     {
         using (ChangeState())
         {
+            next = ApplyModelContract(next, DateTimeOffset.UtcNow);
             values.TryGetValue(next.Path, out var previous);
             if (next.AcquisitionGeneration is null && sourceValueBytes.Remove(next.Path, out var releasedBytes))
             {
@@ -113,6 +115,7 @@ public sealed partial class TagEngine(ProjectStore store, ConnectorService conne
             if (generation == definitionGeneration && cachedRecovery == (recovery?.Active == true)) return;
             cachedDefinitions = store.GetRuntimeTagDefinitions().OfType<JsonObject>().ToArray();
             cachedDefinitionsByPath = cachedDefinitions.ToDictionary(definition => ProjectStore.Required(definition, "path"), StringComparer.Ordinal);
+            modelContracts = cachedDefinitions.Where(ModelFieldContract.HasRules).ToDictionary(definition => ProjectStore.Required(definition, "path"), StringComparer.Ordinal);
             cachedDefinitionPaths = cachedDefinitions.Select(definition => ProjectStore.Required(definition, "path")).ToHashSet(StringComparer.Ordinal);
             cachedDisabledConnections = store.GetConnections().OfType<JsonObject>().Where(item => item["enabled"]?.GetValue<bool>() == false)
                 .Select(item => ProjectStore.Required(item, "id")).ToHashSet(StringComparer.Ordinal);
@@ -165,6 +168,43 @@ public sealed partial class TagEngine(ProjectStore store, ConnectorService conne
         public Task? CancellationRequested;
     }
     public TagValue[] Snapshot() => values.Values.OrderBy(x => x.Path, StringComparer.Ordinal).ToArray();
+    public (ModelReadIndex Index, IReadOnlyDictionary<string, TagValue> Values) ModelSnapshot()
+    {
+        Func<ModelReadIndex> buildIndex;
+        Dictionary<string, TagValue> captured;
+        lock (stateGate)
+        lock (GatewayConfigurationLock.SyncRoot)
+        {
+            buildIndex = store.CaptureModelReadIndex();
+            captured = values.Values.ToDictionary(value => value.Path, StringComparer.Ordinal);
+        }
+        return (buildIndex(), captured);
+    }
+    public JsonObject ReadModel(Func<ModelReadIndex, ModelReadPlan> prepare)
+    {
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            // Build/cache topology, filter scopes, and select the page outside the
+            // value-update lock. Only the selected immutable value records are captured.
+            var index = store.GetModelReadIndex();
+            var plan = prepare(index);
+            Dictionary<string, TagValue> captured;
+            lock (stateGate)
+            lock (GatewayConfigurationLock.SyncRoot)
+            {
+                if (index.Generation != store.TagConfigurationGeneration) continue;
+                captured = new(StringComparer.Ordinal);
+                foreach (var path in plan.Paths) if (values.TryGetValue(path, out var value)) captured[path] = value;
+            }
+            return plan.Render(captured);
+        }
+        // Continuous configuration imports can invalidate every optimistic page
+        // capture. Fall back to one coherent generation instead of starving the
+        // reader. Topology, permission filtering and JSON rendering still happen
+        // after the state/configuration locks have been released.
+        var snapshot = ModelSnapshot();
+        return prepare(snapshot.Index).Render(snapshot.Values);
+    }
     public TagValue[] SubscribeWithSnapshot(Action<TagValue?, TagValue> handler)
     {
         lock (stateGate)
@@ -183,8 +223,8 @@ public sealed partial class TagEngine(ProjectStore store, ConnectorService conne
             InvalidateWatches(watch => watch.Plan.Bindings.Any(binding => binding.Path == path));
             configurationGeneration++;
             if (ProjectStore.Required(saved, "kind") == "memory") SetValue(MemoryValue(saved, DateTimeOffset.UtcNow));
-            else if (ProjectStore.Required(saved, "kind") == "expression")
-                SetValue(new(path, null, ProjectStore.Required(saved, "dataType"), saved["effectiveEnabled"]?.GetValue<bool>() == false ? "Bad_Disabled" : "Bad_WaitingForInitialData", DateTimeOffset.UtcNow, "expression"));
+            else if (ProjectStore.Required(saved, "kind") is "expression" or "reference")
+                SetValue(new(path, null, ProjectStore.Required(saved, "dataType"), saved["effectiveEnabled"]?.GetValue<bool>() == false ? "Bad_Disabled" : "Bad_WaitingForInitialData", DateTimeOffset.UtcNow, ProjectStore.Required(saved, "kind")));
             else
             {
                 var disabled = store.GetConnections().OfType<JsonObject>().Any(item => ProjectStore.Optional(item, "id") == ProjectStore.Optional(saved, "connectionId") && item["enabled"]?.GetValue<bool>() == false);
@@ -319,13 +359,18 @@ public sealed partial class TagEngine(ProjectStore store, ConnectorService conne
     public static string Resolve(string path, IReadOnlyDictionary<string, JsonElement>? parameters)
     {
         if (path.Length > 1024) throw new ArgumentException("Tag path is too long.");
-        return Regex.Replace(path, "\\{([A-Za-z_][A-Za-z0-9_]*)\\}", match =>
+        var resolved = Regex.Replace(path, "\\{([A-Za-z_][A-Za-z0-9_]*)\\}", match =>
         {
             if (parameters is null || !parameters.TryGetValue(match.Groups[1].Value, out var value)) throw new ArgumentException($"Missing binding parameter: {match.Groups[1].Value}");
             var text = TemplateParameterTypes.ScalarText(value);
-            if (text.IndexOfAny(['{', '}', '[', ']', '\\']) >= 0 || text.Contains("..")) throw new ArgumentException("Invalid tag binding parameter.");
+            var modelRoot = match.Index == 0 && text.StartsWith("[default]", StringComparison.Ordinal);
+            if (modelRoot) TagDefinitionValidator.Path(text);
+            var segment = modelRoot ? text[9..] : text;
+            if (segment.IndexOfAny(['{', '}', '[', ']', '\\']) >= 0 || segment.Contains("..") || segment.Any(char.IsControl)) throw new ArgumentException("Invalid tag binding parameter.");
             return text;
         });
+        if (resolved.Length > 1024 || resolved.Contains('{') || resolved.Contains('}')) throw new ArgumentException("Invalid resolved tag binding path.");
+        return resolved;
     }
     public TagValue[] Read(IEnumerable<string> paths, IReadOnlyDictionary<string, JsonElement>? parameters) => paths.Select(path =>
     {
@@ -440,11 +485,12 @@ public sealed partial class TagEngine(ProjectStore store, ConnectorService conne
                 var snapshot = values.ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
                 foreach (var plan in expressionPlans)
                 {
-                    if (expressionDue.TryGetValue(plan.Path, out var due) && now < due) continue;
+                    if (plan.Target is null && expressionDue.TryGetValue(plan.Path, out var due) && now < due) continue;
                     var next = TagExpressions.Evaluate(plan, snapshot, now, snapshot.GetValueOrDefault(plan.Path));
-                    SetValue(next); snapshot[plan.Path] = next;
+                    SetValue(next); snapshot[plan.Path] = values[plan.Path];
                     expressionDue[plan.Path] = now.AddMilliseconds(plan.Interval);
                 }
+                RefreshModelContracts();
             }
             await Task.Delay(100, stoppingToken);
         }
@@ -461,7 +507,7 @@ public sealed partial class TagEngine(ProjectStore store, ConnectorService conne
     {
         var path = ProjectStore.Required(definition, "path");
         return new(path, definition["value"]?.Deserialize<JsonElement>(), ProjectStore.Required(definition, "dataType"),
-            definition["enabled"]?.GetValue<bool>() == false || definition["effectiveEnabled"]?.GetValue<bool>() == false ? "Bad_Disabled" : "Good", timestamp, "memory");
+            definition["enabled"]?.GetValue<bool>() == false || definition["effectiveEnabled"]?.GetValue<bool>() == false ? "Bad_Disabled" : "Good", timestamp, "memory", ReceiptTimestamp: timestamp);
     }
 
     private async Task DefinitionLoop(CancellationToken stoppingToken)
@@ -579,7 +625,8 @@ public sealed partial class TagEngine(ProjectStore store, ConnectorService conne
                         var byNode = batch.ToDictionary(value => value.NodeId, StringComparer.Ordinal);
                         foreach (var binding in watch.Plan.Bindings)
                             if (byNode.TryGetValue(binding.NodeId, out var value))
-                                SetValue(new(binding.Path, value.Value, value.DataType, value.Quality, value.Timestamp, DeviceConfiguration.IsDevice(watch.Plan.Connection.Type) ? "device" : "opcua", watch.Plan.Connection.Device?.Points.Any(point => point.Id == binding.NodeId && point.Writable) == true));
+                                SetValue(new(binding.Path, value.Value, value.DataType, value.Quality, value.Timestamp, DeviceConfiguration.IsDevice(watch.Plan.Connection.Type) ? "device" : "opcua", watch.Plan.Connection.Device?.Points.Any(point => point.Id == binding.NodeId && point.Writable) == true,
+                                    SourceTimestamp: value.Timestamp, ReceiptTimestamp: DateTimeOffset.UtcNow));
                         watch.LastNotification = DateTimeOffset.UtcNow;
                     }
                 },

@@ -21,7 +21,8 @@ internal static class TagCapacityChecks
     private static JsonObject Tag(int index) => new() { ["path"] = PathFor(index), ["kind"] = "memory", ["dataType"] = "Int32", ["value"] = 0 };
     private static JsonObject Package(int count) => new()
     {
-        ["format"] = "sparkstudio.tags", ["version"] = 1,
+        ["format"] = "sparkstudio.tags", ["version"] = TagModel.FormatVersion,
+        ["scanGroups"] = new JsonArray(), ["udtDefinitions"] = new JsonArray(), ["instances"] = new JsonArray(), ["hierarchy"] = new JsonArray(),
         ["tags"] = new JsonArray(Enumerable.Range(0, count).Select(index => (JsonNode)Tag(index)).ToArray())
     };
 
@@ -44,7 +45,7 @@ internal static class TagCapacityChecks
             var store = new ProjectStore(storePath, protection);
             var package = Package(TagModel.MaximumTags);
             var preview = store.PreviewTagImport(package);
-            Check(preview.CanApply && preview.TotalTags == 10_000, "legacy version1 preview accepts10000 direct tags");
+            Check(preview.CanApply && preview.TotalTags == 10_000, "current-format preview accepts10000 direct tags");
             store.ApplyTagImport(new(package, preview.Revision, preview.PreviewToken));
             Check(store.GetTagDefinitions().Count == 10_000, "10000-tag import persists the entire model");
             Check(new ProjectStore(storePath, protection).GetTagDefinitions().Count == 10_000, "10000-tag configuration survives reload");
@@ -80,7 +81,7 @@ internal static class TagCapacityChecks
             var mixedBefore = File.ReadAllBytes(Path.Combine(mixedPath, "tags.json"));
             mixed["tags"]!.AsArray().Add(Tag(9900));
             var conflict = mixedStore.PreviewTagImport(mixed);
-            Check(!conflict.CanApply && conflict.Conflicts!.Any(text => text.Contains("10000", StringComparison.Ordinal)), "version2 preview reports expanded member overflow as an unappliable conflict");
+            Check(!conflict.CanApply && conflict.Conflicts!.Any(text => text.Contains("10000", StringComparison.Ordinal)), "preview reports expanded member overflow as an unappliable conflict");
             Reject(() => mixedStore.ApplyTagImport(new(mixed, conflict.Revision, conflict.PreviewToken)), "mixed member overflow was applied");
             Reject(() => mixedStore.SaveTag(Tag(9900)), "single-save accounting ignored UDT members");
             Check(mixedBefore.SequenceEqual(File.ReadAllBytes(Path.Combine(mixedPath, "tags.json"))) && new ProjectStore(mixedPath, protection).GetTagDefinitions().Count == 10_000,

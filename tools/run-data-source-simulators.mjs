@@ -3,6 +3,7 @@
 import http from 'node:http';
 import net from 'node:net';
 import { pathToFileURL } from 'node:url';
+import { unsProbe, unsCurrent } from './uns-model-fixture.mjs';
 
 const envelope = result => ({ success: true, result });
 const mqttString = text => { const bytes = Buffer.from(text); const prefix = Buffer.alloc(2); prefix.writeUInt16BE(bytes.length); return Buffer.concat([prefix, bytes]); };
@@ -42,8 +43,9 @@ async function readJson(request) {
   return chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {};
 }
 
-export async function startDataSourceSimulators({ mtPort = 5310, i3xPort = 5311, mqttPort = 18890 } = {}) {
+export async function startDataSourceSimulators({ mtPort = 5310, i3xPort = 5311, mqttPort = 18890, unsModels = false } = {}) {
   let tick = 1, closing = false, clientCounter = 0;
+  const stride = unsModels ? 8 : 3;
   const started = new Date().toISOString(), paused = new Set(), subscriptions = new Map(), clients = new Set(), streams = new Set();
   const stats = { mtRequests: 0, i3xRequests: 0, mqttConnections: 0, mqttSubscriptions: 0, mqttPublishAttempts: 0 };
   const sourceValues = () => ({
@@ -51,9 +53,10 @@ export async function startDataSourceSimulators({ mtPort = 5310, i3xPort = 5311,
     'workshop:count#1': { value: 9007199254740993n + BigInt(tick), quality: 'Good', timestamp: new Date().toISOString() },
     'workshop:state#1': { value: { running: tick % 10 < 8, description: 'Synthetic cell' }, quality: 'Good', timestamp: new Date().toISOString() },
   });
-  const header = streams => `<Header creationTime="${new Date().toISOString()}" sender="SparkStudio synthetic fixture" instanceId="1" version="2.8.0" bufferSize="300" deviceModelChangeTime="${started}"${streams ? ` firstSequence="${Math.max(1, tick * 3 - 296)}" lastSequence="${tick * 3 + 3}" nextSequence="${tick * 3 + 4}"` : ''}/>`;
+  const header = streams => `<Header creationTime="${new Date().toISOString()}" sender="SparkStudio synthetic fixture" instanceId="1" version="2.8.0" bufferSize="300" deviceModelChangeTime="${started}"${streams ? ` firstSequence="${Math.max(1, tick * stride - 296)}" lastSequence="${tick * stride + stride}" nextSequence="${tick * stride + stride + 1}"` : ''}/>`;
   const probe = () => `<?xml version="1.0"?><MTConnectDevices xmlns="urn:mtconnect.org:MTConnectDevices:2.8">${header(false)}<Devices><Device id="cnc" name="Synthetic CNC" uuid="workshop-cnc"><Components><Controller id="controller" name="Controller"><DataItems><DataItem id="speed" name="Speed" category="SAMPLE" type="ROTARY_VELOCITY" units="REVOLUTION/MINUTE"/><DataItem id="count" name="PartCount" category="EVENT" type="PART_COUNT"/><DataItem id="condition" name="System" category="CONDITION" type="SYSTEM"/></DataItems></Controller></Components></Device><Agent id="agent" name="Agent" uuid="workshop-agent"><DataItems><DataItem id="availability" name="Availability" category="EVENT" type="AVAILABILITY"/></DataItems></Agent></Devices></MTConnectDevices>`;
   function current(from = 0) {
+    if (unsModels) return unsCurrent(header(true), tick, from);
     const at = new Date().toISOString(), sequence = tick * 3 + 1;
     const sample = sequence >= from ? `<RotaryVelocity dataItemId="speed" timestamp="${at}" sequence="${sequence}">${100 + tick}</RotaryVelocity>` : '';
     const event = sequence + 1 >= from ? `<PartCount dataItemId="count" timestamp="${at}" sequence="${sequence + 1}">${9007199254740993n + BigInt(tick)}</PartCount>` : '';
@@ -73,11 +76,11 @@ export async function startDataSourceSimulators({ mtPort = 5310, i3xPort = 5311,
       if (url.pathname === '/fixture/state') return sendJson(response, { tick, paused: [...paused], ...stats });
       stats.mtRequests++;
       if (paused.has('mtconnect')) { response.writeHead(503); return response.end('Synthetic source paused.'); }
-      if (url.pathname.endsWith('/probe')) { response.writeHead(200, { 'content-type': 'application/xml' }); return response.end(probe()); }
+      if (url.pathname.endsWith('/probe')) { response.writeHead(200, { 'content-type': 'application/xml' }); return response.end(unsModels ? unsProbe(header(false)) : probe()); }
       if (url.pathname.endsWith('/current')) { response.writeHead(200, { 'content-type': 'application/xml' }); return response.end(current()); }
       if (url.pathname.endsWith('/sample')) {
         const from = Number(url.searchParams.get('from') ?? 0);
-        if (from && from < Math.max(1, tick * 3 - 296)) { response.writeHead(404, { 'content-type': 'application/xml' }); return response.end(error()); }
+        if (from && from < Math.max(1, tick * stride - 296)) { response.writeHead(404, { 'content-type': 'application/xml' }); return response.end(error()); }
         response.writeHead(200, { 'content-type': 'multipart/x-mixed-replace; boundary=synthetic-mtconnect', 'cache-control': 'no-store' });
         const stream = { response, from }; streams.add(stream); request.on('close', () => streams.delete(stream));
         return;
@@ -106,6 +109,7 @@ export async function startDataSourceSimulators({ mtPort = 5310, i3xPort = 5311,
   function sendTopics(client, retained = false) {
     if (paused.has('mqtt')) return;
     const values = [ ['workshop/review/temperature', String(20 + tick / 10)], ['workshop/review/count', String(9007199254740993n + BigInt(tick))], ['workshop/tree/a/b', String(tick)], ['workshop/tree/a/b/c', String(tick + 1)], ['workshop/tree/a/b/value', String(tick + 2)], ['workshop/script/cell', serialize({ value: 9007199254740993n + BigInt(tick), temperature: 20 + tick / 10, running: true, timestamp: new Date().toISOString() })] ];
+    if (unsModels) values.push(['uns/Haas01/temperature', String(22 + tick / 10)], ['uns/Haas02/temperature', String(25 + tick / 10)]);
     for (const [topic, payload] of values) {
       if (!client.filters.some(filter => matches(filter, topic))) continue;
       if (client.socket.writableLength > 1024 * 1024) { client.socket.destroy(); return; }
@@ -149,7 +153,7 @@ export async function startDataSourceSimulators({ mtPort = 5310, i3xPort = 5311,
     for (const stream of streams) {
       if (paused.has('mtconnect')) continue;
       if (stream.response.writableLength > 1024 * 1024) { stream.response.destroy(); streams.delete(stream); continue; }
-      const document = current(stream.from); stream.from = tick * 3 + 4;
+      const document = current(stream.from); stream.from = tick * stride + stride + 1;
       stream.response.write(`--synthetic-mtconnect\r\nContent-Type: application/xml\r\nContent-Length: ${Buffer.byteLength(document)}\r\n\r\n${document}\r\n`);
     }
     for (const client of clients) if (client.connected) sendTopics(client);
@@ -160,8 +164,8 @@ export async function startDataSourceSimulators({ mtPort = 5310, i3xPort = 5311,
   };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  if (process.argv.length !== 2) throw new Error('Usage: node tools/run-data-source-simulators.mjs');
-  const fixtures = await startDataSourceSimulators();
+  if (process.argv.length > 3 || process.argv[2] && process.argv[2] !== '--uns') throw new Error('Usage: node tools/run-data-source-simulators.mjs [--uns]');
+  const fixtures = await startDataSourceSimulators({ unsModels: process.argv[2] === '--uns' });
   console.log(JSON.stringify({ synthetic: true, endpoints: fixtures.endpoints }, null, 2));
   console.log('Ctrl+C stops the loopback fixtures. They contain synthetic values only; they are not production protocol servers.');
   process.once('SIGINT', async () => { await fixtures.close(); process.exit(0); });

@@ -23,7 +23,7 @@ try {
   assert.ok(!catalog.projects.some(project => project.name === example.name), 'The workshop project already exists. No changes made.');
   assert.ok(!definitions.some(tag => tag.path.startsWith('[default]AccessPermissionsWorkshop/')), 'Workshop tags already exist. No changes made.');
   const package_ = example.tagPackage, preview = await api('/tag-engineering/preview', 'POST', package_);
-  assert.ok(preview.canApply && preview.changes.every(item => item.action === 'add'), 'Workshop tag conflicts with gateway configuration.');
+  assert.ok(preview.canApply && preview.changes.every(item => item.action === 'add' || item.action === 'unchanged'), 'Workshop tag conflicts with gateway configuration.');
   await api('/tag-engineering/apply', 'POST', { package: package_, revision: preview.revision, previewToken: preview.previewToken });
   const project = await api('/projects', 'POST', { name: example.name }), route = `/projects/${project.id}`;
   const draft = await api(route + '/project');

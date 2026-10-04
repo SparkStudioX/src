@@ -6,7 +6,7 @@
       "kind": "source-commit",
       "value": "4e58e436ef3817458427e23a81d14a65ff1d190a"
     },
-    "note": "Use 0.2.0-preview.12 or a later compatible release for this collection. The portable projects' runtime property bindings, camera capture, photo badges, native tag buttons and multi-schedule/S3 backups require at least preview.11; the setup-required industrial devices workshop requires preview.12. The bundle source revision and each workshop prerequisites identify its actual requirements; exact artifact/source evidence is recorded separately in docs/architecture/PARITY.md. The read-only data sources workshop additionally requires a build with MTConnect, i3X and MQTT source sessions; earlier preview.12 assets lack these additions."
+    "note": "Use 0.2.0-preview.14 or a later compatible release for the complete collection. The Models, model operations and model-bound faceplate workshops require preview.14. Each workshop lists its own prerequisites; the frozen bundle identifies its exact clean source revision. Older tag configuration and backup formats are not migrated automatically. Exact artifact evidence is recorded separately in docs/architecture/PARITY.md."
   },
   "workshops": [
     {
@@ -15,12 +15,42 @@
       "summary": "Open and edit a synthetic canvas through conversation, inspect rendered captures and turn your screenshots into reviewed image assets.",
       "source": "examples/ask-spark.json",
       "distribution": "setup-required",
-      "features": ["Docked assistant", "Voice transcription", "Pasted screenshots", "Markdown answers", "Progressive tool discovery", "Bounded generation recovery", "Compact component schemas", "Configurable model steps", "Batched draft edits and Undo", "Reusable faceplates", "Project and document opening", "Rendered canvas captures", "Latest-capture visual context", "Approved image crop batches", "Query and script refresh", "Authorized published runtime testing"],
-      "prerequisites": ["Requires a build containing Ask Spark; older preview.12 release assets do not include it.", "Configure a Gemini API key in Gateway Settings > AI. Use a development project and engineering Design permission. No equipment or gateway tags are needed."],
+      "features": [
+        "Docked assistant",
+        "Voice transcription",
+        "Pasted screenshots",
+        "Markdown answers",
+        "Progressive tool discovery",
+        "Bounded generation recovery",
+        "Compact component schemas",
+        "Configurable model steps",
+        "Batched draft edits and Undo",
+        "Reusable faceplates",
+        "Project and document opening",
+        "Rendered canvas captures",
+        "Latest-capture visual context",
+        "Approved image crop batches",
+        "Query and script refresh",
+        "Authorized published runtime testing"
+      ],
+      "prerequisites": [
+        "Requires a build containing Ask Spark; older preview.12 release assets do not include it.",
+        "Configure a Gemini API key in Gateway Settings > AI. Use a development project and engineering Design permission. No equipment or gateway tags are needed."
+      ],
       "gatewayWrites": "none",
       "entryScreenId": "ask-spark-workshop",
       "guide": "docs/architecture/ASK_SPARK.md",
-      "walkthrough": ["Import the synthetic workshop as a separate development project. Ask Spark to open the project and its workshop screen from Projects or Gateway Settings.", "Select Speed, Temperature and Count. Ask Spark to align their left edges and equalize widths in one batch, then capture and critique the rendered canvas.", "Use Undo, paste a screenshot and dictate a request. Review each message before sending.", "Request two named crops from your synthetic screenshot. Review their thumbnails and approve the batch; verify new assets appear without reloading.", "Ask for a Markdown comparison table and a code example; inspect the formatting and Copy code button.", "Ask to discover backup tools without making changes. Verify AI settings defaults to 100 model steps per message.", "Ask for twelve labeled overlay buttons in small batches and verify their count and placement in a final capture. See the guide for bounded generation recovery and explicit incomplete stops.", "Ask for a reusable faceplate, inspect the template, then validate, save and preview. Publication requires its own review.", "Optionally publish this synthetic project and ask for a runtime session check and read-only inspection, signing into the operator session as the same account when prompted. See the guide for optional query/script refresh exercises."]
+      "walkthrough": [
+        "Import the synthetic workshop as a separate development project. Ask Spark to open the project and its workshop screen from Projects or Gateway Settings.",
+        "Select Speed, Temperature and Count. Ask Spark to align their left edges and equalize widths in one batch, then capture and critique the rendered canvas.",
+        "Use Undo, paste a screenshot and dictate a request. Review each message before sending.",
+        "Request two named crops from your synthetic screenshot. Review their thumbnails and approve the batch; verify new assets appear without reloading.",
+        "Ask for a Markdown comparison table and a code example; inspect the formatting and Copy code button.",
+        "Ask to discover backup tools without making changes. Verify AI settings defaults to 100 model steps per message.",
+        "Ask for twelve labeled overlay buttons in small batches and verify their count and placement in a final capture. See the guide for bounded generation recovery and explicit incomplete stops.",
+        "Ask for a reusable faceplate, inspect the template, then validate, save and preview. Publication requires its own review.",
+        "Optionally publish this synthetic project and ask for a runtime session check and read-only inspection, signing into the operator session as the same account when prompted. See the guide for optional query/script refresh exercises."
+      ]
     },
     {
       "id": "visitor-checkin",
@@ -909,7 +939,7 @@
       "entryScreenId": "gateway-lab",
       "guide": "docs/architecture/GATEWAY_CONSOLE.md",
       "walkthrough": [
-        "Import and publish the named workshop. Locate its Designer/operator links in Projects, then open Gateway Settings to inspect resource counts.",
+        "Import and publish the named workshop. Locate its Designer/operator links in Projects, then open Gateway Settings to inspect resource counts. Data contains Connections and Public OPC certificates; shared connections are managed there.",
         "Compare engineering and operator sessions. If testing revocation, identify and revoke only a disposable session, leaving the current and other sessions active.",
         "Open Diagnostics and compare automatic observations approximately 15 seconds apart. Inspect CPU, memory, disk and bounded route records.",
         "Verify the observation timestamp advances while visible without a Refresh button. Failed observations retain the last data with a warning and contextual Retry.",
@@ -1388,7 +1418,7 @@
       "entryScreenId": "query-workshop",
       "guide": "docs/architecture/QUERY_TESTING.md",
       "walkthrough": [
-        "Set up the synthetic SQLite database, load the workshop and explicitly publish its draft.",
+        "Set up the synthetic SQLite connection/database in Gateway Settings → Data → Connections, load the workshop and explicitly publish its draft.",
         "Run Typed quantity with minimum 45, then invalid text; verify invalid typed values fail before database execution.",
         "Run Slow read with a 1-second deadline, then with 30 seconds and Cancel read query. No cancelled result should appear.",
         "Run Production records again and open the operator screen. The three synthetic records remain available; no update query was executed."
@@ -1585,7 +1615,7 @@
       "walkthrough": [
         "Run the dedicated setup loader and open the newly created Data workshop operator application.",
         "Select a list item, tree item or table row to fill the local form; page, sort and filter the loaded table result.",
-        "On the isolated gateway only, test Data workshop SQLite and inspect the saved time plus draft/published query dependencies. Disable and save it, verify reads fail, then re-enable, save and test again. Changing the connection invalidates its earlier test result.",
+        "On the isolated gateway only, open Gateway Settings → Data → Connections and test Data workshop SQLite and inspect the saved time plus draft/published query dependencies. Disable and save it, verify reads fail, then re-enable, save and test again. Changing the connection invalidates its earlier test result.",
         "Follow docs/architecture/CONNECTION_OPERATIONS.md to confirm that saved queries block connection deletion, then create and delete a separate unused connection. Managed SQLite database files are retained after connection removal.",
         "Preview the selected form values, then open Independent station forms to compare isolated list and tree choices."
       ]
@@ -1614,13 +1644,112 @@
       "entryScreenId": "data-sources",
       "guide": "docs/architecture/DATA_SOURCES.md",
       "walkthrough": [
-        "Start the loopback fixtures and load the unpublished project. Create one source connection at a time using the guide and inspect Test/Diagnostics.",
+        "Start the loopback fixtures and load the unpublished project. Open Gateway Settings → Data → Connections, create one source connection at a time using the guide and inspect Test/Diagnostics.",
         "Browse the MTConnect CNC and i3X synthetic cell, keep Agent excluded, and preview selected points/tags before atomic apply. Read exact Int64 values and separate raw IDs/selectors.",
         "Create MQTT Review mappings with zero saved tags. Inspect its observed catalog and retained/live quality, then review-import selected topics.",
         "Test a draft Scriban mapping with a supplied payload. Inspect typed output, timestamp and limit/missing-field diagnostics without changing values or definitions.",
         "Browse a/b, a/b/c and the real a/b/value topic. Deliberately enable automatic ownership under an unused root; inspect locked types, suppression and reviewed namespace migration.",
         "Pause MQTT publications for Uncertain_Stale with a healthy transport. Stop/restart the fixtures for communication recovery. Confirm all source write actions remain unavailable.",
         "Add a saved MTConnect point as a CNC UDT member and explicitly publish the displays when ready. Clean up tags/instances before their referenced connections."
+      ]
+    },
+    {
+      "id": "uns-model",
+      "title": "UNS model setup",
+      "summary": "Open the top-level Models workspace, choose existing data, build a CNC model and add two machines. Try the three-press folder exercise, location tree and selective updates.",
+      "source": "examples/uns-model.json",
+      "distribution": "setup-required",
+      "features": [
+        "UNS tag models and ISA-95 hierarchy",
+        "Parameterized reference members and nested types",
+        "Bulk CSV instances and explicit overrides",
+        "Drag folders, infer Device parameters and add matching instances",
+        "One draft across Build models, Organize and Settings with review and navigation protection",
+        "Immutable type versions and selective upgrade",
+        "Read-only MQTT references without duplicate acquisition"
+      ],
+      "prerequisites": [
+        "Requires the current top-level Models workspace, UNS model and Model instance template parameters; earlier preview.13 Windows and preview.13-docker.1 releases predate this feature. Use matching current-schema recipes; older tag formats are not supported.",
+        "Run node tools/run-data-source-simulators.mjs --uns on an isolated development machine. Configure the MTConnect connection and eight exact raw source tags first.",
+        "Engineering Configuration permission is required for model changes. The workshop uses reserved example paths and type IDs; stop if they already belong to another application.",
+        "The optional MQTT exercise uses UTF-8 scalar mappings without expressions. Docker must reach the host fixtures using an explicitly configured reachable endpoint; loopback inside a container refers to that container."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "uns-model",
+      "guide": "docs/architecture/UNS_MODEL_SETUP.md",
+      "walkthrough": [
+        "Create the MTConnect connection in Gateway Settings → Data → Connections. Ingest Haas01 and Haas02 once, with Double speed/load, String execution and Int64 part count under [default]Sources/MTConnect/.",
+        "Choose Models in the workspace left navigation. Build or merge-import Spindle@1 and CNC@1, then use Organize to add four locations in the same draft.",
+        "In Build models choose Bulk actions > Paste spreadsheet rows for the two-row CNC CSV, then review and apply the models, locations and equipment together. Confirm six members per CNC and IdealCycle 42/60; test and clear the CNC01 explicit override.",
+        "Use the separate UNS CNC faceplates portable project or generate a faceplate in the Designer and place it twice.",
+        "Save Spindle@2 without Load and CNC@2 pinned to Spindle@2. Upgrade only CNC01 and inspect the retained Spindle/Load binding in Diagnostics.",
+        "Optionally review-import scalar MQTT temperatures, then apply TemperatureSensor references and compare value, quality and timestamps.",
+        "For the beginner folder exercise, create the six authored Press memory tags in Tags, then open Models. Choose data by dragging Press01 into a new Press model, make it reusable with Device and add matching Press02/Press03 equipment. In Organize place all three under a Line; review and apply once. Inspect missing-data errors and Stay/discard protection."
+      ]
+    },
+    {
+      "id": "uns-faceplates",
+      "title": "UNS CNC faceplates",
+      "summary": "One portable template bound to two Model instance parameters, with units, quality and a deliberate missing-member diagnostic after a selective upgrade.",
+      "source": "examples/uns-faceplates.json",
+      "distribution": "portable",
+      "features": [
+        "Model instance template parameter",
+        "Two placements of a shared CNC faceplate",
+        "Ordinary indirect tag bindings",
+        "Units and value quality",
+        "Unresolved model requirements survive project transfer"
+      ],
+      "prerequisites": [
+        "Requires a build containing UNS Model instance parameters; earlier preview.13 Windows and preview.13-docker.1 releases predate this feature.",
+        "Project import, explicit publication and re-export are independent of gateway model setup. Without the CNC type or instances, values are unavailable and Designer Diagnostics reports unresolved model requirements.",
+        "Follow the separate UNS model setup workshop for live synthetic data. Operators need tag-read scope for [default]Acme/Dallas/Machining/Line1/; no Commands permission or equipment writes are used."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "uns-faceplates",
+      "guide": "docs/architecture/UNS_MODEL_SETUP.md",
+      "walkthrough": [
+        "Import uns-faceplates.sparkproj as a new draft. Open Diagnostics before configuring any types to inspect unresolved requirements.",
+        "Complete the separate gateway model setup. Confirm the machine picker admits only readable CNC instances in the declared version range.",
+        "Preview both placements: CNC01 uses Haas01 with IdealCycle42; CNC02 uses Haas02 with IdealCycle60. Each value shows its own quality.",
+        "Publish explicitly, open the operator application and verify the scoped values. Exporting the project retains template requirements and excludes gateway connections/types/tags.",
+        "Upgrade only CNC01 to CNC@2 in the setup workshop. Keep the faceplate unchanged; inspect the missing Spindle/Load diagnostic and unavailable CNC01 value while CNC02 still works.",
+        "Resolve the mismatch by restyling/versioning the faceplate or deliberately restoring the instance version. Re-export the edited project after review."
+      ]
+    },
+    {
+      "id": "model-operations",
+      "title": "Model contracts, mappings and MQTT publishing",
+      "summary": "Use three synthetic presses to practice validation, alarms, reusable source mappings, reviewed upgrades, dependency export and durable MQTT output.",
+      "source": "examples/model-operations.json",
+      "distribution": "setup-required",
+      "features": [
+        "Guided model setup and live equipment readiness",
+        "Range and freshness issues",
+        "Enums and validated UCUM units",
+        "Model alarm templates",
+        "Independent source mapping profiles",
+        "Reviewed version impact",
+        "Dependency-aware selective export",
+        "Object and leaf MQTT publishing",
+        "Protected credentials and durable queue diagnostics"
+      ],
+      "prerequisites": [
+        "Requires a current build containing Model operations, field contracts, mapping profiles and outbound model publishing. Earlier preview.13 release assets do not contain these changes.",
+        "Use an isolated development gateway with Engineering Configuration permission. Reserve [default]ModelOperations/ and WorkshopPress; stop if these belong to another application.",
+        "The main exercise uses only synthetic memory tags. Optional publishing requires a separate disposable MQTT 3.1.1 broker; its template is disabled, loopback-only and contains no credentials."
+      ],
+      "gatewayWrites": "memory-tags",
+      "entryScreenId": "model-operations",
+      "guide": "docs/architecture/MODEL_PUBLISHING.md",
+      "walkthrough": [
+        "Explore Use a starter or Use my data, the model/version toolbar and setup guide. Review modelRecipe and merge it into the Models draft; use Define fields and Connect machines, then apply once. Readiness requires saved Good samples; confirm Load values 28, 64 and 91 through WorkshopMemory.",
+        "Open Check > Data issues and Live object. Follow valueExercises on synthetic source tags: compare a valid high alarm with invalid 120 and an unknown State; restore valid readings. The equipment badge links to its filtered issues.",
+        "Give only Press02 Load a 2000 ms freshness override. Wait for the issue; write 64 again and confirm receipt freshness recovers without a value change. Disable the exercise override afterward.",
+        "Inspect upgradeRecipe under Manage > Versions: WorkshopPress@2 adds Temperature. Review old/new versions and explicitly choose WorkshopMemoryV2 for Press01 only; Press02/03 stay pinned to v1.",
+        "Bind one disposable screen to Press01 Load, then inspect dependencies. Export only Press01 with its source tags and review the closure; publishing credentials remain outside the model package.",
+        "Under Share > Publish MQTT, follow the five setup steps using publisherRecipe. Preview object and leaf topics, then Save and test broker with delivery off; testing sends no values. Enable only against your disposable broker. Delivery options and broker login are expandable; delivery diagnostics stay visible.",
+        "Observe payloads, stop the broker, change synthetic Load and inspect queued/retry counters. Restart the broker to drain, then disable the publisher. Explicitly discard queued data only when intended."
       ]
     }
   ]

@@ -395,7 +395,7 @@
         "document": {
           "type": "object",
           "additionalProperties": true,
-          "description": "Screen {id,name,width,height,components:[],kind?:'screen'|'popup',parameters?,state?}; template also has parameterTypes/instanceState."
+          "description": "Screen {id,name,width,height,components:[],kind?:'screen'|'popup',parameters?,state?}; template also has parameterTypes/modelParameters/instanceState. A Model instance parameter uses parameterTypes[name]='model' and modelParameters[name]={definitionId,minVersion?,maxVersion?}; its value is an instance path."
         }
       },
       "required": [
@@ -435,7 +435,7 @@
         "patch": {
           "type": "object",
           "additionalProperties": true,
-          "description": "Allowed: name,width,height,kind,parameters,state,parameterTypes,instanceState."
+          "description": "Allowed: name,width,height,kind,parameters,state,parameterTypes,modelParameters,instanceState. Model instance parameters declare a required definitionId and optional minVersion/maxVersion in modelParameters[name]."
         }
       },
       "required": [

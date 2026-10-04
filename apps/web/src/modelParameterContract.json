@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "nameFragment": "[A-Za-z][A-Za-z0-9_-]{0,63}",
+  "maximumPlaceholders": 16
+}

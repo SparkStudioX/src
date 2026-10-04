@@ -1,0 +1,378 @@
+{
+  "name": "Model operations workshop",
+  "description": "Independently authored gateway setup recipe. This JSON is not a .sparkproj and does not run itself. Use only a disposable gateway; every value and path is synthetic.",
+  "walkthrough": [
+    "Open Models. The first-use welcome offers Use a starter or Use my data. Choose models and their versions in the toolbar; hide or restore the actionable setup guide as needed.",
+    "Import modelRecipe into the combined draft. Define fields exposes basic field settings first; expand Quality rules or Process alarms when needed. Connect machines provides the equipment grid; wide layouts also offer Combined view.",
+    "Review and apply once. Needs setup means settings or a relevant draft require attention; Waiting for data means saved equipment has not received all samples. Ready requires Good samples from every enabled field.",
+    "Use Check > Live object and Data issues. Follow valueExercises on source memory tags; an invalid Load value produces a Data issue badge. Review data issues opens the affected equipment and keeps its original value visible.",
+    "Use Manage > Versions to review WorkshopPress v1 to v2 and explicitly select WorkshopMemoryV2 for Press01 only. Inspect Dependencies before exporting under Share.",
+    "Under Share > Publish MQTT, follow Choose equipment, Connect to a broker, Preview the messages, Test the connection and Enable delivery. Keep publishing off during setup; Save and test broker saves disabled settings. Inspect Delivery options only when changing delivery or queue defaults."
+  ],
+  "modelRecipe": {
+    "format": "sparkstudio.tags",
+    "version": 3,
+    "tags": [
+      {
+        "path": "[default]ModelOperations/Sources/Press01/Load",
+        "kind": "memory",
+        "dataType": "Int32",
+        "value": 28
+      },
+      {
+        "path": "[default]ModelOperations/Sources/Press01/State",
+        "kind": "memory",
+        "dataType": "String",
+        "value": "running"
+      },
+      {
+        "path": "[default]ModelOperations/Sources/Press01/CycleCount",
+        "kind": "memory",
+        "dataType": "Int64",
+        "value": 100
+      },
+      {
+        "path": "[default]ModelOperations/Sources/Press02/Load",
+        "kind": "memory",
+        "dataType": "Int32",
+        "value": 64
+      },
+      {
+        "path": "[default]ModelOperations/Sources/Press02/State",
+        "kind": "memory",
+        "dataType": "String",
+        "value": "running"
+      },
+      {
+        "path": "[default]ModelOperations/Sources/Press02/CycleCount",
+        "kind": "memory",
+        "dataType": "Int64",
+        "value": 100
+      },
+      {
+        "path": "[default]ModelOperations/Sources/Press03/Load",
+        "kind": "memory",
+        "dataType": "Int32",
+        "value": 91
+      },
+      {
+        "path": "[default]ModelOperations/Sources/Press03/State",
+        "kind": "memory",
+        "dataType": "String",
+        "value": "running"
+      },
+      {
+        "path": "[default]ModelOperations/Sources/Press03/CycleCount",
+        "kind": "memory",
+        "dataType": "Int64",
+        "value": 100
+      }
+    ],
+    "hierarchy": [
+      {
+        "path": "[default]ModelOperations/Plant",
+        "level": "Site"
+      },
+      {
+        "path": "[default]ModelOperations/Plant/Line1",
+        "level": "Line"
+      }
+    ],
+    "udtDefinitions": [
+      {
+        "id": "WorkshopPress",
+        "version": 1,
+        "description": "Original synthetic press model for learning field contracts and reusable mappings.",
+        "semanticId": "urn:sparkstudio:workshop:press",
+        "parameters": [
+          {
+            "name": "Device",
+            "type": "String",
+            "required": true
+          }
+        ],
+        "members": [
+          {
+            "path": "Load",
+            "kind": "memory",
+            "dataType": "Int32",
+            "value": 0,
+            "unit": "%",
+            "unitSystem": "ucum",
+            "range": {
+              "low": 0,
+              "high": 100
+            },
+            "freshnessMs": 0,
+            "semanticId": "urn:sparkstudio:workshop:press:load",
+            "description": "Synthetic motor load",
+            "alarms": [
+              {
+                "id": "HighLoad",
+                "name": "High press load",
+                "enabled": true,
+                "mode": "high",
+                "setpoint": 80,
+                "deadband": 2,
+                "priority": 2,
+                "message": "Synthetic training alarm: inspect press load."
+              }
+            ]
+          },
+          {
+            "path": "State",
+            "kind": "memory",
+            "dataType": "String",
+            "value": "idle",
+            "enumValues": [
+              "idle",
+              "running",
+              "fault"
+            ],
+            "description": "Declared example machine states"
+          },
+          {
+            "path": "CycleCount",
+            "kind": "memory",
+            "dataType": "Int64",
+            "value": 0,
+            "unit": "1",
+            "unitSystem": "ucum",
+            "description": "Exact completed cycle count"
+          }
+        ]
+      }
+    ],
+    "mappingProfiles": [
+      {
+        "id": "WorkshopMemory",
+        "definitionId": "WorkshopPress",
+        "version": 1,
+        "description": "Bind the same model to existing synthetic memory source tags.",
+        "bindings": {
+          "Load": {
+            "kind": "reference",
+            "target": "[default]ModelOperations/Sources/{Device}/Load"
+          },
+          "State": {
+            "kind": "reference",
+            "target": "[default]ModelOperations/Sources/{Device}/State"
+          },
+          "CycleCount": {
+            "kind": "reference",
+            "target": "[default]ModelOperations/Sources/{Device}/CycleCount"
+          }
+        }
+      }
+    ],
+    "instances": [
+      {
+        "path": "[default]ModelOperations/Plant/Line1/Press01",
+        "definitionId": "WorkshopPress",
+        "version": 1,
+        "parameters": {
+          "Device": "Press01"
+        },
+        "mappingProfileId": "WorkshopMemory"
+      },
+      {
+        "path": "[default]ModelOperations/Plant/Line1/Press02",
+        "definitionId": "WorkshopPress",
+        "version": 1,
+        "parameters": {
+          "Device": "Press02"
+        },
+        "mappingProfileId": "WorkshopMemory"
+      },
+      {
+        "path": "[default]ModelOperations/Plant/Line1/Press03",
+        "definitionId": "WorkshopPress",
+        "version": 1,
+        "parameters": {
+          "Device": "Press03"
+        },
+        "mappingProfileId": "WorkshopMemory"
+      }
+    ],
+    "scanGroups": []
+  },
+  "upgradeRecipe": {
+    "format": "sparkstudio.tags",
+    "version": 3,
+    "tags": [],
+    "udtDefinitions": [
+      {
+        "id": "WorkshopPress",
+        "version": 2,
+        "description": "Original synthetic press model for learning field contracts and reusable mappings.",
+        "semanticId": "urn:sparkstudio:workshop:press",
+        "parameters": [
+          {
+            "name": "Device",
+            "type": "String",
+            "required": true
+          }
+        ],
+        "members": [
+          {
+            "path": "Load",
+            "kind": "memory",
+            "dataType": "Int32",
+            "value": 0,
+            "unit": "%",
+            "unitSystem": "ucum",
+            "range": {
+              "low": 0,
+              "high": 100
+            },
+            "freshnessMs": 0,
+            "semanticId": "urn:sparkstudio:workshop:press:load",
+            "description": "Synthetic motor load",
+            "alarms": [
+              {
+                "id": "HighLoad",
+                "name": "High press load",
+                "enabled": true,
+                "mode": "high",
+                "setpoint": 80,
+                "deadband": 2,
+                "priority": 2,
+                "message": "Synthetic training alarm: inspect press load."
+              }
+            ]
+          },
+          {
+            "path": "State",
+            "kind": "memory",
+            "dataType": "String",
+            "value": "idle",
+            "enumValues": [
+              "idle",
+              "running",
+              "fault"
+            ],
+            "description": "Declared example machine states"
+          },
+          {
+            "path": "CycleCount",
+            "kind": "memory",
+            "dataType": "Int64",
+            "value": 0,
+            "unit": "1",
+            "unitSystem": "ucum",
+            "description": "Exact completed cycle count"
+          },
+          {
+            "path": "Temperature",
+            "kind": "memory",
+            "dataType": "Double",
+            "value": 25,
+            "unit": "Cel",
+            "unitSystem": "ucum",
+            "range": {
+              "low": -20,
+              "high": 180
+            },
+            "description": "New optional synthetic reading; default supplied locally."
+          }
+        ]
+      }
+    ],
+    "mappingProfiles": [
+      {
+        "id": "WorkshopMemoryV2",
+        "definitionId": "WorkshopPress",
+        "version": 2,
+        "description": "Bind the same model to existing synthetic memory source tags.",
+        "bindings": {
+          "Load": {
+            "kind": "reference",
+            "target": "[default]ModelOperations/Sources/{Device}/Load"
+          },
+          "State": {
+            "kind": "reference",
+            "target": "[default]ModelOperations/Sources/{Device}/State"
+          },
+          "CycleCount": {
+            "kind": "reference",
+            "target": "[default]ModelOperations/Sources/{Device}/CycleCount"
+          }
+        }
+      }
+    ],
+    "instances": [
+      {
+        "path": "[default]ModelOperations/Plant/Line1/Press01",
+        "definitionId": "WorkshopPress",
+        "version": 2,
+        "parameters": {
+          "Device": "Press01"
+        },
+        "mappingProfileId": "WorkshopMemoryV2"
+      }
+    ],
+    "scanGroups": [],
+    "hierarchy": []
+  },
+  "freshnessExercise": {
+    "equipmentPath": "[default]ModelOperations/Plant/Line1/Press02",
+    "memberPath": "Load",
+    "freshnessMs": 2000,
+    "sameValueWrite": {
+      "path": "[default]ModelOperations/Sources/Press02/Load",
+      "value": 64
+    }
+  },
+  "valueExercises": [
+    {
+      "path": "[default]ModelOperations/Sources/Press01/Load",
+      "value": 91,
+      "expected": "Good modeled quality; high-load alarm active."
+    },
+    {
+      "path": "[default]ModelOperations/Sources/Press01/Load",
+      "value": 120,
+      "expected": "Value preserved; source quality Good; modeled quality Uncertain_ModelValidation; out-of-range issue. The active alarm is held while quality is uncertain."
+    },
+    {
+      "path": "[default]ModelOperations/Sources/Press01/Load",
+      "value": 70,
+      "expected": "Good modeled quality; range issue cleared; high-load alarm clears below its deadband."
+    },
+    {
+      "path": "[default]ModelOperations/Sources/Press01/State",
+      "value": "maintenance",
+      "expected": "Enum validation issue; original source value retained."
+    },
+    {
+      "path": "[default]ModelOperations/Sources/Press01/State",
+      "value": "running",
+      "expected": "Enum issue cleared."
+    }
+  ],
+  "selectiveExport": {
+    "definitionKeys": [],
+    "instancePaths": [
+      "[default]ModelOperations/Plant/Line1/Press01"
+    ],
+    "includeSourceTags": true
+  },
+  "publisherRecipe": {
+    "id": "workshop-press",
+    "name": "Workshop press output",
+    "enabled": false,
+    "endpoint": "mqtt://127.0.0.1:1883",
+    "instancePaths": [
+      "[default]ModelOperations/Plant/Line1/Press01"
+    ],
+    "topicPrefix": "spark/workshop",
+    "shape": "object",
+    "mode": "onChange",
+    "intervalMs": 1000,
+    "qos": 1,
+    "retain": false,
+    "queueLimit": 1000,
+    "queueBytes": 10485760
+  },
+  "expectedObjectTopic": "spark/workshop/default/ModelOperations/Plant/Line1/Press01"
+}

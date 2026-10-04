@@ -69,7 +69,7 @@ Put("projects/test/assets/example.bin", "synthetic-asset-canary");
 Put("security/identities.json", "{\"accounts\":[\"synthetic-hash-canary\"]}");
 Put("security/audit.jsonl", "{\"action\":\"fixture\"}\n"); Put("security/audit.jsonl.previous", "previous-audit-fixture");
 Put("security/setup-code.txt", "synthetic-setup-canary");
-Put("tags.json", "[]"); Put("connections.json", "[]");
+Put("tags.json", """{"format":"sparkstudio.tags","version":3,"provider":{"name":"default","enabled":true},"tags":[],"scanGroups":[],"udtDefinitions":[],"instances":[],"hierarchy":[]}"""); Put("connections.json", "[]");
 Put("deployment.json", "{\"revision\":2}"); Put("deployment.json.previous", "{\"revision\":1}");
 Put("certificates/deployment/fixture.pem", "synthetic-noncertificate-fixture"); Put("pki/rejected/fixture.der", "synthetic-pki-fixture");
 Put("unknown/operator-notes.txt", "additional-local-data-canary"); Put("projects/.orphan-fixture/state.tmp", "interrupted-local-state");

@@ -13,6 +13,7 @@ public static class TagEngineering
     public static void MapTagEngineeringEndpoints(this RouteGroupBuilder routes)
     {
         routes.MapGet("/tag-engineering/export", (ProjectStore store) => store.ExportTags()).Access("configuration");
+        routes.MapGet("/tag-engineering/definitions", (ProjectStore store) => TagModelWire.Definitions(store.GetTagDefinitions())).Access("configuration");
         routes.MapPost("/tag-engineering/preview", async (HttpContext context, ProjectStore store) => store.PreviewTagImport(await ReadImportAsync<JsonObject>(context))).Access("configuration");
         routes.MapPost("/tag-engineering/apply", async (HttpContext context, TagEngine tags) => tags.ApplyImport(await ReadImportAsync<TagImportRequest>(context))).Access("configuration", audit: true);
         routes.MapGet("/tag-engineering/status", (TagEngine tags) => tags.ProviderSnapshot()).Access("configuration");
@@ -43,7 +44,7 @@ public static class TagEngineering
 
 public sealed record TagImportRequest(JsonObject Package, string Revision, string PreviewToken);
 public sealed record TagImportChange(string Path, string Action, string Kind, string[]? OverrideFields = null);
-public sealed record TagImportPreview(string Revision, string PreviewToken, int TotalTags, TagImportChange[] Changes, string[]? Conflicts = null)
+public sealed record TagImportPreview(string Revision, string PreviewToken, int TotalTags, TagImportChange[] Changes, string[]? Conflicts = null, JsonArray? ExpandedTags = null)
 {
     public bool CanApply => Conflicts is null || Conflicts.Length == 0;
 }
@@ -62,18 +63,16 @@ public sealed partial class ProjectStore
     public long MemoryStateWriteCount { get; private set; }
     private void LoadTagModel(JsonNode? saved)
     {
-        if (saved is JsonArray legacy) tagModel["tags"] = legacy.DeepClone();
-        else if (saved is JsonObject model && model["version"]?.GetValue<int>() == 2) tagModel = (JsonObject)model.DeepClone();
-        else if (saved is not null) throw new ArgumentException("Unsupported stored tag configuration format.");
+        if (saved is not null) tagModel = (JsonObject)TagModel.RequireCurrentFormat(saved).DeepClone();
         definitions = tagModel["tags"]!.AsArray();
         if (Load("tag-values.json") is JsonObject state && state["version"]?.GetValue<int>() == 1 && state["values"] is JsonObject savedValues)
             memoryTagState = (JsonObject)savedValues.DeepClone();
     }
     private void PersistTagModel(JsonObject next)
     {
-        var expanded = TagModel.Expand(next, NormalizeTag);
+        var expanded = ExpandTagModel(next);
         ValidateOwnedNamespaces(expanded);
-        var prior = expandedTagDefinitions ?? TagModel.Expand(tagModel, NormalizeTag);
+        var prior = expandedTagDefinitions ?? ExpandTagModel(tagModel);
         var previous = prior.OfType<JsonObject>().ToDictionary(tag => Required(tag, "path"), StringComparer.Ordinal);
         Persist("tags.json", next);
         tagModel = next;
@@ -89,7 +88,7 @@ public sealed partial class ProjectStore
     private void ApplyMemoryState(JsonArray tags)
     {
         foreach (var tag in tags.OfType<JsonObject>().Where(tag => Optional(tag, "kind") == "memory"))
-            if (memoryTagState[Required(tag, "path")] is JsonObject saved && Optional(saved, "dataType") == Optional(tag, "dataType") && Optional(saved, "configuration") == Hash(tag.ToJsonString()))
+            if (memoryTagState[Required(tag, "path")] is JsonObject saved && Optional(saved, "dataType") == Optional(tag, "dataType") && Hash(tag.ToJsonString()) == Optional(saved, "configuration"))
                 tag["value"] = TagDefinitionValidator.MemoryValue(Required(tag, "dataType"), saved["value"]);
     }
     /// <summary>Memory state is checkpointed at most once per second; orderly stop flushes it as well.</summary>
@@ -131,7 +130,7 @@ public sealed partial class ProjectStore
     private JsonObject NormalizeTag(JsonObject value)
     {
         var kind = TagDefinitionValidator.Kind(value);
-        if (kind is not ("opcua" or "device" or "memory" or "expression")) throw new ArgumentException("kind must be opcua, device, memory or expression.");
+        if (kind is not ("opcua" or "device" or "memory" or "expression" or "reference")) throw new ArgumentException("kind must be opcua, device, memory, expression or reference.");
         var node = new JsonObject
         {
             ["path"] = TagDefinitionValidator.Path(TagDefinitionValidator.Text(value, "path")), ["kind"] = kind,
@@ -139,7 +138,13 @@ public sealed partial class ProjectStore
         };
         if (value["scanGroup"] is not null) node["scanGroup"] = TagModel.Name(value, "scanGroup");
         if (kind is "opcua" or "device")
-        {
+            NormalizeAcquisitionTag(value, node, kind);
+        else NormalizeDerivedTag(value, node, kind);
+        TagModelMetadata.Copy(value, node);
+        return node;
+    }
+    private void NormalizeAcquisitionTag(JsonObject value, JsonObject node, string kind)
+    {
             var id = TagDefinitionValidator.Text(value, "connectionId");
             var connection = connections.OfType<JsonObject>().FirstOrDefault(item => Optional(item, "id") == id)
                 ?? throw new ArgumentException("An existing device connection is required.");
@@ -160,26 +165,27 @@ public sealed partial class ProjectStore
                     throw new ArgumentException("Read-source tags cannot be writable.");
             }
             else if (value.ContainsKey("dataType")) node["dataType"] = TagDefinitionValidator.DataType(value);
-        }
-        else
-        {
+    }
+    private static void NormalizeDerivedTag(JsonObject value, JsonObject node, string kind)
+    {
             node["dataType"] = TagDefinitionValidator.DataType(value);
             if (kind == "memory") node["value"] = TagDefinitionValidator.MemoryValue(Required(node, "dataType"), value["value"]);
+            else if (kind == "reference") node["target"] = TagDefinitionValidator.Path(TagDefinitionValidator.Text(value, "target"));
             else
             {
                 var plan = TagExpressions.Compile(value);
                 node["expression"] = Required(value, "expression");
                 node["inputs"] = new JsonObject(plan.Inputs.OrderBy(item => item.Key, StringComparer.Ordinal).Select(item => KeyValuePair.Create<string, JsonNode?>(item.Key, JsonValue.Create(item.Value))));
             }
-        }
-        return node;
     }
 
     public JsonObject ExportTags()
     {
         if (gatewayStore is not null) return gatewayStore.ExportTags();
-        lock (gate) return (JsonObject)tagModel.DeepClone();
+        lock (gate) return TagModelWire.Package(tagModel);
     }
+
+    private JsonArray ExpandTagModel(JsonObject model) => TagModel.Expand(model, NormalizeTag, SourceOwnedDefinitions().OfType<JsonObject>());
 
     public TagImportPreview PreviewTagImport(JsonObject package)
     {
@@ -204,17 +210,25 @@ public sealed partial class ProjectStore
 
     private (JsonObject Model, TagImportPreview Preview) PrepareTagImport(JsonObject package)
     {
-        if (Optional(package, "format") != "sparkstudio.tags" || package["version"] is not JsonValue version || !version.TryGetValue<int>(out var number) || number is not (1 or 2))
-            throw new ArgumentException("Import requires sparkstudio.tags version 1 or 2.");
-        if (number == 1) TagModel.Fields(package, "format", "version", "tags");
-        else TagModel.Fields(package, "format", "version", "tags", "provider", "scanGroups", "udtDefinitions", "instances", "removeTags", "removeInstances", "removeScanGroups", "removeUdtDefinitions");
-        var imported = TagModel.Array(package, "tags", TagModel.MaximumTags);
-        if (number == 1 && imported.Count == 0) throw new ArgumentException("Version 1 imports require at least one tag.");
-        if (number == 2)
-        {
-            TagModel.Array(package, "scanGroups", 32); TagModel.Array(package, "udtDefinitions", 128); TagModel.Array(package, "instances", 128);
-        }
+        ValidateTagImportEnvelope(package);
+        package = TagModelWire.NormalizePackage(package, tagModel);
+        var imported = package["tags"]!.AsArray();
         var next = (JsonObject)tagModel.DeepClone(); var changes = new List<TagImportChange>();
+        MergeTagImport(package, imported, next, changes);
+        return PreviewExpandedTagImport(package, imported, next, changes);
+    }
+    private static void ValidateTagImportEnvelope(JsonObject package)
+    {
+        TagModel.RequireCurrentFormat(package);
+        TagModel.Fields(package, "format", "version", "tags", "provider", "scanGroups", "udtDefinitions", "instances", "removeTags", "removeInstances", "removeScanGroups", "removeUdtDefinitions", "hierarchy", "removeHierarchy", "mappingProfiles", "removeMappingProfiles");
+        TagModel.Array(package, "tags", TagModel.MaximumTags); TagModel.Array(package, "scanGroups", 32);
+        TagModel.Array(package, "udtDefinitions", TagModel.MaximumDefinitions); TagModel.Array(package, "instances", TagModel.MaximumInstances);
+        if (package.ContainsKey("hierarchy")) TagModel.Array(package, "hierarchy", TagModel.MaximumHierarchyNodes);
+        if (package.ContainsKey("mappingProfiles")) TagModel.Array(package, "mappingProfiles", 256);
+    }
+    private void MergeTagImport(JsonObject package, JsonArray imported, JsonObject next, List<TagImportChange> changes)
+    {
+        next["mappingProfiles"] ??= new JsonArray();
         void Merge(string collection, JsonArray incoming, Func<JsonObject, string> key, Func<JsonObject, JsonObject>? normalize = null, bool immutable = false)
         {
             var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -232,22 +246,25 @@ public sealed partial class ProjectStore
             next[collection] = new JsonArray(target.Values.Select(item => item.DeepClone()).Concat(incomingNodes).ToArray());
         }
         Merge("tags", imported, tag => Required(tag, "path"), tag => { TagModel.ValidateTagFields(tag); return NormalizeTag(tag); });
-        if (number == 2)
-        {
             Merge("scanGroups", package["scanGroups"]!.AsArray(), group => TagModel.Name(group, "name"));
             Merge("udtDefinitions", package["udtDefinitions"]!.AsArray(), TagModel.DefinitionKey, immutable: true);
             Merge("instances", package["instances"]!.AsArray(), item => TagDefinitionValidator.Path(Required(item, "path")));
+            if (package["mappingProfiles"] is JsonArray mappings) Merge("mappingProfiles", mappings, item => TagModel.Name(item, "id"));
+            if (package["hierarchy"] is JsonArray hierarchy) Merge("hierarchy", hierarchy, item => TagDefinitionValidator.Path(Required(item, "path")));
             if (package["provider"] is JsonObject provider)
             {
-                changes.Add(new("default", JsonNode.DeepEquals(next["provider"], provider) ? "unchanged" : "update", "provider"));
-                next["provider"] = provider.DeepClone();
+                var proposed = (JsonObject)provider.DeepClone();
+                if (!proposed.ContainsKey("requireDeclaredHierarchy") && next["provider"]?["requireDeclaredHierarchy"] is JsonNode governance)
+                    proposed["requireDeclaredHierarchy"] = governance.DeepClone();
+                changes.Add(new("default", JsonNode.DeepEquals(next["provider"], proposed) ? "unchanged" : "update", "provider"));
+                next["provider"] = proposed;
             }
             else if (package.ContainsKey("provider")) throw new ArgumentException("provider must be an object.");
             void Remove(string field, string collection, Func<JsonObject, string> key, int maximum)
             {
                 if (!package.ContainsKey(field)) return;
                 if (package[field] is not JsonArray remove || remove.Count > maximum) throw new ArgumentException($"{field} must be an array of at most {maximum} keys.");
-                var incomingIds = package[collection]!.AsArray().OfType<JsonObject>().Select(key).ToHashSet(StringComparer.Ordinal);
+                var incomingIds = (package[collection] as JsonArray ?? []).OfType<JsonObject>().Select(key).ToHashSet(StringComparer.Ordinal);
                 var target = next[collection]!.AsArray().OfType<JsonObject>().ToDictionary(key, StringComparer.Ordinal);
                 foreach (var item in remove)
                 {
@@ -258,14 +275,18 @@ public sealed partial class ProjectStore
                 }
                 next[collection] = new JsonArray(target.Values.Select(item => item.DeepClone()).ToArray());
             }
-            Remove("removeTags", "tags", tag => Required(tag, "path"), TagModel.MaximumTags); Remove("removeInstances", "instances", tag => Required(tag, "path"), 128);
-            Remove("removeScanGroups", "scanGroups", tag => Required(tag, "name"), 32); Remove("removeUdtDefinitions", "udtDefinitions", TagModel.DefinitionKey, 128);
-        }
+            Remove("removeTags", "tags", tag => Required(tag, "path"), TagModel.MaximumTags); Remove("removeInstances", "instances", tag => Required(tag, "path"), TagModel.MaximumInstances);
+            Remove("removeScanGroups", "scanGroups", tag => Required(tag, "name"), 32); Remove("removeUdtDefinitions", "udtDefinitions", TagModel.DefinitionKey, TagModel.MaximumDefinitions);
+            Remove("removeHierarchy", "hierarchy", tag => Required(tag, "path"), TagModel.MaximumHierarchyNodes);
+            Remove("removeMappingProfiles", "mappingProfiles", item => TagModel.Name(item, "id"), 256);
+    }
+    private (JsonObject Model, TagImportPreview Preview) PreviewExpandedTagImport(JsonObject package, JsonArray imported, JsonObject next, List<TagImportChange> changes)
+    {
         var previous = GetTagDefinitions().OfType<JsonObject>().ToDictionary(tag => Required(tag, "path"), StringComparer.Ordinal);
         JsonArray expanded; string[] conflicts = [];
         var ownedDefinitions = SourceOwnedDefinitions();
         try {
-            expanded = TagModel.Expand(next, NormalizeTag);
+            expanded = ExpandTagModel(next);
             ValidateOwnedNamespaces(expanded);
             // Engineering packages edit authored definitions. Source-owned
             // definitions remain part of the resulting complete runtime model.
@@ -275,7 +296,7 @@ public sealed partial class ProjectStore
                 expanded.Add(candidate);
             }
         }
-        catch (ArgumentException error) when (number == 2) { expanded = []; conflicts = [error.Message]; }
+        catch (ArgumentException error) { expanded = []; conflicts = [error.Message]; }
         if (conflicts.Length == 0)
         {
             var importedPaths = imported.OfType<JsonObject>().Select(tag => Required(tag, "path")).ToHashSet(StringComparer.Ordinal);
@@ -283,8 +304,8 @@ public sealed partial class ProjectStore
             {
                 var path = Required(node, "path"); var old = previous.GetValueOrDefault(path);
                 var action = old is null ? "add" : JsonNode.DeepEquals(old, node) ? "unchanged" : "update";
-                // Include unchanged incoming direct tags as in the version-1 contract, and all affected instance members.
-                if (action != "unchanged" || importedPaths.Contains(path) || number == 2 && node["udtInstance"] is not null)
+                // Include unchanged incoming direct tags and all affected instance members.
+                if (action != "unchanged" || importedPaths.Contains(path) || node["udtInstance"] is not null)
                     changes.Add(new(path, action, Required(node, "kind"), node["overrideFields"]?.AsArray().Select(field => field!.GetValue<string>()).ToArray()));
                 previous.Remove(path);
             }
@@ -292,7 +313,7 @@ public sealed partial class ProjectStore
         }
         var revision = Hash(tagModel.ToJsonString());
         var token = Hash(revision + "\n" + connections.ToJsonString() + "\n" + ownedDefinitions.ToJsonString() + "\n" + package.ToJsonString());
-        return (next, new(revision, token, expanded.Count, changes.ToArray(), conflicts));
+        return (next, new(revision, token, expanded.Count, changes.ToArray(), conflicts, TagModelWire.Definitions(expanded)));
     }
     private static string Hash(string text) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 }

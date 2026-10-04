@@ -1,7 +1,7 @@
 [
   {
     "name": "navigate_workspace",
-    "description": "Find a fixed local link to an engineering workspace. Return the link to the user; this does not navigate, interrupt the current conversation, discard drafts or grant permissions. Project-specific destinations need projectId or selected project context. Connections, certificates, queries and scripts include the tab to select after opening.",
+    "description": "Find a fixed local link to an engineering workspace. Return the link to the user; this does not navigate, interrupt the current conversation, discard drafts or grant permissions. The data destination opens Gateway Settings > Data; connections and certificates open their exact Data tabs. Project-specific destinations need projectId or selected project context. Queries and scripts include the tab to select after opening.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -13,9 +13,10 @@
             "queries",
             "scripts",
             "overview",
-            "configuration",
+            "data",
             "connections",
             "tags",
+            "models",
             "certificates",
             "ai",
             "alarms",
@@ -4449,7 +4450,7 @@
             "version": {
               "type": "integer",
               "enum": [
-                2
+                3
               ]
             },
             "provider": {
@@ -4790,6 +4791,61 @@
                 "minLength": 1
               },
               "maxItems": 32
+            },
+            "hierarchy": {
+              "type": "array",
+              "maxItems": 2048,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "level": {
+                    "type": "string",
+                    "enum": [
+                      "Enterprise",
+                      "Site",
+                      "Area",
+                      "Line",
+                      "Cell",
+                      "WorkCenter",
+                      "Custom"
+                    ]
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "semanticType": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "attributes": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 1024
+                    }
+                  }
+                },
+                "required": [
+                  "path",
+                  "level"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "removeHierarchy": {
+              "type": "array",
+              "maxItems": 2048,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              }
             }
           },
           "required": [
@@ -4829,7 +4885,7 @@
   },
   {
     "name": "tags_import_apply",
-    "description": "Apply exactly a reviewed tag-model package with matching model revision and previewToken. Use this after all tag/UDT/scan/provider preview tools.",
+    "description": "Apply exactly a reviewed direct-tag, scan-group or provider package with matching revision and previewToken. UNS/UDT type, instance and hierarchy changes cannot be applied by Ask Spark; prepare them with model_draft for user review in Models.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -4845,7 +4901,7 @@
             "version": {
               "type": "integer",
               "enum": [
-                2
+                3
               ]
             },
             "provider": {
@@ -5186,6 +5242,61 @@
                 "minLength": 1
               },
               "maxItems": 32
+            },
+            "hierarchy": {
+              "type": "array",
+              "maxItems": 2048,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  },
+                  "level": {
+                    "type": "string",
+                    "enum": [
+                      "Enterprise",
+                      "Site",
+                      "Area",
+                      "Line",
+                      "Cell",
+                      "WorkCenter",
+                      "Custom"
+                    ]
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 2048
+                  },
+                  "semanticType": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "attributes": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "maxLength": 1024
+                    }
+                  }
+                },
+                "required": [
+                  "path",
+                  "level"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "removeHierarchy": {
+              "type": "array",
+              "maxItems": 2048,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              }
             }
           },
           "required": [
@@ -5406,7 +5517,7 @@
   },
   {
     "name": "udts_define_preview",
-    "description": "Preview a new immutable UDT version; relative members and expressions are validated. Returns package and review; apply using tags_import_apply.",
+    "description": "Preview a new immutable UDT version; relative members and expressions are validated. Returns package and review; review and apply manually in Models. Ask Spark cannot apply model changes.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -5563,7 +5674,7 @@
   },
   {
     "name": "udts_instances_preview",
-    "description": "Preview creating/upgrading equipment instances and overrides. Returns package and review; apply using tags_import_apply.",
+    "description": "Preview creating/upgrading equipment instances and overrides. Returns package and review; review and apply manually in Models. Ask Spark cannot apply model changes.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -5637,7 +5748,7 @@
   },
   {
     "name": "udts_remove_preview",
-    "description": "Preview removing unreferenced UDT definition-version keys (ID@version). Returns package and review; apply using tags_import_apply.",
+    "description": "Preview removing unreferenced UDT definition-version keys (ID@version). Returns package and review; review and apply manually in Models. Ask Spark cannot apply model changes.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -5681,7 +5792,7 @@
   },
   {
     "name": "udts_remove_instances_preview",
-    "description": "Preview removing exact UDT instance paths. Returns package and review; apply using tags_import_apply.",
+    "description": "Preview removing exact UDT instance paths. Returns package and review; review and apply manually in Models. Ask Spark cannot apply model changes.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -9772,5 +9883,220 @@
     "confirmation": true,
     "parallelSafe": false,
     "audience": "operator"
+  },
+  {
+    "name": "model_types",
+    "description": "Read UNS type versions, parameters, metadata and composed members. Uses the selected project's read scopes when present; otherwise uses gateway Configuration permission from the Models workspace. pageOffset/pageSize page the gateway list; resultPath/offset/limit inspect a bounded returned subtree. Saved versions are immutable. Discover model_draft to propose a new version for user review.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "pageOffset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "resultPath": {
+          "type": "string",
+          "maxLength": 1024,
+          "pattern": "^(?:|/.*)$"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12000
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "category": "model",
+    "kind": "read",
+    "target": "gateway",
+    "permission": "read",
+    "confirmation": false,
+    "parallelSafe": true
+  },
+  {
+    "name": "model_tree",
+    "description": "Browse the UNS hierarchy, folders, typed instances and ordinary tag members. path defaults to [default]; depth is bounded at 8. Only readable members and instances are returned. Use pageOffset/pageSize to continue the gateway page.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "pageOffset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "resultPath": {
+          "type": "string",
+          "maxLength": 1024,
+          "pattern": "^(?:|/.*)$"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12000
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "category": "model",
+    "kind": "read",
+    "target": "gateway",
+    "permission": "read",
+    "confirmation": false,
+    "parallelSafe": true
+  },
+  {
+    "name": "model_instances",
+    "description": "List readable UNS asset instances with pinned type versions and parameters. Filter by type, version or hierarchy prefix under. Use exact returned instance paths in Model instance template parameters. Uses the selected project's read scopes when present; otherwise uses gateway Configuration permission from the Models workspace.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "under": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "pageOffset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "resultPath": {
+          "type": "string",
+          "maxLength": 1024,
+          "pattern": "^(?:|/.*)$"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12000
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "category": "model",
+    "kind": "read",
+    "target": "gateway",
+    "permission": "read",
+    "confirmation": false,
+    "parallelSafe": true
+  },
+  {
+    "name": "model_object",
+    "description": "Read a UNS instance as nested members containing values, quality, source/receipt timestamps, metadata and concrete tag paths. Restricted leaves are omitted and counted; fully unreadable instances appear absent. References are read-only. This does not create a new subscription.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "resultPath": {
+          "type": "string",
+          "maxLength": 1024,
+          "pattern": "^(?:|/.*)$"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12000
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "category": "model",
+    "kind": "read",
+    "target": "gateway",
+    "permission": "read",
+    "confirmation": false,
+    "parallelSafe": true
+  },
+  {
+    "name": "model_draft",
+    "description": "Prepare a UNS type or bulk-instance CSV for human review in Models. Supply exactly one of definitionJson (one type definition serialized as JSON) or csv (path,definitionId,version,<parameter columns> using saved types). Validates through read-only preview and keeps a bounded draft in this user browser tab. Returns a workspace link. Never applies model changes, upgrades or hierarchy edits; the user must review and apply in Models.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "definitionJson": {
+          "type": "string",
+          "maxLength": 60000
+        },
+        "csv": {
+          "type": "string",
+          "maxLength": 60000
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "category": "model",
+    "kind": "draft",
+    "target": "gateway",
+    "permission": "configuration",
+    "confirmation": false,
+    "parallelSafe": false
   }
 ]

@@ -1,0 +1,9 @@
+.designer-model-browser { display:grid; gap:10px; min-width:0; font-size:12px; }
+.designer-model-browser code,.designer-model-item { overflow-wrap:anywhere; }
+.designer-model-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:8px 0; }
+.designer-model-items { display:grid; gap:6px; max-height:420px; overflow:auto; }
+.designer-model-item { display:grid; gap:4px; text-align:left; padding:10px; background:var(--surface); color:inherit; border:1px solid var(--border); border-radius:5px; min-width:0; }
+.designer-model-item small { opacity:.8; }
+.model-instance-picker { display:grid; gap:6px; }
+.tag-binding-picker { grid-column:2; min-width:0; }
+.tag-binding-picker section { display:grid; gap:8px; padding:8px; border:1px solid var(--border); }

@@ -1,4 +1,5 @@
 import { useId, useRef } from "react";
+import { TagBindingPicker } from "./DesignerModelBrowser";
 import type { BindingReference, CanvasComponent, RuntimeParameters, RuntimeStateValues, Tag } from "./types";
 
 export type ReferenceRow = { id: number; name: string; reference: BindingReference };
@@ -9,6 +10,9 @@ export function referenceRowsError(rows: ReferenceRow[]): string | undefined {
   if (rows.some(row => !/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(row.name) || ["true", "false", "null", "__proto__", "prototype", "constructor"].includes(row.name))) return "Give each reference a name of 1–64 letters, numbers, or underscores. Start with a letter or underscore; reserved names are unavailable.";
   if (new Set(rows.map(row => row.name)).size !== rows.length) return "Reference names must be unique.";
   return undefined;
+}
+function ReferenceTagPicker({ reference, allowTags, tags, onSelect }: { reference: BindingReference; allowTags: boolean; tags: Tag[]; onSelect: (path: string) => void }) {
+  return reference.kind === "tag" && allowTags ? <TagBindingPicker tags={tags} onSelect={onSelect} /> : null;
 }
 export function BindingReferencesEditor({ rows, onChange, component, components, parameters, inputKeys, tags = [], state, parameterMode = false, allowTags = !parameterMode, allowUnresolvedScreenState = false, prefix = "" }: {
   rows: ReferenceRow[]; onChange: (rows: ReferenceRow[]) => void; component: CanvasComponent; components: CanvasComponent[]; parameters: RuntimeParameters; inputKeys: string[]; tags?: Tag[]; state?: RuntimeStateValues; parameterMode?: boolean; allowTags?: boolean; allowUnresolvedScreenState?: boolean; prefix?: string;
@@ -59,6 +63,7 @@ export function BindingReferencesEditor({ rows, onChange, component, components,
               : <label>Tag path<input aria-label={`${prefix}Reference ${index + 1} tag path`} list={listId} value={reference.path} onChange={(event) => changeRow(row.id, { reference: { ...reference, path: event.target.value } })} placeholder="[default]Area/Value" /><datalist id={listId}>{tagSuggestions.map((tag) => <option key={tag.path} value={tag.path} />)}</datalist>
                 {matchingTags > tagSuggestions.length && <small className="binding-note">Showing {tagSuggestions.length} of {matchingTags.toLocaleString()} matching tags. Type more of the path to refine suggestions, or enter the full path.</small>}
               </label>}
+              <ReferenceTagPicker reference={reference} allowTags={allowTags} tags={tags} onSelect={path => changeRow(row.id, { reference: { kind: "tag", path } })} />
             </fieldset>;
           })}</div>
   </>;

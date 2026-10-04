@@ -28,9 +28,10 @@ internal static class TemplateParameterTypes
             if (template.ContainsKey("parameterTypes"))
             {
                 if (template["parameterTypes"] is not JsonObject types || types.Count > 64 || types.Any(pair =>
-                    !declared.ContainsKey(pair.Key) || pair.Value is not JsonValue value || !value.TryGetValue<string>(out var type) || type is not ("string" or "number" or "boolean")))
-                    throw new ArgumentException("Template parameterTypes must contain at most 64 declared parameter names with string, number or boolean types.");
+                    !declared.ContainsKey(pair.Key) || pair.Value is not JsonValue value || !value.TryGetValue<string>(out var type) || type is not ("string" or "number" or "boolean" or "model")))
+                    throw new ArgumentException("Template parameterTypes must contain at most 64 declared parameter names with string, number, boolean or model types.");
             }
+            ValidateModelRequirements(template, declared);
             ValidateConstants(declared, template["parameterTypes"] as JsonObject);
         }
         foreach (var component in ProjectTemplates.Components(project).SelectMany(ViewContainerValidator.Placements))
@@ -50,7 +51,36 @@ internal static class TemplateParameterTypes
 
     private static void RejectMetadata(JsonObject owner)
     {
-        if (owner.ContainsKey("parameterTypes")) throw new ArgumentException("Parameter type definitions belong only to templates.");
+        if (owner.ContainsKey("parameterTypes") || owner.ContainsKey("modelParameters")) throw new ArgumentException("Parameter type definitions and model requirements belong only to templates.");
+    }
+
+    // Requirements are portable metadata. Gateway model existence is diagnosed in Designer,
+    // never checked here: importing a project on a new gateway must remain possible.
+    private static void ValidateModelRequirements(JsonObject template, JsonObject declared)
+    {
+        var types = template["parameterTypes"] as JsonObject;
+        if (template.ContainsKey("modelParameters") && (template["modelParameters"] is not JsonObject requirements || requirements.Count > 64))
+            throw new ArgumentException("Model parameter requirements must be an object with at most 64 declared parameters.");
+        var models = template["modelParameters"] as JsonObject ?? [];
+        foreach (var (name, node) in models)
+        {
+            if (!declared.ContainsKey(name) || types?[name]?.GetValue<string>() != "model" || node is not JsonObject requirement)
+                throw new ArgumentException("Model requirements belong to declared Model instance parameters only.");
+            TagModel.Fields(requirement, "definitionId", "minVersion", "maxVersion");
+            TagModel.Name(requirement, "definitionId");
+            var minimum = ModelVersion(requirement, "minVersion");
+            var maximum = ModelVersion(requirement, "maxVersion");
+            if (minimum.HasValue && maximum.HasValue && minimum > maximum) throw new ArgumentException("Minimum model version cannot exceed maximum model version.");
+        }
+        foreach (var (name, type) in types ?? [])
+            if (type?.GetValue<string>() == "model" && !models.ContainsKey(name)) throw new ArgumentException("Each Model instance parameter requires a definitionId and optional version bounds.");
+    }
+
+    private static int? ModelVersion(JsonObject requirement, string key)
+    {
+        if (!requirement.ContainsKey(key)) return null;
+        if (requirement[key] is JsonValue value && value.TryGetValue<int>(out var version) && version is >= 1 and <= 1000000) return version;
+        throw new ArgumentException("Model version bounds must be integers from 1 through 1000000.");
     }
 
     private static void ValidateOverrides(JsonObject owner, JsonObject declared, JsonObject? types)
@@ -74,6 +104,11 @@ internal static class TemplateParameterTypes
     public static JsonElement Coerce(string key, JsonElement value, JsonObject? types)
     {
         var type = types?[key]?.GetValue<string>() ?? "string";
+        if (type == "model")
+        {
+            if (value.ValueKind != JsonValueKind.String) throw new ArgumentException($"Template parameter '{key}' requires a concrete model instance path.");
+            return JsonSerializer.SerializeToElement(TagDefinitionValidator.Path(value.GetString()));
+        }
         if (type == "string") return JsonSerializer.SerializeToElement(ScalarText(value));
         if (type == "boolean")
         {
@@ -82,8 +117,11 @@ internal static class TemplateParameterTypes
                 return JsonSerializer.SerializeToElement(value.GetString() == "true");
             throw new ArgumentException($"Template parameter '{key}' must be true or false.");
         }
-        if (type == "number")
-        {
+        if (type == "number") return CoerceNumber(key, value);
+        throw new ArgumentException("Unsupported template parameter type.");
+    }
+    private static JsonElement CoerceNumber(string key, JsonElement value)
+    {
             var number = double.NaN;
             var parsed = false;
             if (value.ValueKind == JsonValueKind.Number) parsed = value.TryGetDouble(out number);
@@ -92,8 +130,6 @@ internal static class TemplateParameterTypes
             if (parsed && double.IsFinite(number) && !(number == Math.Truncate(number) && Math.Abs(number) > MaximumSafeInteger))
                 return JsonSerializer.SerializeToElement(number == 0 ? 0d : number);
             throw new ArgumentException($"Template parameter '{key}' must be a finite decimal number within the browser's exact integer range, without whitespace.");
-        }
-        throw new ArgumentException("Unsupported template parameter type.");
     }
 
     public static string ScalarText(JsonElement value) => value.ValueKind switch

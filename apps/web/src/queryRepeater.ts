@@ -64,7 +64,7 @@ export async function loadQueryRepeater(
 
 /** React row identity resets only the form whose query context, values, or input contract changed. */
 export function queryRowFormKey(queryKey: string, row: ResolvedTemplateRow, template: Template, parameters: RuntimeParameters): string {
-  return JSON.stringify([queryKey, row.id, Object.entries(parameters).sort(([a], [b]) => a.localeCompare(b)), template.id, template.parameterTypes,
+  return JSON.stringify([queryKey, row.id, Object.entries(parameters).sort(([a], [b]) => a.localeCompare(b)), template.id, template.parameterTypes, template.modelParameters,
     template.components.map(component => ({
       id: component.id, type: component.type, fieldKey: component.props.fieldKey,
       defaultValue: component.props.defaultValue, tagPath: component.props.tagPath,

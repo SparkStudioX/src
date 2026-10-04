@@ -23,7 +23,7 @@ The API must be reachable from the gateway machine or container. **Outside loopb
 
 ## 1. Create and test the connection
 
-1. Open **Gateway Settings → Configuration → Connections → New Connection → i3X source**.
+1. Open **Gateway Settings → Data → Connections → New Connection → i3X source**.
 2. Give it a recognizable name, such as `Line 1 i3X`, and leave it enabled.
 3. Set **Base URL** to the service's full API root. Include `/v1` if it is part of that root; do not enter an individual element or current-value URL.
 4. Set **Authentication mode** to the service's mode. Leave **None** selected when it accepts requests without credentials, including for a remote HTTPS service. Otherwise choose **Username and password**, **Bearer token**, or **API key** and fill the displayed credential fields. For an API key, set **API-key header** to the service's required header; its default is `X-API-Key`.

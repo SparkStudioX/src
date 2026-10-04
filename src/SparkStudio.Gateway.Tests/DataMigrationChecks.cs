@@ -20,16 +20,19 @@ internal static class DataMigrationChecks
         {
             const string legacy = """[{"path":"[default]Fixture/Count","kind":"memory","dataType":"Int32","value":17,"enabled":true}]""";
             File.WriteAllText(Path.Combine(directory, "tags.json"), legacy);
+            Reject(() => GatewayDataMigrations.Prepare(directory), "flat tag arrays are unsupported");
+            Check(File.ReadAllText(Path.Combine(directory, "tags.json")) == legacy && !Directory.Exists(Path.Combine(directory, "migration-backups")), "unsupported tags are not migrated or rewritten");
+            var current = TagModel.Empty(); current["tags"] = JsonNode.Parse(legacy);
+            File.WriteAllText(Path.Combine(directory, "tags.json"), current.ToJsonString());
             GatewayDataMigrations.Prepare(directory);
-            var upgraded = JsonNode.Parse(File.ReadAllText(Path.Combine(directory, "tags.json")))!;
-            Check(upgraded["version"]!.GetValue<int>() == 2 && upgraded["tags"]![0]!["value"]!.GetValue<int>() == 17, "legacy tag model upgrades without value loss");
-            Check(File.ReadAllText(Path.Combine(directory, "migration-backups", "format-2", "tags.json")) == legacy, "migration preserves exact original bytes");
+            Check(JsonNode.Parse(File.ReadAllText(Path.Combine(directory, "gateway-format.json")))!["version"]!.GetValue<int>() == TagModel.FormatVersion, "current tag model initializes the current gateway format marker");
             var before = File.ReadAllText(Path.Combine(directory, "gateway-format.json")); GatewayDataMigrations.Prepare(directory);
-            Check(before == File.ReadAllText(Path.Combine(directory, "gateway-format.json")), "current migration is idempotent");
-            File.Delete(Path.Combine(directory, "gateway-format.json")); GatewayDataMigrations.Prepare(directory);
-            Check(JsonNode.Parse(File.ReadAllText(Path.Combine(directory, "gateway-format.json")))!["version"]!.GetValue<int>() == 2, "interrupted post-replacement migration finishes on restart");
-            File.WriteAllText(Path.Combine(directory, "gateway-format.json"), "{\"version\":999}");
-            Reject(() => GatewayDataMigrations.Prepare(directory), "future format rejected before mutation");
+            Check(before == File.ReadAllText(Path.Combine(directory, "gateway-format.json")), "current format validation is idempotent");
+            foreach (var version in new[] { 1, 2, 999 })
+            {
+                File.WriteAllText(Path.Combine(directory, "gateway-format.json"), new JsonObject { ["version"] = version }.ToJsonString());
+                Reject(() => GatewayDataMigrations.Prepare(directory), "unsupported gateway format rejected before mutation");
+            }
             Check(JsonNode.Parse(File.ReadAllText(Path.Combine(directory, "tags.json")))!["tags"]![0]!["value"]!.GetValue<int>() == 17, "unsupported format does not rewrite data");
 
             var certificates = new OpcCertificateAdministration(directory);

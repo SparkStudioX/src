@@ -22,7 +22,7 @@ node --import ./tools/test-auth-session.mjs tools/load-query-testing-example.mjs
 The loader accepts only loopback port 5091. It refuses an existing project name, connection ID or configured database path. Database creation never overwrites a file. Setup is additive, not a transaction; an interrupted run may leave created resources requiring review. The new project remains unpublished, and the loader never runs the slow query.
 
 1. Open the new **Read query workshop** from Projects.
-2. Inspect the shared `sqlite-query-workshop` connection and synthetic `query-workshop.db`. In Connections, Test verifies the database; Diagnostics lists the three draft query references.
+2. Inspect the shared `sqlite-query-workshop` connection and synthetic `query-workshop.db`. In **Gateway Settings → Data → Connections**, Test verifies the database; Diagnostics lists the three draft query references.
 3. Review the three named reads and workshop screen. Only the fast records query is bound to the table. Explicitly publish the project when ready; the slow query is never run automatically.
 4. In Named queries, run **Typed quantity** with `minimum` set to `45`; expect two synthetic records. Enter a nonnumeric value; expect an input error without a database query. Restore `0`; expect three records.
 5. Select **Slow read for cancellation**, choose **1 second**, and run it. Expect a gateway deadline error. Select **30 seconds**, run it and immediately press **Cancel read query**. Expect a cancellation-requested message, with no result applied.

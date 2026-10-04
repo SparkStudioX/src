@@ -10,6 +10,7 @@ const { setPreviewRequestContext } = await import(preview);
 const auth = uri('export const authSessionRevision=()=>globalThis.__askGatewayAuthRevision;');
 const navigation = uri(ts.transpileModule(fs.readFileSync(new URL('src/askSparkNavigation.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText);
 const runtime = uri('export const runtimeAuthenticatedFetch=(path,init,context,grant)=>globalThis.__askGatewayFetch(path,{...init,operatorGrant:grant}); export const testRuntimeSession=async()=>({available:true}); export const signInRuntime=async()=>({signedIn:true});');
+const modelWorkspace = uri('export const emptyModelPackage=()=>({format:"sparkstudio.tags",version:3,tags:[],scanGroups:[],hierarchy:[],udtDefinitions:[],instances:[]}); export const openModelDraft=(draft,ownerId)=>globalThis.__askModelDraft({draft,ownerId}); export const bulkModelInstances=(csv,types)=>globalThis.__askModelCsv(csv,types);');
 const api = uri(`
 export class ApiError extends Error { constructor(message,status){super(message);this.status=status} }
 export function apiUrl(path,projectId=null){ const scoped=/^\\/(?:project|queries|scripts|assets|runtime|preview|alarms|alarm-journal|history)(?:\\/|\\?|$)/.test(path);return scoped&&projectId?'/api/projects/'+encodeURIComponent(projectId)+path:'/api'+path; }
@@ -22,7 +23,8 @@ const output = ts.transpileModule(source, { compilerOptions: { target: ts.Script
   .replace(/from "\.\/previewRequest"/, `from ${JSON.stringify(preview)}`)
   .replace(/from "\.\/authSession"/, `from ${JSON.stringify(auth)}`)
   .replace(/from "\.\/askSparkNavigation"/, `from ${JSON.stringify(navigation)}`)
-  .replace(/from "\.\/askSparkRuntimeTools"/, `from ${JSON.stringify(runtime)}`);
+  .replace(/from "\.\/askSparkRuntimeTools"/, `from ${JSON.stringify(runtime)}`)
+  .replace(/import\("\.\/modelWorkspace"\)/, `import(${JSON.stringify(modelWorkspace)})`);
 const { executeGatewayTool, supportsGatewayTool } = await import(uri(output));
 const context = { projectId: 'fixture-project' };
 let calls = [], respond, checks = 0;
@@ -69,8 +71,13 @@ await check('Workspace navigation returns only fixed local links and never fetch
   const ai = await run('navigate_workspace', { destination: 'ai' }); assert.equal(ai.data.url, '/gateway#ai'); assert.equal(ai.data.navigated, false); assert.equal(ai.data.status, 'awaiting_user_navigation');
   const scripts = await run('navigate_workspace', { destination: 'scripts' }); assert.equal(scripts.data.url, '/designer/fixture-project'); assert.match(scripts.data.nextStep, /Scripts/); assert.match(scripts.data.guidance, /unsaved drafts remain/);
   const explicit = await run('navigate_workspace', { destination: 'designer', projectId: 'another-project' }); assert.equal(explicit.data.url, '/designer/another-project');
-  const connections = await run('navigate_workspace', { destination: 'connections' }); assert.equal(connections.data.url, '/gateway#configuration'); assert.match(connections.data.nextStep, /Connections/);
+  const data = await run('navigate_workspace', { destination: 'data' }); assert.equal(data.data.url, '/gateway#data'); assert.equal(data.data.label, 'Gateway data');
+  const connections = await run('navigate_workspace', { destination: 'connections' }); assert.equal(connections.data.url, '/gateway#data/connections'); assert.equal(connections.data.nextStep, undefined);
+  const certificates = await run('navigate_workspace', { destination: 'certificates' }); assert.equal(certificates.data.url, '/gateway#data/certificates'); assert.equal(certificates.data.nextStep, undefined);
+  const models = await run('navigate_workspace', { destination: 'models' }); assert.equal(models.data.url, '/workspace?workspace=models&view=build');
+  const tags = await run('navigate_workspace', { destination: 'tags' }); assert.equal(tags.data.url, '/workspace?workspace=tags');
   await assert.rejects(run('navigate_workspace', { destination: 'https://example.test' }), /not a supported value/);
+  await assert.rejects(run('navigate_workspace', { destination: 'configuration' }), /not a supported value/);
   await assert.rejects(run('navigate_workspace', { destination: 'designer' }, {}), /explicit project/);
   await assert.rejects(run('navigate_workspace', { destination: 'designer', projectId: '../other' }), /invalid format/);
   await assert.rejects(run('navigate_workspace', { destination: 'ai', url: '/api/anything' }), /not supported/);
@@ -268,17 +275,93 @@ await check('Partial source configuration preserves nested transport and authent
   assert.deepEqual(calls.at(-1).body.source.mqtt, { transport: 'tls', protocolVersion: '5', keepAliveSeconds: 60, mappings: [] });
 });
 
-await check('Tag/UDT/provider preview packages include every required collection and apply exact tokens', async () => {
+await check('Model previews remain read-only while direct tag imports carry exact review tokens', async () => {
   fixture(call => call.url.endsWith('/preview') ? { revision: 'model-r7', previewToken: 'review-token', canApply: true } : call.body);
   const preview = await run('udts_instances_preview', { items: [{ path: '[default]Pumps/P1', definitionId: 'Pump', version: 1, overrides: {} }] });
   const package_ = preview.data.package;
   assert.deepEqual(package_.tags, []); assert.deepEqual(package_.scanGroups, []); assert.deepEqual(package_.udtDefinitions, []);
   assert.equal(package_.instances[0].definitionId, 'Pump');
-  await run('tags_import_apply', { package: package_, revision: 'model-r7', previewToken: 'review-token' });
-  assert.deepEqual(calls.at(-1).body.package, package_); assert.equal(calls.at(-1).body.previewToken, 'review-token');
+  const before = calls.length;
+  await assert.rejects(run('tags_import_apply', { package: package_, revision: 'model-r7', previewToken: 'review-token' }), /reviewed and applied by the user/);
+  assert.equal(calls.length, before, 'A confirmed UDT preview cannot bypass manual Model review');
+  for (const modelChange of [{ hierarchy: [{ path: '[default]Acme', level: 'Enterprise' }] }, { removeHierarchy: ['[default]Acme'] }]) {
+    await assert.rejects(run('tags_import_apply', { package: { ...package_, instances: [], ...modelChange }, revision: 'model-r7', previewToken: 'review-token' }), /reviewed and applied by the user/);
+  }
+  assert.equal(calls.length, before, 'Hierarchy additions and removals require manual Model review');
+  const direct = { ...package_, instances: [], tags: [{ path: '[default]Fixture', kind: 'memory', dataType: 'Double', value: 1 }] };
+  await run('tags_import_apply', { package: direct, revision: 'model-r7', previewToken: 'review-token' });
+  assert.deepEqual(calls.at(-1).body.package, direct); assert.equal(calls.at(-1).body.previewToken, 'review-token');
   const provider = await run('provider_preview', { enabled: false });
   assert.deepEqual(provider.data.package.provider, { name: 'default', enabled: false });
   assert.equal(provider.data.review.previewToken, 'review-token');
+});
+
+await check('provider enablement review omits hierarchy policy and cannot approve policy changes', async () => {
+  fixture(call => call.url.endsWith('/preview') ? { revision: 'provider-r8', previewToken: 'provider-token', canApply: true } : call.body);
+  const preview = await run('provider_preview', { enabled: false });
+  const package_ = preview.data.package;
+  assert.deepEqual(package_.provider, { name: 'default', enabled: false }, 'An omitted hierarchy policy is preserved by the gateway merge');
+  await run('tags_import_apply', { package: package_, revision: 'provider-r8', previewToken: 'provider-token' });
+  assert.deepEqual(calls.at(-1).body.package.provider, { name: 'default', enabled: false });
+  const before = calls.length;
+  for (const requireDeclaredHierarchy of [false, true]) {
+    await assert.rejects(run('tags_import_apply', { package: { ...package_, provider: { ...package_.provider, requireDeclaredHierarchy } }, revision: 'provider-r8', previewToken: 'provider-token' }), /requireDeclaredHierarchy is not supported|reviewed and applied by the user/);
+  }
+  assert.equal(calls.length, before, 'Both explicit policy values require the user-controlled Model workspace');
+});
+
+await check('Model reads use explicit project scopes and separate server paging from result projection', async () => {
+  fixture(() => ({ generation: 3, items: [], total: 0, nextOffset: null }));
+  await run('model_instances', { type: 'CNC', version: 2, under: '[default]Acme', pageOffset: 200, pageSize: 50 });
+  const url = new URL(calls[0].url, 'https://fixture.invalid');
+  assert.equal(url.pathname, '/api/projects/fixture-project/model/instances');
+  assert.equal(url.searchParams.get('offset'), '200'); assert.equal(url.searchParams.get('limit'), '50');
+  assert.equal(url.searchParams.get('type'), 'CNC'); assert.equal(url.searchParams.get('under'), '[default]Acme');
+  await run('model_tree', { path: '[default]Acme', depth: 2 });
+  assert.equal(new URL(calls[1].url, 'https://fixture.invalid').searchParams.get('limit'), '25');
+  await run('model_object', { path: '[default]Acme/CNC01' });
+  assert.equal(new URL(calls[2].url, 'https://fixture.invalid').pathname, '/api/projects/fixture-project/model/object');
+  await assert.rejects(run('model_types', {}, { projectId: '../other' }), /explicit project/);
+  assert.equal(calls.length, 3, 'An invalid explicit project cannot fall back to gateway scope');
+});
+
+await check('Projectless Models can read every model resource without inventing a project scope', async () => {
+  fixture(() => ({ generation: 3, items: [], total: 0 }));
+  for (const nextContext of [{}, { projectId: null, section: 'models' }]) {
+    await run('model_types', { type: 'CNC', pageOffset: 100, pageSize: 50 }, nextContext);
+    await run('model_tree', { path: '[default]Acme', depth: 2 }, nextContext);
+    await run('model_instances', { type: 'CNC', under: '[default]Acme' }, nextContext);
+    await run('model_object', { path: '[default]Acme/CNC01' }, nextContext);
+  }
+  assert.deepEqual(calls.map(call => new URL(call.url, 'https://fixture.invalid').pathname),
+    ['types', 'tree', 'instances', 'object', 'types', 'tree', 'instances', 'object'].map(resource => `/api/model/${resource}`));
+  assert.ok(calls.every(call => call.method === 'GET'));
+  const page = new URL(calls[0].url, 'https://fixture.invalid');
+  assert.equal(page.searchParams.get('offset'), '100'); assert.equal(page.searchParams.get('limit'), '50');
+  assert.equal(page.searchParams.get('type'), 'CNC');
+  assert.equal(new URL(calls[3].url, 'https://fixture.invalid').searchParams.get('path'), '[default]Acme/CNC01');
+  fixture(() => Response.json({ message: 'Configuration permission required' }, { status: 403 }));
+  await assert.rejects(run('model_types', {}, {}), /Configuration permission required/);
+  assert.equal(calls.length, 1, 'Denied gateway reads must not retry through another scope');
+});
+
+await check('Model drafts only preview and preserve a user-owned browser handoff after current authorization', async () => {
+  let handedOff;
+  globalThis.__askModelDraft = value => { handedOff = value; };
+  const definition = { id: 'CNC', version: 1, members: [{ path: 'Value', kind: 'memory', dataType: 'Double', value: 0 }] };
+  const args = { definitionJson: JSON.stringify(definition) }, signed = { ...context, ownerId: 'fixture-user' };
+  await assert.rejects(run('model_draft', args), /signed-in engineering user/);
+  fixture(() => ({ canApply: true, revision: 'model-r1', previewToken: 'preview-only' }));
+  const result = await run('model_draft', args, signed);
+  assert.equal(result.data.applied, false); assert.equal(result.data.status, 'draft_prepared');
+  assert.equal(result.data.url, '/workspace?workspace=models');
+  assert.deepEqual(handedOff, { ownerId: 'fixture-user', draft: { definition } });
+  assert.equal(calls.length, 1); assert.equal(calls[0].url, '/api/tag-engineering/preview');
+  assert.equal(calls[0].body.version, 3); assert.deepEqual(calls[0].body.udtDefinitions, [definition]);
+  handedOff = undefined;
+  fixture(() => { globalThis.__askGatewayAuthRevision++; return { canApply: true }; });
+  await assert.rejects(run('model_draft', args, signed), /session|account|changed/i);
+  assert.equal(handedOff, undefined, 'A stale account response cannot open another user’s draft');
 });
 
 await check('Source browse/import requests pin revision and keep preview tokens', async () => {

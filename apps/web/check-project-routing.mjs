@@ -27,6 +27,10 @@ await check('security has a dedicated gateway route without a project ID', () =>
   for (const path of ['/security', '/security/']) assert.deepEqual(parseProjectRoute(path), { kind: 'security' });
   assert.deepEqual(parseProjectRoute('/security/line-a'), { kind: 'invalid' });
 });
+await check('shared data workspace is available without a selected project', () => {
+  for (const path of ['/workspace', '/workspace/']) assert.deepEqual(parseProjectRoute(path), { kind: 'workspace' });
+  assert.deepEqual(parseProjectRoute('/workspace/project'), { kind: 'invalid' });
+});
 await check('malformed or non-catalog path fragments cannot select projects', () => {
   for (const path of ['/designer/a/b', '/designer//', '/runtime/../default', '/designer/%2fdefault', '/designer/%252fdefault', '/designer/%', '/designer/Uppercase', '/designer/1-a', '/designer/a_b', '/runtime/' + 'a'.repeat(65), '/random']) assert.deepEqual(parseProjectRoute(path), { kind: 'invalid' }, path);
 });
@@ -161,4 +165,16 @@ try {
     assert.deepEqual(redirects,[]);
   });
 } finally { delete globalThis.window; delete globalThis.__redirect; }
+await check('Designer bookmarks select supported workspaces and a removed Connections pane cannot open', async () => {
+  const source=fs.readFileSync(new URL('src/App.tsx',import.meta.url),'utf8'),ast=ts.createSourceFile('App.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+  const initializer=ast.statements.find(node=>ts.isVariableStatement(node)&&node.declarationList.declarations.some(item=>item.name.getText(ast)==='initialWorkspace'));
+  assert.ok(initializer);
+  const code=ts.transpileModule(initializer.getText(ast)+'\nexport { initialWorkspace };',{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+  const {initialWorkspace}=await import(asModule(code));
+  try {
+    globalThis.window={location:{search:''}};
+    for(const workspace of ['designer','tags','models','queries','scripts']){window.location.search='?workspace='+workspace;assert.equal(initialWorkspace(),workspace);}
+    for(const search of ['?workspace=connections','?workspace=invalid','']){window.location.search=search;assert.equal(initialWorkspace(),'designer');}
+  } finally {delete globalThis.window;}
+});
 console.log(`${checks} project routing/package checks passed.`);

@@ -12,7 +12,7 @@ public static class ConfigurationBackupSnapshot
     private static readonly HashSet<string> RootFiles = new(StringComparer.OrdinalIgnoreCase)
     {
         "gateway-format.json", "projects.json", "connections.json", "tags.json", "tag-values.json", "source-discovery.json", "source-config-commit.json", "process-data.json", "deployment.json", "deployment.json.previous", "backup-settings.json", "ask-spark-settings.json",
-        "project.json", "queries.json", "published.json", "scripts-draft.json", "scripts-published.json"
+        "project.json", "queries.json", "published.json", "scripts-draft.json", "scripts-published.json", "model-publishing.json"
     };
     private static readonly HashSet<string> ProjectFiles = new(StringComparer.OrdinalIgnoreCase)
     { "project.json", "queries.json", "published.json", "scripts-draft.json", "scripts-published.json" };

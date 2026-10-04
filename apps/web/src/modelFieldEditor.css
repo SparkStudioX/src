@@ -1,0 +1,11 @@
+.model-simple-field-editor { min-width: 0; }
+.model-simple-field-editor > label, .model-simple-field-editor .model-field-unit { min-width: 0; }
+.model-simple-field-editor small { color: var(--muted); line-height: 1.5; font-size: 12px; }
+.model-simple-field-editor .model-contract-section { border-top: 1px solid var(--border, #374156); padding: 14px 0 0; }
+.model-simple-field-editor details > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.model-simple-field-editor details[open] > summary { margin-bottom: 14px; }
+.model-simple-field-editor details[open] > label, .model-simple-field-editor details[open] > p, .model-simple-field-editor details[open] > fieldset, .model-simple-field-editor details[open] > div { margin-bottom: 14px; }
+.model-simple-field-editor details > p { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.model-simple-field-editor .model-field-unit { display: grid; }
+.model-simple-field-editor label { display: grid; gap: 8px; }
+.model-simple-field-editor label.model-checkbox { display: flex; gap: 10px; align-items: center; }

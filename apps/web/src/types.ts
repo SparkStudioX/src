@@ -59,7 +59,8 @@ export type TagWritePropertyReference = { kind: "property"; componentId?: string
   | { kind: "parentProperty"; property: "name" | "width" | "height" };
 export type TagWriteAction = { tagPath: string; dataType: TagWriteDataType; confirmation?: string } & (
   { value: InputValue; valueReference?: never } | { value?: never; valueReference: TagWritePropertyReference });
-export type TemplateParameterType = "string" | "number" | "boolean";
+export type TemplateParameterType = "string" | "number" | "boolean" | "model";
+export interface ModelParameterRequirement { definitionId: string; minVersion?: number; maxVersion?: number }
 export type ParameterValue = string | number | boolean;
 export type RuntimeParameters = Record<string, ParameterValue>;
 export type InputValues = Record<string, InputValue | null>;
@@ -361,6 +362,8 @@ export interface ProjectNavigationSettings {
 export interface Template extends Screen {
   parameters: Record<string, string>;
   parameterTypes?: Record<string, TemplateParameterType>;
+  /** Portable model requirements; gateway types and instances are never included in a project package. */
+  modelParameters?: Record<string, ModelParameterRequirement>;
   /** Private defaults; each rendered instance owns its mutable values. */
   instanceState?: StateDefinitions;
 }

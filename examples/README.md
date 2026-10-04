@@ -2,7 +2,7 @@
 
 Each major user-facing feature should ship with an independently authored workshop project, a short exercise guide, compatibility information and a verified import/publish/runtime check. Workshops serve as both learning material and reproducible acceptance examples. Use synthetic data and make any gateway setup or writes explicit.
 
-[catalog.json](catalog.json) is the machine-readable inventory of all 58 source examples. 37 are portable project workshops; 21 require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
+[catalog.json](catalog.json) is the machine-readable inventory of all 61 source examples. 38 are portable project workshops; 23 require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
 
 The [Ask Spark workshop](../docs/architecture/ASK_SPARK.md) uses a synthetic canvas to exercise voice transcription, pasted screenshots, context-aware edits and Undo. It needs AI configuration on a development gateway; no equipment, database or gateway tags are involved.
 
@@ -33,6 +33,7 @@ build; preview.10 installers do not support it.
 
 | Workshop | What to try | Python actions |
 | --- | --- | --- |
+| [UNS faceplates](uns-faceplates.json) | Bind the same typed CNC faceplate to two model instances; inspect units and missing-member diagnostics. The package imports without gateway setup; live values require the companion UNS recipe. | None |
 | [Python UI](python-ui.json) | Rename a button with `self.text`, change local titles from Python, compare independent template rows, then follow the optional shared-tag extension. | Local UI property/state effects only; shared tag writes require explicit guide setup |
 | [Python component events](python-component-events.json) | Load synthetic work orders through input handlers, observe property changes and reset one form through messages. | Input, property and message handlers; independent template and row state |
 | [Component messaging](component-messaging.json) | Send from native buttons and JavaScript input events; compare instance, screen and popup session receivers and cleanup. | None |
@@ -63,7 +64,7 @@ build; preview.10 installers do not support it.
 | [Component lifecycle and property events](component-events.json) | Compare user/property events, popup cleanup and deliberate bounded failures. | None |
 | [Named-query property bindings](query-properties.json) | Drive values, layout and visibility from synthetic query results. | Read-only refresh button |
 
-Use the companion **0.2.0-preview.13** release or a newer compatible gateway for the complete 37-project collection. The catalog retains older minimum versions for individual exercises; runtime property bindings and visitor check-in require preview.11. Each generated bundle records its actual source revision and release label. A workshop may be distributed as an individual `.sparkproj` with its guide or as part of the collection accompanying a release. Exact frozen-bundle verification is recorded in the [release ledger](../docs/architecture/PARITY.md).
+The **0.2.0-preview.13** release contains the preceding 37-project collection. The new UNS faceplate requires a build with Model instance parameters; follow the [UNS setup walkthrough](../docs/architecture/UNS_MODEL_SETUP.md) for its companion gateway recipe. The catalog retains older minimum versions for individual exercises; runtime property bindings and visitor check-in require preview.11. Each generated bundle records its actual source revision and release label. A workshop may be distributed as an individual `.sparkproj` with its guide or as part of the collection accompanying a release. Exact frozen-bundle verification is recorded in the [release ledger](../docs/architecture/PARITY.md).
 
 ## Examples that require gateway setup
 
@@ -71,6 +72,8 @@ These remain useful authored source fixtures, but are excluded from the standalo
 
 | Source example | Additional setup | Runtime writes |
 | --- | --- | --- |
+| [Model operations](model-operations.json) | Review a synthetic three-press recipe in Models. Exercise contracts, alarms, mapping profiles, one selected version upgrade and dependency export. Optional MQTT output starts disabled and requires a disposable broker; see [Model publishing and workshop](../docs/architecture/MODEL_PUBLISHING.md). | Explicit synthetic memory-tag writes; optional MQTT publications after deliberately enabling its publisher. |
+| [UNS model](uns-model.json) | Start the authored `--uns` MTConnect fixture, open **Models** in the workspace left navigation, build a reusable model, add two machines from spreadsheet rows and update only one. Try the simple three-press folder-drag exercise without a source server. Follow the [UNS walkthrough](../docs/architecture/UNS_MODEL_SETUP.md). | None; setup explicitly saves gateway configuration. |
 | [Scheduled backups](scheduled-backups.json) | Disposable gateway and dedicated SMB, FTP/FTPS or S3 test targets; multiple schedules start disabled with 02:00 gateway-local time and seven-day retention. See the [backup schedule guide](../docs/architecture/SCHEDULED_BACKUPS.md). | None from the screen; administrator actions create and copy encrypted archives. |
 | [Gateway recovery](gateway-recovery.json) | Disposable gateway, offline CLI backup/restore and explicit review; see the [recovery guide](../docs/architecture/GATEWAY_RECOVERY.md). | None from the screen; the administrative exercise creates archive/restored files. |
 | [Gateway network access](gateway-network.json) | Disposable installation, matching DNS certificate and client trust; see the [network guide](../docs/architecture/NETWORK_ACCESS.md). | None from the screen; deployment changes are deliberate administrator actions. |
@@ -82,7 +85,7 @@ These remain useful authored source fixtures, but are excluded from the standalo
 | [Reusable applications](reusable-applications.json) | Twelve synthetic `Workcenters` and `Orders` memory tags. | Explicit save/release actions write those tags. |
 | [Images and popups](assets-popups.json) | Eight synthetic memory tags and the local drawing in `examples/assets/assembly-cell.png`. | Explicit popup save/release actions write those tags. |
 | [Industrial devices](industrial-devices-workshop.json) | Independent Int16 lab storage, saved maps and device tags for the four protocols, including six EtherNet/IP families; see the [family/address matrix](../docs/architecture/INDUSTRIAL_DEVICE_CONNECTIONS.md#ethernetip-family-setup). | Explicit reviewed equipment commands write the chosen lab setpoint; rebind its EtherNet/IP tag deliberately between family connections. |
-| [Read-only data sources](data-sources.json) | Independently authored loopback MTConnect/i3X agents and MQTT broker, explicit source configuration and reviewed imports; see the [source guide](../docs/architecture/DATA_SOURCES.md). | None. Script tests evaluate supplied payloads; automatic tag ownership is an explicit engineering opt-in. |
+| [Read-only data sources](data-sources.json) | Independently authored loopback MTConnect/i3X agents and MQTT broker, source setup in **Gateway Settings → Data → Connections** and reviewed imports; see the [source guide](../docs/architecture/DATA_SOURCES.md). | None. Script tests evaluate supplied payloads; automatic tag ownership is an explicit engineering opt-in. |
 | [SQLite data controls](data-controls.json) | Separate managed SQLite connection and synthetic database initialized by its dedicated loader. | None during the exercise; setup creates and seeds the database. |
 | [Read query operations](query-testing.json) | Managed SQLite connection and synthetic database; follow the [setup and cancellation guide](../docs/architecture/QUERY_TESTING.md). | None during reads; setup creates and seeds the database. |
 

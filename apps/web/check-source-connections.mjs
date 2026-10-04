@@ -15,15 +15,19 @@ export const unmount=()=>{values.forEach(value=>value?.cleanup?.());pending=[];}
 export const clear=()=>{unmount();values=[];index=0;pending=[];writes=0;};
 export const useState=initial=>{const at=index++;if(!(at in values))values[at]=typeof initial==='function'?initial():initial;return [values[at],next=>{writes++;values[at]=typeof next==='function'?next(values[at]):next;}];};
 export const useRef=initial=>{const at=index++;return values[at]??={current:initial};};
+export const useMemo=callback=>callback();
 export const useCallback=(callback,deps)=>{const at=index++,old=values[at];if(!old||deps.some((item,i)=>item!==old.deps[i]))values[at]={callback,deps};return values[at].callback;};
 export const useEffect=(run,deps)=>{const at=index++,old=values[at];if(!old||deps.some((item,i)=>item!==old.deps[i]))pending.push(()=>{old?.cleanup?.();values[at]={deps,cleanup:run()};});};
 export const flush=()=>{const jobs=pending;pending=[];jobs.forEach(run=>run());};`);
 const fieldUrl = moduleUrl(`import React from ${JSON.stringify(reactUrl)};export const Field=props=>React.createElement('label',{'data-field':props.label},props.label,props.children);`);
 const apiUrl = moduleUrl('export const api=(...args)=>globalThis.__sourceApi(...args);export const id=kind=>kind+"-fixture";export const displayValue=value=>typeof value==="object"?JSON.stringify(value):String(value??"");export class ApiError extends Error{constructor(message,status){super(message);this.status=status;}}');
 const emptyUrl = moduleUrl('export default ()=>null;export const DeviceConnectionFields=()=>null;export const DeviceRegisterMap=()=>null;export const SourceConnectionFields=()=>null;export const SourceConnectionTools=()=>null;');
+cache.set('TagModels', moduleUrl('export default props=>{globalThis.__sourceModelDraft=props.initialDraft;return null;};'));
+cache.set('Auth', moduleUrl('export const useAuth=()=>({user:{id:"source-fixture"}});'));
 cache.set('askSparkContext',moduleUrl('const registerContext=()=>()=>{};const value={registerContext};export const useAskSpark=()=>value;'));
 function url(name) {
   if (cache.has(name)) return cache.get(name);
+  if (name.endsWith('.json')) { const result = moduleUrl(`export default ${fs.readFileSync(new URL(`src/${name}`, import.meta.url), 'utf8')};`); cache.set(name, result); return result; }
   const file = ['ts', 'tsx'].map(extension => new URL(`src/${name}.${extension}`, import.meta.url)).find(candidate => fs.existsSync(candidate));
   assert.ok(file, name);
   const output = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText
@@ -33,6 +37,7 @@ function url(name) {
 }
 const model = await import(url('sourceConnections'));
 const devices = await import(url('deviceConnections'));
+const modelWorkspace = await import(url('modelWorkspace'));
 const { SourceConnectionFields, SourceConnectionTools } = await import(url('SourceConnectionEditor'));
 const { default: Connections } = await import(url('Connections'));
 const { default: ConnectionDiagnostics } = await import(url('ConnectionDiagnostics'));
@@ -189,6 +194,27 @@ await check('browse selection previews the complete transaction before a single 
   assert.equal(view.calls.length, 1); view.click('Preview point and tag import'); await settle(); view.render(); assert.equal(view.imports.length, 0);
   view.click('Apply reviewed import'); await settle(); view.render();
   assert.equal(view.calls[2][2].previewToken, 'reviewed'); assert.equal(view.calls[2][2].points[0].address, 'opaque#raw'); assert.equal(view.calls[2][2].points[0].selector, '/value'); assert.equal(view.imports[0].revision, 4);
+});
+await check('source browse proposes a reference type from ingested points without applying or importing', async () => {
+  for (const type of ['mtconnect','i3x','mqtt']) {
+    globalThis.__sourceModelDraft=undefined; const draftStorage=new Map(); globalThis.sessionStorage={getItem:key=>draftStorage.get(key)??null,setItem:(key,value)=>draftStorage.set(key,value),removeItem:key=>draftStorage.delete(key)}; globalThis.window={...(globalThis.window||{}),dispatchEvent(){}};
+    const entry={address:'plant/speed',name:'Speed',isVariable:true,dataType:'Double',metadata:{units:'rpm'},...(type==='mqtt'?{mappingId:'mapping1'}:{})};
+    const settings={...model.defaultSourceSettings(type),points:type==='mqtt'?[]:[point({address:entry.address})]},connection=sourceConnection(type,{source:settings});
+    const configured=[{path:'[default]Raw/Machine/Speed',kind:'device',dataType:'Double',connectionId:connection.id,nodeId:'p1'}];
+    const view=tools(connection,async route=>route.endsWith('/browse')?{entries:[entry],truncated:false}:route.endsWith('/definitions')?configured:route.endsWith('/ownership')?{leaves:[{pointId:'p1',mappingId:'mapping1',address:entry.address,path:configured[0].path,dataType:'Double',suppressed:false,pruned:false}]}:{});
+    view.click('Browse / refresh');await settle();view.render();
+    view.find(node=>node.type==='input'&&node.props['aria-label']==='Import Speed').props.onChange({target:{checked:true}});view.render();
+    view.click('Create model from selection');await settle();view.render();
+    globalThis.__sourceModelDraft=modelWorkspace.takeModelDraft('source-fixture');
+    assert.equal(globalThis.__sourceModelDraft.definition.members[0].kind,'reference');assert.equal(globalThis.__sourceModelDraft.definition.members[0].unit,'rpm');assert.equal(view.imports.length,0);assert.equal(view.changes.length,0);
+    assert.ok(view.calls.every(([route])=>!route.includes('/apply')&&!route.includes('/import')));
+  }
+});
+await check('source model draft rejects selections without ingested gateway tags', async () => {
+  globalThis.__sourceModelDraft=undefined;const entry={address:'missing',name:'Missing',isVariable:true,dataType:'Double'};
+  const view=tools(sourceConnection(),async route=>route.endsWith('/browse')?{entries:[entry],truncated:false}:[]);
+  view.click('Browse / refresh');await settle();view.render();view.find(node=>node.type==='input'&&node.props['aria-label']==='Import Missing').props.onChange({target:{checked:true}});view.render();
+  view.click('Create model from selection');await settle();view.render();assert.match(view.content(),/Import Missing as a gateway tag first/);assert.equal(globalThis.__sourceModelDraft,undefined);assert.equal(view.imports.length,0);
 });
 await check('obsolete browse responses and failures cannot cross configuration/revision/disable/unmount fences', async () => {
   for (const transition of [view => { view.props.connection = { ...view.props.connection, revision: 4 }; view.render(); }, view => { view.props.connection = { ...view.props.connection, source: { ...view.props.connection.source, endpoint: 'https://other' } }; view.render(); }, view => { view.props.disabled = true; view.render(); }, () => hooks.unmount()]) {

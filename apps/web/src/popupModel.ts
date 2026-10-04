@@ -188,7 +188,7 @@ const sourceSignature = (steps: SourceStep[]) => JSON.stringify(steps.map(({ ins
   });
   return [instance.id, instance.type, instance.props.templateId, instance.props.parameters ?? {}, instance.props.rowsSource ?? null,
     instance.props.parameterBindings ?? {}, sources.map(component => [component.id, component.type, component.props]),
-    parentParameters, template.parameters, template.parameterTypes ?? {}, template.instanceState ?? {}, row ?? null, stateSources];
+    parentParameters, template.parameters, template.parameterTypes ?? {}, template.modelParameters ?? {}, template.instanceState ?? {}, row ?? null, stateSources];
 }));
 
 function validateSourceState(trace: SourceStep[], snapshots?: ParameterBindingState[]): void {

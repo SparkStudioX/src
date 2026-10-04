@@ -20,9 +20,9 @@ try {
   const [catalog,tags] = await Promise.all([api('/projects'),api('/tag-definitions')]);
   assert.ok(!catalog.projects.some(project=>project.name===example.name),'Workshop project already exists; no changes made.');
   assert.ok(!tags.some(tag=>tag.path.startsWith('[default]CommandWorkshop/')),'Workshop tags already exist; no changes made.');
-  const package_={format:'sparkstudio.tags',version:1,tags:example.tags};
+  const package_={format:'sparkstudio.tags',version:3,tags:example.tags,scanGroups:[],udtDefinitions:[],instances:[],hierarchy:[]};
   const review=await api('/tag-engineering/preview','POST',package_);
-  assert.ok(review.canApply!==false && review.changes.every(change=>change.action==='add'),'Tag preview must add only workshop tags.');
+  assert.ok(review.canApply && review.changes.every(change=>change.action==='add'||change.action==='unchanged'),'Tag preview must add workshop tags and preserve existing resources.');
   await api('/tag-engineering/apply','POST',{package:package_,revision:review.revision,previewToken:review.previewToken});
   const created=await api('/projects','POST',{name:example.name}), route=`/projects/${created.id}`;
   const draft=await api(route+'/project');

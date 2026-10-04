@@ -96,7 +96,7 @@ public sealed partial class ProjectStore
             var active = OwnedLeaves.Where(leaf => !leaf.Suppressed && !leaf.Pruned).ToArray();
             if (active.Select(leaf => leaf.Path).Distinct(StringComparer.Ordinal).Count() != active.Length)
                 throw new ArgumentException("Restored source paths collide.");
-            ValidateOwnedNamespaces(TagModel.Expand(tagModel, NormalizeTag));
+            ValidateOwnedNamespaces(ExpandTagModel(tagModel));
             foreach (var group in OwnedLeaves.GroupBy(leaf => leaf.ConnectionId)) {
                 var connection = GetConnection(group.Key, true);
                 SourceConfiguration.Validate(connection.Type, connection.Source!);
@@ -250,7 +250,7 @@ public sealed partial class ProjectStore
             return added;
         }
     }
-    private bool AuthoredNamespaceCollision(string path, string root) => (expandedTagDefinitions ?? TagModel.Expand(tagModel, NormalizeTag)).OfType<JsonObject>()
+    private bool AuthoredNamespaceCollision(string path, string root) => (expandedTagDefinitions ?? ExpandTagModel(tagModel)).OfType<JsonObject>()
         .Any(tag => { var candidate = Required(tag, "path"); var instance = Optional(tag, "udtInstance");
             return candidate == path || candidate == root || candidate.StartsWith(root.TrimEnd('/') + "/", StringComparison.Ordinal)
                 || instance is not null && (root == instance || root.StartsWith(instance.TrimEnd('/') + "/", StringComparison.Ordinal)); });
@@ -281,6 +281,9 @@ public sealed partial class ProjectStore
     }
     private bool SourcePathReferenced(string path)
     {
+        var expanded = expandedTagDefinitions ?? ExpandTagModel(tagModel);
+        if (expanded.OfType<JsonObject>().Any(tag => Optional(tag, "target") == path
+            || tag["inputs"] is JsonObject inputs && inputs.Any(input => input.Value?.GetValue<string>() == path))) return true;
         var point = OwnedLeaves.FirstOrDefault(leaf => leaf.Path == path);
         if (point is not null && definitions.OfType<JsonObject>().Any(tag => Optional(tag, "path") != path
             && Optional(tag, "connectionId") == point.ConnectionId && Optional(tag, "nodeId") == point.PointId)) return true;

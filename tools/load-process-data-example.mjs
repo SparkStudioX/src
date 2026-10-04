@@ -22,9 +22,9 @@ try {
   assert.ok(!catalog.projects.some(project => project.name === example.name), 'Workshop project already exists; no changes made.');
   assert.ok(!tags.some(tag => tag.path.startsWith('[default]ProcessWorkshop/')), 'Workshop tags already exist; no changes made.');
   assert.ok(!config.alarms.some(alarm => alarm.id.startsWith('process-workshop-')) && !config.history.some(item => item.tagPath.startsWith('[default]ProcessWorkshop/')), 'Workshop recording rules already exist; no changes made.');
-  const package_ = { format: 'sparkstudio.tags', version: 1, tags: example.tags };
+  const package_ = { format: 'sparkstudio.tags', version: 3, tags: example.tags, scanGroups: [], udtDefinitions: [], instances: [], hierarchy: [] };
   const preview = await api('/tag-engineering/preview', 'POST', package_);
-  assert.ok(preview.canApply !== false && preview.changes.every(item => item.action === 'add'), 'Tag preview must only add the workshop tag.');
+  assert.ok(preview.canApply && preview.changes.every(item => item.action === 'add' || item.action === 'unchanged'), 'Tag preview must add the workshop tag and preserve existing resources.');
   await api('/tag-engineering/apply', 'POST', { package: package_, revision: preview.revision, previewToken: preview.previewToken });
   await api('/gateway/process-data', 'PUT', { ...config, alarms: [...config.alarms, ...example.processData.alarms], history: [...config.history, ...example.processData.history] });
   const project = await api('/projects', 'POST', { name: example.name }), route = `/projects/${project.id}`;

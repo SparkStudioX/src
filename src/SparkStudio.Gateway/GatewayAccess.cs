@@ -59,6 +59,10 @@ public static class GatewayAccess
             context.Items[ProjectKey] = projectId;
             context.Items[AudienceKey] = audience;
             var permissions = store.GetPermissions(actor, projectId);
+            // Gateway model authoring does not require a project. Explicit project routes
+            // and all operator reads retain their existing project grants and tag scopes.
+            var sharedModelConfiguration = policy.Permission == "modelRead" && audience == "engineering"
+                && !context.Request.RouteValues.ContainsKey("projectId") && store.Can(actor, null, "configuration");
             var permitted = policy.Permission switch
             {
                 "signedIn" => true,
@@ -70,6 +74,7 @@ public static class GatewayAccess
                 "operate" => audience == "operator" && permissions.Operate,
                 "command" => audience == "operator" && permissions.Commands && permissions.Operate && permissions.View,
                 "read" => audience == "operator" ? permissions.View : permissions.Design,
+                "modelRead" => sharedModelConfiguration || (audience == "operator" ? permissions.View : permissions.Design),
                 _ => false,
             };
             if (!permitted)
@@ -78,7 +83,7 @@ public static class GatewayAccess
                 store.Audit(actor, AuditAction(denialAction), projectId, "denied", resource: Resource(context));
                 await Reject(context, 403, "Your account does not have permission for this operation."); return;
             }
-            if (policy.Permission is "design" or "publish" or "read" or "view" or "operate" or "command"
+            if (!sharedModelConfiguration && policy.Permission is "design" or "publish" or "read" or "modelRead" or "view" or "operate" or "command"
                 && route?.EndsWith("/export", StringComparison.Ordinal) != true)
                 catalog.Get(projectId);
             if (!HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method))

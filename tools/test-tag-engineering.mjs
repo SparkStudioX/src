@@ -33,10 +33,17 @@ JsonObject Expression(string name, string expression, string type = "Double", pa
     ["path"] = "[default]Engineering/" + name, ["kind"] = "expression", ["dataType"] = type, ["expression"] = expression,
     ["inputs"] = new JsonObject(inputs.Select(item => KeyValuePair.Create<string, JsonNode?>(item.Name, JsonValue.Create("[default]Engineering/" + item.Path))))
 };
-JsonObject Package(params JsonObject[] definitions) => new() { ["format"] = "sparkstudio.tags", ["version"] = 1, ["tags"] = new JsonArray(definitions.Select(item => item.DeepClone()).ToArray()) };
+JsonObject Package(params JsonObject[] definitions) => new() { ["format"] = "sparkstudio.tags", ["version"] = 3, ["tags"] = new JsonArray(definitions.Select(item => item.DeepClone()).ToArray()), ["scanGroups"] = new JsonArray(), ["udtDefinitions"] = new JsonArray(), ["instances"] = new JsonArray(), ["hierarchy"] = new JsonArray() };
 void Reject(JsonObject package)
 {
-    var before = store.GetTagDefinitions().ToJsonString(); Throws<ArgumentException>(() => store.PreviewTagImport(package));
+    var before = store.GetTagDefinitions().ToJsonString();
+    TagImportPreview? preview = null;
+    try { preview = store.PreviewTagImport(package); } catch (ArgumentException) { }
+    if (preview is not null)
+    {
+        Assert(!preview.CanApply, "Invalid model was offered for application.");
+        Throws<ArgumentException>(() => store.ApplyTagImport(new(package, preview.Revision, preview.PreviewToken)));
+    }
     Assert(store.GetTagDefinitions().ToJsonString() == before, "Rejected package changed state.");
 }
 var package = Package(Expression("Rate", "count * 60 / seconds", "Double", ("count", "Count"), ("seconds", "Seconds")), Memory("Count", 12), Memory("Seconds", 30),
@@ -78,7 +85,7 @@ Reject(Package(Memory("NoPartial", 1), new JsonObject { ["path"] = "[default]Eng
 var badPackage = Package(Memory("Unsupported", 1)); badPackage["providers"] = new JsonArray(); Reject(badPackage);
 var badField = Memory("UnknownField", 1); badField["alarm"] = new JsonObject(); Reject(Package(badField));
 var wrongKindField = Memory("WrongField", 1); wrongKindField["expression"] = "0"; Reject(Package(wrongKindField));
-var oldVersion = Package(Memory("Version", 1)); oldVersion["version"] = 2; Reject(oldVersion);
+foreach (var version in new[] { 1, 2 }) { var oldVersion = Package(Memory("Version", 1)); oldVersion["version"] = version; Reject(oldVersion); }
 Throws<ArgumentException>(() => store.DeleteTag("[default]Engineering/Count"));
 Throws<ArgumentException>(() => store.SaveTag(Expression("Rate", "self", "Double", ("self", "Rate"))));
 var chain = Enumerable.Range(0, 65).Select(index => index == 0 ? Expression("Chain0", "0") : Expression("Chain" + index, "prior", "Double", ("prior", "Chain" + (index - 1)))).ToArray();
@@ -148,7 +155,7 @@ finally { await restoredEngine.StopAsync(CancellationToken.None); }
 Console.WriteLine("PASS restored OPC tags remain Bad_RecoveryMode without reading unreadable credentials or creating subscriptions");
 var workshop = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "workshop.json")))!.AsObject();
 var catalog = new ProjectCatalog(Path.Combine(directory, "workshop"), protection);
-var workshopPackage = new JsonObject { ["format"] = "sparkstudio.tags", ["version"] = 1, ["tags"] = workshop["tags"]!.DeepClone() };
+var workshopPackage = Package(workshop["tags"]!.AsArray().OfType<JsonObject>().ToArray());
 var workshopPreview = catalog.GatewayStore.PreviewTagImport(workshopPackage);
 catalog.GatewayStore.ApplyTagImport(new(workshopPackage, workshopPreview.Revision, workshopPreview.PreviewToken));
 var workspace = catalog.Create("Tag engineering model workshop");
@@ -193,10 +200,10 @@ async function apiChecks() {
   const admin = await login(accounts.admin); let imported = false;
   try {
     const designer = await login(accounts.designer), operator = await login(accounts.admin, 'operator');
-    const package_ = { format: 'sparkstudio.tags', version: 1, tags: [
+    const package_ = { format: 'sparkstudio.tags', version: 3, tags: [
       { path: paths[1], kind: 'expression', dataType: 'Double', expression: 'count * 2', inputs: { count: paths[0] }, publishingIntervalMs: 100 },
       { path: paths[0], kind: 'memory', dataType: 'Int32', value: 21 },
-    ] };
+    ], scanGroups: [], udtDefinitions: [], instances: [], hierarchy: [] };
     for (const [session, expected] of [[null, 401], [designer, 403], [operator, 401]]) for (const [route, method, body] of [
       ['/api/tag-engineering/export', 'GET'], ['/api/tag-engineering/preview', 'POST', package_], ['/api/tag-engineering/apply', 'POST', { package: package_, revision: '', previewToken: '' }],
     ]) await request(session, route, method, body, expected);

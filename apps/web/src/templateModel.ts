@@ -1,4 +1,5 @@
 import { resolvePath } from "./api";
+import { modelPathError, validateModelParameters } from "./modelParameterRules";
 import { templatePlacements, viewLayoutError } from "./viewContainers";
 import type {
   CanvasComponent,
@@ -21,6 +22,10 @@ const exactNumber = (value: number) => Number.isFinite(value) && (!Number.isInte
 
 /** Coerce a resolved value once. Query strings stay literal and never interpolate braces. */
 export function coerceTemplateParameter(name: string, value: unknown, type: TemplateParameterType = "string"): ParameterValue {
+  if (type === "model") {
+    const error = modelPathError(value); if (error) throw new Error(`Template parameter '${name}': ${error}`);
+    return value as string;
+  }
   if (type === "string") {
     if (typeof value === "string") return value;
     if (typeof value === "boolean" || typeof value === "number" && exactNumber(value)) return String(value);
@@ -41,12 +46,13 @@ export function coerceTemplateParameter(name: string, value: unknown, type: Temp
 }
 
 export function validateTemplateParameterTypes(template: Template): void {
+  validateModelParameters(template);
   if (template.parameterTypes === undefined) return;
   const types = template.parameterTypes;
   if (!types || typeof types !== "object" || Array.isArray(types) || Object.keys(types).length > 64)
     throw new Error("Template parameter types must be a map of at most 64 declared parameters.");
   for (const [name, type] of Object.entries(types))
-    if (!Object.hasOwn(template.parameters, name) || !["string", "number", "boolean"].includes(type))
+    if (!Object.hasOwn(template.parameters, name) || !["string", "number", "boolean", "model"].includes(type))
       throw new Error(`Template parameter '${name}' has an invalid type declaration.`);
 }
 
@@ -262,6 +268,7 @@ export function projectInputContext(project: Project): string {
       id: template.id,
       parameters: template.parameters,
       parameterTypes: template.parameterTypes,
+      modelParameters: template.modelParameters,
       components: form(template.components),
     })),
   });

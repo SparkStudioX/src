@@ -20,7 +20,7 @@ export function useQueryRepeater(source: QueryRepeaterSource | undefined, templa
   try { if (source && template) validateRepeaterSource(source, template); }
   catch (reason) { error = reason instanceof Error ? reason.message : String(reason); }
   const active = Boolean(source && template && !error && !offline && state?.isCurrent?.() !== false);
-  const key = JSON.stringify([source, template?.id, template?.parameters, template?.parameterTypes, request, offline, state?.key]);
+  const key = JSON.stringify([source, template?.id, template?.parameters, template?.parameterTypes, template?.modelParameters, request, offline, state?.key]);
   useEffect(() => {
     if (!active) return;
     let live = true;

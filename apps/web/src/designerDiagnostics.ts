@@ -4,7 +4,7 @@ import type { ComponentEventStatus } from "./componentEventModel";
 import type { SearchEntry, SearchTarget } from "./projectSearch";
 import type { BindingTarget, Project, Screen } from "./types";
 
-export type DiagnosticCategory = "binding" | "query" | "reference" | "quality" | "browser-event";
+export type DiagnosticCategory = "binding" | "query" | "reference" | "quality" | "browser-event" | "model";
 export interface DesignerDiagnostic {
   id: string; category: DiagnosticCategory; level: "error" | "warning" | "info";
   location: string; message: string; recordedAt?: string; target?: SearchTarget;

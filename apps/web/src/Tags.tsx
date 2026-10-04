@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { api, displayValue } from "./api";
 import { Field } from "./App";
 import Icon from "./Icon";
 import TagTransfer from "./TagTransfer";
-import TagModels from "./TagModels";
+import { openModelsWorkspace, registerModelNavigationGuard } from "./modelNavigation";
+import { useAskSpark } from "./askSparkContext";
 import type { Connection, Tag, TagDefinition } from "./types";
 import CreationMenu, { type CreationChoice } from "./CreationMenu";
 import { connectionTypeName } from "./deviceConnections";
@@ -31,6 +32,7 @@ const dataTypes = [
 const cleanPath = (path: string) => path.replace(/^\[[^\]]+\]/, "");
 const folderOf = (path: string) =>
   cleanPath(path).split("/").slice(0, -1).join("/");
+const tagRangeLabel = (count: number, page: number, size: number) => count ? `${page * size + 1}–${Math.min((page + 1) * size, count)} of ${count} tags` : "0 tags";
 
 export default function Tags({
   connections,
@@ -55,7 +57,16 @@ export default function Tags({
   const [error, setError] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [transfer, setTransfer] = useState(false);
-  const [models, setModels] = useState(false);
+  const guardId = useId(), navigation = useRef({ dirty: false, busy: false });
+  navigation.current = { dirty: Boolean(draft || transfer), busy };
+  useEffect(() => registerModelNavigationGuard(guardId, { subject: "Tags", isDirty: () => navigation.current.dirty, isBlocked: () => navigation.current.busy,
+    onBlocked: () => setError("Wait for the tag request to finish before leaving."), discard: () => { setDraft(null); setTransfer(false); setDeleteConfirm(false); navigation.current.dirty = false; } }), [guardId]);
+  useEffect(() => {
+    const beforeUnload = (event: BeforeUnloadEvent) => { if (navigation.current.dirty || navigation.current.busy) { event.preventDefault(); event.returnValue = ""; } };
+    window.addEventListener("beforeunload", beforeUnload); return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, []);
+  const { registerContext } = useAskSpark();
+  useEffect(() => registerContext("tags-workspace", () => ({ section: "tags", editorAvailable: false, ...(draft || busy || transfer ? { unsavedChanges: true } : {}) }), 20), [registerContext, draft, busy, transfer]);
   const [scanGroups, setScanGroups] = useState<{ name: string; publishingIntervalMs: number; enabled?: boolean }[]>([]);
   const [inputsText, setInputsText] = useState("{}");
   const loadSerial = useRef(0), loadPending = useRef(false), operationSerial = useRef(0);
@@ -69,14 +80,13 @@ export default function Tags({
   const deviceConnections = connections.filter(isPointConnection);
   const deviceConnection = deviceConnections.find(connection => connection.id === current?.connectionId);
   const devicePoint = connectionPoints(deviceConnection).find(point => point.id === current?.nodeId);
-
   const reload = useCallback(async (quiet = false) => {
     if (quiet && loadPending.current) return;
     const run = ++loadSerial.current;
     loadPending.current = true;
     if (!quiet) setLoading(true);
     try {
-      const [configured, model] = await Promise.all([api<TagDefinition[]>("/tag-definitions"), api<{ scanGroups: { name: string; publishingIntervalMs: number; enabled?: boolean }[] }>("/tag-engineering/export")]);
+      const [configured, model] = await Promise.all([api<TagDefinition[]>("/tag-engineering/definitions"), api<{ scanGroups: { name: string; publishingIntervalMs: number; enabled?: boolean }[] }>("/tag-engineering/export")]);
       if (run !== loadSerial.current) return;
       setDefinitions(configured); setScanGroups(model.scanGroups); setError("");
     } catch (reason) {
@@ -90,10 +100,11 @@ export default function Tags({
     return () => { loadSerial.current++; loadPending.current = false; operationSerial.current++; };
   }, [reload]);
   useEffect(() => {
-    if (draft || busy || transfer || models || deleteConfirm) return;
+    if (draft || busy || transfer || deleteConfirm) return;
     const timer = window.setInterval(() => { if (document.visibilityState !== "hidden") void reload(true); }, 30_000);
     return () => window.clearInterval(timer);
-  }, [reload, draft, busy, transfer, models, deleteConfirm]);
+  }, [reload, draft, busy, transfer, deleteConfirm]);
+
 
   const folders = useMemo(() => {
     const found = new Set<string>();
@@ -265,6 +276,7 @@ export default function Tags({
     ? liveByPath.get(current.path)
     : undefined;
 
+
   return (
     <div className="management-page tags-page">
       <div className="page-heading">
@@ -276,7 +288,6 @@ export default function Tags({
           </p>
         </div>
         <div className="page-heading-actions">
-          <button className="button" onClick={() => setModels(true)}>UDTs / scan groups</button>
           <button className="button" onClick={() => setTransfer(true)}>Import / export</button>
           <CreationMenu label="New Tag" menuLabel="New tag type" choices={newTagChoices} onSelect={add} />
         </div>
@@ -334,7 +345,7 @@ export default function Tags({
           </div>
           {error && <div className="inline-error">{error} <button type="button" className="button small" disabled={loading || busy} onClick={() => void reload()}>Retry</button></div>}
           <nav aria-label="Configured tag pages" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "8px 12px" }}>
-            <span role="status">{visible.length ? `${currentPage * pageSize + 1}–${Math.min((currentPage + 1) * pageSize, visible.length)} of ${visible.length} tags` : "0 tags"}</span>
+            <span role="status">{tagRangeLabel(visible.length, currentPage, pageSize)}</span>
             <button className="button small" disabled={currentPage === 0} onClick={() => setPage(0)}>First</button>
             <button className="button small" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous</button>
             <span>Page {currentPage + 1} of {pageCount}</span>
@@ -456,7 +467,7 @@ export default function Tags({
                   {busy ? "Saving…" : "Save"}
                 </button>
               </div>
-              {current.udtInstance && <div className="inspector-section"><p>Member of <strong>{current.udtDefinition}@{current.udtVersion}</strong> at {current.udtInstance}.</p><p>Overrides: {current.overrideFields?.join(", ") || "none"}</p><button className="button" onClick={() => setModels(true)}>Edit instance / definition</button></div>}
+              {current.udtInstance && <div className="inspector-section"><p>Member of <strong>{current.udtDefinition}@{current.udtVersion}</strong> at {current.udtInstance}.</p><p>Overrides: {current.overrideFields?.join(", ") || "none"}</p><button className="button" onClick={openModelsWorkspace}>Edit in Models</button></div>}
               <fieldset className="inspector-section" disabled={Boolean(current.udtInstance)} style={{ border: 0, margin: 0 }}>
                 <Field
                   label="Tag path"
@@ -697,7 +708,6 @@ export default function Tags({
         </aside>
       </div>
       {transfer && <TagTransfer onClose={() => setTransfer(false)} onApplied={() => { void reload(); setDraft(null); setSelectedPath(""); onTagsChanged(); }} />}
-      {models && <TagModels connections={connections} onClose={() => setModels(false)} onApplied={() => { void reload(); setDraft(null); setSelectedPath(""); onTagsChanged(); }} />}
     </div>
   );
 }

@@ -14,7 +14,7 @@ export const useEffect=()=>{};export const useMemo=fn=>fn();export const useCall
 export const useRef=value=>({current:value});export const useId=()=>':scaling:';
 `);
 const apiUrl = url(`export function api(...args){return globalThis.__tagApi(...args)};export const displayValue=value=>String(value??'');`);
-const stubUrl = url('export const Field=()=>null;export default ()=>null;');
+const stubUrl = url('export const Field=()=>null;export const ModelReferenceTargets=()=>null;export const useAuth=()=>({user:{id:"scaling"}});export const useAskSpark=()=>({registerContext:()=>()=>{}});export const openModelsWorkspace=()=>{};export const registerModelNavigationGuard=()=>()=>{};export const requestModelNavigation=action=>action();export const recordModelNavigationLocation=()=>{};export const modelDraftEvent="model-draft";export const takeModelDraft=()=>undefined;export const downloadModelExport=()=>Promise.resolve();export const previewModelImport=raw=>globalThis.__tagApi("/tag-engineering/preview","POST",JSON.parse(raw));export const applyModelImport=(...args)=>globalThis.__tagApply(...args);export default ()=>null;');
 function load(name) {
   if (name.endsWith('.json')) return 'data:text/javascript;base64,' + Buffer.from('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8')).toString('base64');
   const source = fs.readFileSync(new URL(`src/${name}.${fs.existsSync(new URL(`src/${name}.ts`, import.meta.url)) ? 'ts' : 'tsx'}`, import.meta.url), 'utf8');
@@ -28,6 +28,7 @@ const definitions = Array.from({ length: 10000 }, (_, index) => ({ path: `[defau
 const samples = definitions.map(tag => ({ ...tag, quality: 'Good', timestamp: '2026-09-30T12:00:00Z', source: 'memory' }));
 samples.find = () => { throw new Error('Live-value linear scans are not allowed per rendered row.'); };
 globalThis.document = { body: {} };
+globalThis.window = { location: { search: '' } };
 function nodes(element, predicate, result = []) {
   if (Array.isArray(element)) element.forEach(child => nodes(child, predicate, result));
   else if (element && typeof element === 'object') { if (predicate(element)) result.push(element); nodes(element.props?.children, predicate, result); }
@@ -56,7 +57,7 @@ check('filtering and shrinking results never strands the view on an empty high p
   nodes(tree, node => node.type === 'input' && node.props['aria-label'] === 'Filter configured tags')[0].props.onChange({ target: { value: 'T00000' } }); tree = tags();
   assert.equal(rows(tree).length, 1); assert.ok(text(tree).includes('1–1 of 1 tags')); assert.equal(button(tree, 'Next').props.disabled, true);
 });
-const packageText = JSON.stringify({ format: 'sparkstudio.tags', version: 1, tags: definitions.map(tag => ({ ...tag, enabled: true, publishingIntervalMs: 1000 })) });
+const packageText = JSON.stringify({ format: 'sparkstudio.tags', version: 3, tags: definitions.map(tag => ({ ...tag, enabled: true, publishingIntervalMs: 1000 })) });
 assert.ok(Buffer.byteLength(packageText) > 900000 && Buffer.byteLength(packageText) < 32 * 1024 * 1024);
 const preview = { revision: 'revision', previewToken: 'token', totalTags: 10000, canApply: true, conflicts: [], changes: definitions.map(tag => ({ path: tag.path, action: 'add', kind: 'memory' })) };
 let previewCalls = 0;
@@ -65,6 +66,13 @@ hooks.seed([[0, packageText]]); tree = transfer(); button(tree, 'Preview import'
 await new Promise(resolve => setImmediate(resolve)); tree = transfer();
 check('a real10k package over900KB reaches preview and limits rendered changes to100', () => { assert.equal(previewCalls, 1); assert.equal(rows(tree).length, 100); assert.ok(text(tree).includes('of 10000 reviewed changes')); });
 check('preview pagination reveals further changes without expanding the DOM', () => { button(tree, 'Next changes').props.onClick(); tree = transfer(); assert.equal(rows(tree).length, 100); assert.ok(text(tree).includes('Showing 101–200 of 10000')); assert.ok(text(rows(tree)[0]).includes(definitions[100].path)); });
+const applied=[],events=[];let finishApply;
+globalThis.window={dispatchEvent:event=>{events.push(event.type);return true;}};
+globalThis.__tagApply=(...args)=>{applied.push(args);return new Promise(resolve=>{finishApply=resolve;});};
+const apply=button(tree,'Apply reviewed import').props.onClick;apply();apply();
+check('transfer applies the reviewed package text and token only once for repeated clicks',()=>{assert.deepEqual(applied,[[packageText,'revision','token']]);});
+finishApply();await new Promise(resolve=>setImmediate(resolve));tree=transfer();
+check('successful transfer clears review and refreshes Model observers',()=>{assert.equal(button(tree,'Apply reviewed import').props.disabled,true);assert.deepEqual(events,['sparkstudio:model-changed']);});
 nodes(tree, node => node.type === 'input' && node.props.type === 'file')[0].props.onChange({ target: { files: [{ size: 32 * 1024 * 1024 + 1, text() { throw new Error('Oversize files must not be read.'); } }] } });
 await new Promise(resolve => setImmediate(resolve)); tree = transfer();
 check('files above32MiB are rejected before reading or gateway access', () => { assert.ok(text(tree).includes('Tag files are limited to 32 MiB.')); assert.equal(previewCalls, 1); });

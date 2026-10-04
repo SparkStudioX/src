@@ -20,7 +20,7 @@ Ask the publisher owner for a topic, example payload, update interval and whethe
 
 ## 1. Create the broker connection
 
-1. Open **Gateway Settings → Configuration → Connections**.
+1. Open **Gateway Settings → Data → Connections**.
 2. Choose **New Connection → MQTT subscriber**, give it a recognizable name such as `Line 1 MQTT`, and leave the connection enabled.
 3. Enter **Broker endpoint** and select the matching **Transport**. Use the broker's actual address and port:
 

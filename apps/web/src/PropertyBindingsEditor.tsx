@@ -7,6 +7,7 @@ import { isProcessDisplay, resolveProcessDisplay } from "./processDisplays";
 import { drawingDefaults, isDrawingComponent } from "./drawingComponents";
 import { InputStateBindingEditor } from "./InputStateBindingEditor";
 import { TemplateParameterOverrides } from "./TemplateParametersEditor";
+import { TagBindingPicker } from "./DesignerModelBrowser";
 import { coerceTemplateParameter } from "./templateModel";
 import { resolveParameterBindings, validateTemplateParameterBinding } from "./templateParameterBindings";
 import { resolvePath } from "./api";
@@ -337,7 +338,8 @@ function BindingsPanel({ children, component, components, tags, queries = [], pa
       {renderValueControl()}
       <button type="button" className="property-bind-button" aria-label={`${bound ? "Edit" : "Add"} ${label} binding`} title={bound ? `${summary}\nClick to edit or remove binding` : `Bind ${label}`} onClick={() => editBinding(key)}>ƒx</button>
       {bound && <small className={evaluated.errors[key] ? "property-sheet-error" : "property-sheet-expression"} title={summary}>{queryBinding ? `${summary} · Preview in the binding editor` : evaluated.errors[key] || summary}</small>}
-      {key === "tagPath" && <small className="property-sheet-hint">Resolved: {resolvePath(String(value ?? ""), parameters) || "No tag selected"}{tags.find(tag => tag.path === resolvePath(String(value ?? ""), parameters)) ? ` · ${tags.find(tag => tag.path === resolvePath(String(value ?? ""), parameters))!.quality}` : " · unavailable"}</small>}
+      {key === "tagPath" && <><small className="property-sheet-hint">Resolved: {resolvePath(String(value ?? ""), parameters) || "No tag selected"}{tags.find(tag => tag.path === resolvePath(String(value ?? ""), parameters)) ? ` · ${tags.find(tag => tag.path === resolvePath(String(value ?? ""), parameters))!.quality}` : " · unavailable"}</small>
+      <TagBindingPicker tags={tags} disabled={bound} onSelect={path => changeValue(path)} /></>}
       {staticError && <small role="alert" className="property-sheet-error">{staticError}</small>}
     </div>;
   }

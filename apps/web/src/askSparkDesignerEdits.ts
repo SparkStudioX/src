@@ -16,7 +16,7 @@ function createDocument(snapshot: DesignerSnapshot, args: ToolArgs): Project {
 }
 function updateDocument(snapshot: DesignerSnapshot, args: ToolArgs): Project {
   const patch = record(args.patch, "patch");
-  exactKeys(patch, ["name", "width", "height", "kind", "parameters", "state", "parameterTypes", "instanceState"]);
+  exactKeys(patch, ["name", "width", "height", "kind", "parameters", "state", "parameterTypes", "modelParameters", "instanceState"]);
   return withDocument(snapshot, args, document => ({ ...document, ...patch }));
 }
 function cloneDocument(snapshot: DesignerSnapshot, args: ToolArgs): Project {

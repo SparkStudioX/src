@@ -45,6 +45,7 @@ public sealed class AskSparkGemini(HttpClient client, AskSparkSettings settings,
         name, inspect the definitions, then submit fresh calls. Never repeat the same undiscovered batch.
         Chain draft edits with the latest returned snapshotToken; use the explicit draft-batch tool for several dependent edits in one call, and never reuse a stale snapshot token.
         Tag changes require preview then apply with the exact returned package, revision, and previewToken; never substitute an empty token or claim a preview applied changes.
+        UNS type, hierarchy and instance changes are drafted with model_draft for the user's Model workspace review; never apply them through tag import tools. Use model_types, model_tree, model_instances and model_object to inspect the existing namespace. References mirror existing tags and are read-only.
         A failed or interrupted mutation may have succeeded; never retry it automatically. Re-read the authoritative state.
         Finish draft edits and validation before opening Designer Preview. While previewActive is true, continue with
         available read tools or a final answer; do not attempt configuration changes. Published operator tools test the

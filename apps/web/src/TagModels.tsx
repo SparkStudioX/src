@@ -1,139 +1,113 @@
-import { useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { api } from "./api";
-import type { Connection } from "./types";
-import { connectionPoints, isPointConnection } from "./sourceConnections";
-import { connectionTypeName } from "./deviceConnections";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import type { Connection, Tag } from "./types";
+import { useAskSpark } from "./askSparkContext";
+import { downloadModelExport } from "./modelWorkspaceDownload";
+import { modelDraftChangeSummary, modelDraftPackage } from "./modelDraft";
+import { recordModelNavigationLocation, registerModelNavigationGuard } from "./modelNavigation";
+import ModelOperationsPanel, { type ModelOperationTool } from "./modelOperationsPanel";
+import ModelBuilder from "./modelBuilder";
+import ModelNamespace from "./modelWorkspaceNamespace";
+import ModelWorkspaceSettings from "./modelWorkspaceSettings";
+import { ModelDiscardConfirmation, ModelImportPanel, ModelWorkspaceReviewPanel } from "./modelWorkspacePanels";
+import { useModelWorkspace } from "./useModelWorkspace";
+import { definitionKey, modelProviderStatus, type ModelDraft } from "./modelWorkspace";
 import "./accountSettings.css";
+import "./modelWorkspace.css";
 
-type Member = { path: string; kind: string; dataType: string; value?: unknown; expression?: string; inputs?: Record<string, string>; connectionId?: string; nodeId?: string; writable?: boolean };
-type Definition = { id: string; version: number; members: Member[] };
-type Instance = { path: string; definitionId: string; version: number; enabled?: boolean; overrides: Record<string, unknown> };
-type Group = { name: string; publishingIntervalMs: number; enabled?: boolean };
-type Model = { format: string; version: number; provider: { name: string; enabled: boolean }; tags: unknown[]; udtDefinitions: Definition[]; instances: Instance[]; scanGroups: Group[] };
-type Preview = { revision: string; previewToken: string; totalTags: number; canApply: boolean; conflicts: string[]; changes: { path: string; kind: string; action: string; overrideFields?: string[] }[] };
-type Status = { state: string; configuredTags: number; goodTags: number; unavailableTags: number; disabledTags: number };
-type Tab = "definitions" | "instances" | "groups" | "provider";
-const empty = () => ({ format: "sparkstudio.tags", version: 2, tags: [], udtDefinitions: [], instances: [], scanGroups: [] });
-const initialMembers = '[\n  { "path": "Count", "kind": "memory", "dataType": "Int32", "value": 0 },\n  { "path": "Doubled", "kind": "expression", "dataType": "Int32", "expression": "count * 2", "inputs": { "count": "./Count" } }\n]';
-
-export default function TagModels({ onClose, onApplied, connections = [] }: { onClose: () => void; onApplied: () => void; connections?: Connection[] }) {
-  const dialog = useRef<HTMLDialogElement>(null), id = useId();
-  const [model, setModel] = useState<Model | null>(null), [status, setStatus] = useState<Status | null>(null);
-  const [tab, setTab] = useState<Tab>("definitions"), [selected, setSelected] = useState("");
-  const [name, setName] = useState("NewUnit"), [version, setVersion] = useState(1), [text, setText] = useState(initialMembers);
-  const [definitionId, setDefinitionId] = useState(""), [enabled, setEnabled] = useState(true), [interval, setInterval] = useState(1000);
-  const [review, setReview] = useState<{ package: object; preview: Preview } | null>(null);
-  const [reviewPage, setReviewPage] = useState(0);
-  const [busy, setBusy] = useState(false), [error, setError] = useState(""), [message, setMessage] = useState("");
-  const [pointConnection, setPointConnection] = useState(""), [pointId, setPointId] = useState(""), [memberPath, setMemberPath] = useState("SourceValue");
-  const selectedConnection = connections.find(connection => connection.id === pointConnection);
-  async function load() {
-    const [next, health] = await Promise.all([api<Model>("/tag-engineering/export"), api<Status>("/tag-engineering/status")]);
-    setModel(next); setStatus(health); return next;
+type View = "build" | "namespace" | "settings" | "operate";
+const views: [View, string, string][] = [["build", "Build models", "Choose data and add equipment"], ["namespace", "Organize", "Put equipment in the right place"], ["operate", "Inspect & share", "Quality, mappings and publishing"], ["settings", "Settings", "Control how data updates"]];
+const initialView = (): View => { const value = new URLSearchParams(window.location.search).get("view"); return value === "namespace" || value === "settings" || value === "operate" ? value : "build"; };
+type OperationRequest = { tool: ModelOperationTool; requestId: number; equipmentPath?: string };
+function WorkspaceSurface({ workspace, view, selectedType, setSelectedType, tags, connections, focusTarget, navigate, announce, onContextChange, onLockChange, requestedTool, openTool }: { workspace: ReturnType<typeof useModelWorkspace>; view: View; selectedType: string; setSelectedType: (key: string) => void; tags?: Tag[]; connections: Connection[]; focusTarget: string; navigate: (path: string) => void; announce: (text: string) => void; onContextChange: (next: { selection: string[]; resolution: string[] }) => void; onLockChange: (locked: boolean) => void; requestedTool?: OperationRequest; openTool: (tool: ModelOperationTool, equipmentPath?: string) => void }) {
+  const { state, data } = workspace; if (!state) return null;
+  const live = tags ?? data.live;
+  return <fieldset className="model-body" disabled={workspace.busy}>{view === "build" && <ModelBuilder model={state.present} savedModel={state.base} definitions={data.definitions} tags={live} connections={data.connections.length ? data.connections : connections} selectedType={selectedType} onSelectType={setSelectedType} onChange={workspace.change} fromAskSpark={state.fromAskSpark} onAnnounce={announce} onContextChange={onContextChange} focusTarget={focusTarget} disabled={workspace.busy} onUseStarter={() => openTool("start")} onReview={() => void workspace.preview()} onVerify={path => openTool("live", path)} hasChanges={workspace.changes.length > 0} onIssues={path => openTool("issues", path)} />}
+    {view === "namespace" && <ModelNamespace key={focusTarget} model={state.present} definitions={data.definitions} tags={live} onChange={workspace.change} onInstance={instance => navigate(instance.path)} onAnnounce={announce} focusTarget={focusTarget} />}
+    {view === "operate" && <ModelOperationsPanel model={state.present} savedModel={state.base} onChange={workspace.change} connections={data.connections.length ? data.connections : connections} tagPaths={data.definitions.map(item => item.path)} onNavigate={navigate} onSelect={key => { setSelectedType(key); navigate(key); }} onLockChange={onLockChange} requestedTool={requestedTool} />}
+    {view === "settings" && <ModelWorkspaceSettings model={state.present} onChange={workspace.change} />}</fieldset>;
+}
+function downloadDraft(text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+  try { const link = document.createElement("a"); link.href = url; link.download = "sparkstudio-model-draft.json"; link.click(); } finally { URL.revokeObjectURL(url); }
+}
+function ModelRecoveryNotice({ workspace }: { workspace: ReturnType<typeof useModelWorkspace> }) {
+  const [confirming, setConfirming] = useState(false);
+  if (!workspace.recoveryWarning) return null;
+  return <div className="model-notice"><p className="model-warning" role="alert">{workspace.recoveryWarning}</p>{workspace.recoveryDraft && <div className="model-actions"><button type="button" className="button" onClick={() => downloadDraft(workspace.recoveryDraft)}>Export recovered draft</button><button type="button" className="button danger" disabled={workspace.busy} onClick={() => setConfirming(true)}>Discard recovered draft</button></div>}{confirming && <ModelDiscardConfirmation title="Discard the recovered session draft?" description="This removes the saved draft that could not be restored. Export it first if you want to recover its contents. Your current workspace edits are kept." onCancel={() => setConfirming(false)} onConfirm={() => { workspace.discardRecovery(); setConfirming(false); }} />}</div>;
+}
+export default function TagModels({ onApplied, connections = [], tags, initialDraft, ownerId = "" }: { onApplied: () => void; connections?: Connection[]; tags?: Tag[]; initialDraft?: ModelDraft; ownerId?: string }) {
+  const id = useId(), ask = useAskSpark();
+  const workspace = useModelWorkspace(ownerId, initialDraft, onApplied);
+  const { state, changes, busy, data, review, reviewOpen } = workspace;
+  const [view, setView] = useState<View>(initialDraft ? "build" : initialView);
+  const [selectedType, setSelectedType] = useState(() => new URLSearchParams(window.location.search).get("type") || "");
+  const [operationLocked, setOperationLocked] = useState(false);
+  const [operationRequest, setOperationRequest] = useState<OperationRequest>();
+  const [focusTarget, setFocusTarget] = useState(""), [announcement, setAnnouncement] = useState("");
+  const [discarding, setDiscarding] = useState(false), [importing, setImporting] = useState(false);
+  const [builderContext, setBuilderContext] = useState<{ selection: string[]; resolution: string[] }>({ selection: [], resolution: [] });
+  const draftLocked = busy || operationLocked;
+  const guard = useRef({ dirty: false, blocked: false, onBlocked: () => {}, discard: () => {} });
+  const context = useRef({ view, selectedType, changes, builderContext }); context.current = { view, selectedType, changes, builderContext };
+  guard.current = { dirty: changes.length > 0, blocked: draftLocked, onBlocked: () => workspace.setError("Finish the current request or save/discard publisher edits before leaving this workspace."), discard: () => { if (busy) return; guard.current.dirty = false; workspace.discard(); } };
+  const onContextChange = useCallback((next: { selection: string[]; resolution: string[] }) => setBuilderContext(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next), []);
+  function changeView(next: View) { if (next !== "operate") setOperationRequest(undefined); if (next !== view) { workspace.setNotice(""); setAnnouncement(""); } setView(next); }
+  function selectType(next: string) { if (next !== selectedType) { workspace.setNotice(""); setAnnouncement(""); } setSelectedType(next); }
+  function openTool(tool: ModelOperationTool, equipmentPath?: string) {
+    if (draftLocked) return;
+    setOperationRequest(previous => ({ tool, equipmentPath, requestId: (previous?.requestId ?? 0) + 1 }));
+    changeView("operate");
   }
+  useEffect(() => registerModelNavigationGuard(id, { isDirty: () => guard.current.dirty, isBlocked: () => guard.current.blocked, onBlocked: () => guard.current.onBlocked(), discard: () => guard.current.discard() }), [id]);
   useEffect(() => {
-    const element = dialog.current, previous = document.activeElement; element?.showModal();
-    void load().catch(reason => setError(String(reason)));
-    return () => { element?.close(); if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
+    const beforeUnload = (event: BeforeUnloadEvent) => { if (guard.current.dirty || guard.current.blocked) { event.preventDefault(); event.returnValue = ""; } };
+    window.addEventListener("beforeunload", beforeUnload); return () => window.removeEventListener("beforeunload", beforeUnload);
   }, []);
-  function change() { setReview(null); setReviewPage(0); setError(""); setMessage(""); }
-  function choose(nextTab: Tab, key = "") {
-    change(); setTab(nextTab); setSelected(key);
-    if (nextTab === "definitions") {
-      const existing = model?.udtDefinitions.find(item => `${item.id}@${item.version}` === key);
-      setName(existing?.id ?? "NewUnit");
-      setVersion(existing ? Math.max(...(model?.udtDefinitions.filter(item => item.id === existing.id).map(item => item.version) ?? [0])) + 1 : 1);
-      setText(existing ? JSON.stringify(existing.members, null, 2) : initialMembers);
-    } else if (nextTab === "instances") {
-      const existing = model?.instances.find(item => item.path === key), first = model?.udtDefinitions[0];
-      setName(existing?.path ?? "[default]Equipment/NewUnit"); setDefinitionId(existing?.definitionId ?? first?.id ?? "");
-      setVersion(existing?.version ?? first?.version ?? 1); setEnabled(existing?.enabled !== false); setText(JSON.stringify(existing?.overrides ?? {}, null, 2));
-    } else if (nextTab === "groups") {
-      const existing = model?.scanGroups.find(item => item.name === key);
-      setName(existing?.name ?? "Normal"); setInterval(existing?.publishingIntervalMs ?? 1000); setEnabled(existing?.enabled !== false);
-    } else setEnabled(model?.provider.enabled !== false);
+  useEffect(() => ask.registerContext(`model-workspace:${id}`, () => {
+    const value = context.current;
+    return { section: "models", editorAvailable: false, documentId: undefined, documentName: undefined, documentKind: undefined, selectedComponentIds: [], selectedComponentNames: [], snapshotToken: undefined, selection: undefined, screenId: undefined, screenName: undefined, templateId: undefined,
+      ...(guard.current.dirty ? { unsavedChanges: true } : {}), modelView: value.view, modelType: value.selectedType, modelSelection: value.builderContext.selection.slice(0, 20), modelResolution: value.builderContext.resolution.slice(0, 20),
+      modelDraftSummary: value.changes.map(item => `${item.action} ${item.kind}: ${item.key}`).slice(0, 30).join("; ").slice(0, 4000) };
+  }, 30), [ask.registerContext, id]);
+  useEffect(() => { ask.refreshContext(); }, [view, selectedType, builderContext, state]);
+  useEffect(() => {
+    const url = new URL(window.location.href); url.searchParams.set("workspace", "models"); url.searchParams.delete("section"); url.searchParams.set("view", view);
+    if (selectedType) url.searchParams.set("type", selectedType); else url.searchParams.delete("type");
+    window.history.replaceState(window.history.state, "", url); recordModelNavigationLocation();
+  }, [view, selectedType]);
+  useEffect(() => {
+    if (!initialDraft || !state) return;
+    setView("build");
+    if (initialDraft.definition) { const candidates = state.present.udtDefinitions.filter(item => item.id === initialDraft.definition!.id); if (candidates.length) setSelectedType(definitionKey(candidates.reduce((a, b) => a.version > b.version ? a : b))); }
+  }, [initialDraft, state?.fromAskSpark]);
+  function navigate(path: string) {
+    if (!state) return;
+    setOperationRequest(undefined); setFocusTarget(path); workspace.setReviewOpen(false); workspace.setNotice(""); setAnnouncement("");
+    const instance = state.present.instances.find(item => path === item.path || path.startsWith(item.path + "/"));
+    const type = state.present.udtDefinitions.find(item => definitionKey(item) === path);
+    if (instance || type) { setSelectedType(instance ? `${instance.definitionId}@${instance.version}` : definitionKey(type!)); setView("build"); }
+    else if (state.present.hierarchy.some(item => item.path === path)) setView("namespace");
+    else if (state.present.scanGroups.some(item => item.name === path) || path === "default") setView("settings");
+    else setView("build");
   }
-  async function run(action: () => Promise<void>) {
-    setBusy(true); setError(""); setMessage("");
-    try { await action(); } catch (reason) { setReview(null); setError(reason instanceof Error ? reason.message : String(reason)); }
-    finally { setBusy(false); }
-  }
-  async function preview(remove = false) {
-    const package_: Record<string, unknown> = empty();
-    if (tab === "definitions") {
-      if (remove) package_.removeUdtDefinitions = [selected];
-      else package_.udtDefinitions = [{ id: name, version, members: JSON.parse(text) }];
-    } else if (tab === "instances") {
-      if (remove) package_.removeInstances = [selected];
-      else package_.instances = [{ path: name, definitionId, version, enabled, overrides: JSON.parse(text) }];
-    } else if (tab === "groups") {
-      if (remove) package_.removeScanGroups = [selected];
-      else package_.scanGroups = [{ name, publishingIntervalMs: interval, enabled }];
-    } else package_.provider = { name: "default", enabled };
-    setReview({ package: package_, preview: await api<Preview>("/tag-engineering/preview", "POST", package_) }); setReviewPage(0);
-  }
-  const reviewChanges = review?.preview.changes ?? [], reviewPageSize = 200;
-  const currentReviewPage = Math.min(reviewPage, Math.max(0, Math.ceil(reviewChanges.length / reviewPageSize) - 1));
-  const reviewOffset = currentReviewPage * reviewPageSize;
-  return createPortal(<dialog ref={dialog} className="account-settings-dialog" style={{ width: "min(1000px, 95vw)" }} aria-labelledby={`${id}-title`}
-    onCancel={event => { event.preventDefault(); if (!busy) onClose(); }} onKeyDown={event => event.stopPropagation()}>
-    <header><h2 id={`${id}-title`}>Tag model</h2><button className="account-settings-close" aria-label="Close tag model" disabled={busy} onClick={onClose}>×</button></header>
-    <section className="security-form account-settings-password">
-      {status && <p role="status">[default] {status.state} · {status.configuredTags} configured · {status.goodTags} good · {status.unavailableTags} unavailable · {status.disabledTags} disabled</p>}
-      <nav aria-label="Tag model sections" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {([ ["definitions", "UDT definitions"], ["instances", "Instances"], ["groups", "Scan groups"], ["provider", "Provider"] ] as const).map(([key, label]) =>
-          <button className={`button ${tab === key ? "primary" : ""}`} key={key} aria-pressed={tab === key} disabled={busy || !model} onClick={() => choose(key)}>{label}</button>)}
-      </nav>
-      {model && <fieldset disabled={busy} style={{ border: 0, padding: 0, display: "grid", gap: 12 }}>
-        {tab === "definitions" && <>
-          <p>Versions are immutable. Select a version to create its successor, then explicitly upgrade each instance. Existing overrides stay with the instance.</p>
-          <label>Start from<select value={selected} onChange={event => choose(tab, event.target.value)}><option value="">New definition</option>{model.udtDefinitions.map(item => <option key={`${item.id}@${item.version}`}>{item.id}@{item.version}</option>)}</select></label>
-          <label>Definition ID<input value={name} onChange={event => { change(); setName(event.target.value); }} /></label>
-          <label>New version<input type="number" min={1} max={1000000} value={version} onChange={event => { change(); setVersion(Number(event.target.value)); }} /></label>
-          <label>Members (JSON)<textarea rows={12} spellCheck={false} value={text} onChange={event => { change(); setText(event.target.value); }} /></label>
-          <small>Use relative member paths and ./Member for expression inputs. PLC and read-source members use kind "device", connectionId and the saved point ID as nodeId. Read-source members are always read-only. Each member has a scalar dataType and optional scanGroup.</small>
-          <details><summary>Add a saved source point member</summary><div className="form-two-col"><label>Connection<select value={pointConnection} onChange={event => { setPointConnection(event.target.value); setPointId(""); }}><option value="">Choose a connection…</option>{connections.filter(isPointConnection).map(connection => <option key={connection.id} value={connection.id}>{connection.name} · {connectionTypeName(connection.type)}</option>)}</select></label><label>Saved point<select value={pointId} onChange={event => setPointId(event.target.value)}><option value="">Choose a point…</option>{connectionPoints(selectedConnection).map(point => <option value={point.id} key={point.id}>{point.name} · {point.dataType}</option>)}</select></label><label>Relative member path<input value={memberPath} onChange={event => setMemberPath(event.target.value)} /></label></div><button className="button" disabled={!pointConnection || !pointId || !memberPath} onClick={() => { try { const members: Member[] = JSON.parse(text); if (!Array.isArray(members)) throw new Error("Members must be a JSON array."); if (members.some(member => member.path === memberPath)) throw new Error("A member already uses this path."); const point = connectionPoints(selectedConnection).find(item => item.id === pointId); if (!point) throw new Error("Choose a saved point."); change(); setText(JSON.stringify([...members, { path: memberPath, kind: "device", dataType: point.dataType, connectionId: pointConnection, nodeId: point.id, writable: point.writable === true }], null, 2)); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } }}>Add member to draft</button></details>
-        </>}
-        {tab === "instances" && <>
-          <label>Instance<select value={selected} onChange={event => choose(tab, event.target.value)}><option value="">New instance</option>{model.instances.map(item => <option key={item.path}>{item.path}</option>)}</select></label>
-          <label>Instance path<input value={name} readOnly={Boolean(selected)} onChange={event => { change(); setName(event.target.value); }} /></label>
-          <label>Pinned definition version<select value={`${definitionId}@${version}`} onChange={event => { change(); const split = event.target.value.lastIndexOf("@"); setDefinitionId(event.target.value.slice(0, split)); setVersion(Number(event.target.value.slice(split + 1))); }}>
-            <option value="@1">Choose a definition…</option>{model.udtDefinitions.map(item => <option key={`${item.id}@${item.version}`}>{item.id}@{item.version}</option>)}
-          </select></label>
-          <label>Member overrides (JSON)<textarea rows={9} spellCheck={false} value={text} onChange={event => { change(); setText(event.target.value); }} /></label>
-          <small>Example: {"{\"Count\": {\"value\": 12}, \"Doubled\": {\"scanGroup\": \"Normal\"}}"}. Remove an override field to inherit the definition again. Memory writes become value overrides. Kind and data type belong to the definition.</small>
-        </>}
-        {tab === "groups" && <>
-          <p>A named scan group controls member/tag timing and availability. Updating it previews every affected tag. Memory values keep their source timestamps.</p>
-          <label>Scan group<select value={selected} onChange={event => choose(tab, event.target.value)}><option value="">New scan group</option>{model.scanGroups.map(item => <option key={item.name}>{item.name}</option>)}</select></label>
-          <label>Name<input value={name} readOnly={Boolean(selected)} onChange={event => { change(); setName(event.target.value); }} /></label>
-          <label>Publishing interval (ms)<input type="number" min={100} max={60000} step={100} value={interval} onChange={event => { change(); setInterval(Number(event.target.value)); }} /></label>
-          <small>Device points poll at this interval; OPC UA requests a subscription interval. Expressions use a 100 ms scheduler resolution.</small>
-        </>}
-        {tab === "provider" && <p>The built-in [default] provider owns all configured tags and sample tags. Disabling it marks values unavailable and stops configured equipment acquisition. Re-enabling restarts acquisition. Connection settings remain separate.</p>}
-        {tab !== "definitions" && <label className="checkbox-field"><input type="checkbox" checked={enabled} onChange={event => { change(); setEnabled(event.target.checked); }} /><span>{tab === "provider" ? "Provider" : tab === "groups" ? "Scan group" : "Instance"} enabled</span></label>}
-      </fieldset>}
-      <div style={{ display: "flex", gap: 8 }}><button className="button" disabled={busy || !model} onClick={() => void run(() => preview())}>Preview changes</button>
-        {selected && tab !== "provider" && <button className="button danger" disabled={busy} onClick={() => void run(() => preview(true))}>Preview removal</button>}</div>
-      {review && <div role="status">
-        {review.preview.conflicts?.length > 0 ? <div className="security-error"><strong>Resolve these conflicts before applying</strong><ul>{review.preview.conflicts.map(item => <li key={item}>{item}</li>)}</ul></div> : <p>{review.preview.totalTags} configured tags after apply. Review inherited changes and retained overrides below.</p>}
-        <div style={{ maxHeight: 260, overflow: "auto" }}><table className="data-table"><thead><tr><th>Action</th><th>Resource / path</th><th>Kind</th><th>Retained overrides</th></tr></thead><tbody>
-          {reviewChanges.slice(reviewOffset, reviewOffset + reviewPageSize).map(item => <tr key={`${item.kind}:${item.path}`}><td>{item.action}</td><td>{item.path}</td><td>{item.kind}</td><td>{item.overrideFields?.join(", ") || "—"}</td></tr>)}
-        </tbody></table></div>
-        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-          <span>{reviewChanges.length ? `Showing ${reviewOffset + 1}–${Math.min(reviewOffset + reviewPageSize, reviewChanges.length)} of ${reviewChanges.length.toLocaleString()} changes.` : "No resource changes."}</span>
-          {reviewChanges.length > reviewPageSize && <>
-            <button type="button" className="button" disabled={busy || currentReviewPage === 0} onClick={() => setReviewPage(currentReviewPage - 1)}>Previous changes</button>
-            <button type="button" className="button" disabled={busy || reviewOffset + reviewPageSize >= reviewChanges.length} onClick={() => setReviewPage(currentReviewPage + 1)}>Next changes</button>
-          </>}
-        </div><small>Apply includes all {reviewChanges.length.toLocaleString()} changes, including other pages. Concurrent tag-definition, connection, or model edits invalidate this preview.</small>
-      </div>}
-      {error && <p className="security-error" role="alert">{error}</p>}{message && <p role="status">{message}</p>}
-      <footer><button className="button" disabled={busy} onClick={onClose}>Done</button><button className="button primary" disabled={busy || !review?.preview.canApply} onClick={() => void run(async () => {
-        await api("/tag-engineering/apply", "POST", { package: review!.package, revision: review!.preview.revision, previewToken: review!.preview.previewToken });
-        setReview(null); await load(); setSelected(""); setMessage("Reviewed tag model saved atomically."); onApplied();
-      })}>{busy ? "Working…" : "Apply reviewed changes"}</button></footer>
-    </section>
-  </dialog>, document.body);
+  async function exportSaved() { try { await downloadModelExport(); } catch (reason) { workspace.setError(reason instanceof Error ? reason.message : String(reason)); } }
+  const menuAction = (event: React.MouseEvent<HTMLButtonElement>, action: () => void) => { event.currentTarget.closest("details")?.removeAttribute("open"); action(); };
+  const status = modelProviderStatus(data.health, data.definitions, tags ?? data.live);
+  return <div className="management-page model-workspace model-workspace-builder" onKeyDown={event => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !busy && state) { event.preventDefault(); event.stopPropagation(); if (event.shiftKey) workspace.redo(); else workspace.undo(); }
+  }}>
+    <div className="page-heading"><div><div className="model-title-line"><h1 id={`${id}-title`}>Models</h1><span className={`model-status-pill ${status.degraded ? "degraded" : ""}`}>{status.label}</span></div><p>Turn your data into reusable models. Build once, then use it for every machine.</p></div><div className="page-heading-actions">
+      <details className="model-transfer-menu"><summary className="button" aria-label="Import / export model">Import / export ▾</summary><div><button type="button" className="button" disabled={!state || busy} onClick={event => menuAction(event, () => setImporting(true))}>Import into draft</button><button type="button" className="button" disabled={!state || busy} onClick={event => menuAction(event, () => void exportSaved())}>Export saved model</button><button type="button" className="button" disabled={!changes.length || busy} onClick={event => menuAction(event, () => downloadDraft(JSON.stringify(modelDraftPackage(state!.base, state!.present), null, 2)))}>Export draft</button></div></details>
+      <button type="button" className="button primary" disabled={draftLocked || !changes.length} onClick={() => void workspace.preview()}>Review changes ({changes.length})</button>
+      <details className="model-transfer-menu"><summary className="button" aria-label="Model workspace actions">⋯</summary><div><button type="button" className="button" disabled={busy || !state?.past.length} onClick={event => menuAction(event, workspace.undo)}>Undo</button><button type="button" className="button" disabled={busy || !state?.future.length} onClick={event => menuAction(event, workspace.redo)}>Redo</button><button type="button" className="button danger" disabled={busy || !changes.length} onClick={event => menuAction(event, () => setDiscarding(true))}>Discard draft</button></div></details>
+    </div></div>
+    <div className="model-workspace-subnav"><nav className="model-view-switch" aria-label="Model workspace views">{views.map(([key, label, hint]) => <button type="button" key={key} disabled={operationLocked && key !== view} aria-label={label} aria-pressed={view === key} className={view === key ? "active" : ""} onClick={() => changeView(key)}><strong>{label}</strong><small>{hint}</small></button>)}</nav><details className="model-workspace-help"><summary>How models work</summary><div><strong>One blueprint. Many machines.</strong><p>A <b>model</b> lists the data you need, like a pump’s speed and temperature. Each piece of data is a <b>field</b>.</p><p>Add <b>equipment</b> to use that blueprint for a real machine, like Pump01. Each equipment entry is an <b>instance</b> with its own data sources.</p><p>Nothing goes live until you review and apply your changes.</p></div></details></div>
+    <div className="model-draft-status" role="status"><span className={changes.length ? "has-changes" : ""} title="Counts the items that differ from the saved gateway. Editing the same item again does not add another change.">{changes.length ? `${changes.length} changed ${changes.length === 1 ? "item" : "items"}` : "All changes saved"}</span><span>{changes.length ? modelDraftChangeSummary(changes) : "Shared across projects on this gateway."}</span></div>
+    {workspace.notice && <div className="model-notice" role="status">{workspace.notice}</div>}<ModelRecoveryNotice workspace={workspace} />{workspace.error && !reviewOpen && <p className="security-error" role="alert">{workspace.error}</p>}
+    {!state && !workspace.error && <p role="status">Loading model library…</p>}
+    <WorkspaceSurface workspace={workspace} view={view} selectedType={selectedType} setSelectedType={selectType} tags={tags} connections={connections} focusTarget={focusTarget} navigate={navigate} announce={setAnnouncement} onContextChange={onContextChange} onLockChange={setOperationLocked} requestedTool={operationRequest} openTool={openTool} />
+    {view !== "build" && <div className="model-live-region" role="status" aria-live="polite">{announcement}</div>}
+    {reviewOpen && state && <ModelWorkspaceReviewPanel review={review} error={workspace.error} count={changes.length} busy={busy} onApply={() => void workspace.apply()} onPreview={() => void workspace.preview()} onClose={() => workspace.setReviewOpen(false)} onDiscard={() => setDiscarding(true)} onNavigate={navigate} model={state.present} />}
+    {importing && <ModelImportPanel onImport={workspace.importText} onClose={() => setImporting(false)} />}{discarding && <ModelDiscardConfirmation onCancel={() => setDiscarding(false)} onConfirm={() => { guard.current.discard(); setDiscarding(false); }} />}
+  </div>;
 }

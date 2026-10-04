@@ -220,7 +220,8 @@ internal static class GatewaySourceChecks
         reject(() => new ProjectStore(corrupt, protection, gatewayOnly: true), "restored valid-looking path inconsistent with raw mapping identity");
         var capPath = Path.Combine(directory, "capacity"); var cap = new ProjectStore(capPath, protection, gatewayOnly: true);
         cap.SaveConnection(Connection("cap", "mqtt", Mqtt(mapping)));
-        var package = new JsonObject { ["format"] = "sparkstudio.tags", ["version"] = 1,
+        var package = new JsonObject { ["format"] = "sparkstudio.tags", ["version"] = TagModel.FormatVersion,
+            ["scanGroups"] = new JsonArray(), ["udtDefinitions"] = new JsonArray(), ["instances"] = new JsonArray(), ["hierarchy"] = new JsonArray(),
             ["tags"] = new JsonArray(Enumerable.Range(0, 9999).Select(index => (JsonNode)new JsonObject { ["path"] = "[default]Authored/P" + index,
                 ["kind"] = "memory", ["dataType"] = "Int32", ["value"] = 0 }).ToArray()) };
         var preview = cap.PreviewTagImport(package); cap.ApplyTagImport(new(package, preview.Revision, preview.PreviewToken));

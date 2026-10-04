@@ -96,7 +96,8 @@ internal static class GatewayLoadProbe
 
     private static JsonObject Package(int count) => new()
     {
-        ["format"] = "sparkstudio.tags", ["version"] = 1,
+        ["format"] = "sparkstudio.tags", ["version"] = TagModel.FormatVersion,
+        ["scanGroups"] = new JsonArray(), ["udtDefinitions"] = new JsonArray(), ["instances"] = new JsonArray(), ["hierarchy"] = new JsonArray(),
         ["tags"] = new JsonArray(Enumerable.Range(0, count).Select(index => (JsonNode)new JsonObject
         { ["path"] = TagPath(index), ["kind"] = "memory", ["dataType"] = "Int32", ["value"] = 0 }).ToArray())
     };

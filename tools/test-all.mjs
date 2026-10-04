@@ -38,7 +38,7 @@ const toolSuites = [
   'test-computer-camera',
   'test-source-boundary', 'test-workshop-build', 'test-project-search', 'test-resource-changes',
   'test-bulk-replacement', 'test-authoring-assets', 'test-visual-styles', 'test-visual-styles-rendering',
-  'test-localization', 'test-localization-rendering', 'test-sqlite-example', 'test-engineering-policy', 'test-data-sources-workshop',
+  'test-localization', 'test-localization-rendering', 'test-sqlite-example', 'test-engineering-policy', 'test-data-sources-workshop', 'test-uns-model-workshop', 'test-model-operations-workshop',
 ];
 if (!process.argv.includes('--node-only')) {
   const artifacts = path.join(root, '.data/test-build');

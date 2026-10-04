@@ -8,6 +8,11 @@ import type { ProjectCatalog, ProjectSummary } from "./projectManagement";
 import "./projects.css";
 
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
+function SharedDataLinks() {
+  const { audience, gatewayCapabilities } = useAuth();
+  if (audience !== "engineering" || !gatewayCapabilities?.configuration) return null;
+  return <nav className="projects-heading-actions" aria-label="Shared data"><a className="button" href="/workspace?workspace=tags"><Icon name="tag" size={16} />Tags</a><a className="button" href="/workspace?workspace=models&view=build"><Icon name="layers" size={16} />Models</a></nav>;
+}
 type ProjectAction = { kind: "create" } | { kind: "rename" | "duplicate" | "archive" | "restore"; project: ProjectSummary };
 
 export function ProjectImportDialog({ onClose, onImported }: { onClose: () => void; onImported?: (project: ProjectSummary) => void }) {
@@ -90,6 +95,7 @@ export default function Projects() {
   return <div className="projects-shell">
     <WorkspaceHeader page="projects" />
     <main className="projects-main"><div className="projects-heading"><div><div className="eyebrow">{engineering ? "APPLICATION WORKSPACE" : "OPERATIONS"}</div><h1>Your projects</h1><p>{engineering ? "Design and publish the applications assigned to your account." : "Open an operator application available to your account."}</p></div>{manage && <div className="projects-heading-actions"><button className="button" onClick={() => setImporting(true)}><Icon name="upload" size={16} />Import .sparkproj</button><button className="button primary" onClick={() => setAction({ kind: "create" })}><Icon name="plus" size={16} />New project</button></div>}</div>
+      <SharedDataLinks />
       {engineering && <div className="projects-gateway-note"><Icon name="plug" size={19} /><div><strong>Separate applications. Shared gateway.</strong><span>Each project has its own screens, queries, scripts, assets and publication. Gateway administrators manage connections and tags.</span></div></div>}
       <div className="projects-tools"><label className="project-search"><Icon name="search" size={16} /><input aria-label="Find projects" placeholder="Find a project…" value={filter} onChange={event => setFilter(event.target.value)} /></label>{manage && <label className="project-archived-toggle"><input type="checkbox" checked={showArchived} onChange={event => setShowArchived(event.target.checked)} />Show archived</label>}<button className="button" disabled={loading} onClick={() => void load()}><Icon name="refresh" size={15} />Refresh</button></div>
       {error && <div className="project-error" role="alert">{error}</div>}{notice && <div className="project-notice" role="status"><span>{notice.message}</span>{notice.project && canDesign(notice.project) && <a className="button" href={projectPage("designer", notice.project.id)}>Open designer <Icon name="arrow" size={14} /></a>}<button className="icon-button" aria-label="Dismiss message" onClick={() => setNotice(null)}><Icon name="close" size={15} /></button></div>}

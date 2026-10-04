@@ -22,7 +22,7 @@ export const unmount=()=>{mounted=false;for(const slot of slots)slot?.cleanup?.(
 export const updatesAfterUnmount=()=>lateWrites;
 `);
 const api = uri(`export const api=(...args)=>globalThis.__deploymentApi(...args); export const apiUrl=route=>'/api'+route; export const authenticatedFetch=(...args)=>globalThis.__deploymentFetch(...args); export const assertAuthResponseCurrent=()=>{};`);
-const auth = uri(`export const useAuth=()=>({gatewayAdmin:true,gatewayCapabilities:{diagnostics:true,configuration:true,sessions:true,backups:true,audit:true}});`);
+const auth = uri(`export const useAuth=()=>globalThis.__deploymentAuth??({gatewayAdmin:true,gatewayCapabilities:{diagnostics:true,configuration:true,sessions:true,backups:true,audit:true}});`);
 // GatewayConsole registers its visible section with the global assistant. Keep
 // that stable provider seam without starting chat requests in lifecycle tests.
 const askSpark = uri(`const registrations=new Map();const registerContext=(owner,getter)=>{registrations.set(owner,getter);globalThis.__deploymentAskContext=getter();return()=>{if(registrations.get(owner)===getter)registrations.delete(owner)}};const context={registerContext};export const useAskSpark=()=>context;`);
@@ -45,8 +45,8 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve,reject; const promise=new Promise((done,fail)=>{resolve=done;reject=fail}); return {promise,resolve,reject}; };
 let timers,events,checks=0;
 const check = async (name,run) => { try { await run(); checks++; console.log(`PASS ${name}`); } finally { lifecycle.unmount(); } };
-async function start(Component,handler,{hash='#overview',fetch}={}) {
-  lifecycle.clear(); timers=new Map();events=new Map();let nextTimer=1,tree;
+async function start(Component,handler,{hash='#overview',fetch,auth:authValue}={}) {
+  lifecycle.clear(); globalThis.__deploymentAuth=authValue; timers=new Map();events=new Map();let nextTimer=1,tree;
   globalThis.window={location:{hash},setInterval:(callback,ms)=>{const id=nextTimer++;timers.set(id,{callback,ms});return id},clearInterval:id=>timers.delete(id),setTimeout:(callback,ms)=>{const id=nextTimer++;timers.set(id,{callback,ms});return id},addEventListener:(name,callback)=>events.set(name,callback),removeEventListener:name=>events.delete(name)};
   globalThis.document={visibilityState:'visible',createElement:()=>({click(){}})};
   const calls=[];
@@ -144,4 +144,14 @@ await check('connection diagnostics retry in context, prevent duplicate reads an
   let reads=0;const late=deferred();const ui=await start(()=>ConnectionPanel({connection,expanded:true,onExpandedChange:()=>{}}),async()=>{if(++reads===1)throw new Error('Diagnostics unavailable');return late.promise});
   const retry=ui.button('Retry diagnostics');retry.props.onClick();retry.props.onClick();ui.render();assert.equal(reads,2);lifecycle.unmount();late.resolve(connectionSnapshot());await settle();assert.equal(lifecycle.updatesAfterUnmount(),0);assert.equal(timers.size,0);
 });
+await check('Data and its deep links use Configuration permission and publish current Ask Spark context',async()=>{
+  const auth={gatewayAdmin:false,gatewayCapabilities:{configuration:true,diagnostics:false,sessions:false,backups:false,audit:false}},ui=await start(Console,async()=>overview(),{hash:'#data/certificates',auth});
+  const data=ui.all().find(node=>node.type==='a'&&text(node)==='Data');assert.ok(data);assert.equal(data.props.href,'#data');assert.equal(data.props['aria-current'],'page');assert.ok(ui.all().some(node=>node.type?.name==='GatewayConfiguration'));assert.ok(!ui.all().some(node=>node.type==='a'&&text(node)==='Configuration'));assert.deepEqual(globalThis.__deploymentAskContext,{surface:'gateway',section:'data',editorAvailable:false});
+  ui.hashChange('#overview');await settle();ui.render();assert.equal(globalThis.__deploymentAskContext.section,'overview');ui.hashChange('#data/connections');await settle();ui.render();assert.equal(globalThis.__deploymentAskContext.section,'data');
+});
+await check('Data stays hidden without Configuration permission and old section hashes are not kept',async()=>{
+  const ui=await start(Console,async()=>overview(),{hash:'#data',auth:{gatewayAdmin:false,gatewayCapabilities:{configuration:false,diagnostics:true,sessions:false,backups:false,audit:false}}});assert.ok(!ui.all().some(node=>node.type==='a'&&text(node)==='Data'));assert.ok(!ui.all().some(node=>node.type?.name==='GatewayConfiguration'));assert.equal(globalThis.__deploymentAskContext.section,'overview');
+  const admin=await start(Console,async()=>overview(),{hash:'#configuration'});assert.equal(globalThis.__deploymentAskContext.section,'overview');assert.ok(admin.all().some(node=>node.type==='a'&&text(node)==='Data'));
+});
+delete globalThis.__deploymentAuth;
 console.log(`${checks} gateway deployment/recovery lifecycle groups passed.`);

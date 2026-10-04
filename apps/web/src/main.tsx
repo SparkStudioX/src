@@ -3,6 +3,9 @@ import ReactDOM from "react-dom/client";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import RenderBoundary from "./RenderBoundary";
 const App = lazy(() => import("./App"));
+const DataWorkspace = lazy(() => import("./DataWorkspace"));
+import { modelDraftEvent } from "./modelWorkspace";
+import { openModelsWorkspace, workspaceNavigationEvent } from "./modelNavigation";
 import OperatorRuntime from "./OperatorRuntime";
 import Projects, { DefaultProjectRedirect } from "./Projects";
 import { parseProjectRoute } from "./api";
@@ -31,8 +34,8 @@ function WorkspaceRouter() {
     const cleanup = registerAskSparkProjectNavigation(projectId => {
       if (audience !== "engineering") throw new Error("Open an engineering session to use the Designer.");
       const next = `/designer/${encodeURIComponent(projectId)}`;
-      if (window.location.pathname !== next) window.history.pushState(null, "", next);
-      previous.current = next; setPathname(next); setNavigationError("");
+      if (window.location.pathname + window.location.search !== next) window.history.pushState(null, "", next);
+      previous.current = next; setPathname(next); setNavigationError(""); window.dispatchEvent(new Event(workspaceNavigationEvent));
     });
     const pop = () => {
       if (window.location.pathname === previous.current) return;
@@ -42,15 +45,22 @@ function WorkspaceRouter() {
       }
       previous.current = window.location.pathname; setPathname(previous.current); setNavigationError("");
     };
-    window.addEventListener("popstate", pop);
-    return () => { cleanup(); window.removeEventListener("popstate", pop); };
+    const modelDraft = () => {
+      if (audience !== "engineering") return;
+      const alreadyModels = new URLSearchParams(window.location.search).get("workspace") === "models";
+      if (alreadyModels) return;
+      if (askSparkNavigationBlocked()) { setNavigationError("Save or cancel your current edits, then open Models to review the saved proposal."); return; }
+      openModelsWorkspace();
+    };
+    window.addEventListener("popstate", pop); window.addEventListener(workspaceNavigationEvent, pop); window.addEventListener(modelDraftEvent, modelDraft);
+    return () => { cleanup(); window.removeEventListener("popstate", pop); window.removeEventListener(workspaceNavigationEvent, pop); window.removeEventListener(modelDraftEvent, modelDraft); };
   }, [audience]);
-  useEffect(() => { document.title = route.kind === "runtime" ? "SparkStudio · Operations" : route.kind === "designer" ? "SparkStudio · Designer" : route.kind === "gateway" || route.kind === "security" ? "SparkStudio · Gateway Settings" : "SparkStudio · Projects"; }, [route.kind]);
+  useEffect(() => { document.title = route.kind === "runtime" ? "SparkStudio · Operations" : route.kind === "workspace" ? "SparkStudio · Workspace" : route.kind === "designer" ? "SparkStudio · Designer" : route.kind === "gateway" || route.kind === "security" ? "SparkStudio · Gateway Settings" : "SparkStudio · Projects"; }, [route.kind]);
   return <>
       {navigationError && <div className="gateway-error" role="alert">{navigationError}</div>}
       <AuthProvider audience={audience} projectId={route.kind === "designer" || route.kind === "runtime" ? route.projectId : null}>
-        <AskSparkProvider><AskSparkShell><RenderBoundary><Suspense fallback={<main className="projects-empty" role="status">Loading workspace…</main>}><AuthGate requireGateway={route.kind === "security" || route.kind === "gateway"}>
-          {route.kind === "home" ? <Projects /> : route.kind === "gateway" || route.kind === "security" ? <GatewayConsole /> : route.kind === "invalid" ? <main className="projects-empty"><h1>Page not found</h1><a className="button" href="/">Open Projects</a></main> : route.projectId === null ? <DefaultProjectRedirect kind={route.kind} /> : route.kind === "runtime" ? <OperatorRuntime key={route.projectId} /> : <App key={route.projectId} />}
+        <AskSparkProvider><AskSparkShell><RenderBoundary><Suspense fallback={<main className="projects-empty" role="status">Loading workspace…</main>}><AuthGate requireGateway={route.kind === "security" || route.kind === "gateway" || route.kind === "workspace"}>
+          {route.kind === "home" ? <Projects /> : route.kind === "workspace" ? <DataWorkspace /> : route.kind === "gateway" || route.kind === "security" ? <GatewayConsole /> : route.kind === "invalid" ? <main className="projects-empty"><h1>Page not found</h1><a className="button" href="/">Open Projects</a></main> : route.projectId === null ? <DefaultProjectRedirect kind={route.kind} /> : route.kind === "runtime" ? <OperatorRuntime key={route.projectId} /> : <App key={route.projectId} />}
         </AuthGate></Suspense></RenderBoundary></AskSparkShell></AskSparkProvider>
       </AuthProvider>
     </>;

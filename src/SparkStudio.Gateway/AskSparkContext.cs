@@ -5,6 +5,27 @@ namespace SparkStudio.Gateway;
 /// <summary>Reduce repeated application data on the wire without changing signed model history.</summary>
 public static class AskSparkContext
 {
+    public static JsonObject ModelWorkspace(JsonObject context)
+    {
+        var result = new JsonObject();
+        foreach (var key in new[] { "modelView", "modelType", "modelDraftSummary" })
+        {
+            if (context[key] is null) continue;
+            if (context[key] is not JsonValue value || !value.TryGetValue<string>(out var text) || text.Length > 512)
+                throw new ArgumentException("Assistant model context text must contain at most 512 characters.");
+            result[key] = text;
+        }
+        foreach (var key in new[] { "modelSelection", "modelResolution" })
+        {
+            if (context[key] is null) continue;
+            if (context[key] is not JsonArray items || items.Count > 100 || items.Any(item =>
+                item is not JsonValue value || !value.TryGetValue<string>(out var text) || text.Length > 512))
+                throw new ArgumentException("Assistant model context lists allow at most 100 strings of 512 characters.");
+            result[key] = items.DeepClone();
+        }
+        return result;
+    }
+
     public static JsonArray ForProvider(JsonArray contents, IReadOnlyList<AskSparkTool> declarations)
     {
         var copy = AskSparkToolImages.ForProvider(contents);

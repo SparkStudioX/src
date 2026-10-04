@@ -1,6 +1,6 @@
 # Connection operations
 
-Gateway configuration administrators manage shared connections in **Gateway Settings → Configuration → Connections** or the Designer's **Connections** workspace. Named queries belong to projects; their connection IDs point at the shared gateway configuration.
+Gateway configuration administrators manage shared connections in **Gateway Settings → Data → Connections**. Named queries belong to projects; their connection IDs point at the shared gateway configuration.
 
 ## SQL Server authentication
 
@@ -50,13 +50,13 @@ The collapsed **Diagnostics** section shows counts for existing references and t
 
 The section loads its counts once and updates automatically every 15 seconds while expanded and the document is visible, without overlapping requests or creating an extra OPC UA read/write session. A failed read or mismatched saved revision retains the last valid snapshot with a warning and contextual **Retry diagnostics**. Reopen Connections when its revision changes. Up to 500 references are shown with explicit omitted counts. A save or selection change clears older UI results. Automatic shared-resource updates do not overwrite a connection draft or its edited credentials. The confirmation rechecks references on the server; a displayed count is not a deletion lock.
 
-Public certificate-store administration is separate under Configuration → Public OPC certificates. Diagnostics do not perform continuous SQL health polling or equipment writes.
+Public certificate-store administration is separate under **Gateway Settings → Data → Public OPC certificates**. Diagnostics do not perform continuous SQL health polling or equipment writes.
 
 ## Workshop: SQLite lifecycle and dependencies
 
 Use the **SQLite data controls** setup workshop from `examples/catalog.json` on a disposable gateway. This is a gateway-setup example, not a self-contained `.sparkproj`; its database connection and managed SQLite data are installed explicitly by the workshop loader. It needs the G05 connection operations build or later.
 
-1. Follow the SQLite data controls loader instructions to install the synthetic sample. Open its connection in **Connections**. Run **Test connection** and inspect the completion time. Reload the page; the result should remain visible.
+1. Follow the SQLite data controls loader instructions to install the synthetic sample. Open its connection in **Gateway Settings → Data → Connections**. Run **Test connection** and inspect the completion time. Reload the page; the result should remain visible.
 2. Open **Diagnostics**. The loader publishes this project during setup, so the sample named queries should appear as both draft and published references. Wait for an automatic update after later query edits or publication.
 3. Rename the connection and save. Its ID stays unchanged, so named queries continue to use it. The previous test result disappears because the saved revision changed.
 4. Open the same connection in two Designer tabs. Save a rename in the first. Saving the older entry from the second should report a conflict. Use **Cancel changes** in that tab to discard the older edit and inspect the new name.

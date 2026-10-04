@@ -101,7 +101,7 @@ try
     Console.WriteLine("PASS each standalone gateway capability signs in, reaches its actual API, rejects other capability/admin APIs and receives redacted overview");
 
     var configuration = await Login(accounts["configuration"]);
-    var package = JsonNode.Parse("""{"format":"sparkstudio.tags","version":1,"tags":[{"path":"[default]AccessWorkshop/Value","kind":"memory","dataType":"Int32","value":1}]}""")!;
+    var package = JsonNode.Parse("""{"format":"sparkstudio.tags","version":3,"tags":[{"path":"[default]AccessWorkshop/Value","kind":"memory","dataType":"Int32","value":1}],"scanGroups":[],"udtDefinitions":[],"instances":[],"hierarchy":[]}""")!;
     var preview = await configuration.Request("/api/tag-engineering/preview", "POST", package);
     var request = new { package, revision = preview["revision"]!.GetValue<string>(), previewToken = preview["previewToken"]!.GetValue<string>() };
     await configuration.Request("/api/tag-engineering/apply", "POST", request, 403, csrf: false);

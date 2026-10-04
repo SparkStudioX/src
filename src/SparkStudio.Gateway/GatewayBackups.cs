@@ -34,7 +34,7 @@ public sealed record BackupRunDocumentV2(int Version, BackupScheduleRunState[] S
 /// <summary>Independent schedules share one serial worker; uploads never hold the configuration monitor.</summary>
 public sealed class GatewayBackups : BackgroundService
 {
-    public const string Coverage = "Configuration only: projects, publications, scripts, assets, users/grants, tags, connections, keys, certificates and gateway settings. Database contents, audit/history and other runtime files are excluded. Use the offline full backup and database-specific backups for those.";
+    public const string Coverage = "Configuration only: projects, publications, scripts, assets, users/grants, tags, connections, model publisher settings, keys, certificates and gateway settings. Database contents, outgoing MQTT queues, audit/history and other runtime files are excluded. Use the offline full backup and database-specific backups for those.";
     private const string DefaultDestinationId = "default-destination", DefaultScheduleId = "default-schedule";
     private const int MaximumDocumentBytes = 1024 * 1024;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true, UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow };

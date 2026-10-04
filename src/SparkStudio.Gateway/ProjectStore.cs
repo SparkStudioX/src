@@ -48,7 +48,15 @@ public sealed partial class ProjectStore
     }
     private JsonNode? Load(string name) => File.Exists(Path.Combine(directory, name)) ? JsonNode.Parse(File.ReadAllText(Path.Combine(directory, name)))
         ?? throw new InvalidOperationException($"Stored {name} cannot be empty.") : null;
-    private void Persist(string name, JsonNode node) => DurableJsonFile.Write(Path.Combine(directory, name), node, Json);
+    private void Persist(string name, JsonNode node)
+    {
+        if (name == "tags.json")
+        {
+            TagModel.RequireCurrentFormat(node);
+            GatewayDataMigrations.Prepare(directory);
+        }
+        DurableJsonFile.Write(Path.Combine(directory, name), node, Json);
+    }
     public JsonObject ProjectMetadata()
     {
         lock (gate) return new() { ["name"] = project["name"]?.DeepClone(), ["revision"] = project["revision"]?.DeepClone() };
@@ -347,7 +355,7 @@ public sealed partial class ProjectStore
         if (gatewayStore is not null) return gatewayStore.GetTagDefinitions();
         lock (gate)
         {
-            expandedTagDefinitions ??= TagModel.Expand(tagModel, NormalizeTag);
+            expandedTagDefinitions ??= ExpandTagModel(tagModel);
             ValidateOwnedNamespaces(expandedTagDefinitions);
             var result = (JsonArray)expandedTagDefinitions.DeepClone();
             foreach (var owned in SourceOwnedDefinitions()) result.Add(owned!.DeepClone());
@@ -373,7 +381,7 @@ public sealed partial class ProjectStore
     {
         if (gatewayStore is not null) return gatewayStore.ConnectionTagPaths(id, includeOwned);
         lock (gate) {
-            expandedTagDefinitions ??= TagModel.Expand(tagModel, NormalizeTag);
+            expandedTagDefinitions ??= ExpandTagModel(tagModel);
             return expandedTagDefinitions.OfType<JsonObject>().Where(tag => Optional(tag, "connectionId") == id).Select(tag => Required(tag, "path"))
                 .Concat(includeOwned ? OwnedLeaves.Where(leaf => leaf.ConnectionId == id && !leaf.Suppressed && !leaf.Pruned).Select(leaf => leaf.Path) : []).ToArray();
         }
@@ -389,7 +397,7 @@ public sealed partial class ProjectStore
     {
         if (gatewayStore is not null) return gatewayStore.ConnectionRuntimeBindings(id);
         lock (gate) {
-            expandedTagDefinitions ??= TagModel.Expand(tagModel, NormalizeTag);
+            expandedTagDefinitions ??= ExpandTagModel(tagModel);
             return expandedTagDefinitions.OfType<JsonObject>().Where(tag => Optional(tag, "connectionId") == id)
                 .Select(tag => (Required(tag, "path"), tag["effectiveEnabled"]?.GetValue<bool>() != false))
                 .Concat(OwnedLeaves.Where(leaf => leaf.ConnectionId == id && !leaf.Suppressed && !leaf.Pruned)
@@ -413,7 +421,7 @@ public sealed partial class ProjectStore
             if (old is null && current.Count >= TagModel.MaximumTags) throw new ArgumentException($"A gateway supports at most {TagModel.MaximumTags} configured tags, including UDT members.");
             if (old is not null) next.Remove(old);
             next.Add(node);
-            var model = ModelWithTags(next); var expanded = TagModel.Expand(model, NormalizeTag);
+            var model = ModelWithTags(next); var expanded = ExpandTagModel(model);
             PersistTagModel(model);
             return (JsonObject)expanded.OfType<JsonObject>().Single(tag => Required(tag, "path") == tagPath).DeepClone();
         }
@@ -431,7 +439,7 @@ public sealed partial class ProjectStore
             var old = next.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "path") == path);
             if (old is null) return false;
             next.Remove(old);
-            var model = ModelWithTags(next); TagModel.Expand(model, NormalizeTag); PersistTagModel(model);
+            var model = ModelWithTags(next); ExpandTagModel(model); PersistTagModel(model);
             return true;
         }
     }
@@ -441,7 +449,7 @@ public sealed partial class ProjectStore
         lock (gate)
         {
             TagDefinitionValidator.Path(path);
-            expandedTagDefinitions ??= TagModel.Expand(tagModel, NormalizeTag);
+            expandedTagDefinitions ??= ExpandTagModel(tagModel);
             expandedTagIndex ??= expandedTagDefinitions.OfType<JsonObject>().ToDictionary(tag => Required(tag, "path"), StringComparer.Ordinal);
             var old = expandedTagIndex.TryGetValue(path, out var definition) ? (JsonObject)definition.DeepClone()
                 : throw new KeyNotFoundException("Tag definition not found.");

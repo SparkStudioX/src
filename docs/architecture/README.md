@@ -1,8 +1,10 @@
 # Architecture and feature documentation
 
-These guides describe the current SparkStudio source, including development work that may be newer than the downloadable installer. The preview.13 release-guide and navigation review date is **October 3, 2026**; the broader source/documentation audit remains dated September 30. A documented implementation is not a claim that every browser, deployment, integration or failure condition has passed acceptance.
+These guides describe the current SparkStudio source, including development work that may be newer than the downloadable installer. The preview.14 release-guide and navigation review date is **October 4, 2026**; the broader source/documentation audit remains dated September 30. A documented implementation is not a claim that every browser, deployment, integration or failure condition has passed acceptance.
 
-Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md). For installation, use the guide attached to your exact release; [Windows installation](WINDOWS_INSTALLER.md) describes preview.13. [Verification and roadmap](PARITY.md) records package verification and release status, separating dated observations from current capability summaries and remaining gates. Earlier ledger entries retain the facts and limitations of their original checks; they are not instructions to start an old development package or assertions about the currently running gateway.
+Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md). For installation, use the guide attached to your exact release; [Windows installation](WINDOWS_INSTALLER.md) describes preview.14. [Verification and roadmap](PARITY.md) records package verification and release status, separating dated observations from current capability summaries and remaining gates. Earlier ledger entries retain the facts and limitations of their original checks; they are not instructions to start an old development package or assertions about the currently running gateway.
+
+Preview.14 adds the [Models workspace](UNS_MODEL_SETUP.md), [model operations](UNS_MODEL_OPERATIONS.md), [MQTT model publishing](MODEL_PUBLISHING.md) and model-bound Designer faceplates. Gateway connections and public OPC certificates now live under **Gateway Settings → Data**. Older tag configuration and backup formats are rejected without automatic conversion. The matching bundle contains 38 portable workshops plus separately documented setup-required exercises.
 
 Windows preview.13 and the Docker preview.13-docker.1 include [Ask Spark](ASK_SPARK.md) and the [MQTT](MQTT_SETUP.md), [MTConnect](MTCONNECT_SETUP.md) and [i3X](I3X_SETUP.md) source clients. The source walkthroughs explain creating tags from a connection's reviewed import or later in Tags. Windows preview.12 and Docker preview.11-docker.1 do not include these features. The Docker edition is published independently; consult the [Docker guide](DOCKER_RELEASE.md) and ledger for publication details, platform limitations and completed acceptance.
 
@@ -85,6 +87,11 @@ Windows preview.13 and the Docker preview.13-docker.1 include [Ask Spark](ASK_SP
 - [Industrial device setup and workshop](INDUSTRIAL_DEVICE_CONNECTIONS.md)
 - [Industrial connector technical specification](INDUSTRIAL_CONNECTOR_SPECIFICATION.md)
 - [Tag engineering](TAG_ENGINEERING.md)
+- [UNS models](UNS_MODEL.md)
+- [UNS setup: two machines and reusable faceplates](UNS_MODEL_SETUP.md)
+- [Models workspace: choose data, build a model, add equipment](UNS_MODEL_WORKSPACE.md)
+- [Model quality, source mappings, versions and dependency export](UNS_MODEL_OPERATIONS.md)
+- [Publish equipment models to MQTT](MODEL_PUBLISHING.md)
 - [Deployment settings](DEPLOYMENT_SETTINGS.md)
 - [Network access](NETWORK_ACCESS.md)
 - [Offline gateway recovery](GATEWAY_RECOVERY.md)

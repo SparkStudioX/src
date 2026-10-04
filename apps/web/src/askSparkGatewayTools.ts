@@ -341,7 +341,7 @@ async function tagModel(context: GatewayToolContext, signal?: AbortSignal): Prom
 }
 
 function tagPackage(value: Values): Values {
-  return { format: "sparkstudio.tags", version: 2, tags: [], udtDefinitions: [], instances: [], scanGroups: [], ...value };
+  return { format: "sparkstudio.tags", version: 3, tags: [], udtDefinitions: [], instances: [], scanGroups: [], hierarchy: [], ...value };
 }
 
 async function previewTagPart(args: Values, context: GatewayToolContext, signal: AbortSignal | undefined, collection: string): Promise<unknown> {
@@ -354,6 +354,44 @@ async function previewProvider(args: Values, context: GatewayToolContext, signal
   const package_ = tagPackage({ provider: { name: "default", enabled: args.enabled } });
   const review = await request("/tag-engineering/preview", context, signal, { method: "POST", body: package_ });
   return { package: package_, review };
+}
+
+function requireDirectTagImport(package_: Values): void {
+  const modelFields = ["udtDefinitions", "instances", "hierarchy", "removeUdtDefinitions", "removeInstances", "removeHierarchy"];
+  if (modelFields.some(key => Array.isArray(package_[key]) && package_[key].length > 0)
+    || object(package_.provider) && package_.provider.requireDeclaredHierarchy !== undefined)
+    throw new Error("Model changes must be reviewed and applied by the user in Models. Use model_draft to prepare the change.");
+}
+
+async function draftModel(args: Values, context: GatewayToolContext, signal?: AbortSignal): Promise<unknown> {
+  if (Boolean(args.definitionJson) === Boolean(args.csv)) throw new Error("Provide either definitionJson or csv, not both.");
+  if (typeof context.ownerId !== "string" || !context.ownerId) throw new Error("A signed-in engineering user is required to prepare a model draft.");
+  const workspace = await import("./modelWorkspace");
+  const draft: import("./modelWorkspace").ModelDraft = {};
+  const package_ = workspace.emptyModelPackage();
+  if (typeof args.definitionJson === "string") {
+    const definition = JSON.parse(args.definitionJson);
+    if (!object(definition) || typeof definition.id !== "string" || !Number.isSafeInteger(definition.version) || !Array.isArray(definition.members))
+      throw new Error("The definition must contain id, version and a members array.");
+    draft.definition = definition as unknown as import("./modelWorkspace").ModelDefinition;
+    package_.udtDefinitions = [draft.definition];
+  } else {
+    const model = await tagModel(context, signal);
+    draft.csv = String(args.csv);
+    package_.instances = workspace.bulkModelInstances(draft.csv, model.udtDefinitions as import("./modelWorkspace").ModelDefinition[], model.instances as import("./modelWorkspace").ModelInstance[]);
+  }
+  const preview = await request("/tag-engineering/preview", context, signal, { method: "POST", body: package_ });
+  (context as BoundContext)[operationGuard]?.(); signal?.throwIfAborted();
+  workspace.openModelDraft(draft, context.ownerId);
+  return { status: "draft_prepared", applied: false, preview, url: "/workspace?workspace=models", guidance: "Open Models in the workspace sidebar. Review this saved browser draft, preview the changes and apply them yourself. Ask Spark cannot apply model changes." };
+}
+
+function modelReadPath(path: string, context: GatewayToolContext): string {
+  return context.projectId == null ? `/model/${path}` : `/projects/${encodeURIComponent(projectId(context))}/model/${path}`;
+}
+
+function modelRead(path: string, keys: string[]): Run {
+  return (args, context, signal) => request(`${modelReadPath(path, context)}${query({ ...args, offset: args.pageOffset ?? 0, limit: args.pageSize ?? 25 }, [...keys, "offset", "limit"])}`, context, signal);
 }
 
 async function resourceFromList(args: Values, context: GatewayToolContext, signal: AbortSignal | undefined, path: string, key: string, scoped = false): Promise<unknown> {
@@ -432,6 +470,11 @@ async function prepareRecovery(_args: Values, context: GatewayToolContext, signa
 }
 
 const handlers: Record<string, Run> = {
+  model_types: modelRead("types", ["type"]),
+  model_tree: modelRead("tree", ["path", "depth"]),
+  model_instances: modelRead("instances", ["type", "version", "under"]),
+  model_object: (args, context, signal) => request(`${modelReadPath("object", context)}${query(args, ["path"])}`, context, signal),
+  model_draft: draftModel,
   runtime_test_session: (_args, context, signal) => testRuntimeSession(context, signal),
   runtime_operator_sign_in: (args, context, signal) => signInRuntime(args, context, signal),
   navigate_workspace: async (args, context) => askSparkNavigationLink(args, context),
@@ -488,7 +531,7 @@ const handlers: Record<string, Run> = {
   tags_status: endpoint("/tag-engineering/status"),
   tags_subscriptions: endpoint("/opcua/subscriptions"),
   tags_import_preview: (args, context, signal) => request("/tag-engineering/preview", context, signal, { method: "POST", body: tagPackage(args.package as Values) }),
-  tags_import_apply: (args, context, signal) => request("/tag-engineering/apply", context, signal, { method: "POST", body: { ...select(args, ["revision", "previewToken"]), package: tagPackage(args.package as Values) } }),
+  tags_import_apply: (args, context, signal) => { requireDirectTagImport(args.package as Values); return request("/tag-engineering/apply", context, signal, { method: "POST", body: { ...select(args, ["revision", "previewToken"]), package: tagPackage(args.package as Values) } }); },
   tags_upsert_preview: (args, context, signal) => previewTagPart(args, context, signal, "tags"),
   tags_delete_preview: (args, context, signal) => previewTagPart(args, context, signal, "removeTags"),
   udts_define_preview: (args, context, signal) => previewTagPart(args, context, signal, "udtDefinitions"),

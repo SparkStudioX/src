@@ -1,6 +1,6 @@
 {
   "name": "Access boundaries workshop",
-  "tagPackage": { "format": "sparkstudio.tags", "version": 1, "tags": [{ "path": "[default]AccessPermissionsWorkshop/Value", "kind": "memory", "dataType": "Int32", "value": 0 }] },
+  "tagPackage": { "format": "sparkstudio.tags", "version": 3, "tags": [{ "path": "[default]AccessPermissionsWorkshop/Value", "kind": "memory", "dataType": "Int32", "value": 0 }], "scanGroups": [], "udtDefinitions": [], "instances": [], "hierarchy": [] },
   "roles": [
     { "name": "Viewer", "projectGrants": { "view": true, "operate": false, "commands": false, "design": false, "publish": false }, "gatewayCapabilities": {} },
     { "name": "Operator", "projectGrants": { "view": true, "operate": true, "commands": false, "design": false, "publish": false }, "gatewayCapabilities": {} },

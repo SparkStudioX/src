@@ -29,17 +29,22 @@ export const updatesAfterUnmount=()=>lateWrites;
 const react = pathToFileURL(require.resolve('react')).href;
 const api = uri(`export class ApiError extends Error{constructor(message,status){super(message);this.status=status;this.name='ApiError'}}export const api=(...args)=>globalThis.__configurationApi(...args);export const apiUrl=route=>'/api'+route;export const authenticatedFetch=(...args)=>globalThis.__configurationApi(args[0],'FETCH',args[1]);export const assertAuthResponseCurrent=()=>{};export const id=kind=>'new-'+kind;export const displayValue=value=>typeof value==='string'?value:JSON.stringify(value);`);
 const shells = {
+  Auth: uri('const user={id:"configuration-test"};export const useAuth=()=>({user,gatewayAccess:true,gatewayCapabilities:{configuration:true}});'),
+  AskSpark: uri('export const AskSparkLauncher=()=>null;'),
+  OperatorAccess: uri('export const SessionIdentity=()=>null;'),
+  AccountSettings: uri('export const AccountSettingsDialog=()=>null;'),
   askSparkContext: uri('const entries=new Map();const sync=()=>{globalThis.__configurationAskContext=[...entries.values()].sort((a,b)=>a.priority-b.priority).at(-1)};const registerContext=(owner,getter,priority)=>{const entry={owner,getter,priority};entries.set(owner,entry);sync();return()=>{if(entries.get(owner)===entry){entries.delete(owner);sync()}}};const value={registerContext};export const useAskSpark=()=>value;'),
   App: uri(`import React from ${JSON.stringify(react)};export const Field=({label,hint,children})=>React.createElement('label',null,label,children,hint&&React.createElement('small',null,hint));`),
   Icon: uri('export default function Icon(){return null}'),
   CreationMenu: uri(`import React from ${JSON.stringify(react)};export default function CreationMenu({choices,onSelect}){return React.createElement('div',null,choices.map(choice=>React.createElement('button',{key:choice.value,onClick:()=>onSelect(choice.value)},'Create '+choice.label)))}`),
   TagTransfer: uri(`import React from ${JSON.stringify(react)};export default function TagTransfer({onClose}){return React.createElement('button',{onClick:onClose},'Close transfer')}`),
-  TagModels: uri(`import React from ${JSON.stringify(react)};export default function TagModels({onClose}){return React.createElement('button',{onClick:onClose},'Close tag models')}`),
+  TagModels: uri(`import React from ${JSON.stringify(react)};export default function TagModels(props){globalThis.__configurationModelProps=props;return React.createElement('button',{onClick:props.onClose},'Close tag models')}`),
 };
 const modules = new Map(), compilerOptions = { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX };
 function load(name) {
   if (shells[name]) return shells[name];
   if (modules.has(name)) return modules.get(name);
+  if (name.endsWith('.json')) { const result = uri(`export default ${fs.readFileSync(new URL(`src/${name}`, import.meta.url), 'utf8')};`); modules.set(name, result); return result; }
   const file = ['tsx', 'ts'].map(extension => new URL(`src/${name}.${extension}`, import.meta.url)).find(file => fs.existsSync(file));
   assert.ok(file, `Authored module ${name} exists.`);
   const source = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions }).outputText
@@ -47,9 +52,11 @@ function load(name) {
     .replace(/(from\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, dependency) => prefix + JSON.stringify(dependency === 'react' ? hooks : dependency === './api' ? api : dependency.startsWith('./') ? load(dependency.slice(2)) : pathToFileURL(require.resolve(dependency)).href));
   const result = uri(source); modules.set(name, result); return result;
 }
-const components = Object.fromEntries(await Promise.all(['GatewayConfiguration', 'Tags', 'Connections', 'ConnectionDiagnostics', 'OpcCertificates'].map(async name => [name, (await import(load(name))).default])));
+const components = Object.fromEntries(await Promise.all(['GatewayConfiguration', 'Tags', 'ModelsWorkspace', 'DataWorkspace', 'Connections', 'ConnectionDiagnostics', 'OpcCertificates'].map(async name => [name, (await import(load(name))).default])));
 const { ApiError } = await import(api);
-const lifecycle = await import(hooks), nativeWindow = globalThis.window, nativeDocument = globalThis.document;
+const draftWorkspace = await import(load('modelWorkspace'));
+const navigation = await import(load('modelNavigation'));
+const lifecycle = await import(hooks), nativeWindow = globalThis.window, nativeDocument = globalThis.document, nativeStorage = globalThis.sessionStorage;
 const nodes = (node, visible = true) => Array.isArray(node) ? node.flatMap(child => nodes(child, visible)) : !node || typeof node !== 'object' || (visible && node.props?.hidden) ? [] : [node, ...nodes(node.props?.children, visible)];
 const text = node => Array.isArray(node) ? node.map(text).join('') : typeof node === 'string' || typeof node === 'number' ? String(node) : !node || typeof node !== 'object' || node.props?.hidden ? '' : text(node.props?.children);
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -60,15 +67,17 @@ const certificate = () => ({ store: 'trusted', sha256: 'A'.repeat(64), subject: 
 const listing = () => ({ certificates: [certificate()], invalidFiles: 0, note: 'Synthetic public certificate fixture.' });
 const publicBytes = new Uint8Array([0x30, 31, 0x30, 21, ...Array(21).fill(1), 0x30, 1, 5, 3, 3, 0, 1, 2]);
 const publicFile = (arrayBuffer = async () => publicBytes.slice().buffer) => ({ name: 'server.der', size: publicBytes.length, arrayBuffer });
-async function start(name, handler, { settled = true, props: given } = {}) {
+async function start(name, handler, { settled = true, props: given, hash = "#data" } = {}) {
   lifecycle.clear(); let tree, focused = null, nextTimer = 0;
+  const events=new EventTarget(),storage=new Map();globalThis.__configurationModelProps=undefined;
+  globalThis.sessionStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)};
   const calls = [], notices = [], changed = [], hosts = new Map(), timers = new Map();
   let props = { connections: connections(), tags: [], onChange: value => { changed.push(value); props = { ...props, connections: value }; }, onTagsChanged: () => changed.push('tags'), notify: (...args) => notices.push(args), ...given };
   globalThis.__configurationApi = async (route, method = 'GET', body) => {
     calls.push({ route, method, body: body && structuredClone(body) });
     const overridden = handler?.(route, method, body); if (overridden !== undefined) return await overridden;
     if (route === '/connections') return structuredClone(method === 'POST' ? body : connections());
-    if (route === '/tag-definitions') return definitions();
+    if (route === '/tag-engineering/definitions') return definitions();
     if (route === '/tag-engineering/export') return { scanGroups: [{ name: 'Production', enabled: true, publishingIntervalMs: 1000 }] };
     if (route === '/tag-engineering/values') return [];
     if (route === '/gateway/opcua/certificates') return listing();
@@ -88,7 +97,8 @@ async function start(name, handler, { settled = true, props: given } = {}) {
     return result;
   };
   globalThis.document = { visibilityState: 'visible' };
-  globalThis.window = { setInterval: (callback, delay) => { assert.ok([5000, 15_000, 30_000].includes(delay)); const id = ++nextTimer; timers.set(id, callback); return id; }, clearInterval: id => timers.delete(id) };
+  const navigate = (_state, _title, url) => { globalThis.window.location = new URL(url, globalThis.window.location.href); };
+  globalThis.window = { location:new URL('http://localhost/gateway'+hash), history:{state:null,pushState:navigate,replaceState:navigate}, addEventListener:events.addEventListener.bind(events), removeEventListener:events.removeEventListener.bind(events), dispatchEvent:events.dispatchEvent.bind(events), setInterval: (callback, delay) => { assert.ok([5000, 15_000, 30_000].includes(delay)); const id = ++nextTimer; timers.set(id, callback); return id; }, clearInterval: id => timers.delete(id) };
   const render = () => { let passes = 0; do { assert.ok(passes++ < 25, 'Configuration effects settle.'); lifecycle.begin(); tree = expand(lifecycle.run(name, () => components[name](props))); lifecycle.finish(); lifecycle.flush(); } while (lifecycle.dirty()); };
   const all = () => nodes(tree);
   const find = (predicate, description) => { const found = all().find(predicate); assert.ok(found, description); return found; };
@@ -99,7 +109,7 @@ async function start(name, handler, { settled = true, props: given } = {}) {
   const change = (label, value) => { const control = field(label); control.props.onChange({ target: control.props.type === 'checkbox' ? { checked: value } : { value } }); render(); };
   const flush = async () => { await settle(); render(); await settle(); render(); };
   render(); if (settled) await flush();
-  return { calls, notices, changed, all, find, button, field, click, invoke, change, render, flush, setHandler: next => { handler = next; }, text: () => text(tree), timers: () => timers.size, hide: value => { document.visibilityState = value ? 'hidden' : 'visible'; }, poll: () => { for (const callback of [...timers.values()]) callback(); render(); }, tick: async () => { for (const callback of [...timers.values()]) callback(); await flush(); }, unmount: () => lifecycle.unmount(), replay: () => { lifecycle.replay(); render(); }, selectTag: () => invoke(find(node => node.type === 'button' && node.props.className === 'tag-name-button', 'configured tag selection')), chooseFile: file => { const control = find(node => node.type === 'input' && node.props.type === 'file', 'certificate upload input'); control.props.onChange({ target: { files: file ? [file] : [] } }); render(); }, focused: () => focused?.node };
+  return { hashChange: next => { window.location.hash=next; window.dispatchEvent(new Event("hashchange")); render(); }, calls, notices, changed, all, find, button, field, click, invoke, change, render, flush, setHandler: next => { handler = next; }, text: () => text(tree), timers: () => timers.size, hide: value => { document.visibilityState = value ? 'hidden' : 'visible'; }, poll: () => { for (const callback of [...timers.values()]) callback(); render(); }, tick: async () => { for (const callback of [...timers.values()]) callback(); await flush(); }, unmount: () => lifecycle.unmount(), replay: () => { lifecycle.replay(); render(); }, selectTag: () => invoke(find(node => node.type === 'button' && node.props.className === 'tag-name-button', 'configured tag selection')), chooseFile: file => { const control = find(node => node.type === 'input' && node.props.type === 'file', 'certificate upload input'); control.props.onChange({ target: { files: file ? [file] : [] } }); render(); }, focused: () => focused?.node };
 }
 const reads = (ui, route) => ui.calls.filter(call => call.method === 'GET' && call.route === route).length;
 const noRefreshButtons = ui => assert.ok(!ui.all().some(node => node.type === 'button' && /\b(refresh|reload)\b/i.test(`${node.props['aria-label'] || ''} ${text(node)}`)), 'Routine refresh/reload buttons are absent.');
@@ -114,17 +124,25 @@ try {
     ui.click('Create OPC UA client'); assert.equal(current().connectionId, undefined); assert.match(current().connectionName, /New/); assert.equal(current().connectionHasUnsavedChanges, true); assert.equal(current().snapshotToken, undefined);
     ui.unmount(); assert.equal(globalThis.__configurationAskContext, undefined);
   });
-  await check('Configuration tabs link panels, preserve keyboard focus and quietly refresh only visible sections', async () => {
-    const ui = await start('GatewayConfiguration'); noRefreshButtons(ui); assert.equal(ui.timers(), 2);
-    assert.equal(globalThis.__configurationAskContext.priority, 10); assert.equal(globalThis.__configurationAskContext.getter().section, 'tags');
+  await check('Data tabs link panels, preserve keyboard focus and quietly refresh only visible sections', async () => {
+    const ui = await start('GatewayConfiguration'); noRefreshButtons(ui); assert.equal(ui.timers(), 1);
+    assert.equal(globalThis.__configurationAskContext.priority, 20); assert.equal(globalThis.__configurationAskContext.getter().section, 'connections');
+    assert.equal(ui.all().some(node => node.props?.role === 'tab' && text(node) === 'Tags'), false);
     const initial = reads(ui, '/connections'); await ui.tick(); assert.equal(reads(ui, '/connections'), initial + 1);
     ui.hide(true); await ui.tick(); assert.equal(reads(ui, '/connections'), initial + 1); ui.hide(false);
-    const tag = ui.button('Tags'); let prevented = false; tag.props.onKeyDown({ key: 'End', preventDefault: () => { prevented = true; } }); ui.render(); await ui.flush();
+    const tag = ui.button('Connections'); let prevented = false; tag.props.onKeyDown({ key: 'End', preventDefault: () => { prevented = true; } }); ui.render(); await ui.flush();
     assert.ok(prevented); assert.equal(text(ui.focused()), 'Public OPC certificates'); assert.equal(ui.button('Public OPC certificates').props['aria-selected'], true);
-    assert.equal(globalThis.__configurationAskContext.getter().section, 'certificates');
+    assert.equal(globalThis.__configurationAskContext.getter().section, 'certificates'); assert.equal(window.location.hash, '#data/certificates');
     const active = ui.button('Public OPC certificates'); assert.ok(ui.all().some(node => node.props.id === active.props['aria-controls'] && node.props.role === 'tabpanel')); const count = reads(ui, '/connections'); await ui.tick(); assert.equal(reads(ui, '/connections'), count); assert.equal(ui.timers(), 1);
     ui.click('Connections'); await ui.flush(); assert.equal(globalThis.__configurationAskContext.priority, 20); assert.equal(globalThis.__configurationAskContext.getter().connectionId, 'db');
-    ui.click('Tags'); await ui.flush(); assert.equal(globalThis.__configurationAskContext.priority, 10); assert.equal(globalThis.__configurationAskContext.getter().section, 'tags');
+  });
+  await check('Data deep links select certificates and hash navigation restores the correct child tools', async () => {
+    const ui = await start('GatewayConfiguration', undefined, { hash: '#data/certificates' });
+    assert.equal(ui.button('Public OPC certificates').props['aria-selected'], true); assert.equal(reads(ui, '/connections'), 0); assert.equal(globalThis.__configurationAskContext.getter().section, 'certificates');
+    assert.ok(ui.all().some(node => node.props.role === 'tablist' && node.props['aria-label'] === 'Gateway data'));
+    ui.hashChange('#data/connections'); await ui.flush(); assert.equal(ui.button('Connections').props['aria-selected'], true); assert.equal(globalThis.__configurationAskContext.getter().section, 'connections');
+    ui.hashChange('#data/certificates'); await ui.flush(); assert.equal(ui.button('Public OPC certificates').props['aria-selected'], true);
+    ui.hashChange('#data'); await ui.flush(); assert.equal(ui.button('Connections').props['aria-selected'], true); assert.equal(nodes(ui.all().find(node => node.props.role === 'tablist' && node.props['aria-label'] === 'Gateway data')).filter(node => node.props.role === 'tab').length, 2);
   });
   await check('Configuration failed initial requests expose only contextual Retry and recover together', async () => {
     let failed = true; const ui = await start('GatewayConfiguration', route => route === '/connections' && failed ? Promise.reject(new Error('Configuration unavailable')) : undefined);
@@ -133,7 +151,7 @@ try {
   });
   await check('Tab switches dispose old configuration and tag requests before delayed replies can update another section', async () => {
     const oldConnections = deferred(), oldDefinitions = deferred(); let firstConnections = true, firstDefinitions = true;
-    const ui = await start('GatewayConfiguration', route => { if (route === '/connections' && firstConnections) { firstConnections = false; return oldConnections.promise; } if (route === '/tag-definitions' && firstDefinitions) { firstDefinitions = false; return oldDefinitions.promise; } }, { settled: false });
+    const ui = await start('GatewayConfiguration', route => { if (route === '/connections' && firstConnections) { firstConnections = false; return oldConnections.promise; } if (route === '/tag-engineering/definitions' && firstDefinitions) { firstDefinitions = false; return oldDefinitions.promise; } }, { settled: false });
     ui.click('Public OPC certificates'); await ui.flush(); oldConnections.resolve([{ ...connections()[0], name: 'Outdated connection response' }]); oldDefinitions.resolve([{ ...definitions()[0], path: '[default]Old/Discarded' }]); await ui.flush();
     assert.equal(lifecycle.updatesAfterUnmount(), 0); ui.click('Connections'); await ui.flush(); assert.match(ui.text(), /Production database/); assert.doesNotMatch(ui.text(), /Outdated connection response/);
   });
@@ -141,25 +159,57 @@ try {
     const pending = deferred(); const ui = await start('GatewayConfiguration', route => route === '/connections' ? pending.promise : undefined, { settled: false });
     ui.poll(); ui.poll(); assert.equal(reads(ui, '/connections'), 1); ui.unmount(); pending.reject(new Error('Disposed request')); await settle(); await settle(); assert.equal(lifecycle.updatesAfterUnmount(), 0); assert.equal(ui.timers(), 0);
   });
-  await check('Tag-definition polling pauses for drafts, transfer dialogs, models and deletion review', async () => {
-    const ui = await start('Tags'); noRefreshButtons(ui); const initial = reads(ui, '/tag-definitions'); await ui.tick(); assert.equal(reads(ui, '/tag-definitions'), initial + 1);
-    ui.click('Import / export'); await ui.tick(); assert.equal(reads(ui, '/tag-definitions'), initial + 1); ui.click('Close transfer');
-    ui.click('UDTs / scan groups'); await ui.tick(); assert.equal(reads(ui, '/tag-definitions'), initial + 1); ui.click('Close tag models');
-    ui.selectTag(); ui.click('Delete tag'); await ui.tick(); assert.equal(reads(ui, '/tag-definitions'), initial + 1); ui.click('Cancel');
-    ui.change('Publishing interval', '2500'); await ui.tick(); assert.equal(reads(ui, '/tag-definitions'), initial + 1); assert.equal(ui.field('Publishing interval').props.value, 2500);
+  await check('Tag-definition polling pauses for drafts, transfer dialogs and deletion review', async () => {
+    const ui = await start('Tags'); noRefreshButtons(ui); const initial = reads(ui, '/tag-engineering/definitions'); await ui.tick(); assert.equal(reads(ui, '/tag-engineering/definitions'), initial + 1);
+    ui.click('Import / export'); await ui.tick(); assert.equal(reads(ui, '/tag-engineering/definitions'), initial + 1); ui.click('Close transfer');
+    ui.selectTag(); ui.click('Delete tag'); await ui.tick(); assert.equal(reads(ui, '/tag-engineering/definitions'), initial + 1); ui.click('Cancel');
+    ui.change('Publishing interval', '2500'); await ui.tick(); assert.equal(reads(ui, '/tag-engineering/definitions'), initial + 1); assert.equal(ui.field('Publishing interval').props.value, 2500);
+  });
+  await check('an assistant draft reaches the active model immediately without unmounting the workspace', async () => {
+    const ui=await start('ModelsWorkspace', undefined, {props:{ownerId:'configuration-test',onApplied(){}}});assert.equal(globalThis.__configurationModelProps.initialDraft,undefined);
+    draftWorkspace.openModelDraft({csv:'path,definitionId,version\n[default]A,CNC,1'},'configuration-test');ui.render();
+    assert.equal(globalThis.__configurationModelProps.pendingDraft,undefined);assert.match(globalThis.__configurationModelProps.initialDraft.csv,/\[default\]A/);assert.equal(globalThis.__configurationModelProps.ownerId,'configuration-test');assert.equal(draftWorkspace.takeModelDraft('configuration-test'),undefined);
+    const first=globalThis.__configurationModelProps.initialDraft;
+    draftWorkspace.openModelDraft({csv:'path,definitionId,version\n[default]B,CNC,1'},'configuration-test');ui.render();
+    assert.notEqual(globalThis.__configurationModelProps.initialDraft,first);assert.match(globalThis.__configurationModelProps.initialDraft.csv,/\[default\]B/);
+  });
+  await check('Tags has no nested Models editor and leaves incoming proposals for the Models workspace', async () => {
+    const ui=await start('Tags');ui.click('Import / export');draftWorkspace.openModelDraft({csv:'review later'},'configuration-test');ui.render();
+    assert.equal(globalThis.__configurationModelProps,undefined);assert.ok(ui.button('Close transfer'));ui.click('Close transfer');assert.equal(globalThis.__configurationModelProps,undefined);assert.equal(draftWorkspace.takeModelDraft('configuration-test').csv,'review later');
+  });
+  await check('Leaving Tags for Models preserves a draft on Stay and discards only after confirmation', async () => {
+    const ui=await start('Tags');ui.selectTag();ui.change('Publishing interval','2500');
+    const before=window.location.href;navigation.openModelsWorkspace();assert.equal(window.location.href,before);assert.equal(navigation.modelNavigationSubject(),'Tags');
+    navigation.resolveModelNavigation(false);ui.render();assert.equal(ui.field('Publishing interval').props.value,2500);
+    navigation.openModelsWorkspace();navigation.resolveModelNavigation(true);ui.render();assert.equal(new URL(window.location.href).searchParams.get('workspace'),'models');
+    assert.equal(navigation.modelNavigationDirty(),false);
+  });
+  await check('The project-independent Models workspace refreshes live values without overlapping or stale updates', async () => {
+    let value=1, reply;const ui=await start('DataWorkspace',route=>route==='/tag-engineering/values'?(reply?.promise??[{path:'[default]Speed',value,quality:'Good'}]):undefined);
+    assert.equal(globalThis.__configurationModelProps.tags[0].value,1);value=2;await ui.tick();assert.equal(globalThis.__configurationModelProps.tags[0].value,2);
+    const before=reads(ui,'/tag-engineering/values');ui.hide(true);await ui.tick();assert.equal(reads(ui,'/tag-engineering/values'),before);ui.hide(false);
+    reply=deferred();ui.poll();ui.poll();assert.equal(reads(ui,'/tag-engineering/values'),before+1);
+    ui.unmount();reply.resolve([{path:'[default]Speed',value:3,quality:'Good'}]);await settle();await settle();assert.equal(lifecycle.updatesAfterUnmount(),0);assert.equal(ui.timers(),0);
+  });
+  await check('Tags transfer dialogs require a decision and a pending save cannot be discarded by navigation', async () => {
+    const result=deferred();const ui=await start('Tags',(route,method)=>route==='/tags'&&method==='POST'?result.promise:undefined);
+    ui.click('Import / export');navigation.openModelsWorkspace();navigation.resolveModelNavigation(false);ui.render();assert.ok(ui.button('Close transfer'));ui.click('Close transfer');
+    ui.click('Create Memory tag');ui.change('Tag path','[default]Test/Guard');ui.click('Save');const before=window.location.href;
+    navigation.openModelsWorkspace();navigation.resolveModelNavigation(true);ui.render();assert.equal(window.location.href,before);assert.match(ui.text(),/Wait for the tag request/);
+    result.resolve({});await ui.flush();
   });
   await check('Tag busy saves and deletes suppress polls and disposed operations cannot load, notify or write state', async () => {
     for (const operation of ['save', 'delete']) {
       const result = deferred(); const ui = await start('Tags', (route, method) => (route === '/tags' && method === 'POST') || (route.startsWith('/tag-definitions?path=') && method === 'DELETE') ? result.promise : undefined);
       if (operation === 'save') { ui.click('Create Memory tag'); ui.change('Tag path', '[default]Test/New'); ui.click('Save'); }
       else { ui.selectTag(); ui.click('Delete tag'); ui.click('Delete tag'); }
-      const initial = reads(ui, '/tag-definitions'); await ui.tick(); assert.equal(reads(ui, '/tag-definitions'), initial); ui.unmount(); result.resolve({}); await settle(); await settle();
-      assert.equal(reads(ui, '/tag-definitions'), initial); assert.equal(ui.notices.length, 0); assert.equal(ui.changed.length, 0); assert.equal(lifecycle.updatesAfterUnmount(), 0);
+      const initial = reads(ui, '/tag-engineering/definitions'); await ui.tick(); assert.equal(reads(ui, '/tag-engineering/definitions'), initial); ui.unmount(); result.resolve({}); await settle(); await settle();
+      assert.equal(reads(ui, '/tag-engineering/definitions'), initial); assert.equal(ui.notices.length, 0); assert.equal(ui.changed.length, 0); assert.equal(lifecycle.updatesAfterUnmount(), 0);
     }
   });
   await check('Tag load failure Retry recovers and late disposed loads never write state', async () => {
-    let failed = true; const ui = await start('Tags', route => route === '/tag-definitions' && failed ? Promise.reject(new Error('Tags unavailable')) : undefined); assert.match(ui.text(), /Tags unavailable/); noRefreshButtons(ui); failed = false; ui.click('Retry'); await ui.flush(); assert.doesNotMatch(ui.text(), /Tags unavailable/);
-    const pending = deferred(); ui.setHandler(route => route === '/tag-definitions' ? pending.promise : undefined); ui.poll(); ui.unmount(); pending.resolve([]); await settle(); await settle(); assert.equal(lifecycle.updatesAfterUnmount(), 0);
+    let failed = true; const ui = await start('Tags', route => route === '/tag-engineering/definitions' && failed ? Promise.reject(new Error('Tags unavailable')) : undefined); assert.match(ui.text(), /Tags unavailable/); noRefreshButtons(ui); failed = false; ui.click('Retry'); await ui.flush(); assert.doesNotMatch(ui.text(), /Tags unavailable/);
+    const pending = deferred(); ui.setHandler(route => route === '/tag-engineering/definitions' ? pending.promise : undefined); ui.poll(); ui.unmount(); pending.resolve([]); await settle(); await settle(); assert.equal(lifecycle.updatesAfterUnmount(), 0);
   });
   await check('Connection Cancel appears only for a draft and failed cancellation preserves edited credentials', async () => {
     let fail = true; const ui = await start('Connections', route => route === '/connections' && fail ? Promise.reject(new Error('Saved connections unavailable')) : undefined); noRefreshButtons(ui); assert.ok(!ui.all().some(node => node.type === 'button' && text(node) === 'Cancel changes'));
@@ -207,15 +257,14 @@ try {
     assert.equal(reads(ui, '/connections'), initial); assert.equal(ui.changed.length, 0); assert.equal(ui.notices.length, 0); assert.equal(lifecycle.updatesAfterUnmount(), 0);
   });
   await check('An older parent poll cannot restore a deleted connection after the child applies its result', async () => {
-    const delayedTags = deferred(); let pendingPoll = false, current = connections();
+    const delayedConnections = deferred(); let pendingPoll = false, current = connections();
     const ui = await start('GatewayConfiguration', (route, method) => {
-      if (route === '/connections') return structuredClone(current);
-      if (route === '/tag-engineering/values' && pendingPoll) return delayedTags.promise;
+      if (route === '/connections') { if (pendingPoll) { pendingPoll = false; return delayedConnections.promise; } return structuredClone(current); }
       if (route === '/connections/db' && method === 'DELETE') { current = []; return null; }
     });
     ui.click('Connections'); await ui.flush(); pendingPoll = true; ui.poll(); await settle();
     ui.click('Delete connection'); ui.click('Delete connection'); await ui.flush(); assert.match(ui.text(), /Connect to your plant/);
-    delayedTags.resolve([]); await ui.flush(); assert.match(ui.text(), /Connect to your plant/); assert.doesNotMatch(ui.text(), /Production database/);
+    delayedConnections.resolve(connections()); await ui.flush(); assert.match(ui.text(), /Connect to your plant/); assert.doesNotMatch(ui.text(), /Production database/);
   });
   await check('Delete fallback retains connections added by a newer parent poll while deletion was pending', async () => {
     const deletion = deferred(); let deleted = false, current = connections();
@@ -232,7 +281,7 @@ try {
     const device = { id: 'plc', name: 'Synthetic PLC', type: 'modbus-tcp', revision: 1, device: { host: '127.0.0.1', port: 502, points: [point] } }, pending = deferred();
     const ui = await start('GatewayConfiguration', route => route === '/connections' ? [device] : undefined);
     ui.click('Connections'); await ui.flush(); ui.click('Register map'); ui.click('Import / edit JSON'); ui.chooseFile({ size: 100, text: () => pending.promise });
-    ui.click('Tags'); await ui.flush(); pending.resolve(JSON.stringify([{ ...point, id: 'obsolete-import' }])); await ui.flush(); assert.equal(lifecycle.updatesAfterUnmount(), 0);
+    ui.click('Public OPC certificates'); await ui.flush(); pending.resolve(JSON.stringify([{ ...point, id: 'obsolete-import' }])); await ui.flush(); assert.equal(lifecycle.updatesAfterUnmount(), 0);
     ui.click('Connections'); await ui.flush(); ui.click('Register map'); ui.click('Import / edit JSON'); assert.equal(JSON.parse(ui.field('Points JSON').props.value)[0].id, 'speed'); assert.doesNotMatch(ui.text(), /obsolete-import/);
   });
   await check('Connection cancellation and saved-revision refresh fence register-map preparation without changing saved points', async () => {
@@ -281,9 +330,9 @@ try {
     const raw = deferred(), listingReply = deferred(); const ui = await start('OpcCertificates', route => route === '/gateway/opcua/certificates' ? listingReply.promise : undefined, { settled: false }); ui.chooseFile(publicFile(() => raw.promise)); ui.unmount(); raw.resolve(publicBytes.slice().buffer); listingReply.resolve(listing()); await settle(); await settle(); assert.equal(lifecycle.updatesAfterUnmount(), 0); assert.equal(ui.timers(), 0);
   });
   await check('Configuration, Tags, Connections and certificate lifecycles recover from Strict Mode effect replay', async () => {
-    for (const [name, expectedTimers] of [['GatewayConfiguration', 2], ['Tags', 1], ['Connections', 0], ['OpcCertificates', 1]]) {
+    for (const [name, expectedTimers] of [['GatewayConfiguration', 1], ['Tags', 1], ['Connections', 0], ['OpcCertificates', 1]]) {
       const ui = await start(name); ui.replay(); await ui.flush(); assert.equal(ui.timers(), expectedTimers); assert.equal(lifecycle.updatesAfterUnmount(), 0); noRefreshButtons(ui); ui.unmount();
     }
   });
   console.log(`${checks} gateway configuration lifecycle groups passed.`);
-} finally { lifecycle.unmount(); globalThis.window = nativeWindow; globalThis.document = nativeDocument; delete globalThis.__configurationApi; }
+} finally { lifecycle.unmount(); globalThis.window = nativeWindow; globalThis.document = nativeDocument; globalThis.sessionStorage=nativeStorage; delete globalThis.__configurationApi; }

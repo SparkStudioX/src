@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { collectDesignerDiagnostics, filterDesignerDiagnostics } from "./designerDiagnostics";
+import { collectModelDiagnostics } from "./designerModel";
+import { getModelInstances, getModelTypes, modelChangedEvent } from "./modelApi";
+import type { DesignerDiagnostic } from "./designerDiagnostics";
 import type { DesignerDiagnosticOptions, DiagnosticCategory } from "./designerDiagnostics";
 import type { ComponentEventCoordinator } from "./componentEventModel";
 import type { SearchTarget } from "./projectSearch";
 import "./designerDiagnostics.css";
 
-const categories: ["all" | DiagnosticCategory, string][] = [["all", "All categories"], ["binding", "Property bindings"], ["query", "Query properties"], ["reference", "Resource references"], ["quality", "Tag quality / connection"], ["browser-event", "Browser component events"]];
+const categories: ["all" | DiagnosticCategory, string][] = [["all", "All categories"], ["binding", "Property bindings"], ["query", "Query properties"], ["reference", "Resource references"], ["quality", "Tag quality / connection"], ["browser-event", "Browser component events"], ["model", "Model requirements"]];
 const labels = new Map(categories);
 export function DesignerDiagnostics({ eventCoordinator, onOpen, onClose, ...options }: Omit<DesignerDiagnosticOptions, "events"> & {
   eventCoordinator?: ComponentEventCoordinator; onOpen: (target: SearchTarget) => void; onClose: () => void;
 }) {
   const capture = () => collectDesignerDiagnostics({ ...options, events: eventCoordinator?.snapshot() });
   const [snapshot, setSnapshot] = useState(capture);
+  const [modelRows, setModelRows] = useState<DesignerDiagnostic[]>([]), [modelError, setModelError] = useState(""), [modelLoading, setModelLoading] = useState(false), [modelRevision, setModelRevision] = useState(0);
   const [category, setCategory] = useState<"all" | DiagnosticCategory>("all");
   const [level, setLevel] = useState("all"), [term, setTerm] = useState(""), [page, setPage] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -19,15 +23,27 @@ export function DesignerDiagnostics({ eventCoordinator, onOpen, onClose, ...opti
     const focus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialog.current?.showModal(); return () => focus?.focus();
   }, []);
-  const filtered = filterDesignerDiagnostics(snapshot.rows, category, term, level);
+  useEffect(() => { const refresh = () => setModelRevision(value => value + 1); window.addEventListener(modelChangedEvent, refresh); return () => window.removeEventListener(modelChangedEvent, refresh); }, []);
+  useEffect(() => {
+    const controller = new AbortController(); setModelRows([]); setModelError(""); setModelLoading(false);
+    if (!(options.project.templates ?? []).some(template => Object.keys(template.modelParameters ?? {}).length)) return;
+    setModelLoading(true);
+    Promise.all([getModelTypes(controller.signal), getModelInstances(undefined, controller.signal)]).then(([types, instances]) => setModelRows(collectModelDiagnostics(options.project, types, instances)))
+      .catch(reason => { if (!controller.signal.aborted) setModelError(reason instanceof Error ? reason.message : "Model requirements could not be checked."); })
+      .finally(() => { if (!controller.signal.aborted) setModelLoading(false); });
+    return () => controller.abort();
+  }, [options.project, modelRevision]);
+  const allRows = [...snapshot.rows, ...modelRows];
+  const filtered = filterDesignerDiagnostics(allRows, category, term, level);
   const pages = Math.max(1, Math.ceil(filtered.length / 50)), currentPage = Math.min(page, pages - 1);
   const visible = filtered.slice(currentPage * 50, (currentPage + 1) * 50);
-  const counts = { errors: snapshot.rows.filter(row => row.level === "error").length, warnings: snapshot.rows.filter(row => row.level === "warning").length };
+  const counts = { errors: allRows.filter(row => row.level === "error").length, warnings: allRows.filter(row => row.level === "warning").length };
   return <dialog ref={dialog} className="designer-diagnostics-dialog" aria-labelledby="designer-diagnostics-title" onCancel={event => { event.preventDefault(); onClose(); }} onKeyDown={event => {
     event.stopPropagation(); if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") event.preventDefault();
   }}>
     <header><div><small>DESIGNER · LOCAL SNAPSHOT</small><h2 id="designer-diagnostics-title">Project diagnostics</h2><p>Inspect current form bindings, structured references, tag quality and retained component-event messages.</p></div><button type="button" className="button small" onClick={onClose}>Close</button></header>
-    <section className="designer-diagnostics-context"><strong>{snapshot.documentName}</strong><span>Captured {new Date(snapshot.capturedAt).toLocaleTimeString()} · {counts.errors} errors · {counts.warnings} warnings</span><button type="button" className="button small" onClick={() => { setSnapshot(capture()); setPage(0); }}>Refresh snapshot</button></section>
+    <section className="designer-diagnostics-context"><strong>{snapshot.documentName}</strong><span>Captured {new Date(snapshot.capturedAt).toLocaleTimeString()} · {counts.errors} errors · {counts.warnings} warnings</span><button type="button" className="button small" onClick={() => { setSnapshot(capture()); setModelRevision(value => value + 1); setPage(0); }}>Refresh snapshot</button></section>
+    {modelLoading && <p role="status">Checking readable gateway model requirements…</p>}{modelError && <p role="alert">Model requirements were not checked: {modelError}</p>}
     <div className="designer-diagnostics-filters"><label>Category<select value={category} onChange={event => { setCategory(event.target.value as typeof category); setPage(0); }}>{categories.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label>Severity<select value={level} onChange={event => { setLevel(event.target.value); setPage(0); }}><option value="all">All severities</option><option value="error">Errors</option><option value="warning">Warnings</option><option value="info">Information</option></select></label>
       <label>Filter messages<input value={term} maxLength={256} onChange={event => { setTerm(event.target.value); setPage(0); }} placeholder="Component, property or message" /></label></div>

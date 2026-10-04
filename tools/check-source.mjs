@@ -16,6 +16,8 @@ const rootFiles = new Set([
   'Dockerfile', 'compose.yaml', 'Directory.Build.props', 'Directory.Build.targets', '.editorconfig', 'ruff.toml', 'global.json', 'NuGet.Config',
 ]);
 const webFiles = new Set([
+  'apps/web/check-model-readiness.mjs', 'apps/web/check-model-operations-ui.mjs',
+  'apps/web/check-designer-model.mjs', 'apps/web/check-model-workspace.mjs', 'apps/web/check-model-builder.mjs', 'apps/web/check-model-builder-ui.mjs', 'apps/web/check-model-navigation.mjs',
   'apps/web/check-source-connections.mjs',
   'apps/web/src/bindingDiagnostics.tsx',
   'apps/web/check-visitor-checkin.mjs',
@@ -30,6 +32,7 @@ const webFiles = new Set([
   'apps/web/check-security-settings.mjs',
   'apps/web/test-module-files.mjs',
   'apps/web/src/runtimeProperties.json',
+  'apps/web/src/modelParameterContract.json',
   'apps/web/check-runtime-properties.mjs',
   'apps/web/check-resilience.mjs', 'apps/web/check-process-data-settings.mjs', 'apps/web/check-opc-certificates.mjs',
   'apps/web/check-input-validation.mjs', 'apps/web/check-table-batch-editor.mjs', 'apps/web/check-view-containers.mjs',
@@ -88,12 +91,14 @@ const webFiles = new Set([
   'apps/web/check-input-state-bindings.mjs', 'apps/web/check-input-state-authoring.mjs',
 ]);
 const toolFiles = new Set([
+  'test-model-operations-workshop.mjs',
   // Independently authored mandatory build gates, orchestration and analyzer policy.
   'build-context.mjs', 'build-quality.mjs', 'build-quality.test.mjs', 'quality-gates.mjs', 'dotnet-environment.mjs', 'lint-backend.mjs', 'test-build-hooks.mjs',
   'lint-python.py', 'ruff-runtime.json', 'analyze-python-complexity.py', 'test-backend-lint.mjs',
   'check-complexity.mjs', 'complexity-policy.mjs', 'complexity.test.mjs', 'complexity-baseline.json',
   'complexity/SparkStudio.Complexity.csproj', 'complexity/Program.cs',
   'run-data-source-simulators.mjs', 'load-data-sources-example.mjs', 'test-data-sources-workshop.mjs',
+  'uns-model-fixture.mjs', 'test-uns-model-workshop.mjs',
   // Authored Linux container packaging, local administration and release checks.
   'docker-entrypoint.py', 'test-docker-entrypoint.py', 'container-admin.py', 'test-container-admin.py',
   'package-notice-supplements.mjs', 'collect-docker-runtime.py', 'write-docker-notices.mjs', 'test-docker-notices.mjs',
@@ -163,6 +168,7 @@ const toolFiles = new Set([
   'test-input-state-bindings.mjs',
 ]);
 const architectureDocs = new Set([
+  'UNS_MODEL.md', 'UNS_MODEL_SETUP.md', 'UNS_MODEL_WORKSPACE.md',
   'BUILD_PROCESS.md',
   'MQTT_SETUP.md', 'MTCONNECT_SETUP.md', 'I3X_SETUP.md',
   'DOCKER_RELEASE.md',
@@ -206,6 +212,15 @@ const architectureDocs = new Set([
   'TAG_ENGINEERING.md', 'NETWORK_ACCESS.md',
 ]);
 const explicitFiles = new Set([
+  // Independently authored model contracts, source mappings, publishing and their synthetic regression fixtures.
+  'src/SparkStudio.Gateway.Tests/ModelContractChecks.cs', 'src/SparkStudio.Gateway.Tests/ModelManagementChecks.cs',
+  'src/SparkStudio.Gateway.Tests/ModelPublishingChecks.cs', 'src/SparkStudio.Gateway.Tests/ModelPublishingBroker.cs',
+  'examples/model-operations.json', 'docs/architecture/UNS_MODEL_OPERATIONS.md', 'docs/architecture/MODEL_PUBLISHING.md',
+  // Authored UNS read scopes, v3 engine migration and portable Designer model tests.
+  'src/SparkStudio.Gateway.Tests/UnsModelChecks.cs', 'src/SparkStudio.Gateway.Tests/ModelReadChecks.cs',
+  'src/SparkStudio.Gateway.Tests/ModelReadApiChecks.cs',
+  'src/SparkStudio.Gateway.Tests/ModelTemplateParameterChecks.cs',
+  'examples/uns-model.json', 'examples/uns-faceplates.json',
   'src/SparkStudio.Gateway.Tests/ContainerHttpsRedirectChecks.cs',
   'src/SparkStudio.Gateway/packages.linux-x64.lock.json', 'src/SparkStudio.Gateway/packages.linux-arm64.lock.json',
   'src/SparkStudio.Connectors/packages.linux-x64.lock.json', 'src/SparkStudio.Connectors/packages.linux-arm64.lock.json',

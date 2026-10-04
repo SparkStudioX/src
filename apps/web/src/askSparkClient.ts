@@ -1,7 +1,7 @@
 import { api, ApiError } from "./api";
 import { previewRequestState } from "./previewRequest";
 
-export type AskSparkContext = Record<string, unknown> & { surface?: string; projectId?: string; projectName?: string; documentId?: string; documentName?: string; documentKind?: string; selectedComponentIds?: string[]; revision?: number; section?: string; connectionId?: string; connectionName?: string; connectionSection?: string; connectionHasUnsavedChanges?: boolean };
+export type AskSparkContext = Record<string, unknown> & { surface?: string; projectId?: string; projectName?: string; documentId?: string; documentName?: string; documentKind?: string; selectedComponentIds?: string[]; revision?: number; section?: string; connectionId?: string; connectionName?: string; connectionSection?: string; connectionHasUnsavedChanges?: boolean; modelView?: string; modelType?: string; modelSelection?: string[]; modelDraftSummary?: string; modelResolution?: string[] };
 export interface AskSparkToolCall { id: string; name: string; arguments: Record<string, unknown>; kind: string; target?: string; confirmation?: boolean | string; parallelSafe?: boolean; approvalToken?: string; authorized?: boolean }
 export interface AskSparkToolImage { data: string; mimeType: string; name?: string; id?: string }
 export interface AskSparkToolResult { id: string; name: string; result: unknown; images?: AskSparkToolImage[] }
@@ -20,7 +20,7 @@ export const askSparkErrorCanRefreshStatus = (error: unknown) => error instanceo
 
 /** Only bounded JSON context is transmitted. Secrets and execution callbacks stay outside it. */
 export function captureAskSparkContext(context: AskSparkContext): AskSparkContext {
-  const allowed = ["surface", "editorAvailable", "snapshotToken", "projectId", "projectName", "documentId", "documentName", "documentKind", "selectedComponentIds", "selectedComponentNames", "revision", "scriptsRevision", "section", "connectionId", "connectionName", "connectionSection", "connectionHasUnsavedChanges", "tagPaths", "selection", "screenId", "screenName", "templateId", "unsavedChanges", "availableImageIds", "previewActive", "previewMode"];
+  const allowed = ["surface", "editorAvailable", "snapshotToken", "projectId", "projectName", "documentId", "documentName", "documentKind", "selectedComponentIds", "selectedComponentNames", "revision", "scriptsRevision", "section", "connectionId", "connectionName", "connectionSection", "connectionHasUnsavedChanges", "modelView", "modelType", "modelSelection", "modelDraftSummary", "modelResolution", "tagPaths", "selection", "screenId", "screenName", "templateId", "unsavedChanges", "availableImageIds", "previewActive", "previewMode"];
   const captured: AskSparkContext = {};
   for (const key of allowed) {
     const value = context[key];
@@ -57,6 +57,7 @@ export function contextChips(context: AskSparkContext): { key: string; label: st
   const selected = context.selectedComponentIds;
   if (selected?.length) chips.push({ key: "selection", label: `${selected.length} selected`, remove: ["selectedComponentIds", "selectedComponentNames"] });
   if (context.section) chips.push({ key: "section", label: context.section, remove: ["section", "connectionId", "connectionName", "connectionSection", "connectionHasUnsavedChanges", "tagPaths"] });
+  if (context.modelView) chips.push({ key: "model", label: `Models · ${context.modelView}${context.modelType ? ` · ${context.modelType}` : ""}`, remove: ["modelView", "modelType", "modelSelection", "modelDraftSummary", "modelResolution"] });
   if (context.connectionId || context.connectionName) chips.push({ key: "connection", label: `${context.connectionName || context.connectionId}${context.connectionHasUnsavedChanges ? " · unsaved" : ""}`, remove: ["connectionId", "connectionName", "connectionSection", "connectionHasUnsavedChanges"] });
   return chips;
 }

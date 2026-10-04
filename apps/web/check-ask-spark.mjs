@@ -19,7 +19,8 @@ const previewUrl = loadSource('previewRequest.ts'), preview = await import(previ
 const clientUrl = loadSource('askSparkClient.ts', { './previewRequest': previewUrl }), client = await import(clientUrl);
 const imagesUrl = loadSource('askSparkImages.ts'), images = await import(imagesUrl);
 const retainedUrl = loadSource('askSparkRetainedImages.ts'), retained = await import(retainedUrl);
-const navigationUrl = loadSource('askSparkProjectNavigation.ts'), navigation = await import(navigationUrl);
+const modelNavigationUrl = loadSource('modelNavigation.ts');
+const navigationUrl = loadSource('askSparkProjectNavigation.ts', {'./modelNavigation':modelNavigationUrl}), navigation = await import(navigationUrl);
 const cropUrl = moduleFile('export const cropRetainedImages=async({crops,resolveImage})=>({created:crops.map(crop=>({sourceImageId:resolveImage(crop.sourceImageId).id,name:crop.name}))});');
 const api = await import(mockApi);
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -67,6 +68,11 @@ await check('captured context is bounded, copied, includes snapshot proof, and e
   const original={surface:'designer',editorAvailable:true,projectId:'project-a',snapshotToken:'snapshot-1',selectedComponentIds:['one'],password:'secret',resolveSecret(){},documentName:'a'.repeat(700),revision:3,nested:{secret:'never'}};
   const captured=client.captureAskSparkContext(original);original.selectedComponentIds.push('two');assert.deepEqual(captured.selectedComponentIds,['one']);assert.equal(captured.snapshotToken,'snapshot-1');assert.equal(captured.documentName.length,512);assert.equal(captured.password,undefined);assert.equal(captured.resolveSecret,undefined);assert.equal(captured.nested,undefined);
 });
+await check('Model context includes only bounded workspace display and resolution data', () => {
+  const context=client.captureAskSparkContext({section:'models',modelView:'build',modelType:'CNC@2',modelSelection:['instance-a'],modelDraftSummary:'3 types, 3 instances',modelResolution:Array.from({length:102},()=> 'r'.repeat(600)),modelDraft:{credentials:'excluded'}});
+  assert.equal(context.modelView,'build');assert.equal(context.modelType,'CNC@2');assert.equal(context.modelResolution.length,100);assert.equal(context.modelResolution[0].length,512);assert.equal(context.modelDraft,undefined);
+  assert.ok(client.contextChips(context).some(chip=>chip.key==='model'&&chip.label==='Models · build · CNC@2'));
+});
 await check('image size/count/type/aggregate limits and actual signatures are enforced before upload', () => {
   assert.equal(images.imageAttachmentError([],100,'image/png'),undefined);assert.match(images.imageAttachmentError([],100,'image/svg+xml'),/PNG/);assert.match(images.imageAttachmentError([],6*1024*1024,'image/png'),/5 MiB/);assert.match(images.imageAttachmentError(Array.from({length:4},()=>({data:''})),1,'image/png'),/four/);assert.match(images.imageAttachmentError([{data:'x'.repeat(12*1024*1024)}],1,'image/png'),/combined/);
   assert.equal(images.validImageSignature(Uint8Array.from([137,80,78,71,13,10,26,10]),'image/png'),true);assert.equal(images.validImageSignature(new TextEncoder().encode('GIF89a'),'image/png'),false);assert.equal(images.validImageSignature(Uint8Array.from([255,216,255]),'image/jpeg'),true);assert.equal(images.validImageSignature(new TextEncoder().encode('RIFFxxxxWEBP'),'image/webp'),true);
@@ -81,7 +87,8 @@ const hooksUrl=moduleFile(`let slots=[],index=0,pending=[];export const begin=()
 const hooks=await import(hooksUrl), authUrl=moduleFile(`let current={user:{id:'test-one'},audience:'engineering',epoch:1};export const useAuth=()=>current;export const setAuth=value=>{current=value};`), auth=await import(authUrl);
 const privateUrl=moduleFile('const cancel=()=>{};export const useAskSparkPrivateInputs=()=>({cancel,dialog:null,resolveSecret:async()=>({password:"private"}),resolveAttachment:async()=>new Blob()});');
 const gatewayUrl=moduleFile('export const supportsGatewayTool=()=>false;export const executeGatewayTool=async()=>{throw new Error("unexpected gateway call")};');
-const providerUrl=loadSource('askSparkContext.tsx',{react:hooksUrl,'./Auth':authUrl,'./askSparkPrivateInputs':privateUrl,'./askSparkGatewayTools':gatewayUrl,'./askSparkClient':clientUrl,'./askSparkImages':imagesUrl,'./askSparkRetainedImages':retainedUrl,'./askSparkProjectNavigation':navigationUrl,'./askSparkImageCrops':cropUrl});
+const modelDraftUrl=moduleFile('export const clearModelDraft=()=>sessionStorage.removeItem("sparkstudio.model-draft");');
+const providerUrl=loadSource('askSparkContext.tsx',{react:hooksUrl,'./Auth':authUrl,'./askSparkPrivateInputs':privateUrl,'./askSparkGatewayTools':gatewayUrl,'./askSparkClient':clientUrl,'./askSparkImages':imagesUrl,'./askSparkRetainedImages':retainedUrl,'./askSparkProjectNavigation':navigationUrl,'./askSparkImageCrops':cropUrl,'./modelWorkspace':modelDraftUrl,'./modelNavigation':modelNavigationUrl});
 const {AskSparkProvider}=await import(providerUrl);
 globalThis.window={addEventListener(){},removeEventListener(){}};
 let state;function render(){hooks.begin();state=AskSparkProvider({children:null}).props.value;return state;}
@@ -135,7 +142,7 @@ await check('resource context priority is independent of parent registration ord
 });
 await check('pinned and removed connection chips do not follow navigation while active workspace still updates',async()=>{
   await beginProvider(async()=>status);let selected='one';
-  state.registerContext('gateway',()=>({surface:'gateway',section:'configuration',editorAvailable:false}));state.registerContext('resource:connection',()=>client.connectionAskSparkContext(selected,`Connection ${selected}`,'connection',false),20);render();
+  state.registerContext('gateway',()=>({surface:'gateway',section:'data',editorAvailable:false}));state.registerContext('resource:connection',()=>client.connectionAskSparkContext(selected,`Connection ${selected}`,'connection',false),20);render();
   state.togglePinned();selected='two';state.refreshContext();render();assert.equal(state.context.connectionId,'one');assert.equal(state.activeContext.connectionId,'two');assert.equal(state.context.editorAvailable,false);
   state.removeContext(client.contextChips(state.context).find(chip=>chip.key==='connection').remove);render();assert.equal(state.context.connectionId,undefined);assert.equal(state.context.connectionSection,undefined);assert.equal(state.context.section,'connections');
   state.refreshContext();render();assert.equal(state.context.connectionId,undefined);state.restoreContext();render();assert.equal(state.context.connectionId,'two');assert.equal(state.pinned,false);

@@ -24,7 +24,7 @@ The command permission is `commands` in project grant JSON and effective session
 | Audit | Read the security activity trail. |
 | Sessions | Inspect authenticated sessions and revoke selected sessions. |
 
-Capabilities are independent Booleans in `gatewayCapabilities`. A capability-only account can sign in to engineering without a project Design grant. Its Gateway Settings navigation exposes its granted sections. Configuration has a standalone shared-resource editor, so managing tags and connections does not depend on access to an application Designer.
+Capabilities are independent Booleans in `gatewayCapabilities`. A capability-only account can sign in to engineering without a project Design grant. Its Gateway Settings navigation exposes its granted sections. The Configuration capability permits shared connection administration through **Gateway Settings → Data → Connections** and certificate administration through **Data → Public OPC certificates**, independently of project Design grants. The permission is still named Configuration; Data is the navigation label.
 
 The shared overview redacts session identities without Sessions, process metrics without Diagnostics, and resource names without Diagnostics or Configuration. Account administration, project grant/tag-scope administration, project creation/import/archive, draft Python execution and recovery approval remain administrator tasks. Backup access does not grant recovery approval. Project resource publication continues to require the project Publish grant.
 
@@ -54,7 +54,7 @@ Use only the disposable workshop project, and preserve other projects' scopes.
 
 Create separate temporary accounts from the fixture’s `roles` matrix, granting project rights only on this workshop. Sign in as Viewer to read the value and verify the action is unavailable. Sign in as Operator to set the synthetic value to 1. Inspect that Equipment commands remains unchecked for this account. The Command operator role demonstrates the separate grant without issuing a physical command.
 
-Create each capability-only account without project grants. Sign in to engineering and use Settings: a Diagnostic observer sees diagnostics; a Configuration engineer sees shared configuration and deployment; Backup operator, Auditor and Session manager see their respective tasks. None can administer accounts. Use the Session manager to revoke the Viewer session, then verify its next authenticated request requires sign-in. Remove an account’s capability as administrator and verify its existing session expires.
+Create each capability-only account without project grants. Sign in to engineering and use Settings: a Diagnostic observer sees diagnostics; a Configuration engineer sees Data and Deployment, along with the other settings allowed by that capability; Backup operator, Auditor and Session manager see their respective tasks. None can administer accounts. Use the Session manager to revoke the Viewer session, then verify its next authenticated request requires sign-in. Remove an account’s capability as administrator and verify its existing session expires.
 
 Project packages contain project resources, not users, credentials, gateway capabilities or gateway tags. After importing the workshop package into another gateway, recreate the tag prerequisite and scoped accounts, then publish explicitly. The role matrix is an instructional setup resource, not an identity-store export.
 

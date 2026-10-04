@@ -21,7 +21,7 @@ This client reads observations, conditions, DATA_SET and TABLE values. It does n
 
 ## 1. Create and test the connection
 
-1. Open **Gateway Settings → Configuration → Connections**.
+1. Open **Gateway Settings → Data → Connections**.
 2. Choose **New Connection → MTConnect agent**.
 3. Set **Connection name** to a recognizable name such as `Mill01 agent`, and leave **Connection enabled** checked.
 4. Set **Base URL** to your agent's base address, for example `https://agent.example.com`. Include any required base path, but do not append `/probe`, `/current` or `/sample`; SparkStudio requests those resources.

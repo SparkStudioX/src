@@ -106,6 +106,7 @@ public static class TagDefinitionValidator
     public static JsonNode MemoryValue(string type, JsonElement value)
     {
         if (!DataTypes.Contains(type)) throw new ArgumentException("Unsupported memory tag dataType.");
+        if (type == "Int64" && value.ValueKind == JsonValueKind.String) return JsonValue.Create(TagModelWire.ParseInt64(value.GetString()!))!;
         if (type == "Boolean")
         {
             if (value.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) throw new ArgumentException("Boolean tags require a Boolean value.");
@@ -118,7 +119,18 @@ public static class TagDefinitionValidator
         }
         if (value.ValueKind != JsonValueKind.Number) throw new ArgumentException($"{type} tags require a numeric value.");
         if (type is "Int16" or "UInt16" or "Int32" or "UInt32" or "Int64")
+            return IntegerValue(type, value);
+        if (!value.TryGetDouble(out var floating) || !double.IsFinite(floating))
+            throw new ArgumentException($"{type} tags require a finite numeric value.");
+        if (type == "Float")
         {
+            if (floating < -float.MaxValue || floating > float.MaxValue) throw new ArgumentException("Memory tag value is outside the Float range.");
+            return JsonValue.Create((float)floating)!;
+        }
+        return JsonValue.Create(floating)!;
+    }
+    private static JsonValue IntegerValue(string type, JsonElement value)
+    {
             var number = Integer(value);
             var minimum = type is "UInt16" or "UInt32" ? 0 : type == "Int16" ? short.MinValue : type == "Int32" ? int.MinValue : long.MinValue;
             var maximum = type == "UInt16" ? ushort.MaxValue : type == "UInt32" ? uint.MaxValue : type == "Int16" ? short.MaxValue : type == "Int32" ? int.MaxValue : long.MaxValue;
@@ -131,15 +143,6 @@ public static class TagDefinitionValidator
                 "UInt32" => JsonValue.Create((uint)number)!,
                 _ => JsonValue.Create((long)number)!
             };
-        }
-        if (!value.TryGetDouble(out var floating) || !double.IsFinite(floating))
-            throw new ArgumentException($"{type} tags require a finite numeric value.");
-        if (type == "Float")
-        {
-            if (floating < -float.MaxValue || floating > float.MaxValue) throw new ArgumentException("Memory tag value is outside the Float range.");
-            return JsonValue.Create((float)floating)!;
-        }
-        return JsonValue.Create(floating)!;
     }
 
     private static long Integer(JsonElement value)

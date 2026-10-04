@@ -9,7 +9,7 @@ using System.Text;
 
 namespace SparkStudio.Connectors;
 
-// Independently authored receive-only MQTT client. The receive allocation gate belongs here,
+// Independently authored bounded MQTT client. The receive allocation gate belongs here,
 // before reading any body, rather than behind a library's already allocated publish queue.
 internal sealed class SourceMqttWire : IAsyncDisposable
 {
@@ -164,6 +164,28 @@ internal sealed class SourceMqttWire : IAsyncDisposable
             else if (ack.Length != 2) throw new ProtocolException("Invalid UNSUBACK.");
         }
     }
+    internal async Task PublishAsync(string topic, ReadOnlyMemory<byte> payload, int qos, bool retain, CancellationToken ct)
+    {
+        if (qos is not (0 or 1) || string.IsNullOrEmpty(topic) || topic.Contains('+') || topic.Contains('#') || topic.Any(char.IsControl))
+            throw new ArgumentException("Publishing requires a concrete topic and QoS 0 or 1.");
+        if (payload.Length > Math.Min(limits.PayloadBytes, 256 * 1024) || Utf8.GetByteCount(topic) > 4096)
+            throw new ArgumentException("MQTT publication exceeds its local byte limit.");
+        var id = qos == 1 ? AllocateId() : (ushort)0;
+        using var body = new MemoryStream(); WriteString(body, topic);
+        if (qos == 1) WriteU16(body, id);
+        if (v5) body.WriteByte(0);
+        body.Write(payload.Span);
+        var header = (byte)(0x30 | (qos << 1) | (retain ? 1 : 0));
+        if (qos == 0) { await SendAsync(header, body.ToArray(), ct); return; }
+        var ack = await SendAcknowledgedAsync(id, header, body.ToArray(), ct);
+        ValidatePublishAcknowledgment(ack);
+    }
+    private void ValidatePublishAcknowledgment(byte[] ack)
+    {
+        if (!v5 && ack.Length != 2) throw new ProtocolException("Invalid PUBACK.");
+        if (v5 && ack.Length > 2 && ack[2] >= 0x80) throw new RejectedException("MQTT broker rejected the publication (reason " + ack[2] + ").");
+        if (v5 && ack.Length > 3) { var offset = 3; SkipProperties(ack, ref offset); if (offset != ack.Length) throw new ProtocolException("Invalid PUBACK properties."); }
+    }
     private IEnumerable<(string Filter, int Qos)[]> SubscriptionBatches(IReadOnlyList<(string Filter, int Qos)> filters)
     {
         var batch = new List<(string Filter, int Qos)>(); var bytes = 8; var cap = Math.Min(limits.PacketBytes, 272 * 1024);
@@ -180,7 +202,7 @@ internal sealed class SourceMqttWire : IAsyncDisposable
     private async Task<byte[]> SendAcknowledgedAsync(ushort id, byte header, byte[] body, CancellationToken ct)
     {
         var completion = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
-        lock (acknowledgments) acknowledgments.Add(id, (header == 0x82 ? 9 : 11, completion));
+        lock (acknowledgments) acknowledgments.Add(id, (header >> 4 == 3 ? 4 : header == 0x82 ? 9 : 11, completion));
         try { await SendAsync(header, body, ct); return await completion.Task.WaitAsync(ct); }
         finally { lock (acknowledgments) acknowledgments.Remove(id); }
     }
@@ -213,7 +235,7 @@ internal sealed class SourceMqttWire : IAsyncDisposable
                     if (qos == 1) await SendAsync(0x40, [(byte)(id >> 8), (byte)id], ct);
                     if (sizeViolations >= 3) throw new ProtocolException("Repeated MQTT payload size violations; correct the publisher or local profile.");
                 }
-                else if (type is 9 or 11)
+                else if (IsAcknowledgment(type))
                 {
                     if ((packet.Header & 15) != 0 || packet.Body.Length < 2) throw new ProtocolException("Invalid MQTT acknowledgment.");
                     var offset = 0; var id = ReadU16(packet.Body, ref offset);
@@ -232,6 +254,7 @@ internal sealed class SourceMqttWire : IAsyncDisposable
             Interlocked.Exchange(ref currentBody, 0); Interlocked.Exchange(ref currentPacket, 0); stop.Cancel(); throw;
         }
     }
+    private static bool IsAcknowledgment(int type) => type is 4 or 9 or 11;
     private async Task HeartbeatAsync(CancellationToken ct)
     {
         try

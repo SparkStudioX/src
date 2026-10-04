@@ -2,8 +2,9 @@
   "name": "Reusable unit model workshop",
   "tagPackage": {
     "format": "sparkstudio.tags",
-    "version": 2,
+    "version": 3,
     "tags": [],
+    "hierarchy": [],
     "scanGroups": [{ "name": "WorkshopRefresh", "publishingIntervalMs": 200, "enabled": true }],
     "udtDefinitions": [{
       "id": "WorkshopCounter", "version": 1,
@@ -28,7 +29,7 @@
       { "id": "east", "type": "label", "x": 580, "y": 178, "width": 492, "height": 42, "props": { "text": "EAST", "fontSize": 24 } },
       { "id": "west-progress", "type": "value", "x": 32, "y": 246, "width": 492, "height": 160, "props": { "text": "Calculated completion", "tagPath": "[default]UnitModelWorkshop/West/Progress", "unit": "%" } },
       { "id": "east-progress", "type": "value", "x": 580, "y": 246, "width": 492, "height": 160, "props": { "text": "Calculated completion", "tagPath": "[default]UnitModelWorkshop/East/Progress", "unit": "%" } },
-      { "id": "exercise", "type": "label", "x": 32, "y": 448, "width": 1048, "height": 88, "props": { "text": "In Tags → UDTs / scan groups, create version 2 with Completed default 10. Upgrade West only: its Goal override stays 16, and progress becomes 62.5%. East remains at 75% on version 1.", "fontSize": 18 } },
+      { "id": "exercise", "type": "label", "x": 32, "y": 448, "width": 1048, "height": 88, "props": { "text": "In Models → Build models, create version 2 with Completed default 10. Upgrade West only: its Goal override stays 16, and progress becomes 62.5%. East remains at 75% on version 1.", "fontSize": 18 } },
       { "id": "scope", "type": "label", "x": 32, "y": 580, "width": 1048, "height": 30, "props": { "text": "Synthetic data · Gateway setup required · No equipment connection or device command", "fontSize": 14 } }
     ]
   }]

@@ -1,4 +1,5 @@
 import type { AskSparkContext } from "./askSparkClient";
+import { modelNavigationDirty } from "./modelNavigation";
 
 let navigate: ((projectId: string) => void) | undefined;
 let contextGetter: (() => AskSparkContext) | undefined;
@@ -8,7 +9,7 @@ export function registerAskSparkNavigationContext(getter: () => AskSparkContext)
 }
 export function askSparkNavigationBlocked(): boolean {
   const context = contextGetter?.();
-  return Boolean(context?.unsavedChanges || context?.connectionHasUnsavedChanges);
+  return modelNavigationDirty() || Boolean(context?.unsavedChanges || context?.connectionHasUnsavedChanges);
 }
 export function registerAskSparkProjectNavigation(handler: (projectId: string) => void): () => void {
   navigate = handler;
@@ -20,7 +21,7 @@ export async function openAskSparkProject(projectId: string, current: () => AskS
   signal.throwIfAborted();
   const before = current();
   if (before.projectId === projectId && before.editorAvailable === true) return before;
-  if (before.unsavedChanges || before.connectionHasUnsavedChanges) throw new Error("Save or cancel the current unsaved edits before opening another project. Nothing was discarded.");
+  if (modelNavigationDirty() || before.unsavedChanges || before.connectionHasUnsavedChanges) throw new Error("Save or cancel the current unsaved edits before opening another project. Nothing was discarded.");
   if (!navigate) throw new Error("Project navigation is not ready. Try again after the workspace loads.");
   navigate(projectId);
   const deadline = Date.now() + 30000;

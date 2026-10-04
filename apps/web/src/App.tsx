@@ -47,7 +47,6 @@ import type {
   Tag,
   Template,
 } from "./types";
-import Connections from "./Connections";
 import Queries from "./Queries";
 const Scripts = lazy(() => import("./Scripts"));
 import {
@@ -58,6 +57,8 @@ import {
 } from "./templates";
 import { resolveTemplateParameters, templatePlacementError } from "./templateModel";
 import Tags from "./Tags";
+import ModelsWorkspace from "./ModelsWorkspace";
+import { recordModelNavigationLocation, requestModelNavigation, workspaceNavigationEvent } from "./modelNavigation";
 import { isInput, validateInputs } from "./inputs";
 import { useFormInputs } from "./inputStateBindings";
 import { alignSelected, arrangementCount, checkpoint, distributeSelected, duplicateSelected, expandGroupSelection, groupSelected, marqueeBounds, marqueeSelection, matchSelectedSize, moveSelected, parseGridSize, projectContent, resizeComponent, resizeGroup, restoreHistory, selectComponentType, selectionBounds, toggleGroupSelection, ungroupSelected } from "./canvasEditing";
@@ -100,6 +101,7 @@ import { LocalizationProvider, useLocaleSelection, LocaleSelector } from "./Loca
 import TranslationsEditor, { ComponentTranslationAssignment } from "./TranslationsEditor";
 import { applyLocalizationCatalog } from "./localization";
 import { DesignerDiagnostics } from "./DesignerDiagnosticsDialog";
+import { DesignerModelBrowser } from "./DesignerModelBrowser";
 import VisualStylesEditor, { ComponentStyleAssignment } from "./VisualStylesEditor";
 import { applyStyleCatalog } from "./visualStyles";
 import { usePreviewCommunication } from "./usePreviewCommunication";
@@ -111,7 +113,10 @@ import AssetLibraryDialog from "./AssetLibraryDialog";
 import { applyAssetReplacement } from "./assetLibrary";
 import "./designerDocuments.css";
 
-type Workspace = "designer" | "tags" | "connections" | "queries" | "scripts";
+type Workspace = "designer" | "tags" | "models" | "queries" | "scripts";
+const initialWorkspace = (): Workspace => { const value = new URLSearchParams(window.location.search).get("workspace"); return value === "tags" || value === "models" || value === "queries" || value === "scripts" ? value : "designer"; };
+const workspaceLabels: Record<Workspace, string> = { designer: "Designer", tags: "Tags", models: "Models", queries: "Named queries", scripts: "Scripting" };
+const workspaceNeedsTagValues = (workspace: Workspace, leftTab: string) => workspace === "tags" || workspace === "models" || workspace === "designer" && leftTab === "tags";
 type Toast = { message: string; error?: boolean };
 const palettes: { type: ComponentType; name: string; hint: string; viewKind?: ViewLayoutKind }[] = [
   { type: "alarmStatusTable", name: "Alarm status", hint: "Live conditions and operator acknowledgement" },
@@ -240,9 +245,23 @@ function UnsavedProjectNavigation({ onStay, onDiscard }: { onStay: () => void; o
 }
 
 export default function App() {
-  const { gatewayAdmin, permissions, gatewayAccess, gatewayCapabilities } = useAuth();
+  const { user, gatewayAdmin, permissions, gatewayAccess, gatewayCapabilities } = useAuth();
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
-  const [workspace, setWorkspace] = useState<Workspace>("designer");
+  const [workspace, setWorkspace] = useState<Workspace>(initialWorkspace);
+  const navigateWorkspace = (next: Workspace, after?: () => void) => {
+    const action = () => {
+      const url = new URL(window.location.href); url.searchParams.set("workspace", next);
+      if (next !== "models") { url.searchParams.delete("view"); url.searchParams.delete("type"); }
+      if (url.href !== window.location.href) window.history.pushState(window.history.state, "", url);
+      recordModelNavigationLocation(); setWorkspace(next); after?.();
+    };
+    if (next === workspace) action(); else requestModelNavigation(action);
+  };
+  useEffect(() => {
+    const pop = () => setWorkspace(initialWorkspace());
+    window.addEventListener("popstate", pop); window.addEventListener(workspaceNavigationEvent, pop);
+    return () => { window.removeEventListener("popstate", pop); window.removeEventListener(workspaceNavigationEvent, pop); };
+  }, []);
   const [scriptsVisited, setScriptsVisited] = useState(false);
   const [queriesVisited, setQueriesVisited] = useState(false);
   const [scriptsDirty, setScriptsDirty] = useState(false);
@@ -253,6 +272,7 @@ export default function App() {
   const [stylesEditorOpen, setStylesEditorOpen] = useState(false);
   const [translationsOpen, setTranslationsOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [tagBrowserView, setTagBrowserView] = useState<"raw" | "model">("raw");
   const [publicationHistoryOpen, setPublicationHistoryOpen] = useState(false);
   const [equipmentCommandsOpen, setEquipmentCommandsOpen] = useState(false);
   const [assetLibraryOpen, setAssetLibraryOpen] = useState(false);
@@ -334,7 +354,7 @@ export default function App() {
   const [previewActionBusy, setPreviewActionBusy] = useState("");
   const [leftTab, setLeftTab] = useState<"project" | "components" | "tags">("project");
   const tagDocument = useMemo(() => workspace === "designer" ? [project?.screens.find(item => item.id === screenId), project?.templates] : [], [project, screenId, workspace]);
-  const tags = useTagSnapshot(tagStore, tagDocument, project?.parameters ?? {}, workspace === "tags" || workspace === "designer" && leftTab === "tags");
+  const tags = useTagSnapshot(tagStore, tagDocument, project?.parameters ?? {}, workspaceNeedsTagValues(workspace, leftTab));
   const [tagFilter, setTagFilter] = useState("");
   const [tagSelection, setTagSelection] = useState<Tag | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -560,26 +580,26 @@ export default function App() {
   const selectedUnitCount = arrangementCount(screen?.components || [], selectedIds);
   const selectedGroupId = selection.length > 1 && selection[0].groupId && selection.every(component => component.groupId === selection[0].groupId) ? selection[0].groupId : null;
   useEffect(() => { setSelectedIds([]); setEventEditorId(null); }, [screen?.id, editingTemplateId, preview]);
-  const navigateSearch = (target: SearchTarget) => {
+  const navigateSearch = (target: SearchTarget) => requestModelNavigation(() => {
     if (!project || previewActionBusy) return;
     setSearchOpen(false);
     setSearchNavigation(null); setSearchLocation(null);
     if (target.kind === "query") {
-      setWorkspace("queries"); setQueryNavigation({ id: target.id, token: ++searchNavigationToken.current }); return;
+      navigateWorkspace("queries"); setQueryNavigation({ id: target.id, token: ++searchNavigationToken.current }); return;
     }
     if (target.kind === "script") {
-      setWorkspace("scripts"); setScriptNavigation({ id: target.id, token: ++searchNavigationToken.current }); return;
+      navigateWorkspace("scripts"); setScriptNavigation({ id: target.id, token: ++searchNavigationToken.current }); return;
     }
     if (target.kind === "project") { setProjectSettingsOpen(true); return; }
     const resource = (target.kind === "screen" ? project.screens : project.templates ?? []).find(item => item.id === target.id);
     if (!resource || target.componentId && !resource.components.some(item => item.id === target.componentId)) {
       notify("This search result no longer exists. Search again to use the current draft.", true); return;
     }
-    setWorkspace("designer"); setPreview(false); setLeftTab("project");
+    navigateWorkspace("designer"); setPreview(false); setLeftTab("project");
     if (preview || previewCommunication.session) { setPreviewPopup(null); void previewCommunication.stop().catch(() => {}); }
     openDocument({ kind: target.kind, id: target.id });
     setSearchNavigation(target);
-  };
+  });
   // Apply selection after changing documents, following the normal selection reset above.
   useEffect(() => {
     if (!searchNavigation || workspace !== "designer" || preview || !screen || screen.id !== searchNavigation.id || Boolean(editingTemplateId) !== (searchNavigation.kind === "template")) return;
@@ -860,7 +880,7 @@ export default function App() {
       selectedComponentIds: selectedIds, queries: searchQueries ?? queries, scripts: searchScripts, tags, assets,
     } : null,
     change,
-    select: (documentId, kind, ids) => { setWorkspace("designer"); openDocument({ id: documentId, kind }); setSelectedIds(ids); },
+    select: (documentId, kind, ids) => navigateWorkspace("designer", () => { openDocument({ id: documentId, kind }); setSelectedIds(ids); }),
     save: signal => save(true, signal),
     capture: async signal => {
       const canvas = askSparkCanvas.current;
@@ -886,7 +906,7 @@ export default function App() {
       signal.throwIfAborted();
       if (!screen || editorParameterError || previewActionBusy) throw new Error("Open a valid screen and finish the current action before previewing.");
       if (!preview && !await previewCommunication.start("read-only")) throw new Error("Read-only preview could not start.");
-      signal.throwIfAborted(); setWorkspace("designer"); setPreview(true); setPreviewPopup(null); setPreviewInputs({});
+      signal.throwIfAborted(); navigateWorkspace("designer", () => { setPreview(true); setPreviewPopup(null); setPreviewInputs({}); });
       return { preview: true, mode: "read-only" };
     },
     editable: [preview, previewActionBusy].every(value => !value), workspace, dirty: [dirty, scriptsDirty, queriesDirty, saving].some(Boolean),
@@ -2008,6 +2028,7 @@ export default function App() {
   }
 
   function renderProjectPane(project: Project) {
+    function selectionAcceptsTag() { return selected && acceptsInitialTag(selected.type); }
     return (<aside id="designer-project-panel" className="project-panel">
       <div className="panel-tabs">
         <button
@@ -2185,6 +2206,14 @@ export default function App() {
           <strong>Tag browser</strong>
           <span className="count-pill">{tags.length}</span>
         </div>
+        <div className="designer-model-actions"><button type="button" className="button small" aria-pressed={tagBrowserView === "raw"} onClick={() => setTagBrowserView("raw")}>Raw tags</button><button type="button" className="button small" aria-pressed={tagBrowserView === "model"} onClick={() => setTagBrowserView("model")}>Model</button></div>
+        {tagBrowserView === "model" ? <DesignerModelBrowser onSelect={path => {
+          if (selected && acceptsInitialTag(selected.type)) updateProps(tagBindingPatch(selected, path)); else if (screen) addComponent("value", path);
+        }} onCreateFaceplate={next => {
+          if ((project?.templates?.length ?? 0) >= 100) { notify("A project supports at most 100 templates.", true); return; }
+          change(current => ({ ...current, templates: [...(current.templates ?? []), next] }));
+          openTemplate(next.id); setPreview(false); notify("Created an editable faceplate. Each value uses an ordinary indirect tag binding; units and quality are included.");
+        }} /> : <>
         <label className="search-box">
           <Icon name="search" size={15} />
           <input
@@ -2250,7 +2279,7 @@ export default function App() {
               }
             >
               <Icon name="link" size={13} />
-              {selected && acceptsInitialTag(selected.type)
+              {selectionAcceptsTag()
                 ? "Bind to selection"
                 : "Add value to screen"}
             </button>
@@ -2260,6 +2289,7 @@ export default function App() {
           <Icon name="info" size={12} />
           Drag a tag onto a value to bind it.
         </p>
+        </>}
       </div>}
     </aside>);
   }
@@ -2270,15 +2300,7 @@ export default function App() {
         <span>Workspace</span>
         <Icon name="arrow" size={13} />
         <strong>
-          {workspace === "designer"
-            ? project?.name || "Designer"
-            : workspace === "tags"
-              ? "Tags"
-              : workspace === "connections"
-                ? "Connections"
-                : workspace === "queries"
-                  ? "Named queries"
-                  : "Scripting"}
+          {workspace === "designer" ? project?.name || "Designer" : workspaceLabels[workspace]}
         </strong>
         {workspace === "designer" && (
           <span className="version-pill">
@@ -2335,6 +2357,12 @@ export default function App() {
     </header>);
   }
 
+  function renderModelsWorkspace() {
+    if (!gatewayCapabilities.configuration || !user || workspace !== "models") return null;
+    return <ModelsWorkspace key={user.id} ownerId={user.id} connections={connections} tags={tags}
+      onApplied={() => { void api<Tag[]>("/tags").then(setTags).catch(() => {}); }} />;
+  }
+
   function renderWorkspace() {
     return (<div className="app-main" data-ask-spark-open={askSparkOpen}>
       {renderTopbar()}
@@ -2375,6 +2403,7 @@ export default function App() {
           )}
         </div>
       )}
+      {renderModelsWorkspace()}
       {gatewayCapabilities.configuration && project && workspace === "tags" && (
         <Tags
           connections={connections}
@@ -2383,16 +2412,6 @@ export default function App() {
             void api<Tag[]>("/tags")
               .then(setTags)
               .catch(() => { });
-          }}
-          notify={notify}
-        />
-      )}
-      {gatewayCapabilities.configuration && project && workspace === "connections" && (
-        <Connections
-          connections={connections}
-          onChange={setConnections}
-          onTagsChanged={() => {
-            void api<Tag[]>("/tags").then(setTags);
           }}
           notify={notify}
         />
@@ -2493,7 +2512,7 @@ export default function App() {
         loadError={resourceChangeError || (scriptsEditorReady ? searchScriptsError : "")}
         retryLabel={scriptsEditorReady && searchScriptsError ? "Open script workspace" : "Refresh preview"}
         onRetry={() => {
-          if (scriptsEditorReady && searchScriptsError) { closeResourceChange(); setWorkspace("scripts"); notify("Reload script resources to check references again. Your current drafts are retained until you choose to reload.", true); }
+          if (scriptsEditorReady && searchScriptsError) { closeResourceChange(); navigateWorkspace("scripts"); notify("Reload script resources to check references again. Your current drafts are retained until you choose to reload.", true); }
           else if (resourceChangeContext) previewResourceChange(resourceChangeContext.request);
         }} />}
       {projectSettingsOpen && project && <ProjectSettingsDialog project={project} canRename={gatewayAdmin} notify={notify}
@@ -2602,7 +2621,7 @@ export default function App() {
           href="#designer"
           onClick={(event) => {
             event.preventDefault();
-            setWorkspace("designer");
+            navigateWorkspace("designer");
           }}
           aria-label="SparkStudio designer"
           title="SparkStudio designer"
@@ -2648,18 +2667,18 @@ export default function App() {
             [
               ["designer", "design", "Designer"],
               ["tags", "tag", "Tags"],
-              ["connections", "plug", "Connections"],
+              ["models", "layers", "Models"],
               ["queries", "database", "Named queries"],
               ["scripts", "code", "Scripting"],
             ] as const
-          ).filter(([key]) => gatewayCapabilities.configuration || key !== "tags" && key !== "connections").map(([key, icon, label]) => (
+          ).filter(([key]) => gatewayCapabilities.configuration || key !== "tags" && key !== "models").map(([key, icon, label]) => (
             <button
               key={key}
               className={`nav-link ${workspace === key ? "active" : ""}`}
               title={label}
               aria-label={label}
               aria-current={workspace === key ? "page" : undefined}
-              onClick={() => setWorkspace(key)}
+              onClick={() => navigateWorkspace(key)}
             >
               <Icon name={icon} />
               <span>{label}</span>

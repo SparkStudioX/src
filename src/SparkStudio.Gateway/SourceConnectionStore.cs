@@ -63,7 +63,7 @@ public sealed partial class ProjectStore
                 throw new ArgumentException("Automatic source roots must be exclusive of authored tags, UDT instances and other automatic mappings.");
         }
         var points = settings.SavedPoints.Concat(SourceOwnedPoints(id)).ToDictionary(point => point.Id, StringComparer.Ordinal);
-        expandedTagDefinitions ??= TagModel.Expand(tagModel, NormalizeTag);
+        expandedTagDefinitions ??= ExpandTagModel(tagModel);
         var bindings = expandedTagDefinitions.OfType<JsonObject>().Concat(SourceOwnedDefinitions().OfType<JsonObject>()).Concat(tagModel["udtDefinitions"]!.AsArray().OfType<JsonObject>()
             .SelectMany(definition => definition["members"]!.AsArray().OfType<JsonObject>()));
         foreach (var binding in bindings.Where(tag => Optional(tag, "kind") == "device" && Optional(tag, "connectionId") == id))
@@ -162,7 +162,7 @@ public sealed partial class ProjectStore
             tags.Add(tag); addedTags.Add(tag);
         }
         var previous = connections; connections = candidateConnections;
-        try { ValidateOwnedNamespaces(TagModel.Expand(model, NormalizeTag)); }
+        try { ValidateOwnedNamespaces(ExpandTagModel(model)); }
         finally { connections = previous; }
         var token = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new {
             Id = id, request.Revision, Generation = tagConfigurationGeneration, Points = request.Points

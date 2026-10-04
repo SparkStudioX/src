@@ -23,12 +23,12 @@ using SparkStudio.Gateway;
 
 var directory = Path.Combine(AppContext.BaseDirectory, "fixture"); Directory.CreateDirectory(directory);
 var protection = new EphemeralDataProtectionProvider();
-File.WriteAllText(Path.Combine(directory, "tags.json"), """[{"path":"[default]Legacy/Count","kind":"memory","dataType":"Int32","value":3}]""");
+File.WriteAllText(Path.Combine(directory, "tags.json"), """{"format":"sparkstudio.tags","version":3,"tags":[{"path":"[default]Baseline/Count","kind":"memory","dataType":"Int32","value":3}],"provider":{"name":"default","enabled":true},"scanGroups":[],"udtDefinitions":[],"instances":[],"hierarchy":[]}""");
 var store = new ProjectStore(directory, protection, gatewayOnly: true);
 var original = File.ReadAllText(Path.Combine(directory, "tags.json"));
-Assert(store.GetTagDefinitions().Count == 1 && store.ExportTags()["version"]!.GetValue<int>() == 2, "Legacy array did not migrate in memory.");
-Assert(File.ReadAllText(Path.Combine(directory, "tags.json")) == original, "Loading legacy tags changed disk.");
-JsonObject Package() => new() { ["format"] = "sparkstudio.tags", ["version"] = 2, ["tags"] = new JsonArray(), ["scanGroups"] = new JsonArray(), ["udtDefinitions"] = new JsonArray(), ["instances"] = new JsonArray() };
+Assert(store.GetTagDefinitions().Count == 1 && store.ExportTags()["version"]!.GetValue<int>() == 3, "Current tag envelope did not load.");
+Assert(File.ReadAllText(Path.Combine(directory, "tags.json")) == original, "Reading current tags changed disk.");
+JsonObject Package() => new() { ["format"] = "sparkstudio.tags", ["version"] = 3, ["tags"] = new JsonArray(), ["scanGroups"] = new JsonArray(), ["udtDefinitions"] = new JsonArray(), ["instances"] = new JsonArray(), ["hierarchy"] = new JsonArray() };
 JsonObject Read(string json) => JsonNode.Parse(json)!.AsObject();
 JsonObject Definition(int version, int initial = 4) => Read("""{"id":"Counter","version":1,"members":[{"path":"Count","kind":"memory","dataType":"Int32","value":4},{"path":"Twice","kind":"expression","dataType":"Int32","expression":"count * 2","inputs":{"count":"./Count"},"scanGroup":"Fast"}]}""").WithVersion(version, initial);
 JsonObject Instance(string unit, int version = 1) => new() { ["path"] = "[default]Units/" + unit, ["definitionId"] = "Counter", ["version"] = version, ["enabled"] = true, ["overrides"] = new JsonObject() };
@@ -52,7 +52,7 @@ var expanded = store.GetTagDefinitions().OfType<JsonObject>().ToDictionary(tag =
 Assert(expanded["[default]Units/A/Twice"]["inputs"]!["count"]!.GetValue<string>() == "[default]Units/A/Count", "Relative member binding escaped instance.");
 Assert(expanded["[default]Units/A/Twice"]["publishingIntervalMs"]!.GetValue<int>() == 100, "Scan group interval was ignored.");
 Assert(expanded["[default]Units/A/Count"]["value"]!.GetValue<int>() == 7 && expanded["[default]Units/B/Count"]["value"]!.GetValue<int>() == 4, "Instance override leaked.");
-Console.WriteLine("PASS legacy migration is read-only until mutation; relative members and independent overrides expand atomically");
+Console.WriteLine("PASS current model loading is read-only; relative members and independent overrides expand atomically");
 
 var addVersion = Package(); addVersion["udtDefinitions"]!.AsArray().Add(Definition(2, 10)); Apply(addVersion);
 Assert(store.GetTagDefinitions().OfType<JsonObject>().Single(tag => tag["path"]!.GetValue<string>() == "[default]Units/B/Count")["value"]!.GetValue<int>() == 4, "New version propagated without explicit pin update.");
@@ -83,7 +83,7 @@ var multiProvider = Package(); multiProvider["provider"] = Read("""{"name":"remo
 var stale = Package(); stale["scanGroups"]!.AsArray().Add(Read("""{"name":"Fast","publishingIntervalMs":200,"enabled":true}""")); preview = store.PreviewTagImport(stale);
 store.WriteMemoryTag("[default]Units/B/Count", JsonSerializer.SerializeToElement(13));
 Assert(store.PreviewTagImport(stale).PreviewToken == preview.PreviewToken, "Runtime value writes invalidated a configuration-only import preview.");
-store.SaveTag(Read("""{"path":"[default]Legacy/Count","kind":"memory","dataType":"Int32","value":4}"""));
+store.SaveTag(Read("""{"path":"[default]Baseline/Count","kind":"memory","dataType":"Int32","value":4}"""));
 Throws<InvalidOperationException>(() => store.ApplyTagImport(new(stale, preview.Revision, preview.PreviewToken)));
 store.FlushMemoryValues();
 var reloaded = new ProjectStore(directory, protection, gatewayOnly: true);

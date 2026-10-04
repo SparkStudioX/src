@@ -22,8 +22,8 @@ try {
   const catalog = await api('/projects'), definitions = await api('/tag-definitions');
   assert.ok(!catalog.projects.some(project => project.name === example.name), 'The workshop project already exists. No changes made.');
   assert.ok(!definitions.some(tag => example.tags.some(item => item.path === tag.path)), 'The reserved [default]TagWorkshop namespace is already configured. No changes made.');
-  const package_ = { format: 'sparkstudio.tags', version: 1, tags: example.tags }, preview = await api('/tag-engineering/preview', 'POST', package_);
-  assert.ok(preview.changes.every(item => item.action === 'add'), 'The workshop must create new tags only.');
+  const package_ = { format: 'sparkstudio.tags', version: 3, tags: example.tags, scanGroups: [], udtDefinitions: [], instances: [], hierarchy: [] }, preview = await api('/tag-engineering/preview', 'POST', package_);
+  assert.ok(preview.canApply && preview.changes.every(item => item.action === 'add' || item.action === 'unchanged'), 'The workshop must add its tags and preserve existing resources.');
   await api('/tag-engineering/apply', 'POST', { package: package_, revision: preview.revision, previewToken: preview.previewToken });
   const project = await api('/projects', 'POST', { name: example.name }), route = `/projects/${project.id}`;
   const draft = await api(route + '/project');

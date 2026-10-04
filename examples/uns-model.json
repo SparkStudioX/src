@@ -1,0 +1,548 @@
+{
+  "name": "UNS model setup workshop",
+  "description": "Independently authored synthetic source and model recipes. Configure sources first, build and review the model in the top-level Models workspace, then import the separate portable uns-faceplates project. This recipe is not itself a tag package.",
+  "sourceRecipes": [
+    {
+      "name": "UNS MTConnect",
+      "type": "mtconnect",
+      "source": {
+        "endpoint": "http://127.0.0.1:5310",
+        "acquisition": "poll",
+        "intervalMs": 1000,
+        "authentication": {
+          "mode": "none"
+        },
+        "mtConnect": {
+          "heartbeatMs": 1000,
+          "count": 1000,
+          "userAgent": "SparkStudioUNSWorkshop/1.0"
+        },
+        "points": [
+          {
+            "id": "Haas01-Sspeed",
+            "name": "Sspeed",
+            "address": "Haas01/Haas01-Sspeed",
+            "dataType": "Double",
+            "writable": false
+          },
+          {
+            "id": "Haas01-Sload",
+            "name": "Sload",
+            "address": "Haas01/Haas01-Sload",
+            "dataType": "Double",
+            "writable": false
+          },
+          {
+            "id": "Haas01-execution",
+            "name": "execution",
+            "address": "Haas01/Haas01-execution",
+            "dataType": "String",
+            "writable": false
+          },
+          {
+            "id": "Haas01-PartCountAct",
+            "name": "PartCountAct",
+            "address": "Haas01/Haas01-PartCountAct",
+            "dataType": "Int64",
+            "writable": false
+          },
+          {
+            "id": "Haas02-Sspeed",
+            "name": "Sspeed",
+            "address": "Haas02/Haas02-Sspeed",
+            "dataType": "Double",
+            "writable": false
+          },
+          {
+            "id": "Haas02-Sload",
+            "name": "Sload",
+            "address": "Haas02/Haas02-Sload",
+            "dataType": "Double",
+            "writable": false
+          },
+          {
+            "id": "Haas02-execution",
+            "name": "execution",
+            "address": "Haas02/Haas02-execution",
+            "dataType": "String",
+            "writable": false
+          },
+          {
+            "id": "Haas02-PartCountAct",
+            "name": "PartCountAct",
+            "address": "Haas02/Haas02-PartCountAct",
+            "dataType": "Int64",
+            "writable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "UNS MQTT (optional)",
+      "type": "mqtt",
+      "source": {
+        "endpoint": "mqtt://127.0.0.1:18890",
+        "acquisition": "subscribe",
+        "authentication": {
+          "mode": "none"
+        },
+        "points": [],
+        "mqtt": {
+          "protocolVersion": "5",
+          "transport": "tcp",
+          "keepAliveSeconds": 30,
+          "cleanStart": true,
+          "sessionExpirySeconds": 0,
+          "mappings": [
+            {
+              "id": "uns-temperature",
+              "topicFilter": "uns/+/temperature",
+              "root": "[default]Sources/MQTT",
+              "tags": "review",
+              "payload": "scalar",
+              "dataType": "Double",
+              "shape": "scalar",
+              "qos": 0,
+              "retained": "uncertain",
+              "stripLevels": 1,
+              "staleAfterMs": 5000,
+              "maximumTags": 10
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "sourceTagRecipe": {
+    "format": "sparkstudio.tags",
+    "version": 3,
+    "tags": [
+      {
+        "path": "[default]Sources/MTConnect/Haas01/Sspeed",
+        "kind": "device",
+        "dataType": "Double",
+        "connectionId": "REPLACE_WITH_SAVED_MTCONNECT_CONNECTION_ID",
+        "nodeId": "Haas01-Sspeed",
+        "writable": false
+      },
+      {
+        "path": "[default]Sources/MTConnect/Haas01/Sload",
+        "kind": "device",
+        "dataType": "Double",
+        "connectionId": "REPLACE_WITH_SAVED_MTCONNECT_CONNECTION_ID",
+        "nodeId": "Haas01-Sload",
+        "writable": false
+      },
+      {
+        "path": "[default]Sources/MTConnect/Haas01/execution",
+        "kind": "device",
+        "dataType": "String",
+        "connectionId": "REPLACE_WITH_SAVED_MTCONNECT_CONNECTION_ID",
+        "nodeId": "Haas01-execution",
+        "writable": false
+      },
+      {
+        "path": "[default]Sources/MTConnect/Haas01/PartCountAct",
+        "kind": "device",
+        "dataType": "Int64",
+        "connectionId": "REPLACE_WITH_SAVED_MTCONNECT_CONNECTION_ID",
+        "nodeId": "Haas01-PartCountAct",
+        "writable": false
+      },
+      {
+        "path": "[default]Sources/MTConnect/Haas02/Sspeed",
+        "kind": "device",
+        "dataType": "Double",
+        "connectionId": "REPLACE_WITH_SAVED_MTCONNECT_CONNECTION_ID",
+        "nodeId": "Haas02-Sspeed",
+        "writable": false
+      },
+      {
+        "path": "[default]Sources/MTConnect/Haas02/Sload",
+        "kind": "device",
+        "dataType": "Double",
+        "connectionId": "REPLACE_WITH_SAVED_MTCONNECT_CONNECTION_ID",
+        "nodeId": "Haas02-Sload",
+        "writable": false
+      },
+      {
+        "path": "[default]Sources/MTConnect/Haas02/execution",
+        "kind": "device",
+        "dataType": "String",
+        "connectionId": "REPLACE_WITH_SAVED_MTCONNECT_CONNECTION_ID",
+        "nodeId": "Haas02-execution",
+        "writable": false
+      },
+      {
+        "path": "[default]Sources/MTConnect/Haas02/PartCountAct",
+        "kind": "device",
+        "dataType": "Int64",
+        "connectionId": "REPLACE_WITH_SAVED_MTCONNECT_CONNECTION_ID",
+        "nodeId": "Haas02-PartCountAct",
+        "writable": false
+      }
+    ],
+    "scanGroups": [],
+    "hierarchy": [],
+    "udtDefinitions": [],
+    "instances": []
+  },
+  "modelRecipe": {
+    "format": "sparkstudio.tags",
+    "version": 3,
+    "tags": [],
+    "scanGroups": [],
+    "hierarchy": [
+      {
+        "path": "[default]Acme",
+        "level": "Enterprise",
+        "description": "Synthetic workshop organization"
+      },
+      {
+        "path": "[default]Acme/Dallas",
+        "level": "Site"
+      },
+      {
+        "path": "[default]Acme/Dallas/Machining",
+        "level": "Area"
+      },
+      {
+        "path": "[default]Acme/Dallas/Machining/Line1",
+        "level": "Line",
+        "attributes": {
+          "costCenter": "4410"
+        }
+      }
+    ],
+    "udtDefinitions": [
+      {
+        "id": "Spindle",
+        "version": 1,
+        "description": "Reusable spindle backed by existing MTConnect tags",
+        "parameters": [
+          {
+            "name": "Device",
+            "type": "String",
+            "required": true
+          }
+        ],
+        "members": [
+          {
+            "path": "Speed",
+            "kind": "reference",
+            "dataType": "Double",
+            "target": "[default]Sources/MTConnect/{Device}/Sspeed",
+            "unit": "rev/min",
+            "description": "Actual spindle speed",
+            "range": {
+              "low": 0,
+              "high": 12000
+            }
+          },
+          {
+            "path": "Load",
+            "kind": "reference",
+            "dataType": "Double",
+            "target": "[default]Sources/MTConnect/{Device}/Sload",
+            "unit": "%",
+            "description": "Spindle load"
+          }
+        ]
+      },
+      {
+        "id": "CNC",
+        "version": 1,
+        "description": "Synthetic three-axis machining center",
+        "semanticType": "isa95:WorkUnit",
+        "parameters": [
+          {
+            "name": "Device",
+            "type": "String",
+            "required": true
+          },
+          {
+            "name": "IdealCycleSeconds",
+            "type": "Double",
+            "default": 60
+          }
+        ],
+        "members": [
+          {
+            "path": "Execution",
+            "kind": "reference",
+            "dataType": "String",
+            "target": "[default]Sources/MTConnect/{Device}/execution",
+            "description": "Controller execution state"
+          },
+          {
+            "path": "PartCount",
+            "kind": "reference",
+            "dataType": "Int64",
+            "target": "[default]Sources/MTConnect/{Device}/PartCountAct",
+            "unit": "count",
+            "description": "Exact completed part count"
+          },
+          {
+            "path": "IdealCycle",
+            "kind": "memory",
+            "dataType": "Double",
+            "value": "{IdealCycleSeconds}",
+            "unit": "s",
+            "description": "Configured ideal cycle time"
+          },
+          {
+            "path": "Spindle",
+            "kind": "type",
+            "definitionId": "Spindle",
+            "version": 1,
+            "parameters": {
+              "Device": "{Device}"
+            }
+          },
+          {
+            "path": "Running",
+            "kind": "expression",
+            "dataType": "Boolean",
+            "expression": "execution == \"ACTIVE\"",
+            "inputs": {
+              "execution": "./Execution"
+            },
+            "description": "True while execution is ACTIVE"
+          }
+        ]
+      }
+    ],
+    "instances": []
+  },
+  "instanceCsv": "path,definitionId,version,Device,IdealCycleSeconds\n[default]Acme/Dallas/Machining/Line1/CNC01,CNC,1,Haas01,42\n[default]Acme/Dallas/Machining/Line1/CNC02,CNC,1,Haas02,\n",
+  "overrideRecipe": {
+    "format": "sparkstudio.tags",
+    "version": 3,
+    "tags": [],
+    "scanGroups": [],
+    "hierarchy": [],
+    "udtDefinitions": [],
+    "instances": [
+      {
+        "path": "[default]Acme/Dallas/Machining/Line1/CNC01",
+        "definitionId": "CNC",
+        "version": 1,
+        "parameters": {
+          "Device": "Haas01",
+          "IdealCycleSeconds": 42
+        },
+        "overrides": {
+          "IdealCycle": {
+            "value": 45
+          }
+        }
+      }
+    ]
+  },
+  "upgradeRecipe": {
+    "format": "sparkstudio.tags",
+    "version": 3,
+    "tags": [],
+    "scanGroups": [],
+    "hierarchy": [],
+    "udtDefinitions": [
+      {
+        "id": "Spindle",
+        "version": 2,
+        "description": "Reusable spindle backed by existing MTConnect tags",
+        "parameters": [
+          {
+            "name": "Device",
+            "type": "String",
+            "required": true
+          }
+        ],
+        "members": [
+          {
+            "path": "Speed",
+            "kind": "reference",
+            "dataType": "Double",
+            "target": "[default]Sources/MTConnect/{Device}/Sspeed",
+            "unit": "rev/min",
+            "description": "Actual spindle speed",
+            "range": {
+              "low": 0,
+              "high": 12000
+            }
+          }
+        ]
+      },
+      {
+        "id": "CNC",
+        "version": 2,
+        "description": "Synthetic three-axis machining center",
+        "semanticType": "isa95:WorkUnit",
+        "parameters": [
+          {
+            "name": "Device",
+            "type": "String",
+            "required": true
+          },
+          {
+            "name": "IdealCycleSeconds",
+            "type": "Double",
+            "default": 60
+          }
+        ],
+        "members": [
+          {
+            "path": "Execution",
+            "kind": "reference",
+            "dataType": "String",
+            "target": "[default]Sources/MTConnect/{Device}/execution",
+            "description": "Controller execution state"
+          },
+          {
+            "path": "PartCount",
+            "kind": "reference",
+            "dataType": "Int64",
+            "target": "[default]Sources/MTConnect/{Device}/PartCountAct",
+            "unit": "count",
+            "description": "Exact completed part count"
+          },
+          {
+            "path": "IdealCycle",
+            "kind": "memory",
+            "dataType": "Double",
+            "value": "{IdealCycleSeconds}",
+            "unit": "s",
+            "description": "Configured ideal cycle time"
+          },
+          {
+            "path": "Spindle",
+            "kind": "type",
+            "definitionId": "Spindle",
+            "version": 2,
+            "parameters": {
+              "Device": "{Device}"
+            }
+          },
+          {
+            "path": "Running",
+            "kind": "expression",
+            "dataType": "Boolean",
+            "expression": "execution == \"ACTIVE\"",
+            "inputs": {
+              "execution": "./Execution"
+            },
+            "description": "True while execution is ACTIVE"
+          }
+        ]
+      }
+    ],
+    "instances": []
+  },
+  "upgradeInstances": [
+    {
+      "path": "[default]Acme/Dallas/Machining/Line1/CNC01",
+      "definitionId": "CNC",
+      "version": 2,
+      "parameters": {
+        "Device": "Haas01",
+        "IdealCycleSeconds": 42
+      },
+      "overrides": {}
+    }
+  ],
+  "mqttReferenceRecipe": {
+    "format": "sparkstudio.tags",
+    "version": 3,
+    "tags": [],
+    "scanGroups": [],
+    "hierarchy": [],
+    "udtDefinitions": [
+      {
+        "id": "TemperatureSensor",
+        "version": 1,
+        "parameters": [
+          {
+            "name": "Device",
+            "type": "String",
+            "required": true
+          }
+        ],
+        "members": [
+          {
+            "path": "Temperature",
+            "kind": "reference",
+            "dataType": "Double",
+            "target": "[default]Sources/MQTT/{Device}/temperature",
+            "unit": "degC",
+            "description": "Read-only MQTT temperature mirror"
+          }
+        ]
+      }
+    ],
+    "instances": [
+      {
+        "path": "[default]Acme/Dallas/Machining/Line1/Temperature01",
+        "definitionId": "TemperatureSensor",
+        "version": 1,
+        "parameters": {
+          "Device": "Haas01"
+        },
+        "overrides": {}
+      },
+      {
+        "path": "[default]Acme/Dallas/Machining/Line1/Temperature02",
+        "definitionId": "TemperatureSensor",
+        "version": 1,
+        "parameters": {
+          "Device": "Haas02"
+        },
+        "overrides": {}
+      }
+    ]
+  },
+  "screens": [
+    {
+      "id": "uns-model",
+      "name": "UNS setup checklist",
+      "width": 1100,
+      "height": 600,
+      "components": [
+        {
+          "id": "heading",
+          "type": "label",
+          "x": 24,
+          "y": 24,
+          "width": 1052,
+          "height": 50,
+          "props": {
+            "text": "UNS model setup · independently authored lab",
+            "fontSize": 27
+          }
+        },
+        {
+          "id": "steps",
+          "type": "label",
+          "x": 24,
+          "y": 98,
+          "width": 1052,
+          "height": 300,
+          "props": {
+            "text": "1. Start tools/run-data-source-simulators.mjs --uns.\n2. Configure MTConnect and create eight raw tags with the exact types and paths in this recipe.\n3. Review Spindle v1, CNC v1 and four hierarchy nodes.\n4. Instantiate two CNCs from CSV; verify 20 tags including the eight raw sources.\n5. Import the separate UNS CNC faceplates project; publish explicitly when ready.\n6. Save Spindle v2 and CNC v2, upgrade only CNC01, then inspect the missing Spindle/Load binding.",
+            "fontSize": 20
+          }
+        },
+        {
+          "id": "caution",
+          "type": "label",
+          "x": 24,
+          "y": 432,
+          "width": 1052,
+          "height": 112,
+          "props": {
+            "text": "This setup recipe is not a .sparkproj or a tag package. Follow docs/architecture/UNS_MODEL_SETUP.md. Import the source-tag recipe through Tags > Import / export, and model recipes through Models > Import / export. No equipment commands, automatic writes, or live gateway data are included.",
+            "fontSize": 18
+          }
+        }
+      ]
+    }
+  ]
+}

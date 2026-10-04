@@ -2,7 +2,7 @@
 
 Modbus TCP, Allen Bradley EtherNet/IP, Siemens S7 and Beckhoff ADS connection types require `0.2.0-preview.12` or a later compatible release. Preview.11 and earlier installers do not contain these drivers. Exact artifact/source verification is recorded separately in [Verification and roadmap](PARITY.md); device-model and firmware acceptance remains separate. OPC UA and database connections retain their existing workflows. The [support plan](INDUSTRIAL_PROTOCOLS.md) and [technical specification](INDUSTRIAL_CONNECTOR_SPECIFICATION.md) describe the wider roadmap; MQTT, Sparkplug and other planned protocols are not included in these four driver choices.
 
-Use **Gateway Settings → Configuration → Connections** to choose a driver, enter its protocol settings and save a point map. Each point has a stable ID, display name, native address, scalar type and explicit writable flag. Runtime tags bind to the saved point ID, so editing a native address invalidates reviewed commands and acquisition configuration. Removing a point or changing its type is blocked while saved tags or UDT members still depend on it.
+Use **Gateway Settings → Data → Connections** to choose a driver, enter its protocol settings and save a point map. Each point has a stable ID, display name, native address, scalar type and explicit writable flag. Runtime tags bind to the saved point ID, so editing a native address invalidates reviewed commands and acquisition configuration. Removing a point or changing its type is blocked while saved tags or UDT members still depend on it.
 
 Choose the engineering type used by tags independently from the optional raw storage type. For a one-register temperature, use raw `UInt16`, engineering `Double`, scale `0.1` and offset `0`: register value `123` becomes `12.3`, and an approved write of `12.3` encodes `123`. Boolean and String types retain matching storage types. Integer writes reject fractional raw results and values outside the declared width. Maps are limited to 10,000 points and 768 KiB of normalized JSON.
 
@@ -71,7 +71,7 @@ PCCC file prefixes are case-insensitive and canonicalized for the SDK; uppercase
 
 For each available family, save the lab map, test the connection, use **Browse saved map**, quick-watch `Setpoint`, and bind the workshop tag. For Logix, native browsing is also available. Continue with the reviewed command exercise below only after the read returns `Good` and `10`. For optional B-word/Boolean acceptance, reserve a separate lab word and check neighboring bits independently; the signed-word workshop does not establish bit-write acceptance.
 
-Save the connection, browse its map, read `Setpoint` in quick watch and check `Good` quality and value `10`. Add a device tag using the path in the table. The tag type must match the mapped point. View the live value in Gateway Tags before proceeding to a command.
+Save the connection, browse its map, read `Setpoint` in quick watch and check `Good` quality and value `10`. Add a device tag using the path in the table. The tag type must match the mapped point. View the live value in **Tags** in the workspace left navigation before proceeding to a command.
 
 When the same physical target is reached by different host names or IP aliases, configure the same **Shared command domain** on those connections. Commands serialize conservatively by physical host/domain, including aliases within a connection; distinct saved connection IDs do not establish independent physical storage.
 

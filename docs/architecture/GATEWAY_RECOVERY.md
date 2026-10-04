@@ -16,18 +16,23 @@ For the **offline full backup command**, stop the service, gateway process, Pyth
 
 The v1 archive format is bounded to 10,000 files, 8 GiB total content, 2 GiB per file and an 8 MiB manifest; online capture has the smaller limits above. It rejects links, duplicate/colliding paths, traversal, unknown format versions, missing/truncated records and failed authentication or file digests. The offline backup command writes no plaintext staging archive. Restore creates private staging, verifies the entire snapshot and installs it with a same-filesystem directory rename into a **new, previously nonexistent** destination. A failed restore leaves the original data directory untouched. Keep the source directory until the restored gateway has been verified.
 
-Archive format validation does not establish application-version compatibility. Use the same companion gateway build for backup and restoration. Gateway startup now records data format version 2 in `gateway-format.json` and supports the specific legacy version-1 tag migration below; that is not a general downgrade or arbitrary cross-version restore contract. Keep the original directory and matching binaries until verification succeeds.
+Archive format validation does not establish application-version compatibility. Use the same companion gateway build for backup and restoration. The gateway accepts only its current data-format marker and current tag schema, identified internally by `3` in `gateway-format.json` and the tag envelope. Keep the original directory and matching binaries until verification succeeds.
 
-At startup, while holding the data-directory lease, an unmarked directory is
-treated as version 1. A legacy flat `tags.json` array becomes the version-2 tag
-model. Before replacement, its original bytes and a SHA-256 receipt are saved
-under `migration-backups/format-2/`. The transformation and version marker use
-durable atomic file replacement and can resume after interruption between those
-steps. Reopening version 2 does not repeat the transformation. A newer unknown
-format is rejected before normal stores open, rather than being rewritten by an
-older reader. Preserve a full pre-upgrade backup for rollback; do not lower the
-version marker manually. Online configuration backups include the format marker
-and alarm/history rule configuration, but not recorded process samples.
+At startup, while holding the data-directory lease, the gateway validates stored
+tags before opening the normal stores. Flat tag arrays, older tag envelopes and
+unknown tag formats are rejected without rewriting their bytes. Existing
+gateway-format markers must identify the current format; older and future
+markers are rejected. A missing marker is initialized only after confirming that
+tags are absent or already use the current schema. No automatic tag conversion
+or migration backup is generated.
+
+Restore an older gateway snapshot using its matching older binaries in an
+isolated directory. There is no supported tag-format upgrade or downgrade path
+in the current gateway. Do not edit or lower a marker to bypass validation.
+Online configuration backups include the format marker and alarm/history rule
+configuration, but not recorded process samples. See [tag models](TAG_MODELS.md)
+for the current resources. Portable project formats and other resource handling
+are separate from this tag-schema restriction.
 
 Scheduled configuration copies, manual configuration backups and managed remote retention are available now. Live database quiescence, automatic service switching and gateway replication/failover remain open G03 work. Whole-application publication is described in [Unified publication](UNIFIED_PUBLICATION.md).
 

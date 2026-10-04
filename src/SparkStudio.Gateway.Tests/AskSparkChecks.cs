@@ -37,6 +37,7 @@ internal static class AskSparkChecks
             await RawLogChecks(directory, settings, protection);
             SchemaChecks();
             ContextProjectionChecks();
+            ModelWorkspaceContextChecks();
             AuthoringChecks(projects.Get(projects.DefaultId).Store);
             await BackupChecks(directory, protection);
             PermissionChecks(security, admin, projects.DefaultId);
@@ -47,6 +48,18 @@ internal static class AskSparkChecks
             return checks;
         }
         finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    }
+
+    private static void ModelWorkspaceContextChecks()
+    {
+        var context = new JsonObject { ["modelView"] = "build", ["modelType"] = "CNC@2", ["modelDraftSummary"] = "2 types, 2 instances", ["modelSelection"] = new JsonArray("CNC01"), ["modelResolution"] = new JsonArray("CNC02: missing Speed"), ["password"] = "excluded" };
+        var bounded = AskSparkContext.ModelWorkspace(context);
+        Check(bounded["modelType"]!.GetValue<string>() == "CNC@2" && bounded.Count == 5 && bounded["password"] is null, "Model context retains only the five display fields");
+        context["modelSelection"]!.AsArray().Add("CNC02");
+        Check(bounded["modelSelection"]!.AsArray().Count == 1, "Model context lists are copied");
+        Reject(() => AskSparkContext.ModelWorkspace(new() { ["modelView"] = new string('x', 513) }), "oversized model text");
+        Reject(() => AskSparkContext.ModelWorkspace(new() { ["modelSelection"] = new JsonArray(1) }), "non-string model selection");
+        Reject(() => AskSparkContext.ModelWorkspace(new() { ["modelResolution"] = new JsonArray(Enumerable.Range(0, 101).Select(_ => (JsonNode?)JsonValue.Create("x")).ToArray()) }), "oversized model resolution list");
     }
 
     private static void ContextProjectionChecks()
@@ -486,6 +499,22 @@ internal static class AskSparkChecks
         Check(catalog.Allowed(security, admin, projectId, true).Any(tool => tool.Permission == "operate"), "engineering administrator can discover runtime tests which still require a separate same-account operator session");
         Reject(() => catalog.Require("admin_action", new JsonObject { ["label"] = "fixture" }, security, engineer, projectId, true), "forged admin call");
         Check(new AskSparkCatalog().Allowed(security, admin, projectId, true).Length > 30, "embedded manifests are valid and loaded");
+        ModelPermissionChecks(security, engineer, projectId);
+    }
+
+    private static void ModelPermissionChecks(SecurityStore security, SecurityUser engineer, string projectId)
+    {
+        var configurator = security.CreateUser(new("ask-config-only", "Synthetic-configuration-12345", GatewayCapabilities: new(Configuration: true)));
+        var diagnostic = security.CreateUser(new("ask-diagnostic-only", "Synthetic-diagnostics-12345", GatewayCapabilities: new(Diagnostics: true)));
+        var shipped = new AskSparkCatalog();
+        var names = new[] { "model_types", "model_tree", "model_instances", "model_object" };
+        var gateway = shipped.Allowed(security, configurator, null, false);
+        Check(names.All(name => gateway.Any(tool => tool.Name == name)), "Configuration-only users can inspect models from the projectless workspace");
+        Check(!gateway.Any(tool => tool.Name == "project_get"), "gateway model inspection grants no unrelated project read tools");
+        foreach (var actor in new[] { engineer, diagnostic })
+            Check(!shipped.Allowed(security, actor, null, false).Any(tool => names.Contains(tool.Name)), "projectless model inspection still requires Configuration permission");
+        Check(!shipped.Allowed(security, configurator, projectId, false).Any(tool => names.Contains(tool.Name)), "Configuration permission does not replace Design for an explicit project context");
+        Check(names.All(name => shipped.Allowed(security, engineer, projectId, false).Any(tool => tool.Name == name)), "project-scoped designers retain all model read tools without Configuration");
     }
 
     private static AskSparkTool Tool(string name, string kind, bool confirmation, bool parallelSafe) => new(name, "Synthetic fixture tool", new JsonObject

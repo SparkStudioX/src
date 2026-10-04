@@ -30,6 +30,7 @@ public sealed class AskSparkCatalog
     {
         var tool = RequireAvailable(name, security, actor, projectId, editorAvailable, previewActive);
         AskSparkSchema.Validate(arguments, tool.Parameters);
+        AskSparkModelTools.RequireUserModelApply(name, arguments);
         // Navigation may address another project; opening its live Designer also requires an explicit grant below.
         if (tool.Name is not ("navigate_workspace" or "spark_open_project") && arguments["projectId"] is JsonValue supplied && supplied.GetValue<string>() != projectId)
             throw new BadHttpRequestException("The tool must use the current project. Open that project before continuing.", 403);
@@ -54,6 +55,8 @@ public sealed class AskSparkCatalog
         if (tool.Permission is "view" or "operate" or "command")
             return projectId is not null && security.Can(actor, projectId, "design") && security.Can(actor, projectId, tool.Permission);
         if (tool.Permission == "signedIn") return security.GetUser(actor.Id)?.Revision == actor.Revision;
+        if (tool.Permission == "read" && tool.Category == "model" && projectId is null)
+            return security.Can(actor, null, "configuration");
         var permission = tool.Permission switch { "admin" => "gatewayAdmin", "read" => "design", _ => tool.Permission };
         return security.Can(actor, projectId, permission);
     }

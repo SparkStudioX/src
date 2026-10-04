@@ -8,7 +8,7 @@ namespace SparkStudio.Gateway;
 /// <summary>A bounded scalar language. No functions, reflection, scripts, assignments or external I/O.</summary>
 public static class TagExpressions
 {
-    public sealed record Plan(string Path, string DataType, bool Enabled, int Interval, IReadOnlyDictionary<string, string> Inputs, Node Expression);
+    public sealed record Plan(string Path, string DataType, bool Enabled, int Interval, IReadOnlyDictionary<string, string> Inputs, Node Expression, string? Target = null);
     public abstract record Node { public abstract object Evaluate(IReadOnlyDictionary<string, object> inputs); }
     private sealed record Literal(object Value) : Node { public override object Evaluate(IReadOnlyDictionary<string, object> inputs) => Value; }
     private sealed record Reference(string Name) : Node { public override object Evaluate(IReadOnlyDictionary<string, object> inputs) => inputs[Name]; }
@@ -77,7 +77,9 @@ public static class TagExpressions
     public static Plan[] Order(JsonObject[] definitions)
     {
         var paths = definitions.Select(item => TagDefinitionValidator.Text(item, "path")).ToHashSet(StringComparer.Ordinal);
-        var plans = definitions.Where(item => TagDefinitionValidator.Kind(item) == "expression").Select(Compile).ToDictionary(item => item.Path, StringComparer.Ordinal);
+        var byPath = definitions.ToDictionary(item => TagDefinitionValidator.Text(item, "path"), StringComparer.Ordinal);
+        var plans = definitions.Where(item => TagDefinitionValidator.Kind(item) is "expression" or "reference")
+            .Select(item => TagDefinitionValidator.Kind(item) == "reference" ? CompileReference(item, byPath) : Compile(item)).ToDictionary(item => item.Path, StringComparer.Ordinal);
         var state = new Dictionary<string, int>(StringComparer.Ordinal);
         var heights = new Dictionary<string, int>(StringComparer.Ordinal);
         var ordered = new List<Plan>();
@@ -103,11 +105,26 @@ public static class TagExpressions
         return ordered.ToArray();
     }
 
+    private static Plan CompileReference(JsonObject definition, Dictionary<string, JsonObject> definitions)
+    {
+        var path = TagDefinitionValidator.Text(definition, "path");
+        var target = TagDefinitionValidator.Path(TagDefinitionValidator.Text(definition, "target"));
+        if (!definitions.TryGetValue(target, out var source)) throw new ArgumentException($"Reference target tag does not exist: {target}.");
+        var dataType = TagDefinitionValidator.DataType(definition);
+        if (source["dataType"] is not JsonValue type || !type.TryGetValue<string>(out var targetType) || string.IsNullOrEmpty(targetType))
+            throw new ArgumentException($"Reference target {target} has no declared dataType. Declare its dataType in tag configuration before creating reference {path}; reference types are not inferred from live values.");
+        if (dataType != targetType)
+            throw new ArgumentException($"Reference {path} dataType must exactly match target {target}.");
+        return new(path, dataType, TagDefinitionValidator.Enabled(definition), TagDefinitionValidator.PublishingInterval(definition),
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["target"] = target }, new Literal(0d), target);
+    }
+
     internal static bool SamplePath(string path) => path == "[default]Setpoints/TargetSpeed"
         || Regex.IsMatch(path, "^\\[default\\]Line/Line[12]/(Speed|Temperature|ProductionCount|Status)$", RegexOptions.CultureInvariant);
 
     public static TagValue Evaluate(Plan plan, IReadOnlyDictionary<string, TagValue> values, DateTimeOffset now, TagValue? previous = null)
     {
+        if (plan.Target is not null) return EvaluateReference(plan, values, now, previous);
         var timestamp = previous?.Timestamp ?? now;
         TagValue Bad(string quality) => new(plan.Path, null, plan.DataType, quality, timestamp, "expression");
         if (!plan.Enabled) return Bad("Bad_Disabled");
@@ -122,10 +139,19 @@ public static class TagExpressions
             var result = plan.Expression.Evaluate(input);
             var typed = TagDefinitionValidator.MemoryValue(plan.DataType, JsonSerializer.SerializeToElement(result));
             if (sources.Length == 0 && (previous?.Quality != "Good" || JsonSerializer.Serialize(previous.Value) != typed.ToJsonString())) timestamp = now;
-            return new(plan.Path, typed.Deserialize<JsonElement>(), plan.DataType, "Good", timestamp, "expression");
+            var receipt = sources.Length == 0 ? now : sources.Min(item => item.Value!.ReceiptTimestamp ?? item.Value.Timestamp);
+            return new(plan.Path, typed.Deserialize<JsonElement>(), plan.DataType, "Good", timestamp, "expression", ReceiptTimestamp: receipt);
         }
         catch (ArithmeticException) { return Bad("Bad_ExpressionError"); }
         catch (Exception error) when (error is ArgumentException or InvalidOperationException or JsonException) { return Bad("Bad_TypeMismatch"); }
+    }
+
+    private static TagValue EvaluateReference(Plan plan, IReadOnlyDictionary<string, TagValue> values, DateTimeOffset now, TagValue? previous)
+    {
+        if (!values.TryGetValue(plan.Target!, out var target))
+            return new(plan.Path, null, plan.DataType, plan.Enabled ? "Bad_NotFound" : "Bad_Disabled", previous?.Timestamp ?? now, "reference");
+        if (!plan.Enabled) return target with { Path = plan.Path, Value = null, Quality = "Bad_Disabled", SourceQuality = "Bad_Disabled", ModelIssues = null, Source = "reference", Writable = false };
+        return target with { Path = plan.Path, Source = "reference", Writable = false, SourceQuality = target.Quality, ModelIssues = null };
     }
 
     private static object Scalar(object? value)

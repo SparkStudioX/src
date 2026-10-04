@@ -274,7 +274,7 @@ internal static class SourceLoadProbe
         store.SaveConnection(new JsonObject { ["id"] = "plc", ["name"] = "Synthetic PLC", ["type"] = "modbus-tcp", ["device"] = JsonSerializer.SerializeToNode(new DeviceSettings {
             Host = "127.0.0.1", Port = plcPort, Points = [new() { Id = "r", Name = "Register", Address = "holdingRegister:0", DataType = "UInt16" }] }, ProjectStore.Json) });
         var plcTag = DeviceTag(PlcPath, "plc", "r", "UInt16"); plcTag["publishingIntervalMs"] = 100; tags.Add(plcTag);
-        var package = new JsonObject { ["format"] = "sparkstudio.tags", ["version"] = 1, ["tags"] = tags };
+        var package = TagModel.Empty(); package["tags"] = tags;
         var preview = store.PreviewTagImport(package); store.ApplyTagImport(new(package, preview.Revision, preview.PreviewToken));
         void SaveSource(string id, string type, SourceSettings source) => store.SaveConnection(new JsonObject { ["id"] = id, ["name"] = "Synthetic " + id, ["type"] = type,
             ["enabled"] = false, ["source"] = JsonSerializer.SerializeToNode(source, ProjectStore.Json) });

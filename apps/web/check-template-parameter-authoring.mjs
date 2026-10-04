@@ -63,6 +63,35 @@ function drive(Component, props) {
 let passed = 0;
 function check(name, run) { run(); passed++; console.log(`PASS ${name}`); }
 
+check('Model instance declaration requires portable type metadata and applies it atomically', () => {
+  const priorWindow=globalThis.window,priorFetch=globalThis.fetch;
+  globalThis.window={location:{pathname:'/designer/test',href:'http://localhost/designer/test'},addEventListener(){},removeEventListener(){}};
+  globalThis.fetch=async()=>new Response(JSON.stringify({generation:1,items:[],offset:0,limit:200,total:0}),{status:200});
+  try {
+    const patches=[],errors=[];
+    const original={...template,parameters:{machine:'[default]Acme/CNC01'},parameterTypes:{}};
+    const ui=drive(InteractiveDefinitions,{template:original,parentParameters:{},onChange:patch=>patches.push(patch),notify:message=>errors.push(message)});
+    ui.label('Edit template parameter machine').props.onClick();ui.refresh();ui.change('Template parameter type','model');
+    ui.button('Apply parameter').props.onClick();assert.equal(patches.length,0);assert.match(errors.at(-1),/requires a valid type ID/);
+    ui.change('Required model type ID','CNC');ui.change('Minimum model version','1');ui.change('Maximum model version','2');
+    ui.button('Apply parameter').props.onClick();ui.refresh();assert.deepEqual(patches,[{parameters:{machine:'[default]Acme/CNC01'},parameterTypes:{machine:'model'},modelParameters:{machine:{definitionId:'CNC',minVersion:1,maxVersion:2}}}]);
+    assert.deepEqual(original.parameterTypes,{});
+  } finally {globalThis.window=priorWindow;globalThis.fetch=priorFetch;}
+});
+
+check('renaming and deleting Model instance parameters keeps portable requirements aligned',()=>{
+  const original={...template,parameters:{machine:'[default]Acme/CNC01'},parameterTypes:{machine:'model'},modelParameters:{machine:{definitionId:'CNC'}}},patches=[];
+  const priorWindow=globalThis.window,priorFetch=globalThis.fetch;
+  globalThis.window={location:{pathname:'/designer/test',href:'http://localhost/designer/test'},addEventListener(){},removeEventListener(){}};
+  globalThis.fetch=async()=>new Response(JSON.stringify({generation:1,items:[],offset:0,limit:200,total:0}),{status:200});
+  try {
+    const ui=drive(InteractiveDefinitions,{template:original,parentParameters:{},onChange:patch=>patches.push(patch),notify:noOp});
+    ui.label('Edit template parameter machine').props.onClick();ui.refresh();ui.change('Template parameter name','asset');ui.button('Apply parameter').props.onClick();
+    assert.deepEqual(patches[0].modelParameters,{asset:{definitionId:'CNC'}});assert.deepEqual(patches[0].parameterTypes,{asset:'model'});
+    const remove=drive(InteractiveDefinitions,{template:original,parentParameters:{},onChange:patch=>patches.push(patch),notify:noOp});remove.label('Edit template parameter machine').props.onClick();remove.refresh();remove.button('Delete parameter').props.onClick();assert.deepEqual(patches[1],{parameters:{},parameterTypes:{},modelParameters:{}});
+  } finally {globalThis.window=priorWindow;globalThis.fetch=priorFetch;}
+});
+
 check('typed authoring belongs to template documents; screen and project defaults remain text', () => {
   const html = renderToStaticMarkup(React.createElement(DocumentProperties, { document: template, isTemplate: true, parentParameters, onChange: noOp, notify: noOp }));
   assert.match(html, /Number · 10/); assert.match(html, /Boolean · False/); assert.match(html, /Motor A/);

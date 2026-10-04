@@ -5,13 +5,13 @@ using Microsoft.Data.Sqlite;
 
 namespace SparkStudio.Gateway;
 
-public sealed record AlarmDefinition(string Id, string Name, string TagPath, bool Enabled, string Mode, double Setpoint, double Deadband = 0, int Priority = 1);
+public sealed record AlarmDefinition(string Id, string Name, string TagPath, bool Enabled, string Mode, double Setpoint, double Deadband = 0, int Priority = 1, string? Message = null);
 public sealed record HistoryDefinition(string TagPath, bool Enabled, double Deadband = 0, int MaxIntervalMs = 60000, int RetentionDays = 7);
 public sealed record ProcessDataConfiguration(long Revision, int AlarmRetentionDays, AlarmDefinition[] Alarms, HistoryDefinition[] History, string? ConfigurationError = null, string? StorageError = null, bool ReplaceInvalidConfiguration = false);
 public sealed record AlarmState(string Id, string Name, string TagPath, int Priority, bool Active, bool Acknowledged, string Quality,
-    JsonElement Value, string? ActiveAt, string? ClearedAt, string? AcknowledgedAt, string? AcknowledgedBy, string EventId);
+    JsonElement Value, string? ActiveAt, string? ClearedAt, string? AcknowledgedAt, string? AcknowledgedBy, string EventId, string? Message = null);
 public sealed record AlarmJournalEntry(string Id, string Name, string TagPath, int Priority, bool Active, bool Acknowledged, string Quality,
-    JsonElement Value, string RecordedAt, string Kind, string? Actor, string EventId);
+    JsonElement Value, string RecordedAt, string Kind, string? Actor, string EventId, string? Message = null);
 public sealed record AlarmJournalResult(AlarmJournalEntry[] Events, bool Truncated);
 public sealed record HistoryPoint(string Timestamp, JsonElement Value, string Quality);
 public sealed record HistorySeries(string Path, HistoryPoint[] Points);
@@ -38,6 +38,9 @@ public sealed class ProcessDataService : BackgroundService
     private DateTimeOffset lastRetention;
     private string? error;
     private bool configurationPending = true;
+    private long modelGeneration = -1;
+    private AlarmDefinition[] modelAlarms = [];
+    private AlarmDefinition[] EffectiveAlarms => [.. configuration.Alarms, .. modelAlarms];
 
     public ProcessDataService(string directory, TagEngine tags, RecoveryQuarantine recovery, ILogger<ProcessDataService> logger, TimeProvider? clock = null)
     {
@@ -108,7 +111,14 @@ public sealed class ProcessDataService : BackgroundService
         if (configurationError is not null || storageError is not null || error is not null) throw new InvalidOperationException(configurationError ?? storageError ?? error);
     }
     public ProcessDataConfiguration Configuration() { lock (gate) return configuration with { Alarms = [.. configuration.Alarms], History = [.. configuration.History], ConfigurationError = configurationError, StorageError = storageError ?? error }; }
-    public object Diagnostics() { lock (gate) return new { error = configurationError ?? storageError ?? error, configurationError, storageError, configuredAlarms = configuration.Alarms.Length, configuredHistory = configuration.History.Length, activeAlarms = states.Values.Count(state => state.Active), enabled = !recovery.Active && configurationError is null && storageError is null && error is null }; }
+    public object Diagnostics() { lock (gate) return new { error = configurationError ?? storageError ?? error, configurationError, storageError, configuredAlarms = configuration.Alarms.Length, modelAlarms = modelAlarms.Length, configuredHistory = configuration.History.Length, activeAlarms = states.Values.Count(state => state.Active), enabled = !recovery.Active && configurationError is null && storageError is null && error is null }; }
+    public AlarmDefinition[] ModelAlarms() { lock (gate) { RefreshModelAlarms(); return [.. modelAlarms]; } }
+    private void RefreshModelAlarms()
+    {
+        var current = tags.ModelAlarmConfiguration();
+        if (current.Generation == modelGeneration) return;
+        modelGeneration = current.Generation; modelAlarms = current.Alarms; configurationPending = true;
+    }
     public ProcessDataConfiguration Save(ProcessDataConfiguration next)
     {
         Validate(next);
@@ -147,6 +157,7 @@ public sealed class ProcessDataService : BackgroundService
     // startup and retry finish its SQLite side after a failed save or power loss.
     private void ReconcileConfiguration()
     {
+        RefreshModelAlarms();
         var now = clock.GetUtcNow();
         using var transaction = Database.BeginTransaction();
         var identities = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -156,7 +167,7 @@ public sealed class ProcessDataService : BackgroundService
             using var reader = command.ExecuteReader();
             while (reader.Read()) identities[reader.GetString(0)] = reader.GetString(1);
         }
-        var definitions = configuration.Alarms.ToDictionary(item => item.Id, StringComparer.Ordinal);
+        var definitions = EffectiveAlarms.ToDictionary(item => item.Id, StringComparer.Ordinal);
         var removed = new List<string>();
         foreach (var previous in states.Values)
         {
@@ -185,19 +196,26 @@ public sealed class ProcessDataService : BackgroundService
         if (value.Revision < 1 || value.AlarmRetentionDays is < 1 or > 3650 || value.Alarms is null || value.History is null || value.Alarms.Length > 2000 || value.History.Length > 5000)
             throw new ArgumentException("Choose 1–3650 retention days, at most 2,000 alarms and 5,000 historical tags.");
         var ids = new HashSet<string>(StringComparer.Ordinal); var paths = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var alarm in value.Alarms)
-        {
-            if (alarm is null || string.IsNullOrWhiteSpace(alarm.Id) || alarm.Id.Length > 64 || !alarm.Id.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_') || !ids.Add(alarm.Id)
-                || string.IsNullOrWhiteSpace(alarm.Name) || alarm.Name.Length > 200 || alarm.Mode is not ("high" or "low" or "equal") || !double.IsFinite(alarm.Setpoint) || !double.IsFinite(alarm.Deadband) || alarm.Deadband < 0 || alarm.Priority is < 1 or > 4)
-                throw new ArgumentException("Alarm definitions need unique IDs, names, high/low/equal mode, finite setpoints, nonnegative deadbands and priority 1–4.");
-            ValidatePath(alarm.TagPath);
-        }
+        foreach (var alarm in value.Alarms) ValidateAlarm(alarm, ids);
         foreach (var history in value.History)
         {
             if (history is null || !paths.Add(history.TagPath) || !double.IsFinite(history.Deadband) || history.Deadband < 0 || history.MaxIntervalMs is < 250 or > 86400000 || history.RetentionDays is < 1 or > 3650)
                 throw new ArgumentException("History paths must be unique, with nonnegative deadband, 250–86400000 ms maximum interval and 1–3650 retention days.");
             ValidatePath(history.TagPath);
         }
+    }
+    private static void ValidateAlarm(AlarmDefinition? alarm, HashSet<string> ids)
+    {
+        if (alarm is null || string.IsNullOrWhiteSpace(alarm.Id) || alarm.Id.Length > 64 || !alarm.Id.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_') || !ids.Add(alarm.Id)
+            || string.IsNullOrWhiteSpace(alarm.Name) || alarm.Name.Length > 200 || alarm.Mode is not ("high" or "low" or "equal") || !double.IsFinite(alarm.Setpoint) || !double.IsFinite(alarm.Deadband) || alarm.Deadband < 0 || alarm.Priority is < 1 or > 4)
+            throw new ArgumentException("Alarm definitions need unique IDs, names, high/low/equal mode, finite setpoints, nonnegative deadbands and priority 1–4.");
+        ValidateAlarmMessage(alarm);
+        ValidatePath(alarm.TagPath);
+    }
+    private static void ValidateAlarmMessage(AlarmDefinition alarm)
+    {
+        if (alarm.Id.StartsWith(ModelAlarmTemplates.Prefix, StringComparison.Ordinal) || alarm.Message is not null && (alarm.Message.Length > 2048 || alarm.Message.Any(char.IsControl)))
+            throw new ArgumentException("Alarm IDs beginning model_ are reserved for model templates; messages require at most 2048 characters without controls.");
     }
     private static void ValidatePath(string path)
     {
@@ -271,13 +289,14 @@ public sealed class ProcessDataService : BackgroundService
         lock (gate)
         {
             if (configurationError is not null || storageError is not null) return;
+            RefreshModelAlarms();
             if (configurationPending) ReconcileConfiguration();
             var now = clock.GetUtcNow();
-            var paths = configuration.Alarms.Select(alarm => alarm.TagPath).Concat(configuration.History.Where(item => item.Enabled).Select(item => item.TagPath)).Distinct(StringComparer.Ordinal).ToArray();
+            var paths = EffectiveAlarms.Select(alarm => alarm.TagPath).Concat(configuration.History.Where(item => item.Enabled).Select(item => item.TagPath)).Distinct(StringComparer.Ordinal).ToArray();
             var readings = tags.Read(paths, null).ToDictionary(value => value.Path, StringComparer.Ordinal);
             using var transaction = Database.BeginTransaction();
             var updates = new List<AlarmState>(); var historyUpdates = new List<(string Path, JsonElement Value, string Quality)>();
-            foreach (var alarm in configuration.Alarms)
+            foreach (var alarm in EffectiveAlarms)
             {
                 var reading = readings[alarm.TagPath]; var value = JsonSerializer.SerializeToElement(reading.Value);
                 states.TryGetValue(alarm.Id, out var previous);
@@ -295,8 +314,8 @@ public sealed class ProcessDataService : BackgroundService
                 var activated = active && previous?.Active != true; var cleared = !active && previous?.Active == true;
                 var next = new AlarmState(alarm.Id, alarm.Name, alarm.TagPath, alarm.Priority, active, activated ? false : previous?.Acknowledged ?? true,
                     alarm.Enabled ? quality : "Disabled", value, activated ? now.ToString("O") : previous?.ActiveAt, cleared ? now.ToString("O") : activated ? null : previous?.ClearedAt,
-                    activated ? null : previous?.AcknowledgedAt, activated ? null : previous?.AcknowledgedBy, activated || previous is null ? Guid.NewGuid().ToString("N") : previous.EventId);
-                var changed = previous is null || activated || cleared || previous.Quality != next.Quality || previous.Name != next.Name || previous.TagPath != next.TagPath || previous.Priority != next.Priority;
+                    activated ? null : previous?.AcknowledgedAt, activated ? null : previous?.AcknowledgedBy, activated || previous is null ? Guid.NewGuid().ToString("N") : previous.EventId, alarm.Message);
+                var changed = AlarmChanged(previous, next, activated, cleared);
                 if (changed) { Persist(next, transaction); Journal(next, activated ? "active" : cleared ? "cleared" : previous is null ? "initial" : "quality", null, now, transaction); }
                 updates.Add(next);
             }
@@ -317,6 +336,10 @@ public sealed class ProcessDataService : BackgroundService
             error = null;
         }
     }
+
+    private static bool AlarmChanged(AlarmState? previous, AlarmState next, bool activated, bool cleared)
+        => previous is null || activated || cleared || previous.Quality != next.Quality || previous.Name != next.Name
+            || previous.TagPath != next.TagPath || previous.Priority != next.Priority || previous.Message != next.Message;
 
     private void SaveRetention(HistoryDefinition policy, SqliteTransaction transaction)
         => Execute("INSERT INTO history_retention(path,days) VALUES($path,$days) ON CONFLICT(path) DO UPDATE SET days=excluded.days", transaction, ("$path", policy.TagPath), ("$days", policy.RetentionDays));
@@ -340,7 +363,7 @@ public sealed class ProcessDataService : BackgroundService
     private void Persist(AlarmState state, SqliteTransaction transaction) => Execute("INSERT INTO alarm_state(id,document) VALUES($id,$document) ON CONFLICT(id) DO UPDATE SET document=excluded.document", transaction, ("$id", state.Id), ("$document", JsonSerializer.Serialize(state, Json)));
     private void Journal(AlarmState state, string kind, string? actor, DateTimeOffset now, SqliteTransaction transaction)
     {
-        var entry = new AlarmJournalEntry(state.Id, state.Name, state.TagPath, state.Priority, state.Active, state.Acknowledged, state.Quality, state.Value, now.ToString("O"), kind, actor, state.EventId);
+        var entry = new AlarmJournalEntry(state.Id, state.Name, state.TagPath, state.Priority, state.Active, state.Acknowledged, state.Quality, state.Value, now.ToString("O"), kind, actor, state.EventId, state.Message);
         Execute("INSERT INTO alarm_journal(recorded,document) VALUES($time,$document)", transaction, ("$time", now.ToUnixTimeMilliseconds()), ("$document", JsonSerializer.Serialize(entry, Json)));
     }
     private void Execute(string sql, SqliteTransaction? transaction = null, params (string Name, object Value)[] parameters)

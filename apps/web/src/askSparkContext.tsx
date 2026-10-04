@@ -9,6 +9,8 @@ import { prepareAskSparkImage, type AskSparkImage } from "./askSparkImages";
 import { openAskSparkProject, registerAskSparkNavigationContext } from "./askSparkProjectNavigation";
 import { AskSparkRetainedImages } from "./askSparkRetainedImages";
 import { cropRetainedImages } from "./askSparkImageCrops";
+import { clearModelDraft } from "./modelWorkspace";
+import { clearModelNavigation, installModelNavigationGuards, modelNavigationSubject, resolveModelNavigation, subscribeModelNavigation } from "./modelNavigation";
 
 export interface AskSparkExecutionResult { result: unknown; summary?: string; undo?: () => void | Promise<void>; images?: AskSparkToolImage[]; contextUpdate?: AskSparkContext }
 export interface AskSparkMutation { projectId: string; name: string }
@@ -41,8 +43,22 @@ function normalizeExecution(value: unknown): AskSparkExecutionResult {
 }
 function resultError(result: unknown): string | undefined { return result !== null && typeof result === "object" && "error" in result && typeof result.error === "string" ? result.error : undefined; }
 
+function ModelNavigationDialog() {
+  const [pending, setPending] = useState(false), dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => subscribeModelNavigation(setPending), []);
+  useEffect(() => { const element = dialog.current; if (pending) element?.showModal(); return () => element?.close(); }, [pending]);
+  if (!pending) return null;
+  return <dialog ref={dialog} className="project-dialog" aria-labelledby="model-navigation-title" aria-describedby="model-navigation-description" onCancel={event => { event.preventDefault(); resolveModelNavigation(false); }} onKeyDown={event => event.stopPropagation()}>
+    <header><div className="eyebrow">UNSAVED CHANGES</div><h2 id="model-navigation-title">Leave {modelNavigationSubject()}?</h2></header>
+    <div className="project-dialog-body"><p id="model-navigation-description">Your changes have not been saved. Stay to keep editing, or discard this draft and leave. Saved gateway data is unchanged.</p></div>
+    <footer><button type="button" className="button" autoFocus onClick={() => resolveModelNavigation(false)}>Stay</button><button type="button" className="button project-archive-button" onClick={() => resolveModelNavigation(true)}>Discard draft and leave</button></footer>
+  </dialog>;
+}
+
 export function AskSparkProvider({ children }: { children: ReactNode }) {
   const auth = useAuth(), inputs = useAskSparkPrivateInputs();
+  useEffect(() => installModelNavigationGuards(), []);
+  useEffect(() => () => clearModelNavigation(), [auth.user?.id]);
   const [open, setOpen] = useState(false), [voiceRequest, setVoiceRequest] = useState(0), [draft, setDraft] = useState("");
   const [context, setContext] = useState<AskSparkContext>({}), [pinned, setPinned] = useState(false);
   const [activeContext, setActiveContext] = useState<AskSparkContext>({});
@@ -106,7 +122,7 @@ export function AskSparkProvider({ children }: { children: ReactNode }) {
     lifecycle.current++; stop(); setMessages([]); setActions([]); setStatus(null); setError(""); setConversations([]); setOpen(false); setVoiceRequest(0);
     imageUrls.current.forEach(url => URL.revokeObjectURL(url)); imageUrls.current.clear(); imageDraft.current = []; retainedImages.current.clear(); setImages([]); setImagesBusy(false);
     undoActions.current.clear(); pin.current = false; setPinned(false); excluded.current = []; refreshContext();
-    if (currentStorage.current && currentStorage.current !== identity) { try { sessionStorage.removeItem(currentStorage.current); } catch { /* Storage may be disabled. */ } }
+    if (currentStorage.current && currentStorage.current !== identity) { clearModelDraft(); try { sessionStorage.removeItem(currentStorage.current); } catch { /* Storage may be disabled. */ } }
     currentStorage.current = identity; setLoadedIdentity(identity);
     const saved = identity ? readAskSparkSession(identity) : { draft: "" }; conversation.current = saved.conversationId; setDraft(saved.draft);
     if (identity) { void refreshStatus(); if (saved.conversationId) void openConversation(saved.conversationId).then(() => { if (currentStorage.current === identity) setDraft(saved.draft); }); }
@@ -148,7 +164,7 @@ export function AskSparkProvider({ children }: { children: ReactNode }) {
       return { result, summary: `Saved ${result.created.length} of ${result.requested} image crops.${result.error ? ` ${result.error}` : ""}` };
     }
     const executionContext = { ...captured, executionBatchId: batch.id, executionBatchIndex: batch.index,
-      currentUserId: auth.user?.id, currentUsername: auth.user?.username, resolveSecret: inputs.resolveSecret, resolveAttachment: inputs.resolveAttachment };
+      currentUserId: auth.user?.id, ownerId: auth.user?.id, currentUsername: auth.user?.username, resolveSecret: inputs.resolveSecret, resolveAttachment: inputs.resolveAttachment };
     const executor = [...executors.current.values()].find(item => item.supports(call.name));
     if (executor) return normalizeExecution(await executor.execute(call.name, call.arguments, executionContext, signal));
     if (supportsGatewayTool(call.name)) return { result: await executeGatewayTool(call.name, call.arguments, executionContext, signal) };
@@ -256,5 +272,5 @@ export function AskSparkProvider({ children }: { children: ReactNode }) {
     approval, approve: approved => approvalWait.current?.resolve(approved), undo, conversations, loadHistory, openConversation, deleteConversation, newConversation, images, imagesBusy, addImages, removeImage, retainedImagePreview };
   // Do not expose the previous account's state during the render before effect cleanup.
   if (loadedIdentity !== identity) Object.assign(value, { open: false, draft: "", messages: [], actions: [], images: [], conversations: [], approval: null, status: null, error: "", providerError: undefined, errorCanRefreshStatus: false, busy: false });
-  return <Context.Provider value={value}>{children}{loadedIdentity === identity && auth.user ? inputs.dialog : null}</Context.Provider>;
+  return <Context.Provider value={value}>{children}{loadedIdentity === identity && auth.user ? <>{inputs.dialog}<ModelNavigationDialog /></> : null}</Context.Provider>;
 }

@@ -5,6 +5,7 @@ public static class ProcessDataEndpoints
     public static void MapProcessDataConfiguration(this WebApplication app)
     {
         app.MapGet("/api/gateway/process-data", (ProcessDataService service) => service.Configuration()).Access("configuration");
+        app.MapGet("/api/gateway/process-data/model-alarms", (ProcessDataService service) => new { alarms = service.ModelAlarms() }).Access("configuration");
         app.MapGet("/api/gateway/process-data/diagnostics", (ProcessDataService service) => service.Diagnostics()).Access("diagnostics");
         app.MapPut("/api/gateway/process-data", (ProcessDataConfiguration request, ProcessDataService service) => service.Save(request)).Access("configuration", audit: true);
     }

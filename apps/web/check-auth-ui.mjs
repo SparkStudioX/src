@@ -243,16 +243,28 @@ await check('capability-only accounts receive gateway navigation without adminis
 });
 await check('gateway sections reflect independent capabilities and forbidden hashes fall back to an allowed section', () => {
   globalThis.window={location:{hash:'#security'}};
+  const sectionFor = capability => capability === 'configuration' ? 'data' : capability;
   for(const capability of Object.keys(noCapabilities)) {
     state(identity('engineering',{},false,{[capability]:true}),{requestedSection:'security',data:null,busy:false});
     const html=render(GatewayConsole);
     const nav=html.match(/<nav aria-label="Gateway sections">([^]*?)<\/nav>/)?.[1] ?? '';
-    assert.ok(nav.includes(`href="#${capability}"`),capability);
+    assert.ok(nav.includes(`href="#${sectionFor(capability)}"`),capability);
     for (const processSection of ['alarms', 'history']) assert.equal(nav.includes(`href="#${processSection}"`), capability === 'configuration', `${capability} access to ${processSection}`);
     assert.doesNotMatch(nav, /href="#process-data"|Alarms &amp; history/);
-    for(const other of Object.keys(noCapabilities).filter(key=>key!==capability)) assert.ok(!nav.includes(`href="#${other}"`),`${capability} leaked ${other}`);
-    assert.doesNotMatch(nav,/href="#security"|href="#recovery"/);
+    for(const other of Object.keys(noCapabilities).filter(key=>key!==capability)) assert.ok(!nav.includes(`href="#${sectionFor(other)}"`),`${capability} leaked ${other}`);
+    assert.doesNotMatch(nav,/href="#security"|href="#recovery"|href="#configuration"/);
     assert.doesNotMatch(html,/Gateway accounts|New user/);
+  }
+  delete globalThis.window;
+});
+await check('Data connection and certificate deep links require the existing Configuration capability', () => {
+  for (const hash of ['#data', '#data/connections', '#data/certificates']) {
+    globalThis.window = { location: { hash } };
+    for (const capability of Object.keys(noCapabilities)) {
+      state(identity('engineering', {}, false, { [capability]: true }), { data: null, busy: false });
+      const panel = descendants(GatewayConsole(), value => value.type?.name === 'GatewayConfiguration');
+      assert.equal(panel.length, capability === 'configuration' ? 1 : 0, capability + ' at ' + hash);
+    }
   }
   delete globalThis.window;
 });

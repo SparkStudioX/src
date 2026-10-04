@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { useAuth } from "./Auth";
 import { api, displayValue, id } from "./api";
 import { Field } from "./App";
-import type { Connection, ConnectionEditorSection, SourceBrowseEntry, SourceBrowsePage, SourceConnectionType, SourceImportPoint, SourceImportPreview, SourceLimits, SourceMqttMapping, SourceOwnedPoint, SourcePoint, SourceReadValue, SourceScriptTestResult, SourceSettings, TagWriteDataType } from "./types";
+import type { Connection, ConnectionEditorSection, SourceBrowseEntry, SourceBrowsePage, SourceConnectionType, SourceImportPoint, SourceImportPreview, SourceLimits, SourceMqttMapping, SourceOwnedPoint, SourcePoint, SourceReadValue, SourceScriptTestResult, SourceSettings, TagDefinition, TagWriteDataType } from "./types";
+import { modelFromSource, openModelDraft } from "./modelWorkspace";
 import { scalarTypes } from "./deviceConnections";
 import { defaultSourceSettings, parseSourceMap, sourceBrowseRows, sourceEntryKey, sourceImportPoint, validateSourcePoints } from "./sourceConnections";
 import "./sourceConnections.css";
@@ -123,6 +125,8 @@ export function SourceConnectionTools({ connection, saved, disabled, onChange, o
   const [pointDraft, setPointDraft] = useState<SourcePoint | null>(null), [editingPointId, setEditingPointId] = useState<string | null>(null);
   const [entries, setEntries] = useState<SourceBrowseEntry[]>([]), [token, setToken] = useState<string | null>(null), [truncated, setTruncated] = useState(false);
   const [trail, setTrail] = useState<{ address: string; name: string }[]>([]), [selected, setSelected] = useState<Record<string, SourceImportPoint>>({});
+  const selectedEntries = useRef(new Map<string, SourceBrowseEntry>());
+  const { user } = useAuth();
   const [root, setRoot] = useState(`[default]Sources/${connection.id}`), [preview, setPreview] = useState<SourceImportPreview | null>(null);
   const [values, setValues] = useState<Record<string, SourceReadValue>>({}), [owned, setOwned] = useState<SourceOwnedPoint[]>([]), [ownedLoaded, setOwnedLoaded] = useState(false);
   const [scriptMapping, setScriptMapping] = useState(""), [topic, setTopic] = useState("plant/example"), [payload, setPayload] = useState("42"), [retained, setRetained] = useState(false), [scriptResult, setScriptResult] = useState<SourceScriptTestResult | null>(null);
@@ -153,6 +157,7 @@ export function SourceConnectionTools({ connection, saved, disabled, onChange, o
   }
   function toggle(entry: SourceBrowseEntry, checked: boolean) {
     setPreview(null); const key = sourceEntryKey(entry);
+    if (checked) selectedEntries.current.set(key, entry); else selectedEntries.current.delete(key);
     setSelected(old => { const next = { ...old }; if (checked) next[key] = sourceImportPoint(entry, root); else delete next[key]; return next; });
   }
   async function importDevice(entry: SourceBrowseEntry) {
@@ -164,10 +169,24 @@ export function SourceConnectionTools({ connection, saved, disabled, onChange, o
         if (catalog.length > 1000) throw new Error("This device exceeds the 1,000-point reviewed batch limit. Browse it and import smaller selections.");
         if (page.truncated) throw new Error("The device catalog was truncated; import visible selections after reviewing its diagnostics.");
       } while (continuation);
+      for (const item of catalog.filter(item => item.isVariable)) selectedEntries.current.set(sourceEntryKey(item), item);
       setSelected(old => ({ ...old, ...Object.fromEntries(catalog.filter(item => item.isVariable).map(item => [sourceEntryKey(item), sourceImportPoint(item, root)])) })); setPreview(null);
     });
   }
   const requested = Object.values(selected);
+  async function createType() {
+    await run(async current => {
+      const configured = await api<TagDefinition[]>("/tag-engineering/definitions");
+      const catalog = Object.entries(selected).map(([key, point]) => selectedEntries.current.get(key) || { ...point, isVariable: true });
+      let sourceConnection = connection;
+      if (connection.type === "mqtt") {
+        const result = await api<SourceOwnedPoint[] | { leaves?: SourceOwnedPoint[]; points?: SourceOwnedPoint[]; items?: SourceOwnedPoint[] }>(`${route}/ownership`);
+        const leaves = Array.isArray(result) ? result : result.leaves ?? result.points ?? result.items ?? [];
+        sourceConnection = { ...connection, source: { ...settings, points: [...points, ...leaves.filter(point => !point.suppressed && !point.pruned).map(point => ({ id: point.pointId, name: point.path, address: point.address, selector: point.selector, mappingId: point.mappingId, dataType: scalarTypes.find(type => type === point.dataType) || "String", writable: false as const }))] } };
+      }
+      if (current() && user) openModelDraft({ definition: modelFromSource(sourceConnection, catalog, configured), origin: "source" }, user.id);
+    });
+  }
   async function reviewImport() { if (!available || !requested.length) return; await run(async current => { const result = await api<SourceImportPreview>(`${route}/import/preview`, "POST", { revision: connection.revision ?? 0, points: requested }); if (current()) setPreview(result); }); }
   async function applyImport() { if (!available || !preview) return; await run(async current => { const result = await api<{ imported: number; connection: Connection }>(`${route}/import/apply`, "POST", { revision: connection.revision ?? 0, points: requested, previewToken: preview.previewToken }); if (!current()) return; notify(`${result.imported} source points and tags imported atomically.`); onImported(result.connection); }); }
   async function read(ids: string[]) { if (!available || !ids.length) return; await run(async current => { const result = await api<{ values: SourceReadValue[] }>(`${route}/read`, "POST", { revision: connection.revision ?? 0, nodeIds: ids.slice(0, 1000) }); if (current()) setValues(old => ({ ...old, ...Object.fromEntries(result.values.map(value => [value.pointId, value])) })); }); }
@@ -203,6 +222,10 @@ export function SourceConnectionTools({ connection, saved, disabled, onChange, o
       <section className="browse-section" hidden={section !== undefined && section !== "mapping-test"}><h3>Mapping test</h3><p>Evaluate one supplied payload without changing live values or definitions. Tests use the selected draft mapping; save a new connection once to enable this panel.</p><div className="form-two-col"><Field label="Test mapping"><select value={scriptMapping} onChange={event => { scriptGeneration.current++; setScriptMapping(event.target.value); setScriptResult(null); }}><option value="">Choose a mapping…</option>{settings.mqtt?.mappings?.map(mapping => <option value={mapping.id} key={mapping.id}>{mapping.topicFilter}</option>)}</select></Field><Field label="Topic"><input value={topic} onChange={event => { scriptGeneration.current++; setTopic(event.target.value); setScriptResult(null); }} /></Field></div><Field label="Test payload"><textarea rows={5} spellCheck={false} value={payload} onChange={event => { scriptGeneration.current++; setPayload(event.target.value); setScriptResult(null); }} /></Field><label className="checkbox-field"><input type="checkbox" checked={retained} onChange={event => { scriptGeneration.current++; setRetained(event.target.checked); setScriptResult(null); }} /><span>Retained message</span></label><button className="button" disabled={!testAvailable || busy || !scriptMapping} onClick={() => void run(async current => { const scriptStamp = scriptGeneration.current; const result = await api<SourceScriptTestResult>(`${route}/script/test`, "POST", { revision: connection.revision ?? 0, mappingId: scriptMapping, mapping: settings.mqtt?.mappings?.find(mapping => mapping.id === scriptMapping), topic, payload, retained }); if (current() && scriptStamp === scriptGeneration.current) setScriptResult(result); })}>Test mapping</button>{scriptResult !== null && <SourceScriptTestOutput result={scriptResult} />}</section>
       <section className="browse-section" hidden={section !== undefined && section !== "ownership"}><div className="browse-section-heading"><div><h3>Automatic ownership and suppression</h3><p>Removing a generated tag suppresses rediscovery. Pruning retains identity and locked types.</p></div><button className="button" disabled={!ownershipAvailable || busy} onClick={() => void ownership()}>Load ownership</button></div>{ownedLoaded && !owned.length && <p>No owned source definitions.</p>}{!!owned.length && <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Path / identity</th><th>State</th><th>Type</th><th>Actions</th></tr></thead><tbody>{owned.slice(0, 1000).map(point => <tr key={point.pointId}><td>{point.path}<small>{point.address}{point.selector ? ` · ${point.selector}` : ""}</small></td><td>{point.suppressed ? "Suppressed" : point.pruned ? "Pruned" : "Owned"}</td><td>{point.dataType}</td><td>{point.suppressed && <button className="button small" disabled={busy} onClick={() => void run(async current => { await api(`${route}/suppression/clear`, "POST", { pointId: point.pointId, revision: connection.revision ?? 0 }); if (current()) { notify("Suppression cleared. Rediscovery is still subject to type, namespace and capacity checks."); setOwnedLoaded(false); setOwned([]); } })}>Allow rediscovery</button>}</td></tr>)}</tbody></table></div>}{owned.length > 1000 && <p>Showing the first 1,000 of {owned.length} owned records.</p>}</section>
     </>}
+    <SourceModelDraftPanel section={section} count={requested.length} available={available} busy={busy} createType={createType} />
     {error && <p className="inline-error" role="alert" style={{ whiteSpace: "pre-wrap" }}>{error}</p>}
   </div>;
+}
+function SourceModelDraftPanel({ section, count, available, busy, createType }: { section?: ConnectionEditorSection; count: number; available: boolean; busy: boolean; createType: () => Promise<void> }) {
+  return (section === undefined || section === "browse") && count > 0 ? <div className="model-actions"><button type="button" className="button" disabled={!available || busy || count > 128} onClick={() => void createType()}>Create model from selection</button><small>Reuse tags you have already imported. Opens Models so you can review the design before saving.</small></div> : null;
 }

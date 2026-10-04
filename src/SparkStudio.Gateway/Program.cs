@@ -49,6 +49,7 @@ builder.Services.AddSingleton(_ => new ConnectorService(dataDir, recovery.Ensure
 builder.Services.AddSingleton(sp => new TagEngine(sp.GetRequiredService<ProjectCatalog>().GatewayStore,
     sp.GetRequiredService<ConnectorService>(), sp.GetRequiredService<ILogger<TagEngine>>(), recovery, enableDemoTags: builder.Configuration.GetValue<bool>("SparkStudio:EnableDemoTags")));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TagEngine>());
+builder.Services.AddModelPublishing(dataDir);
 builder.Services.AddSingleton(sp => new ProcessDataService(dataDir, sp.GetRequiredService<TagEngine>(), recovery, sp.GetRequiredService<ILogger<ProcessDataService>>()));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ProcessDataService>());
 builder.Services.AddSingleton<ProjectRuntimeRegistry>();
@@ -113,6 +114,7 @@ app.MapDeploymentSettingsEndpoints();
 app.MapGatewayRecoveryEndpoints();
 app.MapGatewayBackupEndpoints();
 app.MapProcessDataConfiguration();
+app.MapGroup("/api").MapModelPublishingEndpoints();
 OpcCertificateAdministration.MapEndpoints(app);
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -165,6 +167,8 @@ static void MapProjectEndpoints(RouteGroupBuilder routes)
 {
 routes.MapProjectAuthoringReview();
 routes.MapTagEngineeringEndpoints();
+routes.MapModelReadEndpoints();
+routes.MapModelManagementEndpoints();
 routes.MapPreviewEndpoints();
 routes.MapPythonComponentEventEndpoints();
 routes.MapRuntimeSessionMessageEndpoints();
@@ -248,7 +252,7 @@ routes.MapPost("/tags/read", (TagReadRequest request, HttpContext context, Secur
         throw new BadHttpRequestException("One or more tags are outside this project's readable tag scope.", 403);
     return values;
 }).Access("read", "context");
-routes.MapGet("/tag-definitions", (ProjectStore store) => store.GetTagDefinitions()).Access("configuration");
+routes.MapGet("/tag-definitions", (ProjectStore store) => TagModelWire.Definitions(store.GetTagDefinitions())).Access("configuration");
 routes.MapGet("/opcua/subscriptions", (TagEngine tags) => tags.SubscriptionSnapshot()).Access("configuration");
 routes.MapPost("/tags", (JsonObject value, TagEngine tags) => tags.SaveDefinition(value)).Access("configuration", audit: true);
 routes.MapDelete("/tag-definitions", (string path, TagEngine tags) => tags.DeleteDefinition(path) ? Results.NoContent() : Results.NotFound(new { error = "Tag definition not found." })).Access("configuration", audit: true);

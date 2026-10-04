@@ -340,6 +340,7 @@ public static class GatewayRecovery
         "security" => "accounts-and-audit", "keys" => "keyring", "projects" or "projects.json" => "projects",
         "databases" => "managed-databases", "pki" or "certificates" => "certificates", "connections.json" => "connections",
         "tags.json" => "tags", "deployment.json" or "deployment.json.previous" => "deployment",
+        "model-publishing.json" => "model-publishing", "model-publishing-queue" => "outgoing-model-messages",
         "project.json" or "queries.json" or "published.json" or "scripts-draft.json" or "scripts-published.json" or "assets" => "legacy-project-data",
         _ => "additional-local-data"
     };

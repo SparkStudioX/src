@@ -17,8 +17,8 @@ public static class AskSparkToolSearch
     };
     private static readonly Dictionary<string, string[]> PageCategories = new(StringComparer.Ordinal)
     {
-        ["overview"] = ["gateway"], ["diagnostics"] = ["gateway"], ["configuration"] = ["connections", "sources"],
-        ["connections"] = ["connections", "sources"], ["tags"] = ["tags"], ["designer"] = ["designer"],
+        ["overview"] = ["gateway"], ["diagnostics"] = ["gateway"], ["data"] = ["connections", "sources"],
+        ["connections"] = ["connections", "sources"], ["tags"] = ["tags"], ["models"] = ["model"], ["designer"] = ["designer"],
         ["screens"] = ["designer"], ["templates"] = ["designer"], ["queries"] = ["queries"], ["scripts"] = ["scripts"],
         ["projects"] = ["projects"], ["publication"] = ["publication"], ["assets"] = ["assets"],
         ["alarms"] = ["process-data"], ["history"] = ["process-data"], ["process-data"] = ["process-data"],

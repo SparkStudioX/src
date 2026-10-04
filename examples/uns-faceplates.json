@@ -1,0 +1,205 @@
+{
+  "name": "UNS CNC faceplates",
+  "parameters": {},
+  "navigation": {
+    "mode": "none",
+    "startupScreenId": "uns-faceplates",
+    "items": []
+  },
+  "templates": [
+    {
+      "id": "cnc-faceplate",
+      "name": "CNC faceplate",
+      "width": 560,
+      "height": 470,
+      "parameters": {
+        "machine": "[default]Acme/Dallas/Machining/Line1/CNC01"
+      },
+      "parameterTypes": {
+        "machine": "model"
+      },
+      "modelParameters": {
+        "machine": {
+          "definitionId": "CNC",
+          "minVersion": 1
+        }
+      },
+      "components": [
+        {
+          "id": "reading-0",
+          "type": "value",
+          "x": 16,
+          "y": 16,
+          "width": 256,
+          "height": 136,
+          "props": {
+            "text": "Execution",
+            "tagPath": "{machine}/Execution"
+          }
+        },
+        {
+          "id": "reading-1",
+          "type": "value",
+          "x": 288,
+          "y": 16,
+          "width": 256,
+          "height": 136,
+          "props": {
+            "text": "Part count",
+            "tagPath": "{machine}/PartCount",
+            "unit": "count"
+          }
+        },
+        {
+          "id": "reading-2",
+          "type": "value",
+          "x": 16,
+          "y": 168,
+          "width": 256,
+          "height": 136,
+          "props": {
+            "text": "Ideal cycle",
+            "tagPath": "{machine}/IdealCycle",
+            "unit": "s"
+          }
+        },
+        {
+          "id": "reading-3",
+          "type": "value",
+          "x": 288,
+          "y": 168,
+          "width": 256,
+          "height": 136,
+          "props": {
+            "text": "Spindle speed",
+            "tagPath": "{machine}/Spindle/Speed",
+            "unit": "rev/min"
+          }
+        },
+        {
+          "id": "reading-4",
+          "type": "value",
+          "x": 16,
+          "y": 320,
+          "width": 256,
+          "height": 136,
+          "props": {
+            "text": "Spindle load",
+            "tagPath": "{machine}/Spindle/Load",
+            "unit": "%"
+          }
+        },
+        {
+          "id": "reading-5",
+          "type": "value",
+          "x": 288,
+          "y": 320,
+          "width": 256,
+          "height": 136,
+          "props": {
+            "text": "Running",
+            "tagPath": "{machine}/Running"
+          }
+        }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "id": "uns-faceplates",
+      "name": "Two CNC instances",
+      "width": 1200,
+      "height": 760,
+      "components": [
+        {
+          "id": "heading",
+          "type": "label",
+          "x": 24,
+          "y": 20,
+          "width": 1152,
+          "height": 44,
+          "props": {
+            "text": "One faceplate, two versioned CNC instances",
+            "fontSize": 27
+          }
+        },
+        {
+          "id": "setup",
+          "type": "label",
+          "x": 24,
+          "y": 76,
+          "width": 1152,
+          "height": 74,
+          "props": {
+            "text": "Gateway setup is separate. Configure the UNS workshop model before expecting live values. Project import preserves the CNC requirement; Diagnostics explains missing types or members.",
+            "fontSize": 17
+          }
+        },
+        {
+          "id": "title-1",
+          "type": "label",
+          "x": 24,
+          "y": 170,
+          "width": 560,
+          "height": 36,
+          "props": {
+            "text": "CNC01 · Haas01",
+            "fontSize": 22
+          }
+        },
+        {
+          "id": "machine-1",
+          "type": "template",
+          "x": 24,
+          "y": 214,
+          "width": 560,
+          "height": 470,
+          "props": {
+            "templateId": "cnc-faceplate",
+            "parameters": {
+              "machine": "[default]Acme/Dallas/Machining/Line1/CNC01"
+            }
+          }
+        },
+        {
+          "id": "title-2",
+          "type": "label",
+          "x": 616,
+          "y": 170,
+          "width": 560,
+          "height": 36,
+          "props": {
+            "text": "CNC02 · Haas02",
+            "fontSize": 22
+          }
+        },
+        {
+          "id": "machine-2",
+          "type": "template",
+          "x": 616,
+          "y": 214,
+          "width": 560,
+          "height": 470,
+          "props": {
+            "templateId": "cnc-faceplate",
+            "parameters": {
+              "machine": "[default]Acme/Dallas/Machining/Line1/CNC02"
+            }
+          }
+        },
+        {
+          "id": "upgrade-note",
+          "type": "label",
+          "x": 24,
+          "y": 704,
+          "width": 1152,
+          "height": 40,
+          "props": {
+            "text": "Upgrade CNC01 to CNC v2 to remove Spindle/Load. CNC02 remains v1; this template is deliberately unchanged so Diagnostics exposes the broken binding.",
+            "fontSize": 14
+          }
+        }
+      ]
+    }
+  ]
+}

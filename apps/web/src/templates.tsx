@@ -282,7 +282,7 @@ function ContainerPane(props: TemplateInstanceProps & { pane: ViewPane; context:
     const resize = () => { if (element.clientWidth && element.clientHeight) setSize({ width: element.clientWidth, height: element.clientHeight }); };
     resize(); const observer = new ResizeObserver(resize); observer.observe(element); return () => observer.disconnect();
   }, []);
-  const key = JSON.stringify([props.pane.id, props.pane.templateId, props.context, template.parameters, template.parameterTypes, template.instanceState, props.publishedAt]);
+  const key = JSON.stringify([props.pane.id, props.pane.templateId, props.context, template.parameters, template.parameterTypes, template.modelParameters, template.instanceState, props.publishedAt]);
   return <div className="view-pane-placement" ref={host}><TemplateInstanceCell {...props} key={key}
     component={panePlacement(props.component, props.pane)} template={template} row={{ id: props.pane.id, parameters: {} }}
     parentBindingInputs={props.parentBindingInputs ? [...props.parentBindingInputs, {}] : undefined}
