@@ -59,24 +59,8 @@ public static class GatewayAccess
             context.Items[ProjectKey] = projectId;
             context.Items[AudienceKey] = audience;
             var permissions = store.GetPermissions(actor, projectId);
-            // Gateway model authoring does not require a project. Explicit project routes
-            // and all operator reads retain their existing project grants and tag scopes.
-            var sharedModelConfiguration = policy.Permission == "modelRead" && audience == "engineering"
-                && !context.Request.RouteValues.ContainsKey("projectId") && store.Can(actor, null, "configuration");
-            var permitted = policy.Permission switch
-            {
-                "signedIn" => true,
-                "admin" => audience == "engineering" && permissions.GatewayAdmin,
-                "gateway" or "diagnostics" or "configuration" or "backups" or "audit" or "sessions" => audience == "engineering" && store.Can(actor, null, policy.Permission),
-                "design" => audience == "engineering" && permissions.Design,
-                "publish" => audience == "engineering" && permissions.Design && permissions.Publish,
-                "view" => audience == "operator" && permissions.View,
-                "operate" => audience == "operator" && permissions.Operate,
-                "command" => audience == "operator" && permissions.Commands && permissions.Operate && permissions.View,
-                "read" => audience == "operator" ? permissions.View : permissions.Design,
-                "modelRead" => sharedModelConfiguration || (audience == "operator" ? permissions.View : permissions.Design),
-                _ => false,
-            };
+            var sharedModelConfiguration = CanConfigureSharedModel(context, policy.Permission, audience, store, actor);
+            var permitted = HasPermission(policy.Permission, audience, permissions, sharedModelConfiguration, store, actor);
             if (!permitted)
             {
                 var denialAction = $"denied {context.Request.Method} {route}";
@@ -117,6 +101,37 @@ public static class GatewayAccess
             }
         });
     }
+
+    private static bool CanConfigureSharedModel(HttpContext context, string permission, string audience, SecurityStore store, SecurityUser actor)
+        // Gateway model authoring does not require a project. Explicit project routes
+        // and all operator reads retain their existing project grants and tag scopes.
+        => permission == "modelRead" && audience == "engineering"
+            && !context.Request.RouteValues.ContainsKey("projectId") && store.Can(actor, null, "configuration");
+
+    private static bool HasPermission(string permission, string audience, SecurityPermissions permissions, bool sharedModelConfiguration, SecurityStore store, SecurityUser actor)
+    {
+        if (permission == "signedIn") return true;
+        if (permission == "modelRead" && sharedModelConfiguration) return true;
+        if (permission is "read" or "modelRead") return audience == "operator" ? permissions.View : permissions.Design;
+        return audience == "engineering" ? HasEngineeringPermission(permission, permissions, store, actor) : HasOperatorPermission(permission, permissions);
+    }
+
+    private static bool HasEngineeringPermission(string permission, SecurityPermissions permissions, SecurityStore store, SecurityUser actor) => permission switch
+    {
+        "admin" => permissions.GatewayAdmin,
+        "gateway" or "diagnostics" or "configuration" or "backups" or "audit" or "sessions" => store.Can(actor, null, permission),
+        "design" => permissions.Design,
+        "publish" => permissions.Design && permissions.Publish,
+        _ => false,
+    };
+
+    private static bool HasOperatorPermission(string permission, SecurityPermissions permissions) => permission switch
+    {
+        "view" => permissions.View,
+        "operate" => permissions.Operate,
+        "command" => permissions.Commands && permissions.Operate && permissions.View,
+        _ => false,
+    };
 
     // Retain both the operation prefix and route suffix so long component API
     // routes still distinguish review from execution. Resource carries the path.
