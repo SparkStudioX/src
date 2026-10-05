@@ -1,3 +1,4 @@
+import { showNotifyAction } from "./notifyAction";
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { ApiError, resolvePath, scriptFailureMessage } from "./api";
@@ -361,7 +362,7 @@ export default function Popup({
                       [scope]: { ...previous[scope], [field]: value },
                     }))
                   }
-                  onAction={(leaf, instance, uiAction) => void run(leaf, instance, uiAction)}
+                  onAction={(leaf, instance, uiAction) => showNotifyAction(leaf, instance, message => setFeedback({ success: true, message })) || void run(leaf, instance, uiAction)}
                   onPythonEvent={(component, invocation, instance) => (active.current || isPythonUnmount(invocation.eventHandler)) && !sourceLocked && !readOnly
                     ? runSavedPythonEvent({ scope: queryScope, screenId: screen.id, parameters: popup.rootParameters,
                       popupOrigin: popup.origin, publishedAt: project.publishedAt }, component, invocation, instance).catch(error => {

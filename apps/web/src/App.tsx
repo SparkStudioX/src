@@ -102,6 +102,7 @@ import TranslationsEditor, { ComponentTranslationAssignment } from "./Translatio
 import { applyLocalizationCatalog } from "./localization";
 import { DesignerDiagnostics } from "./DesignerDiagnosticsDialog";
 import { DesignerModelBrowser, TagBrowserTabs } from "./DesignerModelBrowser";
+import { showNotifyAction } from "./notifyAction";
 import VisualStylesEditor, { ComponentStyleAssignment } from "./VisualStylesEditor";
 import { applyStyleCatalog } from "./visualStyles";
 import { usePreviewCommunication } from "./usePreviewCommunication";
@@ -1938,7 +1939,7 @@ export default function App() {
           onInputChange={previewForm.assign}
           onAutomaticInputChange={previewForm.assignAutomatic}
           onAction={(component, instance, uiAction) =>
-            void runPreviewAction(component, instance, uiAction)
+            showNotifyAction(component, instance, message => notify(message)) || void runPreviewAction(component, instance, uiAction)
           }
           onPythonEvent={(component, invocation, instance) => gatewayAdmin && previewCommunication.session?.mode === "live-actions"
             ? runSavedPythonEvent({

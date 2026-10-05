@@ -10,6 +10,8 @@ namespace SparkStudio.Gateway;
 public sealed class AskSparkSettings
 {
     public const string DefaultModel = "gemini-3.8-flash";
+    /// <summary>A fresh gateway caps monthly spend until an administrator chooses another allowance; 0 still means unlimited.</summary>
+    public const long DefaultMonthlyTokenLimit = 20_000_000;
     private sealed record Document(string Revision, bool Enabled, string Model, int ParallelLimit, string? ProtectedApiKey, long MonthlyTokenLimit = 0, int ModelStepLimit = 100, bool LoggingEnabled = true);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly Regex ModelName = new(@"\Agemini-[a-zA-Z0-9][a-zA-Z0-9._-]{0,90}\z", RegexOptions.CultureInvariant);
@@ -21,7 +23,9 @@ public sealed class AskSparkSettings
     {
         path = Path.Combine(directory, "ask-spark-settings.json");
         protector = protection.CreateProtector("SparkStudio.AskSpark.ApiKey.v1");
-        document = new("0", false, DefaultModel, 4, null);
+        // Fresh gateways start with raw provider logging off and a bounded allowance. Existing files keep their saved choices;
+        // a file written before the logging field existed keeps the logging it had.
+        document = new("0", false, DefaultModel, 4, null, DefaultMonthlyTokenLimit, LoggingEnabled: false);
         if (!File.Exists(path)) return;
         RecoveryFileSystem.RejectLinks(path);
         if (new FileInfo(path).Length > 32_768) throw new InvalidDataException("Ask Spark settings exceed the allowed size.");

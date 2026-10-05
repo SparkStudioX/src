@@ -112,7 +112,10 @@ internal static class AskSparkCacheChecks
             Check(result.Content.ToJsonString().Contains("signature-fixture", StringComparison.Ordinal), "usage extraction preserves signed raw model content");
             Check(handler.Creates.Single()["systemInstruction"]!["parts"]![0]!["text"]!.GetValue<string>().Contains(context.ToolDirectory, StringComparison.Ordinal), "stable discovery directory joins cached system prompt");
             await provider.GenerateAsync(contents, [Tool()], true, context, CancellationToken.None);
-            Check(handler.Creates.Count == 1 && handler.Generations.Last()["cachedContent"] is null && handler.Generations.Last()["tools"] is null, "forced final answer bypasses cached tool definitions");
+            Check(handler.Creates.Count == 1 && handler.Generations.Last()["cachedContent"] is null && handler.Generations.Last()["tools"]?[0]?["functionDeclarations"]?[0]?["name"]?.GetValue<string>() == "read_fixture"
+                && handler.Generations.Last()["toolConfig"]?["functionCallingConfig"]?["mode"]?.GetValue<string>() == "NONE"
+                && handler.Generations.Last()["generationConfig"]?["maxOutputTokens"]?.GetValue<int>() == AskSparkGemini.OutputTokenLimit,
+                "forced final answer bypasses the cache, keeps declarations for earlier calls and forbids new calls");
             handler.ExpireNext = true;
             var before = handler.Generations.Count;
             await provider.GenerateAsync(contents, [Tool()], false, context, CancellationToken.None);
@@ -144,7 +147,7 @@ internal static class AskSparkCacheChecks
         try
         {
             var settings = new AskSparkSettings(directory, new EphemeralDataProtectionProvider());
-            settings.Save(new("0", true, AskSparkSettings.DefaultModel, ApiKey: Key, MonthlyTokenLimit: 20_000));
+            settings.Save(new("0", true, AskSparkSettings.DefaultModel, ApiKey: Key, MonthlyTokenLimit: 200_000));
             var usage = new AskSparkUsage(directory);
             using var handler = new FixtureHandler(new FixtureClock(DateTimeOffset.UtcNow));
             using var client = new HttpClient(handler);
@@ -175,7 +178,7 @@ internal static class AskSparkCacheChecks
         var before = handler.Generations.Count;
         await RejectAsync(() => provider.TestAsync(CancellationToken.None), "insufficient monthly headroom");
         Check(handler.Generations.Count == before, "exhausted allowance stops before generation dispatch");
-        settings.Save(new(settings.Snapshot().Revision, true, AskSparkSettings.DefaultModel, MonthlyTokenLimit: 20_000));
+        settings.Save(new(settings.Snapshot().Revision, true, AskSparkSettings.DefaultModel, MonthlyTokenLimit: 200_000));
         var used = usage.Snapshot(20_000).UsedTokens;
         handler.CountStatus = HttpStatusCode.ServiceUnavailable;
         await RejectAsync(() => provider.TestAsync(CancellationToken.None), "token measurement failure");
@@ -193,7 +196,7 @@ internal static class AskSparkCacheChecks
         try
         {
             var settings = new AskSparkSettings(directory, new EphemeralDataProtectionProvider());
-            settings.Save(new("0", true, AskSparkSettings.DefaultModel, ApiKey: Key, MonthlyTokenLimit: 20_000));
+            settings.Save(new("0", true, AskSparkSettings.DefaultModel, ApiKey: Key, MonthlyTokenLimit: 200_000));
             var usage = new AskSparkUsage(directory);
             using var rawLog = new AskSparkRawLog(directory, settings);
             using var handler = new FixtureHandler(new FixtureClock(DateTimeOffset.UtcNow));

@@ -6,8 +6,11 @@ namespace SparkStudio.Gateway;
 /// <summary>Explicit Gemini REST calls. The provider never executes an application tool.</summary>
 public sealed class AskSparkGemini(HttpClient client, AskSparkSettings settings, RecoveryQuarantine? recovery = null, AskSparkUsage? usage = null, AskSparkRawLog? rawLog = null) : IAskSparkModel, IDisposable
 {
+    /// <summary>Room for long reasoning bursts and large tool arguments, such as model drafts, without a truncation repair round.</summary>
+    public const int OutputTokenLimit = 32_768;
     private readonly SemaphoreSlim admissions = new(4, 4);
     private readonly AskSparkCache cache = new(client, rawLog: rawLog);
+    private readonly AskSparkFiles files = new(client, rawLog);
     private const int MaximumResponseBytes = 2 * 1024 * 1024;
     private const string SystemPrompt = """
         You are Ask Spark, the SparkStudio engineering assistant. Help build and diagnose gateway applications.
@@ -15,8 +18,9 @@ public sealed class AskSparkGemini(HttpClient client, AskSparkSettings settings,
         publication, device state, or available capabilities. Inspect schemas/resources before editing. An error is not success.
         For Designer authoring, inspect spark_designer_component_schema for each component type you need. Follow its exact
         property types, color syntax, action shapes and event names; do not guess alternate APIs after a validation rejection.
-        A button's action is a string, not an object. Its script action runs Python; a result object with a message field
-        produces button feedback. Component message actions and JavaScript component events are different contracts.
+        A button's action is a string, not an object. For fixed click feedback or a toast use action notify with notifyMessage;
+        it needs no Python. A script action runs Python on the gateway; use it only when feedback depends on gateway logic.
+        Component message actions and JavaScript component events are different contracts.
         Request focused component schemas; load additional script/event/section contracts only when the task needs them.
         Prefer one update_components call with multiple componentIds for identical changes. patch.props shallow-merges:
         send only changed properties and preserve existing scripts/actions. Use apply_edits for different dependent edits,
@@ -65,9 +69,9 @@ public sealed class AskSparkGemini(HttpClient client, AskSparkSettings settings,
         var instructions = SystemPrompt + (string.IsNullOrEmpty(context?.ToolDirectory) ? "" : "\n\nAvailable tool directory (names and descriptions only; discover schemas before using tools):\n" + context.ToolDirectory);
         var body = new JsonObject
         {
-            ["contents"] = AskSparkContext.ForProvider(contents, finalAnswer ? [] : tools),
+            ["contents"] = AskSparkContext.ForProvider(contents, tools),
             ["systemInstruction"] = new JsonObject { ["parts"] = new JsonArray(new JsonObject { ["text"] = instructions }) },
-            ["generationConfig"] = new JsonObject { ["maxOutputTokens"] = 8192 }
+            ["generationConfig"] = new JsonObject { ["maxOutputTokens"] = OutputTokenLimit }
         };
         AddTools(body, tools, finalAnswer);
         var result = await SendAsync(body, true, cancellation, finalAnswer ? null : context);
@@ -152,11 +156,13 @@ public sealed class AskSparkGemini(HttpClient client, AskSparkSettings settings,
 
     private static void AddTools(JsonObject body, IReadOnlyList<AskSparkTool> tools, bool finalAnswer)
     {
-        if (tools.Count == 0 || finalAnswer) return;
+        if (tools.Count == 0) return;
         var declarations = new JsonArray(tools.OrderBy(tool => tool.Name, StringComparer.Ordinal).Select(tool => (JsonNode)new JsonObject
         { ["name"] = tool.Name, ["description"] = tool.Description, ["parametersJsonSchema"] = tool.Parameters.DeepClone() }).ToArray());
         body["tools"] = new JsonArray(new JsonObject { ["functionDeclarations"] = declarations });
-        body["toolConfig"] = new JsonObject { ["functionCallingConfig"] = new JsonObject { ["mode"] = "AUTO" } };
+        // A forced final answer keeps the declarations that earlier function calls and responses refer to,
+        // but mode NONE prevents new calls. Omitting them would leave history parts without their declarations.
+        body["toolConfig"] = new JsonObject { ["functionCallingConfig"] = new JsonObject { ["mode"] = finalAnswer ? "NONE" : "AUTO" } };
     }
 
     private async Task<JsonObject> SendAsync(JsonObject body, bool requireEnabled, CancellationToken cancellation, AskSparkModelContext? context = null)
@@ -210,10 +216,23 @@ public sealed class AskSparkGemini(HttpClient client, AskSparkSettings settings,
         var result = await ReadResponseAsync(response, 65_536, cancellation);
         if (result["totalTokens"] is not JsonValue value || !value.TryGetValue<long>(out var input) || input < 0 || input > 100_000_000)
             throw ProviderFailure("The AI provider could not measure this request's token allowance.");
-        return checked(input + (body["generationConfig"]?["maxOutputTokens"]?.GetValue<int>() ?? 8192));
+        return checked(input + (body["generationConfig"]?["maxOutputTokens"]?.GetValue<int>() ?? OutputTokenLimit));
     }
 
     private async Task<JsonObject> GenerateWithCacheAsync(JsonObject body, (string Model, string Key) credentials, string? cached, CancellationToken cancellation)
+    {
+        var referenced = await files.ReferenceImagesAsync(body, credentials.Key, cancellation);
+        if (ReferenceEquals(referenced, body)) return await GenerateInlineAsync(body, credentials, cached, cancellation);
+        try { return await GenerateInlineAsync(referenced, credentials, cached, cancellation); }
+        catch (AskSparkProviderException error) when (error.Error.HttpStatus is 400 or 403 or 404)
+        {
+            // A rejected or expired file reference must not end the conversation: forget the uploads and resend the pixels inline once.
+            files.Forget(credentials.Key);
+            return await GenerateInlineAsync(body, credentials, cached, cancellation);
+        }
+    }
+
+    private async Task<JsonObject> GenerateInlineAsync(JsonObject body, (string Model, string Key) credentials, string? cached, CancellationToken cancellation)
     {
         try { return await SendRequestAsync(cached is null ? body : AskSparkCache.Reference(body, cached), credentials, cached is not null, cancellation); }
         catch (CacheRejectedException) when (cached is not null)

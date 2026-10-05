@@ -43,7 +43,14 @@ internal static class ProjectInteractions
         }
         else if (action == "message") ComponentEventValidator.ValidateMessageAction(props["message"]);
         else if (action == "setTagValue") NativeTagActionDefinitions.Validate(props["tagWrite"]);
-        else if (action != "closePopup") throw new ArgumentException("Button action must be navigate, script, openPopup, closePopup, message or setTagValue.");
+        else if (action == "notify")
+        {
+            // Browser-only feedback text: shown verbatim, never executed or sent to the gateway when clicked.
+            var message = ProjectStore.Required(props, "notifyMessage").Trim();
+            if (message.Length is 0 or > 500 || message.Any(character => char.IsControl(character) && character is not ('\n' or '\r' or '\t')))
+                throw new ArgumentException("A notify button needs a message of 1–500 characters without control characters.");
+        }
+        else if (action != "closePopup") throw new ArgumentException("Button action must be navigate, script, openPopup, closePopup, message, setTagValue or notify.");
     }
 
     public static void ValidateDrawingActions(JsonObject project)

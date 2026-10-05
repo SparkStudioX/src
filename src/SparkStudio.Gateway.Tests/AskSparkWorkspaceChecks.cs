@@ -205,7 +205,8 @@ internal static class AskSparkWorkspaceChecks
         await provider.GenerateAsync(saved, [tool], false, new("Capture fixture", "image-fixture-scope"), CancellationToken.None);
         await provider.GenerateAsync(saved, [tool], true, new("Capture fixture", "image-fixture-scope"), CancellationToken.None);
         Check(handler.Generations.Count == 3 && handler.Counts.Count == 3, "image requests reach serialized HTTP boundary for uncached, cached and final rounds");
-        Check(handler.Generations[0]["tools"] is not null && handler.Generations[1]["cachedContent"] is not null && handler.Generations[2]["tools"] is null, "image normalization preserves provider cache and forced-final behavior");
+        Check(handler.Generations[0]["tools"] is not null && handler.Generations[1]["cachedContent"] is not null && handler.Generations[2]["cachedContent"] is null
+            && handler.Generations[2]["toolConfig"]?["functionCallingConfig"]?["mode"]?.GetValue<string>() == "NONE", "image normalization preserves provider cache and forced-final behavior");
         foreach (var body in handler.Generations.Concat(handler.Counts)) CheckImagePayload(body["contents"]!.AsArray(), saved);
         Check(saved.ToJsonString() == before && fixture.Conversations.Read(fixture.Actor.Id, conversation.Id).Contents.ToJsonString() == before, "transport normalization does not mutate signed or persisted conversation state");
         var normalized = AskSparkToolImages.ForProvider(saved);

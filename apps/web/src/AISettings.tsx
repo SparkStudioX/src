@@ -5,7 +5,7 @@ import { useAskSpark } from "./askSparkContext";
 import { askSparkError, defaultAskSparkModel, type AskSparkSettings, type AskSparkUsage } from "./askSparkClient";
 import "./askSpark.css";
 
-const initialSettings: AskSparkSettings = { revision: "0", enabled: false, model: defaultAskSparkModel, hasApiKey: false, parallelLimit: 4, monthlyTokenLimit: 0, modelStepLimit: 100, loggingEnabled: true };
+const initialSettings: AskSparkSettings = { revision: "0", enabled: false, model: defaultAskSparkModel, hasApiKey: false, parallelLimit: 4, monthlyTokenLimit: 20_000_000, modelStepLimit: 100, loggingEnabled: false };
 
 function settingsHaveChanges(saved: AskSparkSettings | null, settings: AskSparkSettings, apiKey: string, clearApiKey: boolean) {
   return Boolean(saved && (JSON.stringify(settings) !== JSON.stringify(saved) || apiKey.length > 0 || clearApiKey));

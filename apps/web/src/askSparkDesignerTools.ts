@@ -11,6 +11,10 @@ import { designerEdits } from "./askSparkDesignerEdits";
 import { designerWorkflows } from "./askSparkDesignerWorkflows";
 import { documentFor, exactKeys, idsArg, ownerKind, record, redactDesigner, safeValue, textArg } from "./askSparkDesignerModel";
 import type { DesignerBridge, DesignerSnapshot, ToolArgs } from "./askSparkDesignerModel";
+import { id } from "./api";
+import { getModelObject } from "./modelApi";
+import { createModelFaceplate } from "./designerModel";
+import type { Project } from "./types";
 
 const edits = { ...designerEdits, ...designerWorkflows };
 type Reader = (snapshot: DesignerSnapshot, args: ToolArgs) => unknown;
@@ -54,7 +58,7 @@ const bounded = (value: unknown) => {
 };
 const providerTools = ["spark_designer_crop_image_assets"];
 export const supportsDesignerTool = (name: string): boolean => !providerTools.includes(name) && catalog.some(tool => tool.name === name);
-export function designerImplementedNames(): string[] { return [...Object.keys(readers), ...Object.keys(edits), ...providerTools, "spark_designer_validate", "spark_designer_select", "spark_designer_save", "spark_designer_preview", "spark_designer_apply_edits", "spark_designer_open_document", "spark_designer_capture_canvas"]; }
+export function designerImplementedNames(): string[] { return [...Object.keys(readers), ...Object.keys(edits), ...providerTools, "spark_designer_validate", "spark_designer_select", "spark_designer_save", "spark_designer_preview", "spark_designer_apply_edits", "spark_designer_create_model_faceplate", "spark_designer_open_document", "spark_designer_capture_canvas"]; }
 
 interface DraftChain { batchId: string; index: number; originalToken: string; latestToken: string }
 const draftChains = new WeakMap<DesignerBridge, DraftChain>();
@@ -108,7 +112,21 @@ async function applyDraft(bridge: DesignerBridge, name: string, args: ToolArgs, 
   const expected = checkedToken(bridge, snapshot, args, context);
   const edit = name === "spark_designer_apply_edits" ? applyEdits : edits[name];
   if (!edit) throw new Error("Unknown designer tool.");
-  const next = edit(snapshot, args);
+  return commitDraft(bridge, args, context, snapshot, signal, expected, edit(snapshot, args));
+}
+/** Read the machine from the gateway, then add the same faceplate the Designer Model tree creates. Not batchable: it needs a live read. */
+async function createMachineFaceplate(bridge: DesignerBridge, args: ToolArgs, context: ToolArgs, snapshot: DesignerSnapshot, signal: AbortSignal) {
+  const expected = checkedToken(bridge, snapshot, args, context), templateId = textArg(args, "templateId");
+  if ([...snapshot.project.screens, ...snapshot.project.templates ?? []].some(item => item.id === templateId)) throw new Error("Template ID must be new and unique.");
+  const machine = await getModelObject(textArg(args, "instancePath"), signal); signal.throwIfAborted();
+  const template = createModelFaceplate(machine, prefix => prefix === "template" ? templateId : id(prefix));
+  if (typeof args.name === "string" && args.name.trim()) template.name = args.name.trim().slice(0, 128);
+  const next: Project = { ...snapshot.project, templates: [...snapshot.project.templates ?? [], template] };
+  const outcome = await commitDraft(bridge, args, context, snapshot, signal, expected, next);
+  return { ...outcome, result: { ...outcome.result, templateId, name: template.name, fields: template.components.length, machineParameter: "machine", modelRequirement: template.modelParameters },
+    summary: "Added an editable model faceplate template to the designer draft. Place it on a screen and set its machine parameter." };
+}
+async function commitDraft(bridge: DesignerBridge, args: ToolArgs, context: ToolArgs, snapshot: DesignerSnapshot, signal: AbortSignal, expected: string, next: Project) {
   await bridge.validate(next, signal); signal.throwIfAborted();
   bridge.commit(next, expected);
   const applied = bridge.snapshot(); rememberDraft(bridge, snapshot, applied, args, context);
@@ -135,5 +153,6 @@ export async function executeDesignerTool(bridge: DesignerBridge, name: string, 
     if (textArg(args, "snapshotToken") !== snapshot.token) throw new Error("The draft changed. Inspect the current draft before saving.");
     return { result: await bridge.save(snapshot.token, signal), summary: "Saved project draft. Publication is a separate action." };
   }
+  if (name === "spark_designer_create_model_faceplate") return createMachineFaceplate(bridge, args, context, snapshot, signal);
   return applyDraft(bridge, name, args, context, snapshot, signal);
 }

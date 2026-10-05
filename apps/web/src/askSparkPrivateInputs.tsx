@@ -7,6 +7,7 @@ const secretFields: Record<string, [string, string][]> = {
   "create-user": [["password", "New user's password"]], "update-user": [["password", "New password"]],
   "backup-destination": [["password", "Destination password"], ["secretAccessKey", "Secret access key"], ["sessionToken", "Session token"]],
   "backup-archive": [["archivePassphrase", "Archive passphrase"]],
+  "model-publisher": [["password", "MQTT broker password"]],
 };
 
 export function useAskSparkPrivateInputs() {

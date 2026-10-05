@@ -203,7 +203,7 @@ These rules apply to Models, and the same checklist should be used for future wo
 
 ## Ask Spark
 
-- Ask Spark model drafts (`model_draft`) open the model page in **Models** and merge into the current draft, each with a "from Ask Spark" badge. The existing rule stays: Ask Spark never applies model changes.
+- Ask Spark model drafts (`model_draft`) merge into the current draft, each new model, machine or location marked "from Ask Spark", and link to the affected model, machine or location page. A draft can combine several model versions, machines, locations, source mappings and data update groups, plus location renames and machine moves; it is merged and previewed exactly as this workspace merges it. Ask Spark can read the unapplied draft of the current browser tab before proposing more. The existing rule stays: Ask Spark never applies model changes, and it cannot overwrite or remove a model version. See [Ask Spark](ASK_SPARK.md#models).
 - Models registers its current page kind, selected type, selection, draft summary and resolution messages as Ask Spark context, so questions like "why can't CNC03 find its data?" include the relevant diagnostics. Context text and arrays are bounded; credentials and editable connection settings are excluded. Pinning chat context does not bypass the live unsaved-draft guard.
 - Source **Create type from selection** enters the same owner-scoped draft workflow and is identified as a source draft. It is not labeled as an Ask Spark proposal. Neither entry point applies changes.
 

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import ts from 'typescript';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 
 const metadata = JSON.parse(fs.readFileSync(new URL('src/askSparkGatewayTools.json', import.meta.url), 'utf8'));
 const source = fs.readFileSync(new URL('src/askSparkGatewayTools.ts', import.meta.url), 'utf8');
@@ -10,13 +12,27 @@ const { setPreviewRequestContext } = await import(preview);
 const auth = uri('export const authSessionRevision=()=>globalThis.__askGatewayAuthRevision;');
 const navigation = uri(ts.transpileModule(fs.readFileSync(new URL('src/askSparkNavigation.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText);
 const runtime = uri('export const runtimeAuthenticatedFetch=(path,init,context,grant)=>globalThis.__askGatewayFetch(path,{...init,operatorGrant:grant}); export const testRuntimeSession=async()=>({available:true}); export const signInRuntime=async()=>({signedIn:true});');
-const modelWorkspace = uri('export const emptyModelPackage=()=>({format:"sparkstudio.tags",version:3,tags:[],scanGroups:[],hierarchy:[],udtDefinitions:[],instances:[]}); export const openModelDraft=(draft,ownerId)=>globalThis.__askModelDraft({draft,ownerId}); export const bulkModelInstances=(csv,types)=>globalThis.__askModelCsv(csv,types);');
 const api = uri(`
 export class ApiError extends Error { constructor(message,status){super(message);this.status=status} }
 export function apiUrl(path,projectId=null){ const scoped=/^\\/(?:project|queries|scripts|assets|runtime|preview|alarms|alarm-journal|history)(?:\\/|\\?|$)/.test(path);return scoped&&projectId?'/api/projects/'+encodeURIComponent(projectId)+path:'/api'+path; }
 export const authenticatedFetch=(...args)=>globalThis.__askGatewayFetch(...args);
 export const assertAuthResponseCurrent=response=>globalThis.__askGatewayCurrent(response);
 `);
+// Model drafts use the same merge/preview code as the Models page, so load the real modules.
+const requireFromHere = createRequire(import.meta.url), loaded = new Map([['api', api], ['react', uri('export const useState=()=>{throw new Error("hooks are not used here")};')]]);
+function load(name) {
+  if (loaded.has(name)) return loaded.get(name);
+  if (name.endsWith('.json')) { const json = uri('export default ' + fs.readFileSync(new URL('src/' + name, import.meta.url), 'utf8') + ';'); loaded.set(name, json); return json; }
+  const file = ['ts', 'tsx'].map(extension => new URL('src/' + name + '.' + extension, import.meta.url)).find(path => fs.existsSync(path));
+  assert.ok(file, name);
+  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX } }).outputText
+    .replace(/from (["'])([^"']+)\1/g, (_match, _quote, dependency) => 'from ' + JSON.stringify(dependency === 'react' ? loaded.get('react') : dependency.startsWith('./') ? load(dependency.slice(2)) : pathToFileURL(requireFromHere.resolve(dependency)).href));
+  const result = uri(code); loaded.set(name, result); return result;
+}
+const sessionValues = new Map();
+globalThis.sessionStorage = { getItem: key => sessionValues.get(key) ?? null, setItem: (key, value) => sessionValues.set(key, String(value)), removeItem: key => sessionValues.delete(key) };
+globalThis.window ??= { dispatchEvent: () => true };
+const modelWorkspace = load('modelWorkspace'), modelDraft = load('modelDraft');
 const output = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
   .replace(/import declarations from "\.\/askSparkGatewayTools.json";/, `const declarations=${JSON.stringify(metadata)};`)
   .replace(/from "\.\/api"/, `from ${JSON.stringify(api)}`)
@@ -24,7 +40,8 @@ const output = ts.transpileModule(source, { compilerOptions: { target: ts.Script
   .replace(/from "\.\/authSession"/, `from ${JSON.stringify(auth)}`)
   .replace(/from "\.\/askSparkNavigation"/, `from ${JSON.stringify(navigation)}`)
   .replace(/from "\.\/askSparkRuntimeTools"/, `from ${JSON.stringify(runtime)}`)
-  .replace(/import\("\.\/modelWorkspace"\)/, `import(${JSON.stringify(modelWorkspace)})`);
+  .replace(/import\("\.\/modelWorkspace"\)/g, `import(${JSON.stringify(modelWorkspace)})`)
+  .replace(/import\("\.\/modelDraft"\)/g, `import(${JSON.stringify(modelDraft)})`);
 const { executeGatewayTool, supportsGatewayTool } = await import(uri(output));
 const context = { projectId: 'fixture-project' };
 let calls = [], respond, checks = 0;
@@ -74,7 +91,13 @@ await check('Workspace navigation returns only fixed local links and never fetch
   const data = await run('navigate_workspace', { destination: 'data' }); assert.equal(data.data.url, '/gateway#data'); assert.equal(data.data.label, 'Gateway data');
   const connections = await run('navigate_workspace', { destination: 'connections' }); assert.equal(connections.data.url, '/gateway#data/connections'); assert.equal(connections.data.nextStep, undefined);
   const certificates = await run('navigate_workspace', { destination: 'certificates' }); assert.equal(certificates.data.url, '/gateway#data/certificates'); assert.equal(certificates.data.nextStep, undefined);
-  const models = await run('navigate_workspace', { destination: 'models' }); assert.equal(models.data.url, '/workspace?workspace=models&view=build');
+  const models = await run('navigate_workspace', { destination: 'models' }); assert.equal(models.data.url, '/workspace?workspace=models&view=plant');
+  const model = await run('navigate_workspace', { destination: 'model', modelKey: 'Press@2' }); assert.equal(model.data.url, '/workspace?workspace=models&view=models&type=Press%402');
+  const machine = await run('navigate_workspace', { destination: 'machine', path: '[default]Acme/Line1/Press01' }); assert.equal(machine.data.url, '/workspace?workspace=models&view=plant&item=%5Bdefault%5DAcme%2FLine1%2FPress01&kind=machine');
+  const location = await run('navigate_workspace', { destination: 'location', path: '[default]Acme' }); assert.equal(location.data.url, '/workspace?workspace=models&view=plant&item=%5Bdefault%5DAcme&kind=location');
+  const tools = await run('navigate_workspace', { destination: 'model-tools', tool: 'publish' }); assert.equal(tools.data.url, '/workspace?workspace=models&view=tools&tool=publish');
+  await assert.rejects(run('navigate_workspace', { destination: 'model', modelKey: 'Press' }), /format|ModelId@version/);
+  await assert.rejects(run('navigate_workspace', { destination: 'machine', path: 'no-provider' }), /format|full machine path/);
   const tags = await run('navigate_workspace', { destination: 'tags' }); assert.equal(tags.data.url, '/workspace?workspace=tags');
   await assert.rejects(run('navigate_workspace', { destination: 'https://example.test' }), /not a supported value/);
   await assert.rejects(run('navigate_workspace', { destination: 'configuration' }), /not a supported value/);
@@ -345,23 +368,96 @@ await check('Projectless Models can read every model resource without inventing 
   assert.equal(calls.length, 1, 'Denied gateway reads must not retry through another scope');
 });
 
+const savedModel = { format: 'sparkstudio.tags', version: 3, tags: [], scanGroups: [], udtDefinitions: [{ id: 'Press', version: 1, parameters: [], members: [{ path: 'Speed', kind: 'memory', dataType: 'Double', value: 0 }] }],
+  hierarchy: [{ path: '[default]Acme', level: 'Enterprise' }, { path: '[default]Acme/Line1', level: 'Line' }, { path: '[default]Acme/Line2', level: 'Line' }],
+  instances: [{ path: '[default]Acme/Line1/Press01', definitionId: 'Press', version: 1, parameters: {}, overrides: {} }] };
+const handoff = () => { const text = sessionStorage.getItem('sparkstudio.model-draft'); sessionStorage.removeItem('sparkstudio.model-draft'); return text ? JSON.parse(text) : undefined; };
+const modelFixture = preview => fixture(call => call.url === '/api/tag-engineering/export' ? structuredClone(savedModel) : preview(call));
+
 await check('Model drafts only preview and preserve a user-owned browser handoff after current authorization', async () => {
-  let handedOff;
-  globalThis.__askModelDraft = value => { handedOff = value; };
   const definition = { id: 'CNC', version: 1, members: [{ path: 'Value', kind: 'memory', dataType: 'Double', value: 0 }] };
   const args = { definitionJson: JSON.stringify(definition) }, signed = { ...context, ownerId: 'fixture-user' };
   await assert.rejects(run('model_draft', args), /signed-in engineering user/);
-  fixture(() => ({ canApply: true, revision: 'model-r1', previewToken: 'preview-only' }));
+  modelFixture(() => ({ canApply: true, revision: 'model-r1', previewToken: 'preview-only' }));
   const result = await run('model_draft', args, signed);
   assert.equal(result.data.applied, false); assert.equal(result.data.status, 'draft_prepared');
-  assert.equal(result.data.url, '/workspace?workspace=models');
-  assert.deepEqual(handedOff, { ownerId: 'fixture-user', draft: { definition } });
-  assert.equal(calls.length, 1); assert.equal(calls[0].url, '/api/tag-engineering/preview');
-  assert.equal(calls[0].body.version, 3); assert.deepEqual(calls[0].body.udtDefinitions, [definition]);
-  handedOff = undefined;
-  fixture(() => { globalThis.__askGatewayAuthRevision++; return { canApply: true }; });
+  assert.equal(result.data.url, '/workspace?workspace=models&view=models&type=CNC%401');
+  assert.deepEqual(handoff(), { ownerId: 'fixture-user', draft: { origin: 'ask-spark', definition } });
+  assert.deepEqual(calls.map(call => call.url), ['/api/tag-engineering/export', '/api/tag-engineering/preview']);
+  assert.equal(calls[1].body.version, 3); assert.deepEqual(calls[1].body.udtDefinitions, [definition]);
+  modelFixture(() => { globalThis.__askGatewayAuthRevision++; return { canApply: true }; });
   await assert.rejects(run('model_draft', args, signed), /session|account|changed/i);
-  assert.equal(handedOff, undefined, 'A stale account response cannot open another user’s draft');
+  assert.equal(handoff(), undefined, 'A stale account response cannot open another user’s draft');
+});
+
+await check('Model drafts combine types, machines, locations, renames and moves and never overwrite a version', async () => {
+  const signed = { ...context, ownerId: 'fixture-user' };
+  const package_ = { udtDefinitions: [{ id: 'Spindle', version: 1, parameters: [], members: [{ path: 'Load', kind: 'memory', dataType: 'Double', value: 0 }] },
+    { id: 'Lathe', version: 1, parameters: [], members: [{ path: 'Spindle', kind: 'type', definitionId: 'Spindle', version: 1 }] }],
+    hierarchy: [{ path: '[default]Acme/Line3', level: 'Line' }],
+    instances: [{ path: '[default]Acme/Line3/Lathe01', definitionId: 'Lathe', version: 1, parameters: {}, overrides: {} }] };
+  modelFixture(call => ({ canApply: true, received: call.body }));
+  const result = await run('model_draft', { packageJson: JSON.stringify(package_), locationRenames: [{ path: '[default]Acme/Line2', name: 'Packing' }],
+    moves: [{ paths: ['[default]Acme/Line1/Press01'], destination: '[default]Acme/Line3' }] }, signed);
+  const sent = calls.at(-1).body;
+  assert.deepEqual(sent.udtDefinitions.map(item => item.id + '@' + item.version), ['Spindle@1', 'Lathe@1']);
+  assert.deepEqual(sent.hierarchy.map(item => item.path).sort(), ['[default]Acme/Line3', '[default]Acme/Packing']);
+  assert.deepEqual(sent.removeHierarchy, ['[default]Acme/Line2']);
+  assert.deepEqual(sent.instances.map(item => item.path).sort(), ['[default]Acme/Line3/Lathe01', '[default]Acme/Line3/Press01']);
+  assert.deepEqual(sent.removeInstances, ['[default]Acme/Line1/Press01']);
+  assert.match(result.data.summary, /2 models/); assert.ok(result.data.changeCount >= 6);
+  assert.equal(result.data.url, '/workspace?workspace=models&view=models&type=Spindle%401');
+  assert.equal(handoff().draft.moves[0].destination, '[default]Acme/Line3');
+  modelFixture(() => ({ canApply: true }));
+  await assert.rejects(run('model_draft', { packageJson: JSON.stringify({ udtDefinitions: [savedModel.udtDefinitions[0]] }) }, signed), /already exist.*immutable/);
+  await assert.rejects(run('model_draft', { packageJson: JSON.stringify({ removeUdtDefinitions: ['Press@1'] }) }, signed), /cannot remove model versions/);
+  await assert.rejects(run('model_draft', { moves: [{ paths: ['[default]Acme/Line1/Press01'], destination: '[default]Nowhere' }] }, signed), /destination/);
+  await assert.rejects(run('model_draft', {}, signed), /Provide a definition/);
+  assert.equal(handoff(), undefined, 'Rejected proposals never reach the Models draft');
+});
+
+await check('Model draft reader reports the tab draft and an unopened proposal without gateway calls', async () => {
+  fixture(() => { throw new Error('No gateway request expected'); });
+  const signed = { ...context, ownerId: 'fixture-user' };
+  let draft = await run('model_draft_get', {}, signed);
+  assert.equal(draft.data.hasDraft, false); assert.equal(draft.data.pendingAssistantProposal, false);
+  sessionStorage.setItem('sparkstudio.model-workspace.fixture-user', JSON.stringify({ schema: 1, ownerId: 'fixture-user', package: { udtDefinitions: [{ id: 'Press', version: 2 }] },
+    expected: [{ kind: 'udtDefinitions', key: 'Press@2', action: 'add', before: null }], fromAskSpark: ['Press@2'] }));
+  sessionStorage.setItem('sparkstudio.model-draft', '{}');
+  draft = await run('model_draft_get', {}, signed);
+  assert.deepEqual(draft.data.changes, [{ kind: 'udtDefinitions', key: 'Press@2', action: 'add' }]);
+  assert.equal(draft.data.pendingAssistantProposal, true); assert.deepEqual(draft.data.fromAskSpark, ['Press@2']);
+  assert.equal(calls.length, 0);
+  sessionStorage.removeItem('sparkstudio.model-workspace.fixture-user'); sessionStorage.removeItem('sparkstudio.model-draft');
+  await assert.rejects(run('model_draft_get', {}, context), /signed-in engineering user/);
+});
+
+await check('Model checks, export and publishing reach their exact gateway endpoints', async () => {
+  fixture(call => ({ ok: true, url: call.url }));
+  await run('model_issues', { path: '[default]Acme', pageSize: 20 });
+  await run('model_dependencies', { type: 'Press@1', query: 'speed' });
+  await run('model_versions_compare', { definitionJson: '{"id":"Press","version":2,"members":[]}', fromVersion: 1 });
+  await run('model_export', { definitionKeys: ['Press@1'], includeSourceTags: false });
+  await run('model_publishing_get', {});
+  const publisher = { id: 'line1', name: 'Line 1', endpoint: 'mqtt://broker.test:1883', instancePaths: ['[default]Acme/Line1/Press01'] };
+  await run('model_publishing_preview', { publisher });
+  assert.deepEqual(calls.map(call => call.method ?? 'GET'), ['GET', 'GET', 'POST', 'POST', 'GET', 'POST']);
+  assert.equal(new URL(calls[0].url, 'https://fixture.invalid').pathname, '/api/projects/fixture-project/model/issues');
+  assert.equal(new URL(calls[0].url, 'https://fixture.invalid').searchParams.get('path'), '[default]Acme');
+  assert.equal(calls[1].url, '/api/model/dependencies?type=Press%401&query=speed');
+  assert.deepEqual(calls[2].body, { definition: { id: 'Press', version: 2, members: [] }, fromVersion: 1 });
+  assert.deepEqual(calls[3].body, { definitionKeys: ['Press@1'], includeSourceTags: false });
+  assert.deepEqual(calls[5].body, { publisher });
+  fixture(call => call.url === '/api/model/publishing' && (call.method ?? 'GET') === 'GET' ? { revision: 3, publishers: [{ ...publisher, username: 'spark' }] } : { saved: true, body: call.body });
+  await assert.rejects(run('model_publishing_save', { revision: 2, publisher }), /changed after it was read/);
+  const saved = await run('model_publishing_save', { revision: 3, publisher: { ...publisher, enabled: true } });
+  assert.equal(calls.at(-1).method, 'PUT'); assert.equal(calls.at(-1).url, '/api/model/publishing/line1'); assert.deepEqual(saved.data.body, { revision: 3, publisher: { ...publisher, enabled: true } });
+  const secrets = [];
+  await run('model_publishing_set_credentials', { id: 'line1', revision: 3 }, { ...context, resolveSecret: async (_handle, purpose) => { secrets.push(purpose); return { password: 'typed-in-dialog' }; } });
+  assert.deepEqual(secrets, ['model-publisher']); assert.equal(calls.at(-1).body.publisher.password, 'typed-in-dialog');
+  await assert.rejects(run('model_publishing_set_credentials', { id: 'line1', revision: 3 }, context), /Secure credential entry/);
+  await run('model_publishing_delete', { id: 'line1', revision: 3, discardPending: true });
+  assert.equal(calls.at(-1).method, 'DELETE'); assert.equal(calls.at(-1).url, '/api/model/publishing/line1?revision=3&discardPending=true');
 });
 
 await check('Source browse/import requests pin revision and keep preview tokens', async () => {

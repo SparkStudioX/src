@@ -76,6 +76,23 @@ internal static class ComponentMessagingChecks
             Invalid(draft => Button(draft)["message"]!["payload"] = NestedPayload(17), "native payload depth limit");
             Invalid(draft => Button(draft)["message"]!["payload"] = new JsonObject { ["items"] = new JsonArray(Enumerable.Range(0, 4095).Select(_ => (JsonNode?)null).ToArray()) }, "native payload node limit");
 
+            // Button actions are checked when an application is published; a draft may hold an unfinished action.
+            void Notify(JsonObject draft, JsonNode? message) { var button = Button(draft); button["action"] = "notify"; button.Remove("message"); if (message is null) button.Remove("notifyMessage"); else button["notifyMessage"] = message; }
+            var original = Button(Draft()).DeepClone().AsObject();
+            void InvalidNotify(JsonNode? message, string description)
+            {
+                var draft = Draft(); Notify(draft, message);
+                var saved = workspace.Store.SaveProject(draft);
+                Reject(() => workspace.Publication.Publish(workspace.Store, saved["revision"]!.GetValue<int>()), description);
+            }
+            InvalidNotify(null, "notify button without its message");
+            foreach (var text in new[] { "", "   ", new string('x', 501), "bell\u0007", "escape\u001b" }) InvalidNotify(JsonValue.Create(text), "invalid notify message");
+            var notifying = Draft(); Notify(notifying, JsonValue.Create("Order saved.\nThank you"));
+            var notifySaved = workspace.Store.SaveProject(notifying);
+            workspace.Publication.Publish(workspace.Store, notifySaved["revision"]!.GetValue<int>());
+            Check(Button(workspace.Publication.GetProject())["action"]?.GetValue<string>() == "notify" && Button(workspace.Publication.GetProject())["notifyMessage"]?.GetValue<string>() == "Order saved.\nThank you",
+                "notify button publishes its browser-only feedback text");
+            var restored = Draft(); restored["screens"]![0]!["components"]![1]!["props"] = original.DeepClone(); workspace.Store.SaveProject(restored);
             var valid = Draft();
             Props(valid)["messageHandlers"]!.AsArray().Add(Handler("sameTypeDifferentScope", scope: "session"));
             Props(valid)["messageHandlers"]!.AsArray().Add(Handler(new string('a', 80), new string('t', 80), "instance", new string('x', 65_536)));

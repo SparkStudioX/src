@@ -210,7 +210,7 @@ export default function ComponentActionsEditor({ component, components, screens,
           {selected === "action" && <div className="component-actions-fields">
             <label>Action<select aria-label="Click action" value={draft.action} onChange={event => patch({ action: event.target.value as ComponentActionsDraft["action"] })}>
               {component.type === "equipmentSymbol" && <option value="">None</option>}<option value="navigate">Open a screen</option><option value="openPopup" disabled={!popupAllowed}>Open a popup</option>
-              {component.type === "button" && <><option value="setTagValue">Set tag value</option><option value="script">Run Python script</option><option value="message">Send message</option><option value="closePopup">Close popup</option></>}
+              {component.type === "button" && <><option value="setTagValue">Set tag value</option><option value="notify">Show a message</option><option value="script">Run Python script</option><option value="message">Send message</option><option value="closePopup">Close popup</option></>}
             </select></label>
             {draft.action === "setTagValue" && renderTagValueAction()}
             {(draft.action === "navigate" || draft.action === "openPopup") && <label>{draft.action === "openPopup" ? "Popup screen" : "Destination screen"}<select aria-label="Action destination" value={draft.action === "openPopup" ? draft.popupTargetScreenId : draft.targetScreenId} onChange={event => patch(draft.action === "openPopup" ? { popupTargetScreenId: event.target.value, popupParameters: "{}" } : { targetScreenId: event.target.value })}>
@@ -218,7 +218,7 @@ export default function ComponentActionsEditor({ component, components, screens,
             </select></label>}
             {draft.action === "openPopup" && <label>Popup parameter overrides · JSON text values<textarea aria-label="Popup parameter overrides" rows={6} spellCheck={false} value={draft.popupParameters} onChange={event => patch({ popupParameters: event.target.value })} /></label>}
             {draft.action === "message" && <><label>Message type<input aria-label="Button message type" list={messageTypeListId} value={draft.messageType} maxLength={80} spellCheck={false} autoComplete="off" onChange={event => patch({ messageType: event.target.value })} /></label><datalist id={messageTypeListId}>{receiverDiscovery.messageTypes.map(messageType => <option key={messageType} value={messageType} />)}</datalist><label>Message scope<select aria-label="Button message scope" value={draft.messageScope} onChange={event => patch({ messageScope: event.target.value as ComponentMessageScope })}>{componentMessageScopes.map(scope => <option key={scope} value={scope}>{scope}</option>)}</select></label><p>{componentMessageScopeDescriptions[draft.messageScope]}</p><MessageReceiverList discovery={receiverDiscovery} messageType={draft.messageType} scope={draft.messageScope} /><label>Message payload · JSON object<textarea aria-label="Button message payload" rows={8} spellCheck={false} value={draft.messagePayload} onChange={event => patch({ messagePayload: event.target.value })} /></label></>}
-            {draft.action === "closePopup" && <p>Closes the containing popup when activated.</p>}
+            <SimpleActionDetails draft={draft} onMessage={notifyMessage => patch({ notifyMessage })} />
           </div>}
           {selected === "messages" && <><div className="component-actions-handler-toolbar"><label>Handler<select aria-label="Selected message handler" disabled={!draft.handlers.length} value={handlerId ?? ""} onChange={event => { setHandlerId(event.target.value); setError(""); }}>{!draft.handlers.length && <option value="">No handlers</option>}{draft.handlers.map(item => <option key={item.id} value={item.id}>{item.messageType || "Unnamed"} · {item.scope} · {item.id}</option>)}</select></label><button type="button" className="button" disabled={draft.handlers.length >= 16} onClick={addHandler}>Add handler</button><button type="button" className="button" disabled={!handler} onClick={removeHandler}>Remove handler</button></div>
             {handler ? <div className="component-actions-fields"><label>Handler ID<input aria-label="Message handler ID" value={handler.id} readOnly /></label><label>Message type<input aria-label="Message handler type" value={handler.messageType} maxLength={80} spellCheck={false} onChange={event => updateHandler({ messageType: event.target.value })} /></label><label>Listening scope<select aria-label="Message handler scope" value={handler.scope} onChange={event => updateHandler({ scope: event.target.value as ComponentMessageScope })}>{componentMessageScopes.map(scope => <option key={scope} value={scope}>{scope}</option>)}</select></label><p>{componentMessageScopeDescriptions[handler.scope]} Message types are case-sensitive.</p></div> : <p className="input-events-description">Add a handler to respond to a named message. Removing every handler stops this component from listening after Apply.</p>}
@@ -236,4 +236,12 @@ export default function ComponentActionsEditor({ component, components, screens,
     </div>
     <footer className="input-events-footer"><span>Ctrl+S applies all changes · Ctrl+Space completes</span><button type="button" className="button" onClick={onClose}>Cancel</button><button type="button" className="button primary" onClick={apply}>Apply actions &amp; events</button></footer>
   </dialog>;
+}
+
+/** Actions without a destination or code: Show a message needs its text; Close popup only explains itself. */
+function SimpleActionDetails({ draft, onMessage }: { draft: ComponentActionsDraft; onMessage: (message: string) => void }) {
+  if (draft.action === "closePopup") return <p>Closes the containing popup when activated.</p>;
+  if (draft.action !== "notify") return null;
+  return <><label>Message to show<textarea aria-label="Message to show" rows={3} maxLength={500} value={draft.notifyMessage} onChange={event => onMessage(event.target.value)} /></label>
+    <p>Shows this text when the button is clicked, in Preview and the operator runtime. No script runs and nothing is sent to the gateway.</p></>;
 }

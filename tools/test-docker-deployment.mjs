@@ -177,15 +177,17 @@ async function verifyCurrentConfiguration() {
   const settings = await api('/api/gateway/ai');
   assert.equal(settings.enabled, false); assert.equal(settings.hasApiKey, false);
   assert.equal(settings.model, 'gemini-3.8-flash'); assert.equal(settings.modelStepLimit, 100);
-  assert.equal(settings.loggingEnabled, true); assert.equal(settings.parallelLimit, 4);
+  // Fresh gateways start with raw provider logging off and a bounded monthly allowance.
+  assert.equal(settings.loggingEnabled, false); assert.equal(settings.parallelLimit, 4); assert.equal(settings.monthlyTokenLimit, 20_000_000);
   assert.equal(Object.hasOwn(settings, 'apiKey'), false);
   const status = await api('/api/ask-spark/status');
   assert.equal(status.configured, false); assert.equal(status.enabled, false);
   const usage = await api('/api/gateway/ai/usage');
-  for (const name of ['limit', 'usedTokens', 'cachedTokens', 'totalTokens', 'requests', 'uncertainRequests', 'inputTokens', 'outputTokens', 'thoughtTokens', 'unclassifiedTokens'])
+  assert.equal(usage.limit, 20_000_000, 'Fresh AI usage must report the default monthly allowance.');
+  for (const name of ['usedTokens', 'cachedTokens', 'totalTokens', 'requests', 'uncertainRequests', 'inputTokens', 'outputTokens', 'thoughtTokens', 'unclassifiedTokens'])
     assert.equal(usage[name], 0, `Fresh AI usage ${name} must be zero.`);
   assert.ok(Number.isFinite(Date.parse(usage.resetsAt)));
-  evidence.askSpark = { model: settings.model, modelStepLimit: settings.modelStepLimit, loggingEnabled: settings.loggingEnabled,
+  evidence.askSpark = { model: settings.model, modelStepLimit: settings.modelStepLimit, loggingEnabled: settings.loggingEnabled, monthlyTokenLimit: settings.monthlyTokenLimit,
     hasApiKey: settings.hasApiKey, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, thoughtTokens: usage.thoughtTokens, providerRequestsMade: false };
 
   // Validate saved HTTP source contracts without contacting external devices.

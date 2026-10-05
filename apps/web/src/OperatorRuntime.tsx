@@ -1,3 +1,4 @@
+import { showNotifyAction } from "./notifyAction";
 import { runtimeText } from "./runtimeText";
 import { TagSnapshotStore } from "./tagStore";
 import { useTagSnapshot } from "./useTagSnapshot";
@@ -701,7 +702,8 @@ export default function OperatorRuntime() {
                       onInputChange={form.assign}
                       onAutomaticInputChange={form.assignAutomatic}
                       onAction={(component, instance, uiAction) =>
-                        void runAction(component, instance, uiAction)
+                        // Show a message buttons need no Operate permission: they only display their fixed text.
+                        showNotifyAction(component, instance, message => setActionStatus({ success: true, message })) || void runAction(component, instance, uiAction)
                       }
                       onPythonEvent={(component, invocation, instance) => canOperate && currentProject.current === project
                         ? runSavedPythonEvent({ scope: "runtime", screenId: screen.id, parameters, publishedAt: project.publishedAt }, component, invocation, instance)

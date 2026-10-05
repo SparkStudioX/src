@@ -1,4 +1,5 @@
 import { bulkModelInstances, definitionKey, emptyModelPackage, validateDraftDefinition, validateDraftMap, validateDraftMember, validateDraftMetadata, type ModelDraft, type ModelInstance, type ModelPackage } from "./modelWorkspace";
+import { moveModelInstances, renameModelLocation } from "./modelLocationEdits";
 
 export interface ModelDraftState { base: ModelPackage; present: ModelPackage; past: ModelPackage[]; future: ModelPackage[]; fromAskSpark: string[]; revision: number }
 export interface ModelDraftChange { kind: string; key: string; action: "add" | "update" | "remove" }
@@ -123,11 +124,26 @@ export function mergeAssistantModelDraft(state: ModelDraftState, draft: ModelDra
     if (used.some(item => item.version === definition.version)) definition.version = Math.max(...used.map(item => item.version)) + 1;
     present = { ...present, udtDefinitions: [...present.udtDefinitions, definition] }; if (draft.origin !== "source") fromAskSpark.push(definitionKey(definition));
   }
+  if (draft.package) {
+    const package_ = { ...emptyModelPackage(), ...structuredClone(draft.package) };
+    present = mergeAssistantPackage(present, package_);
+    if (draft.origin !== "source") fromAskSpark.push(...package_.udtDefinitions.map(definitionKey), ...package_.instances.map(item => item.path), ...package_.hierarchy.map(item => item.path));
+  }
   if (draft.csv) {
     const instances = bulkModelInstances(draft.csv, present.udtDefinitions, present.instances);
     present = { ...present, instances: [...present.instances, ...instances] }; if (draft.origin !== "source") fromAskSpark.push(...instances.map(item => item.path));
   }
+  for (const rename of draft.locationRenames ?? []) present = renameModelLocation(present, rename.path, rename.name);
+  for (const move of draft.moves ?? []) present = moveModelInstances(present, move.paths, move.destination);
   return { ...editModelDraft(state, present), fromAskSpark: [...new Set(fromAskSpark)] };
+}
+/** Assistant packages add or replace draft resources but never overwrite an existing model version, saved or drafted. */
+function mergeAssistantPackage(present: ModelPackage, package_: ModelPackage): ModelPackage {
+  const existing = new Set(present.udtDefinitions.map(definitionKey));
+  const taken = package_.udtDefinitions.map(definitionKey).filter(key => existing.has(key));
+  if (taken.length) throw new Error(`${taken.slice(0, 5).join(", ")} already exist. Model versions are immutable; propose a new version number instead.`);
+  if (package_.removeUdtDefinitions?.length) throw new Error("Assistant drafts cannot remove model versions. The user removes versions in Models.");
+  return mergeModelPackage(present, package_);
 }
 const storageKey = (ownerId: string) => "sparkstudio.model-workspace." + encodeURIComponent(ownerId);
 export function readPersistedModelDraft(storage: ModelDraftStorage, ownerId: string): string | null { return ownerId ? storage.getItem(storageKey(ownerId)) : null; }

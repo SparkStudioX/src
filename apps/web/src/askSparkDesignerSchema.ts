@@ -29,7 +29,7 @@ const exampleProps: Record<ComponentType, CanvasComponent["props"]> = {
   chart: defaultChartProps(false), sparkline: defaultChartProps(true), equipmentCommand: { commandId: "existing_command" },
   label: { text: "Order summary", fontSize: 24, color: "#ffffff" },
   value: { text: "Value", tagPath: "[default]ExistingTag" }, gauge: { text: "Gauge", tagPath: "[default]ExistingTag", min: 0, max: 100 },
-  button: { text: "Add item", action: "script", script: "result = {'message': 'Item selected.'}" },
+  button: { text: "Add item", action: "notify", notifyMessage: "Item selected." },
   table: { data: { columns: ["Item", "Quantity"], rows: [{ Item: "Sample", Quantity: 1 }] }, pageSize: 25 },
   list: { options }, treeView: { options }, textInput: { defaultValue: "" },
   formattedInput: { defaultValue: "", formatMask: "AA-####", textCase: "upper" }, barcodeInput: { defaultValue: "", scanTerminator: "enter" },
@@ -49,7 +49,7 @@ const exampleProps: Record<ComponentType, CanvasComponent["props"]> = {
   equipmentSymbol: { ...drawing, fillColor: "#64748b", symbol: "pump", active: false },
 };
 export const designerComponentTypes = Object.keys(exampleProps) as ComponentType[];
-const actionTypes = ["navigate", "script", "openPopup", "closePopup", "message", "setTagValue"];
+const actionTypes = ["navigate", "script", "openPopup", "closePopup", "message", "setTagValue", "notify"];
 const scriptSchema = object({ language: languages, code });
 const messageSchema = object({ messageType: { ...text, minLength: 1, maxLength: 80 }, scope: scopes, payload: dictionary({}) });
 const expressionBinding = object({ expression: { ...text, minLength: 1 }, references: dictionary({
@@ -91,6 +91,7 @@ function nativeActions() {
       { action: "openPopup", componentTypes: ["button", "equipmentSymbol"], fields: object({ action: { const: "openPopup" }, targetScreenId: text, parameters: dictionary(text) }, ["action", "targetScreenId"]), example: { action: "openPopup", targetScreenId: "existing_popup", parameters: {} }, rules: "Target must be an existing popup. Overrides name declared parameters and contain strings. A popup cannot open another popup." },
       { action: "closePopup", componentTypes: ["button", "equipmentSymbol"], fields: object({ action: { const: "closePopup" } }), example: { action: "closePopup" }, rules: "Valid only within a popup placement." },
       { action: "message", componentTypes: ["button"], fields: object({ action: { const: "message" }, message: messageSchema }), example: { action: "message", message: { messageType: "order.changed", scope: "screen", payload: { item: "Sample" } } }, rules: "Sends an exact named message to authored matching handlers. It does not show a toast. An absent receiver produces no visible notification." },
+      { action: "notify", componentTypes: ["button"], fields: object({ action: { const: "notify" }, notifyMessage: { type: "string", minLength: 1, maxLength: 500 } }), example: { action: "notify", notifyMessage: "Item selected." }, rules: "Shows notifyMessage as click feedback in Designer Preview, popups and the published operator runtime. Browser-only: no Python, gateway call, publication of scripts or operate permission is needed. Use this for plain confirmations and toasts." },
       { action: "setTagValue", componentTypes: ["button"], fields: object({ action: { const: "setTagValue" }, tagWrite: object({
         tagPath: text, dataType: { enum: tagWriteDataTypes }, value: { type: ["string", "number", "boolean"] }, valueReference: { oneOf: [
           object({ kind: { const: "property" }, property: text, componentId: text }, ["kind", "property"]),
@@ -103,9 +104,9 @@ function nativeActions() {
 
 function runtimeScripts() {
   return {
-    clickToast: { nativeToastAction: false, mechanism: "Python button action result.message", propsExample: { text: "Add item", action: "script", script: "result = {'message': 'Item selected.'}" },
-      requirements: "Author the Python source as a draft; do not run it to configure the button. Interactive Preview requires enabled communication/scripts and a gateway administrator. Operator runtime uses published scripts and existing action permissions. Do not call published runtime action tools to test an unsaved Designer draft. Input validation can block an action.",
-      display: "Designer Preview shows its global action toast. Published operator runtime shows the action status message. This is the existing action-feedback path, not a browser toast API." },
+    clickToast: { nativeToastAction: true, mechanism: "Button action notify with props.notifyMessage", propsExample: { text: "Add item", action: "notify", notifyMessage: "Item selected." },
+      requirements: "Use notify for fixed confirmation text. It works in Designer Preview and the operator runtime without Python, gateway calls or operate permission. Use a Python script action with result.message only when the feedback must come from gateway logic.",
+      display: "Designer Preview shows its global action toast; popups and the published operator runtime show the action status message." },
     javascript: { globals: ["event", "inputs", "parameters", "app"], methods: ["app.notify(message)", "app.setInput(fieldKey, value)", "app.state.get(scope, key)", "app.state.set(scope, key, value)", "app.state.reset(scope, key?)", "app.sendMessage(messageType, payload, {scope})", "app.onCleanup(callback)"],
       cancellation: "app.signal", notice: "app.notify is component-event/input feedback, not the application-level click toast; do not use it to promise an operator toast. app.onCleanup is for component events, not input change/commit handlers. Unmount helpers cannot update UI.",
       example: { componentEvents: { focus: { language: "javascript", code: 'console.log("Focused", event.componentId);' } } } },
@@ -169,7 +170,7 @@ function actionSummary(type: ComponentType) {
   return {
     location: "props.action", schema: { type: "string", enum: type === "button" ? actionTypes : actionTypes.slice(0, 4) }, default: "navigate",
     note: "Action is a string. Companion fields are sibling props, set with update_components.patch.props. There is no click/onClick component event.",
-    examples: { navigate: { action: "navigate", targetScreenId: "existing_regular_screen" }, script: { action: "script", script: "result = {'message': 'Item selected.'}" } },
+    examples: { navigate: { action: "navigate", targetScreenId: "existing_regular_screen" }, notify: { action: "notify", notifyMessage: "Item selected." }, script: { action: "script", script: "result = {'message': 'Saved ' + str(inputs.get('qty'))}" } },
     script: "props.script is Python gateway source, authored as a draft without executing it. A result.message provides action feedback on activation. Interactive Preview requires enabled communication/scripts and a gateway administrator; published runtime requires action permissions. Never use published runtime tools to test an unsaved draft.",
     more: "Before authoring other actions or complex scripts, request include:[actions] or include:[scripts]. message dispatches to matching handlers; it does not itself show a toast.",
   };

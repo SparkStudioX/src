@@ -31,11 +31,18 @@
         "Latest-capture visual context",
         "Approved image crop batches",
         "Query and script refresh",
-        "Authorized published runtime testing"
+        "Authorized published runtime testing",
+        "Model drafts with locations, renames and machine moves",
+        "Model issues, dependencies, version comparison and templates",
+        "MQTT model publisher setup with secure password entry",
+        "Faceplates from a machine",
+        "Links to exact Models pages",
+        "Native Show a message buttons"
       ],
       "prerequisites": [
         "Requires a build containing Ask Spark; older preview.12 release assets do not include it.",
-        "Configure a Gemini API key in Gateway Settings > AI. Use a development project and engineering Design permission. No equipment or gateway tags are needed."
+        "Configure a Gemini API key in Gateway Settings > AI. Use a development project and engineering Design permission. No equipment or gateway tags are needed.",
+        "Model drafting, data-issue, publishing and machine-faceplate tools, and Show a message buttons, require a build after 0.2.0-preview.14."
       ],
       "gatewayWrites": "none",
       "entryScreenId": "ask-spark-workshop",
@@ -49,7 +56,10 @@
         "Ask to discover backup tools without making changes. Verify AI settings defaults to 100 model steps per message.",
         "Ask for twelve labeled overlay buttons in small batches and verify their count and placement in a final capture. See the guide for bounded generation recovery and explicit incomplete stops.",
         "Ask for a reusable faceplate, inspect the template, then validate, save and preview. Publication requires its own review.",
-        "Optionally publish this synthetic project and ask for a runtime session check and read-only inspection, signing into the operator session as the same account when prompted. See the guide for optional query/script refresh exercises."
+        "Optionally publish this synthetic project and ask for a runtime session check and read-only inspection, signing into the operator session as the same account when prompted. See the guide for optional query/script refresh exercises.",
+        "With a model workspace open, ask: \"Draft a Spindle model and a Lathe that nests it, add Lathe01 under a new Line3 and move Press01 there.\" Follow the returned link and review the combined draft before applying it yourself.",
+        "Ask \"What unapplied changes do I have in Models?\" and \"Which machines have data issues?\" to exercise the draft reader and data-issue tools.",
+        "In Designer, ask for a faceplate from a saved machine; the template uses a Model instance parameter named machine. Ask for a button that confirms a save; it should use Show a message rather than Python."
       ]
     },
     {
@@ -1075,10 +1085,12 @@
         "component property sheets",
         "scalar expression bindings",
         "input change and commit events",
-        "saved component groups"
+        "saved component groups",
+        "native Show a message button"
       ],
       "prerequisites": [
-        "No gateway tags, database, external equipment or Python action is required."
+        "No gateway tags, database, external equipment or Python action is required.",
+        "The Save order button uses the Show a message action, available in builds after 0.2.0-preview.14. Earlier gateways reject this project."
       ],
       "gatewayWrites": "none",
       "entryScreenId": "component-workshop",
@@ -1087,7 +1099,8 @@
         "Change Quantity and Unit price; Total recalculates from the current form values.",
         "Edit Order code and commit with Enter or Tab to exercise the browser commit handler.",
         "In Designer, inspect the card's width, text and background bindings and the saved Quantity/Unit price group.",
-        "Select different controls in Designer and compare their shared property grid. Open a collection editor, Cancel, then Apply a valid edit and Undo it."
+        "Select different controls in Designer and compare their shared property grid. Open a collection editor, Cancel, then Apply a valid edit and Undo it.",
+        "Click Save order in Preview or the published application. Its fixed message appears without Python, a gateway call or Operate permission; inspect it under Actions & events → Show a message."
       ]
     },
     {

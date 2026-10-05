@@ -84,9 +84,12 @@ public sealed class AskSparkCatalog
 
 public static class AskSparkSchema
 {
+    /// <summary>Large reviewed packages, such as tag imports and model drafts, fit in one call; each schema still bounds its own strings.</summary>
+    public const int MaximumArgumentCharacters = 524_288;
+
     public static void Validate(JsonObject arguments, JsonObject schema)
     {
-        if (arguments.ToJsonString().Length > 65_536) throw new ArgumentException("Tool arguments exceed 64 KiB.");
+        if (arguments.ToJsonString().Length > MaximumArgumentCharacters) throw new ArgumentException("Tool arguments exceed 512 KiB.");
         ValidateValue(arguments, schema, 0);
     }
 

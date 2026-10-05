@@ -48,7 +48,7 @@ internal static class AskSparkUsageChecks
             legacy = new AskSparkUsage(legacyDirectory, clock);
             Check(legacy.Snapshot(0) is { UsedTokens: 425, CachedTokens: 1060, TotalTokens: 1485, InputTokens: 100, OutputTokens: 20, ThoughtTokens: 10, UnclassifiedTokens: 1355 }, "new categories accumulate while historical and uncategorized tokens remain identified across restart");
             var settings = new AskSparkSettings(directory, new EphemeralDataProtectionProvider());
-            Check(settings.Snapshot() is { ModelStepLimit: 100, MonthlyTokenLimit: 0 }, "100 steps and unlimited monthly allowance default");
+            Check(settings.Snapshot() is { ModelStepLimit: 100, MonthlyTokenLimit: AskSparkSettings.DefaultMonthlyTokenLimit }, "100 steps and a bounded monthly allowance by default");
             settings.Save(new("0", false, AskSparkSettings.DefaultModel, ModelStepLimit: 65, MonthlyTokenLimit: 100000));
             Check(new AskSparkSettings(directory, new EphemeralDataProtectionProvider()).Snapshot() is { ModelStepLimit: 65, MonthlyTokenLimit: 100000 }, "configured limits persist without a credential");
             foreach (var steps in new[] { 0, 1001 })

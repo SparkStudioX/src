@@ -77,6 +77,7 @@ export interface ComponentActionsDraft {
   messageScripts: Record<string, EventScriptDraft>;
   action: NonNullable<CanvasComponent["props"]["action"]> | "";
   buttonCode: string;
+  notifyMessage: string;
   targetScreenId: string;
   popupTargetScreenId: string;
   popupParameters: string;
@@ -92,6 +93,7 @@ export interface ComponentActionsDraft {
   tagConfirmationEnabled: boolean;
   tagConfirmation: string;
 }
+const textOrEmpty = (value: unknown): string => typeof value === "string" ? value : "";
 export const hasComponentAction = (component: CanvasComponent) => component.type === "button" || component.type === "equipmentSymbol";
 export function componentActionsDraft(component: CanvasComponent): ComponentActionsDraft {
   const props = component.props, inputAvailable = pythonInputEventsAvailable(component);
@@ -100,7 +102,7 @@ export function componentActionsDraft(component: CanvasComponent): ComponentActi
     scripts: Object.fromEntries(scriptEventTabs.map(tab => [tab, tab === "change" || tab === "commit" ? eventScriptDraft(props.events?.[tab], inputAvailable) : eventScriptDraft(props.componentEvents?.[tab])])) as Record<ScriptEventTab, EventScriptDraft>,
     properties: [...(props.componentEvents?.propertyChange?.properties ?? [])], handlers,
     messageScripts: Object.fromEntries(handlers.map(handler => [handler.id, eventScriptDraft(handler)])),
-    action: props.action ?? (component.type === "button" ? "navigate" : ""), buttonCode: props.script ?? "",
+    action: props.action ?? (component.type === "button" ? "navigate" : ""), buttonCode: props.script ?? "", notifyMessage: textOrEmpty(props.notifyMessage),
     targetScreenId: props.action === "openPopup" ? "" : props.targetScreenId ?? "",
     popupTargetScreenId: props.action === "openPopup" ? props.targetScreenId ?? "" : "",
     popupParameters: JSON.stringify(props.parameters ?? {}, null, 2),
@@ -201,6 +203,14 @@ function applyTagValueAction({ component, draft, props, tags, components, parent
   return undefined;
 }
 
+/** A notify button shows its fixed text in the browser; it never runs a script or calls the gateway. */
+function applyNotifyAction(context: ActionDraftContext): string | undefined {
+  const message = context.draft.notifyMessage.trim();
+  if (!message) return "Enter the message to show.";
+  if (message.length > 500 || [...message].some(character => character.charCodeAt(0) < 32 && !"\n\r\t".includes(character))) return "Messages are limited to 500 characters without control characters.";
+  context.props.notifyMessage = message;
+  return undefined;
+}
 function applyActivationAction(context: ActionDraftContext): string | undefined {
   switch (context.draft.action) {
     case "script": {
@@ -212,6 +222,7 @@ function applyActivationAction(context: ActionDraftContext): string | undefined 
     case "navigate": case "openPopup": return applyNavigationAction(context);
     case "message": return applyMessageAction(context);
     case "setTagValue": return applyTagValueAction(context);
+    case "notify": return applyNotifyAction(context);
     default: return undefined;
   }
 }
@@ -226,7 +237,7 @@ export function applyComponentActionsDraft(component: CanvasComponent, draft: Co
   if (component.type === "equipmentSymbol" && !["", "navigate", "openPopup"].includes(draft.action)) return { error: "Equipment symbols support navigation and popup actions.", tab: "action" };
   // Opening the editor must preserve valid saved native actions and inactive definitions.
   if (actionChanged || component.props.action !== undefined) props.action = draft.action || undefined;
-  if (actionChanged) { props.targetScreenId = undefined; props.parameters = undefined; props.message = undefined; }
+  if (actionChanged) { props.targetScreenId = undefined; props.parameters = undefined; props.message = undefined; props.notifyMessage = undefined; }
   if (draft.buttonCode !== (component.props.script ?? "") || draft.action === "script") props.script = draft.buttonCode;
   const error = applyActivationAction({ component, draft, props, actionChanged, screens, popupAllowed, tags, components, parent, commands });
   if (error) return { error, tab: "action" };

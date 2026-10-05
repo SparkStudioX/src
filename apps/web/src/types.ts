@@ -295,7 +295,9 @@ export interface CanvasComponent {
     stateValue?: string;
     states?: { value: string; label: string; color: string }[];
     optionsSource?: QueryOptionsSource;
-    action?: "navigate" | "script" | "openPopup" | "closePopup" | "message" | "setTagValue";
+    action?: "navigate" | "script" | "openPopup" | "closePopup" | "message" | "setTagValue" | "notify";
+    /** Browser-side feedback shown when a notify button is clicked; no gateway call or script runs. */
+    notifyMessage?: string;
     tagWrite?: TagWriteAction;
     message?: ComponentMessageAction;
     assetId?: string;

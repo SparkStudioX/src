@@ -38,7 +38,10 @@ export function modelProviderStatus(health: ModelProviderHealth | null, definiti
   return { label: parts.length ? parts.join(" · ") : `Data running · ${definitions.length} ${definitions.length === 1 ? "tag" : "tags"}`, degraded: counts.unavailable + counts.uncertain > 0 };
 }
 export interface ModelPreview { revision: string; previewToken: string; totalTags: number; canApply: boolean; conflicts?: string[]; changes: { path: string; kind: string; action: string; overrideFields?: string[] }[]; expandedTags?: ModelExpandedTag[] }
-export interface ModelDraft { definition?: ModelDefinition; csv?: string; origin?: "ask-spark" | "source" }
+export interface ModelLocationRename { path: string; name: string }
+export interface ModelMachineMove { paths: string[]; destination: string }
+/** A proposed change for the user to review in Models. Package entries add or replace resources; renames and moves keep descendants consistent. */
+export interface ModelDraft { definition?: ModelDefinition; csv?: string; package?: ModelPackage; locationRenames?: ModelLocationRename[]; moves?: ModelMachineMove[]; origin?: "ask-spark" | "source" }
 export const modelDataTypes = ["Boolean", "Int16", "Int32", "Int64", "UInt16", "UInt32", "Float", "Double", "String"];
 export const modelLevels = ["Enterprise", "Site", "Area", "Line", "Cell", "WorkCenter", "Custom"];
 export const definitionKey = (definition: Pick<ModelDefinition, "id" | "version">) => `${definition.id}@${definition.version}`;
@@ -174,7 +177,13 @@ function validateModelDraft(draft: ModelDraft): void {
   if (!draft || typeof draft !== "object" || Array.isArray(draft)) throw new Error("A model definition or CSV draft is required.");
   if (draft.csv !== undefined && typeof draft.csv !== "string") throw new Error("CSV draft must be text.");
   if (draft.definition !== undefined) validateDraftDefinition(draft.definition);
-  if (draft.definition === undefined && draft.csv === undefined) throw new Error("A model definition or CSV draft is required.");
+  if (draft.package !== undefined && (typeof draft.package !== "object" || draft.package === null || Array.isArray(draft.package))) throw new Error("A model draft package must be an object.");
+  if (draft.locationRenames !== undefined && (!Array.isArray(draft.locationRenames) || draft.locationRenames.length > 200
+    || draft.locationRenames.some(item => typeof item?.path !== "string" || typeof item?.name !== "string"))) throw new Error("Location renames need a path and new name for each of at most 200 locations.");
+  if (draft.moves !== undefined && (!Array.isArray(draft.moves) || draft.moves.length > 200
+    || draft.moves.some(item => typeof item?.destination !== "string" || !Array.isArray(item?.paths) || !item.paths.length || item.paths.length > 2000 || item.paths.some(path => typeof path !== "string"))))
+    throw new Error("Machine moves need a destination location and 1–2,000 machine paths, in at most 200 moves.");
+  if ([draft.definition, draft.csv, draft.package, draft.locationRenames, draft.moves].every(item => item === undefined)) throw new Error("A model definition, CSV, package, location rename or move is required.");
 }
 export function validateDraftDefinition(value: ModelDefinition): void {
     if (!value || typeof value.id !== "string" || !Number.isInteger(value.version) || !Array.isArray(value.members) || value.members.length > 128) throw new Error("A model draft needs a named version and at most 128 members.");

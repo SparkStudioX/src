@@ -597,7 +597,9 @@ function renderButton(context: RenderContext) {
         (props.action === "message" && readOnly)
       }
       onClick={() =>
-        props.action === "script" || props.action === "message"
+        props.action === "notify"
+          ? onAction?.(component)
+          : props.action === "script" || props.action === "message"
           ? !readOnly && onAction?.(component)
           : props.action === "openPopup"
             ? onOpenPopup?.(component)
@@ -609,7 +611,9 @@ function renderButton(context: RenderContext) {
       {actionBusy ? "Running…" : caption("Button")}
       <Icon
         name={
-          props.action === "script" || props.action === "message"
+          props.action === "notify"
+            ? "info"
+            : props.action === "script" || props.action === "message"
             ? "play"
             : props.action === "openPopup"
               ? "external"

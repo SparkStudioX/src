@@ -158,7 +158,7 @@ internal static class AskSparkProviderErrorChecks
             Check(fixture.Handler.Generations.Count == 3 && fixture.Handler.Generations[1]["cachedContent"] is not null
                 && fixture.Handler.Generations[2]["cachedContent"] is null && failure.Error.Message == HighDemand,
                 "explicit cache rejection retries uncached exactly once and reports final provider failure");
-            Check(fixture.Usage.Snapshot(20_000).UsedTokens == 8292 && fixture.Usage.Snapshot(20_000).UncertainRequests == 1,
+            Check(fixture.Usage.Snapshot(20_000).UsedTokens == 100 + AskSparkGemini.OutputTokenLimit && fixture.Usage.Snapshot(20_000).UncertainRequests == 1,
                 "failed uncached retry retains one conservative reservation");
             if (logged)
                 Check(Directory.EnumerateFiles(Path.Combine(fixture.DirectoryPath, AskSparkRawLog.DirectoryName), "*.txt")
@@ -188,7 +188,7 @@ internal static class AskSparkProviderErrorChecks
         {
             Directory.CreateDirectory(DirectoryPath);
             var settings = new AskSparkSettings(DirectoryPath, new EphemeralDataProtectionProvider());
-            settings.Save(new("0", true, AskSparkSettings.DefaultModel, ApiKey: Key, MonthlyTokenLimit: limited ? 20_000 : 0));
+            settings.Save(new("0", true, AskSparkSettings.DefaultModel, ApiKey: Key, MonthlyTokenLimit: limited ? 200_000 : 0));
             Usage = new AskSparkUsage(DirectoryPath);
             client = new HttpClient(Handler);
             rawLog = logged ? new AskSparkRawLog(DirectoryPath, settings) : null;

@@ -88,7 +88,8 @@ internal static class AskSparkChecks
     private static AskSparkSettings Settings(string directory, IDataProtectionProvider protection)
     {
         var settings = new AskSparkSettings(directory, protection);
-        Check(settings.Snapshot().Model == "gemini-3.8-flash" && !settings.Snapshot().HasApiKey && settings.Snapshot().LoggingEnabled, "default model, empty key and enabled raw logging");
+        Check(settings.Snapshot().Model == "gemini-3.8-flash" && !settings.Snapshot().HasApiKey && !settings.Snapshot().LoggingEnabled
+            && settings.Snapshot().MonthlyTokenLimit == AskSparkSettings.DefaultMonthlyTokenLimit, "fresh settings use the default model, no key, raw logging off and a bounded monthly allowance");
         Reject(() => settings.Save(new("0", true, AskSparkSettings.DefaultModel)), "enabled without key");
         var saved = settings.Save(new("0", true, AskSparkSettings.DefaultModel, ApiKey: " \t" + FixtureApiKey + "\r\n "));
         Check(settings.Credentials().Key == FixtureApiKey, "pasted dotted key trims surrounding whitespace before encryption");

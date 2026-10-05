@@ -20,6 +20,27 @@ const run = (name, args = {}, context = { projectId: 'ask-workshop' }, signal = 
 const target = { documentId: 'home', documentKind: 'screen' };
 let passed = 1;
 async function check(name, work) { reset(); await work(); passed++; console.log(`PASS ${name}`); }
+await check('machine faceplate reads the machine once and adds a model-bound template to the draft', async () => {
+  const machine = { path: '[default]Acme/Line1/Press01', definitionId: 'Press', version: 2, restrictedMembers: 0, generation: 1, metadata: {},
+    members: { Speed: { path: '[default]Acme/Line1/Press01/Speed', modelPath: 'Speed', dataType: 'Double', kind: 'memory', value: 12, quality: 'Good', metadata: { unit: 'rpm' } },
+      Count: { path: '[default]Acme/Line1/Press01/Count', modelPath: 'Count', dataType: 'Int64', kind: 'memory', value: 3, quality: 'Good', metadata: {} } } };
+  const requests = [], originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { requests.push(String(url)); return Response.json(machine); };
+  try {
+    const result = await run('create_model_faceplate', { snapshotToken: 'initial', instancePath: machine.path, templateId: 'press_faceplate', name: 'Press panel' });
+    assert.equal(requests.length, 1); assert.match(requests[0], /\/api\/model\/object\?path=%5Bdefault%5DAcme%2FLine1%2FPress01$/);
+    assert.equal(result.result.templateId, 'press_faceplate'); assert.equal(result.result.fields, 2); assert.equal(commits, 1);
+    const template = state.templates.find(item => item.id === 'press_faceplate');
+    assert.equal(template.name, 'Press panel'); assert.deepEqual(template.parameterTypes, { machine: 'model' }); assert.deepEqual(template.modelParameters, { machine: { definitionId: 'Press' } });
+    assert.deepEqual(template.components.map(item => item.props.tagPath), ['{machine}/Speed', '{machine}/Count']);
+    assert.equal(new Set(template.components.map(item => item.id)).size, 2);
+    await assert.rejects(run('create_model_faceplate', { snapshotToken: token, instancePath: machine.path, templateId: 'press_faceplate' }), /new and unique/);
+    await assert.rejects(run('create_model_faceplate', { snapshotToken: 'initial', instancePath: machine.path, templateId: 'other' }), /draft changed/);
+    globalThis.fetch = async () => Response.json({ ...machine, restrictedMembers: 1 });
+    await assert.rejects(run('create_model_faceplate', { snapshotToken: token, instancePath: machine.path, templateId: 'partial' }), /read access to every model member/);
+    assert.equal(commits, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});
 await check('read tools do not edit or save', async () => { const result = await run('inspect_context'); assert.equal(result.result.snapshotToken, 'initial'); assert.equal(commits, 0); });
 await check('component discovery and creation declarations enumerate every real component type', async () => {
   const result = (await run('component_schema')).result;
@@ -37,14 +58,16 @@ await check('component discovery and creation declarations enumerate every real 
   await assert.rejects(run('component_schema', { type: 'html' }), /Unsupported component type/);
   assert.equal(commits, 0);
 });
-await check('button schema exposes exact native actions and truthful Python notification examples', async () => {
+await check('button schema exposes exact native actions, a native notify toast and truthful Python feedback', async () => {
   const schema = (await run('component_schema', { type: 'button', include: ['actions', 'scripts'] })).result;
-  assert.deepEqual(schema.actions.schema.enum, ['navigate', 'script', 'openPopup', 'closePopup', 'message', 'setTagValue']);
+  assert.deepEqual(schema.actions.schema.enum, ['navigate', 'script', 'openPopup', 'closePopup', 'message', 'setTagValue', 'notify']);
   assert.equal(schema.actions.schema.type, 'string');
-  assert.equal(schema.scripts.clickToast.nativeToastAction, false);
-  assert.deepEqual(schema.scripts.clickToast.propsExample, { text: 'Add item', action: 'script', script: "result = {'message': 'Item selected.'}" });
-  assert.match(schema.scripts.clickToast.requirements, /gateway administrator/);
-  assert.match(schema.scripts.clickToast.requirements, /Do not call published runtime action tools/);
+  assert.equal(schema.scripts.clickToast.nativeToastAction, true);
+  assert.deepEqual(schema.scripts.clickToast.propsExample, { text: 'Add item', action: 'notify', notifyMessage: 'Item selected.' });
+  assert.match(schema.scripts.clickToast.requirements, /without Python, gateway calls or operate permission/);
+  assert.match(schema.scripts.clickToast.requirements, /Python script action with result\.message only when/);
+  const notify = schema.actions.variants.find(item => item.action === 'notify');
+  assert.deepEqual(notify.componentTypes, ['button']); assert.equal(notify.fields.properties.notifyMessage.maxLength, 500); assert.match(notify.rules, /Browser-only/);
   assert.match(schema.scripts.javascript.notice, /not the application-level click toast/);
   const message = schema.actions.variants.find(item => item.action === 'message');
   assert.deepEqual(message.fields.properties.message.required, ['messageType', 'scope', 'payload']);
@@ -100,7 +123,8 @@ await check('compact schemas preserve property constraints without repeating unr
   }
   const button = (await run('component_schema', { type: 'button' })).result;
   assert.equal(button.actions.schema.type, 'string');
-  assert.deepEqual(button.actions.examples.script, { action: 'script', script: "result = {'message': 'Item selected.'}" });
+  assert.deepEqual(button.actions.examples.notify, { action: 'notify', notifyMessage: 'Item selected.' });
+  assert.equal(button.actions.examples.script.action, 'script');
   assert.match(button.actions.script, /Never use published runtime tools to test an unsaved draft/);
   assert.ok(button.overlayAppearance.propsExample.text.trim());
   assert.equal(button.overlayAppearance.propsExample.foregroundColor, '#00000000');

@@ -93,6 +93,18 @@ check('Cancel, close and Escape discard all event and native action changes', ()
     assert.deepEqual(ui.applied, []); assert.equal(ui.closed.length, 1);
   }
 });
+check('notify buttons stage browser-only feedback text and drop it when the action changes', () => {
+  const screens = [{ id: 'home', name: 'Home' }];
+  const draft = componentActionsDraft(button); draft.action = 'notify'; draft.notifyMessage = '  Item saved.  ';
+  const applied = applyComponentActionsDraft(button, draft, screens);
+  assert.equal(applied.props.action, 'notify'); assert.equal(applied.props.notifyMessage, 'Item saved.'); assert.equal(applied.props.script ?? '', button.props.script ?? '');
+  for (const notifyMessage of ['   ', 'x'.repeat(501), 'bad\u0007bell']) assert.equal(applyComponentActionsDraft(button, { ...draft, notifyMessage }, screens).tab, 'action', JSON.stringify(notifyMessage));
+  assert.equal(applyComponentActionsDraft(button, { ...draft, notifyMessage: 'Line one\nLine two' }, screens).props.notifyMessage, 'Line one\nLine two');
+  const notifying = { ...button, props: applied.props }, back = componentActionsDraft(notifying);
+  assert.equal(back.action, 'notify'); assert.equal(back.notifyMessage, 'Item saved.');
+  const navigating = applyComponentActionsDraft(notifying, { ...back, action: 'navigate', targetScreenId: 'home' }, screens);
+  assert.equal(navigating.props.action, 'navigate'); assert.equal(navigating.props.notifyMessage, undefined);
+});
 check('saved Python button script and existing JavaScript events round trip without conversion', () => {
   const component = { ...button, props: { ...button.props, color: '#abcdef', componentEvents: { mount: {language:'javascript',code:'app.notify("legacy");'}, unmount: {language:'javascript',code:'console.log("closed");'} }, messageHandlers:[handler()] } };
   const ui = drive(component); apply(ui); assert.deepEqual(JSON.parse(JSON.stringify(ui.applied[0])), component.props);

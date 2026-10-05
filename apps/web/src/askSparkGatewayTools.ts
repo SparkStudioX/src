@@ -363,27 +363,92 @@ function requireDirectTagImport(package_: Values): void {
     throw new Error("Model changes must be reviewed and applied by the user in Models. Use model_draft to prepare the change.");
 }
 
-async function draftModel(args: Values, context: GatewayToolContext, signal?: AbortSignal): Promise<unknown> {
-  if (Boolean(args.definitionJson) === Boolean(args.csv)) throw new Error("Provide either definitionJson or csv, not both.");
-  if (typeof context.ownerId !== "string" || !context.ownerId) throw new Error("A signed-in engineering user is required to prepare a model draft.");
-  const workspace = await import("./modelWorkspace");
-  const draft: import("./modelWorkspace").ModelDraft = {};
-  const package_ = workspace.emptyModelPackage();
-  if (typeof args.definitionJson === "string") {
-    const definition = JSON.parse(args.definitionJson);
+type ModelWorkspaceModule = typeof import("./modelWorkspace");
+type ModelDraftInput = import("./modelWorkspace").ModelDraft;
+const modelsLink = (params: Record<string, string>) => "/workspace?" + new URLSearchParams({ workspace: "models", ...params }).toString();
+function parseDraftJson(text: unknown, label: string): unknown {
+  if (typeof text !== "string") return undefined;
+  try { return JSON.parse(text); } catch { throw new Error(label + " is not valid JSON."); }
+}
+function assistantDraft(args: Values, workspace: ModelWorkspaceModule): ModelDraftInput {
+  const draft: ModelDraftInput = { origin: "ask-spark" };
+  const definition = parseDraftJson(args.definitionJson, "definitionJson");
+  if (definition !== undefined) {
     if (!object(definition) || typeof definition.id !== "string" || !Number.isSafeInteger(definition.version) || !Array.isArray(definition.members))
       throw new Error("The definition must contain id, version and a members array.");
     draft.definition = definition as unknown as import("./modelWorkspace").ModelDefinition;
-    package_.udtDefinitions = [draft.definition];
-  } else {
-    const model = await tagModel(context, signal);
-    draft.csv = String(args.csv);
-    package_.instances = workspace.bulkModelInstances(draft.csv, model.udtDefinitions as import("./modelWorkspace").ModelDefinition[], model.instances as import("./modelWorkspace").ModelInstance[]);
   }
-  const preview = await request("/tag-engineering/preview", context, signal, { method: "POST", body: package_ });
+  const package_ = parseDraftJson(args.packageJson, "packageJson");
+  if (package_ !== undefined) {
+    if (!object(package_)) throw new Error("packageJson must be one model package object.");
+    draft.package = { ...workspace.emptyModelPackage(), ...package_, format: "sparkstudio.tags", version: 3 } as import("./modelWorkspace").ModelPackage;
+  }
+  if (typeof args.csv === "string") draft.csv = args.csv;
+  if (Array.isArray(args.locationRenames)) draft.locationRenames = args.locationRenames as import("./modelWorkspace").ModelLocationRename[];
+  if (Array.isArray(args.moves)) draft.moves = args.moves as import("./modelWorkspace").ModelMachineMove[];
+  if (Object.keys(draft).length === 1) throw new Error("Provide a definition, package, CSV, location renames or machine moves.");
+  return draft;
+}
+function draftLink(draft: ModelDraftInput, workspace: ModelWorkspaceModule): string {
+  const type = draft.definition ?? draft.package?.udtDefinitions?.[0];
+  if (type) return modelsLink({ view: "models", type: workspace.definitionKey(type) });
+  const move = draft.moves?.[0], machine = move ? move.destination + "/" + String(move.paths[0]).split("/").at(-1) : draft.package?.instances?.[0]?.path;
+  if (machine) return modelsLink({ view: "plant", item: machine, kind: "machine" });
+  const location = draft.package?.hierarchy?.[0]?.path ?? draft.locationRenames?.[0]?.path;
+  return location ? modelsLink({ view: "plant", item: location, kind: "location" }) : modelsLink({ view: "plant" });
+}
+
+/** Merge the proposal exactly as Models will, preview that delta against saved configuration, then hand it to the user's Models draft. */
+async function draftModel(args: Values, context: GatewayToolContext, signal?: AbortSignal): Promise<unknown> {
+  if (typeof context.ownerId !== "string" || !context.ownerId) throw new Error("A signed-in engineering user is required to prepare a model draft.");
+  const workspace = await import("./modelWorkspace"), drafts = await import("./modelDraft");
+  const draft = assistantDraft(args, workspace);
+  const saved = await tagModel(context, signal) as unknown as import("./modelWorkspace").ModelPackage;
+  const merged = drafts.mergeAssistantModelDraft(drafts.createModelDraft(saved), draft);
+  const changes = drafts.modelDraftChanges(saved, merged.present);
+  if (!changes.length) throw new Error("This proposal does not change the saved model.");
+  const preview = await request("/tag-engineering/preview", context, signal, { method: "POST", body: drafts.modelDraftPackage(saved, merged.present) });
   (context as BoundContext)[operationGuard]?.(); signal?.throwIfAborted();
   workspace.openModelDraft(draft, context.ownerId);
-  return { status: "draft_prepared", applied: false, preview, url: "/workspace?workspace=models", guidance: "Open Models in the workspace sidebar. Review this saved browser draft, preview the changes and apply them yourself. Ask Spark cannot apply model changes." };
+  const url = draftLink(draft, workspace);
+  return { status: "draft_prepared", applied: false, summary: drafts.modelDraftChangeSummary(changes), changes: changes.slice(0, 200), changeCount: changes.length, preview, url, markdown: "[Review in Models](" + url + ")",
+    guidance: "Show the link. The proposal joins the user's unapplied Models draft when Models opens; the user reviews and applies it. The preview compares against saved configuration, not other unapplied edits. Ask Spark cannot apply model changes." };
+}
+
+/** The user's unapplied Models draft in this browser tab, plus any Ask Spark proposal Models has not opened yet. */
+async function readModelDraft(_args: Values, context: GatewayToolContext): Promise<unknown> {
+  if (typeof context.ownerId !== "string" || !context.ownerId) throw new Error("A signed-in engineering user is required to read the Models draft.");
+  const drafts = await import("./modelDraft");
+  let saved: Values | undefined;
+  try { const text = drafts.readPersistedModelDraft(sessionStorage, context.ownerId); saved = text ? JSON.parse(text) as Values : undefined; }
+  catch { throw new Error("The saved Models draft in this browser tab could not be read."); }
+  const changes = Array.isArray(saved?.expected) ? (saved.expected as Values[]).map(item => ({ kind: item.kind, key: item.key, action: item.action })) : [];
+  let pendingProposal = false;
+  try { pendingProposal = Boolean(sessionStorage.getItem("sparkstudio.model-draft")); } catch { /* Browser storage can be unavailable. */ }
+  return { hasDraft: changes.length > 0, changeCount: changes.length, changes, package: saved?.package ?? null, fromAskSpark: saved?.fromAskSpark ?? [], pendingAssistantProposal: pendingProposal,
+    scope: "This browser tab only. Changes appear after Models records them; an unopened Ask Spark proposal is reported separately and is not merged yet." };
+}
+
+async function publishingSnapshot(context: GatewayToolContext, signal?: AbortSignal): Promise<Values> {
+  const snapshot = await request("/model/publishing", context, signal);
+  if (!object(snapshot) || !Array.isArray(snapshot.publishers)) throw new Error("Gateway returned invalid model publishing settings.");
+  return snapshot;
+}
+async function savePublisher(args: Values, context: GatewayToolContext, signal?: AbortSignal): Promise<unknown> {
+  const publisher = structuredClone(args.publisher) as Values;
+  const snapshot = await publishingSnapshot(context, signal);
+  if (snapshot.revision !== args.revision) throw new Error("Model publishing changed after it was read. Reload and review the change again.");
+  return request("/model/publishing/" + encodeURIComponent(String(publisher.id)), context, signal, { method: "PUT", body: { revision: args.revision, publisher } });
+}
+/** The broker password is typed by the user in the secure dialog; it never enters the conversation. */
+async function publisherCredentials(args: Values, context: GatewayToolContext, signal?: AbortSignal): Promise<unknown> {
+  const snapshot = await publishingSnapshot(context, signal);
+  if (snapshot.revision !== args.revision) throw new Error("Model publishing changed after it was read. Reload and review the change again.");
+  const publisher = (snapshot.publishers as unknown[]).find(item => object(item) && item.id === args.id);
+  if (!object(publisher)) throw new Error("Model publisher not found.");
+  if (typeof publisher.username !== "string" || !publisher.username) throw new Error("Save a broker username on this publisher before entering its password.");
+  const { password } = await secret(args, context, "model-publisher", ["password"]);
+  return request("/model/publishing/" + segment(args), context, signal, { method: "PUT", body: { revision: args.revision, publisher: { ...publisher, password, clearPassword: false, hasPassword: false } } });
 }
 
 function modelReadPath(path: string, context: GatewayToolContext): string {
@@ -475,6 +540,21 @@ const handlers: Record<string, Run> = {
   model_instances: modelRead("instances", ["type", "version", "under"]),
   model_object: (args, context, signal) => request(`${modelReadPath("object", context)}${query(args, ["path"])}`, context, signal),
   model_draft: draftModel,
+  model_draft_get: readModelDraft,
+  model_issues: modelRead("issues", ["path"]),
+  model_units: (_args, context, signal) => request(modelReadPath("units", context), context, signal),
+  model_dependencies: endpoint(args => "/model/dependencies" + query(args, ["type", "instance", "query"])),
+  model_versions_compare: async (args, context, signal) => request("/model/versions/compare", context, signal, { method: "POST",
+    body: { definition: parseDraftJson(args.definitionJson, "definitionJson"), fromVersion: args.fromVersion, definitions: parseDraftJson(args.definitionsJson, "definitionsJson") } }),
+  model_starters: endpoint("/model/starters"),
+  model_export: endpoint("/model/export", "POST", ["definitionKeys", "instancePaths", "includeSourceTags"]),
+  model_publishing_get: endpoint("/model/publishing"),
+  model_publishing_preview: endpoint("/model/publishing/preview", "POST", ["publisher"]),
+  model_publishing_save: savePublisher,
+  model_publishing_set_credentials: publisherCredentials,
+  model_publishing_test: endpoint(args => "/model/publishing/" + segment(args) + "/test", "POST", []),
+  model_publishing_discard: endpoint(args => "/model/publishing/" + segment(args) + "/discard", "POST", []),
+  model_publishing_delete: endpoint(args => "/model/publishing/" + segment(args) + query(args, ["revision", "discardPending"]), "DELETE", []),
   runtime_test_session: (_args, context, signal) => testRuntimeSession(context, signal),
   runtime_operator_sign_in: (args, context, signal) => signInRuntime(args, context, signal),
   navigate_workspace: async (args, context) => askSparkNavigationLink(args, context),

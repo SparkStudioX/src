@@ -120,14 +120,35 @@
         },
         "detail": {
           "type": "string",
-          "enum": ["compact", "full"],
+          "enum": [
+            "compact",
+            "full"
+          ],
           "description": "Default compact. Full loads every action, script API, structured section and resource summary; prefer targeted include to avoid unrelated context."
         },
         "include": {
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["actions", "scripts", "resources", "events", "componentEvents", "messageHandlers", "customProperties", "stateBinding", "dataSource", "tableEdit", "rowsSource", "parameterBindings", "parameters", "viewLayout", "optionsSource", "bindings", "queryBindings"]
+            "enum": [
+              "actions",
+              "scripts",
+              "resources",
+              "events",
+              "componentEvents",
+              "messageHandlers",
+              "customProperties",
+              "stateBinding",
+              "dataSource",
+              "tableEdit",
+              "rowsSource",
+              "parameterBindings",
+              "parameters",
+              "viewLayout",
+              "optionsSource",
+              "bindings",
+              "queryBindings"
+            ]
           },
           "maxItems": 17,
           "description": "Return complete definitions only for these advanced features alongside the type's basic schema. Examples: [componentEvents] for lifecycle/interaction scripts, [events] for input change/commit, [bindings] for expressions."
@@ -1200,6 +1221,46 @@
         "componentIds",
         "templateId",
         "name"
+      ],
+      "additionalProperties": false
+    },
+    "category": "designer",
+    "kind": "draft",
+    "target": "designer",
+    "permission": "design",
+    "confirmation": false,
+    "parallelSafe": false
+  },
+  {
+    "name": "spark_designer_create_model_faceplate",
+    "description": "Create an editable faceplate template from a saved machine: one value component per readable field, bound through a Model instance parameter named machine with the machine's model as its requirement. Needs read access to every field and 1–500 fields. Then place the template and set machine per placement.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "snapshotToken": {
+          "type": "string",
+          "description": "Exact token from inspect_context or the preceding successful draft edit."
+        },
+        "instancePath": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 1024,
+          "description": "Full machine path, for example [default]Acme/Line1/Press01."
+        },
+        "templateId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "snapshotToken",
+        "instancePath",
+        "templateId"
       ],
       "additionalProperties": false
     },

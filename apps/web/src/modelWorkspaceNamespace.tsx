@@ -1,34 +1,17 @@
 import { useState } from "react";
 import type { Tag } from "./types";
 import { modelLevels, type ModelPackage, type ModelExpandedTag, type ModelHierarchy } from "./modelWorkspace";
+import { locationPrefix, parentPath } from "./modelLocationEdits";
+export { moveModelInstances, renameModelLocation } from "./modelLocationEdits";
 
 interface NamespaceNode { path: string; name: string; kind: "folder" | "hierarchy" | "instance" | "member"; level?: string; type?: string; version?: number; instance?: string; tag?: ModelExpandedTag; live?: Tag; depth: number; outside?: boolean }
-const parentPath = (path: string) => path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : path === "[default]" ? "" : "[default]";
 export const modelLocationName = (path: string) => path.replace(/^\[default\]/, "").split("/").at(-1) || "";
-const withinLocation = (path: string, root: string) => path === root || path.startsWith(root + "/");
-const locationPrefix = (parent: string) => parent === "[default]" ? parent : parent + "/";
 export function nextModelLocationLevel(model: ModelPackage, parent: string): string {
   for (let path = parent; path; path = parentPath(path)) {
     const level = model.hierarchy.find(item => item.path === path)?.level;
     if (level && level !== "Custom") return modelLevels[modelLevels.indexOf(level) + 1] || "Custom";
   }
   return "Enterprise";
-}
-export function renameModelLocation(model: ModelPackage, path: string, name: string): ModelPackage {
-  if (model.hierarchy.filter(item => item.path === path).length !== 1) throw new Error("Select one unique location to rename.");
-  name = name.trim();
-  if (!name || name === "." || name === ".." || /[/\\[\]{}]/.test(name) || [...name].some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) >= 127 && character.charCodeAt(0) <= 159)) throw new Error("Enter a location name without slashes, brackets, braces or control characters.");
-  const destination = locationPrefix(parentPath(path)) + name;
-  if (destination === path) return model;
-  const occupied = [...model.hierarchy, ...model.instances, ...model.tags as { path: string }[]];
-  if (occupied.some(item => !withinLocation(item.path, path) && withinLocation(item.path, destination))) throw new Error(`A location or value already exists at ${destination}. Choose another name.`);
-  const renamed = <T extends { path: string }>(item: T): T => {
-    if (!withinLocation(item.path, path)) return item;
-    const nextPath = destination + item.path.slice(path.length);
-    if (nextPath.length > 512) throw new Error("Renaming would create a path longer than 512 characters.");
-    return { ...item, path: nextPath };
-  };
-  return { ...model, hierarchy: model.hierarchy.map(renamed), instances: model.instances.map(renamed) };
 }
 function hasAncestor(path: string, paths: Set<string>, self = false): boolean { for (let value = self ? path : parentPath(path); value; value = parentPath(value)) if (paths.has(value)) return true; return false; }
 export function visibleModelNamespace(nodes: NamespaceNode[], expanded: Set<string>): NamespaceNode[] { return nodes.filter(node => { for (let value = parentPath(node.path); value; value = parentPath(value)) if (!expanded.has(value)) return false; return true; }); }
@@ -50,19 +33,6 @@ export function filterModelNamespace(nodes: NamespaceNode[], filter: { text: str
   const matching = nodes.filter(node => (!filter.text || node.path.toLowerCase().includes(filter.text.toLowerCase())) && (!filter.type || node.type === filter.type) && (!filter.level || hasAncestor(node.path, levels, true)) && (!filter.quality || (filter.quality === "Good" ? node.live?.quality === "Good" : Boolean(node.live && node.live.quality !== "Good"))) && (!filter.outside || node.outside));
   const paths = new Set<string>(); for (const node of matching) { let path = node.path; while (path) { paths.add(path); path = parentPath(path); } }
   return nodes.filter(node => paths.has(node.path));
-}
-export function moveModelInstances(model: ModelPackage, paths: string[], parent: string): ModelPackage {
-  if (!model.hierarchy.some(node => node.path === parent)) throw new Error("Choose a location as the destination.");
-  if (!paths.length) throw new Error("Select equipment to move.");
-  if (paths.some(path => !model.instances.some(instance => instance.path === path))) throw new Error("A selected instance is no longer in this draft.");
-  const selected = new Set(paths), occupied = new Set(model.instances.filter(item => !selected.has(item.path)).map(item => item.path));
-  const instances = model.instances.map(instance => {
-    if (!selected.has(instance.path)) return instance;
-    const path = parent + "/" + instance.path.replace(/^\[default\]/, "").split("/").at(-1);
-    if (occupied.has(path)) throw new Error(`An instance already exists at ${path}.`);
-    occupied.add(path); return { ...instance, path };
-  });
-  return { ...model, instances };
 }
 export function LocationFields({ node, onRename, onPatch }: { node: ModelHierarchy; onRename: (name: string) => void; onPatch: (value: Partial<ModelHierarchy>) => void }) {
   const [name, setName] = useState(() => modelLocationName(node.path)), [error, setError] = useState("");
