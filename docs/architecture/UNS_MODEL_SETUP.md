@@ -4,7 +4,7 @@ Use this workshop to turn two synthetic MTConnect machines into one reusable mod
 
 ## Find your way around
 
-Use **Tags** for individual data values and **Models** to group those values into something useful, such as a press or a CNC machine. Models has three views: **Build models**, **Organize** and **Settings**. It is separate from Tags and from Gateway Settings.
+Use **Tags** for individual data values and **Models** to group those values into something useful, such as a press or a CNC machine. Models shows a **Plant | Models** explorer beside one detail page. **Plant** lists locations and machines; **Models** lists your reusable models. It is separate from Tags and from Gateway Settings.
 
 | On screen | What it means |
 | --- | --- |
@@ -19,7 +19,7 @@ Use **Tags** for individual data values and **Models** to group those values int
 
 For example: a connection reaches Press01, a source point reads its speed, and the tag `[default]EquipmentDemo/Press01/Speed` gives that value a usable name. A model's Speed field can reference that tag. Reusing the field does not create another device connection or read the source twice.
 
-Start with **Use a starter** or **Use my data**. Use the toolbar to choose your model and version, then **Define fields → Connect machines**. The setup guide links to the next useful action and can be hidden. Then use **Organize** to place equipment in locations and **Review changes** to check everything before saving it. These steps share one draft, so you can move between them without saving half-finished work. If this is your first model, the [three-press exercise](#8-drag-a-folder-to-build-three-press-instances) uses ordinary memory tags and needs no source server.
+Start from the first-run screen or **＋ New**: **Model from connected data**, **Model from a template** or **Blank model**. A model page shows its fields, the optional data library (**＋ Add fields from data**) and the equipment that uses it. Use the **Plant** side to add locations and drag machines into them. Every page shares one draft, so you can move around without saving half-finished work; the bar at the bottom shows how many changes are waiting and offers **Review & apply**. If this is your first model, the [three-press exercise](#8-drag-a-folder-to-build-three-press-instances) uses ordinary memory tags and needs no source server.
 
 This guide requires a build containing the current UNS tag model and Model instance template parameters. Windows `v0.2.0-preview.13` and Docker `v0.2.0-preview.13-docker.1` predate this feature. Use the recipes from the same source build as the gateway; older tag package formats are not supported. The workflow below describes the authored exercise, not evidence of qualification against physical controllers.
 
@@ -84,9 +84,9 @@ For an API-assisted setup, `sourceRecipes[0]` in the authored example specifies 
 
 ## 3. Create types and hierarchy
 
-Open **Models → Build models** from the workspace's left navigation. The **Define fields** and **Connect machines** steps share one draft with **Organize**, **Inspect & share** and **Settings**. Wide layouts also offer **Combined view**. Equipment shows **Needs setup** until its applicable draft is applied; **Ready** means saved configuration and Good live samples for every active field. Create the models, locations and equipment below, then use the header's **Review changes** and **Apply** once. Review shows what will change without saving it. Fix any conflicts before Apply; changing the draft or gateway configuration requires a new review.
+Open **Models** from the workspace's left navigation. Model pages, location and machine pages, **Check & share tools** and **Data update settings** all share one draft. Equipment shows **Needs setup** until its applicable draft is applied; **Ready** means saved configuration and Good live samples for every active field. Create the models, locations and equipment below, then use **Review & apply** in the draft bar once. Review shows what will change without saving it. Fix any conflicts before Apply; changing the draft or gateway configuration requires a new review.
 
-The **Create type from selection** button in a saved connection's Browse section can start a draft from points already imported as tags. It opens Models with fields that read the selected tags and, where possible, a `SourceRoot` parameter. That draft remains editable. For this exercise, select Haas01 speed/load, name the model **Spindle**, name the fields **Speed** and **Load**, and replace the proposed parameter/targets with the definitions below. You can also choose **New model** in **Build models** and drag the two tags into it, or select each tag and choose **Add to model**.
+The **Create type from selection** button in a saved connection's Browse section can start a draft from points already imported as tags. It opens Models with fields that read the selected tags and, where possible, a `SourceRoot` parameter. That draft remains editable. For this exercise, select Haas01 speed/load, name the model **Spindle**, name the fields **Speed** and **Load**, and replace the proposed parameter/targets with the definitions below. You can also choose **＋ New → Model from connected data** and drag the two tags from the data library into **Fields**, or select each tag and choose **Add to model**.
 
 Create **Spindle version 1**, with a required String parameter named `Device`:
 
@@ -95,7 +95,7 @@ Create **Spindle version 1**, with a required String parameter named `Device`:
 | Speed | reference / Double | `[default]Sources/MTConnect/{Device}/Sspeed` | Unit `rev/min`; range 0–12000; description Actual spindle speed |
 | Load | reference / Double | `[default]Sources/MTConnect/{Device}/Sload` | Unit `%`; description Spindle load |
 
-Leave Spindle in the draft. Choose **New model** to create **CNC version 1**, with required String `Device` and Double `IdealCycleSeconds` defaulting to `60`. Drag the draft Spindle version from the type library into CNC to create the nested member; the library also provides a keyboard-accessible nest button.
+Leave Spindle in the draft. Choose **＋ New → Blank model** to create **CNC version 1**, with required String `Device` and Double `IdealCycleSeconds` defaulting to `60`. Drag the draft Spindle from the **Models** list into CNC's fields to create the nested member, or use **＋ Add a model inside** on CNC's page.
 
 | Member | Configuration |
 | --- | --- |
@@ -107,7 +107,7 @@ Leave Spindle in the draft. Choose **New model** to create **CNC version 1**, wi
 
 Set CNC's description to a machining center and its optional semantic type to `isa95:WorkUnit`. A unit does not convert the value. A range does not clamp it, but an out-of-range reading is flagged by the model's quality rules. Switching between models preserves both drafts. For source profiles, alarms, validity rules and the starter library, continue with [model operations](UNS_MODEL_OPERATIONS.md).
 
-In **Organize**, use **Add location** to create these four locations in the same draft:
+On the **Plant** side, use **＋ Add location** (or **＋ Location inside** on a location page) to create these four locations in the same draft:
 
 | Path | Level |
 | --- | --- |
@@ -116,9 +116,9 @@ In **Organize**, use **Add location** to create these four locations in the same
 | `[default]Acme/Dallas/Machining` | Area |
 | `[default]Acme/Dallas/Machining/Line1` | Line |
 
-Select a parent location before adding its child. The suggested kind follows Enterprise → Site → Area → Line → Cell → WorkCenter → Custom; the first root location starts as Enterprise. A Custom location uses the nearest ancestor with a standard kind to choose the next suggestion. You can change the kind when your layout needs it.
+Open a parent location before adding its child. The suggested kind follows Enterprise → Site → Area → Line → Cell → WorkCenter → Custom; the first root location starts as Enterprise. A Custom location uses the nearest ancestor with a standard kind to choose the next suggestion. You can change the kind when your layout needs it.
 
-Edit **Location name**, then choose **Rename** or press **Enter** to commit it. Type only the name, such as `Dallas`, rather than the full `[default]Acme/Dallas` path. The name stays local while you type, so it cannot change another location. Rename moves that location and its child locations and equipment together, preserving their names and kinds. Empty names, path separators and collisions are rejected. Source tag paths and reference targets are not rewritten; because moved equipment has new model paths, review screen bindings and other references before applying.
+Open **Location details** on the location page, edit **Location name**, then choose **Rename** or press **Enter** to commit it. Type only the name, such as `Dallas`, rather than the full `[default]Acme/Dallas` path. The name stays local while you type, so it cannot change another location. Rename moves that location and its child locations and equipment together, preserving their names and kinds. Empty names, path separators and collisions are rejected. Source tag paths and reference targets are not rewritten; because moved equipment has new model paths, review screen bindings and other references before applying.
 
 For a repeatable alternative, use **Models → Import / export** to merge the example's nested `modelRecipe` into the draft. It supplies the same two model versions and four locations without equipment. Continue to the CSV step before Review. Do not paste the whole example wrapper. You can copy the nested object from an editor, or print it from the source checkout:
 
@@ -130,7 +130,7 @@ Import merges the specified resources; it does not delete other gateway resource
 
 ## 4. Instantiate two CNCs from CSV
 
-Return to **Build models**, select the draft CNC model, choose **Bulk actions → Paste spreadsheet rows** in **Add equipment** and paste:
+Open the draft CNC model from the **Models** list, choose **Bulk actions → Paste spreadsheet rows** in its **Equipment** section and paste:
 
 ```csv
 path,definitionId,version,Device,IdealCycleSeconds
@@ -138,11 +138,11 @@ path,definitionId,version,Device,IdealCycleSeconds
 [default]Acme/Dallas/Machining/Line1/CNC02,CNC,1,Haas02,
 ```
 
-The blank final cell for CNC02 uses the type's default of 60. Add the pasted rows to the draft, then choose **Review changes**. The combined review includes both types, all four hierarchy nodes and both instances. In **Reference targets after apply**, review each model path and its resolved raw target, along with parameter provenance and capacity, then choose **Apply**. A reference exposes the target value to readers of the model path even if they cannot read the raw path. As the configuration administrator, deliberately decide which source values this curated namespace should expose.
+The blank final cell for CNC02 uses the type's default of 60. Add the pasted rows to the draft, then choose **Review & apply**. The combined review includes both types, all four hierarchy nodes and both instances. In **Reference targets after apply**, review each model path and its resolved raw target, along with parameter provenance and capacity, then choose **Apply**. A reference exposes the target value to readers of the model path even if they cannot read the raw path. As the configuration administrator, deliberately decide which source values this curated namespace should expose.
 
 Both instances should have six leaf members. CNC01's IdealCycle is 42 and CNC02's is 60. Execution and Running should agree; Running changes with the fixture's ACTIVE/READY state. Speed, load and count should differ between the two machines. Their model references mirror their raw source values, quality and timestamps.
 
-In **Add equipment**, open CNC01's details and expand **Advanced: customize fields for this equipment → IdealCycle**. Check the value override, enter 45, review and apply. An override changes this machine only: it takes precedence over the parameter value 42. Clear that override and apply again to restore 42. The authored `overrideRecipe` describes the same optional exercise.
+Open CNC01 on the **Plant** side. Under **This machine's settings**, expand the advanced field changes for **IdealCycle**. Check the value override, enter 45, review and apply. An override changes this machine only: it takes precedence over the parameter value 42. Clear that override and apply again to restore 42. The authored `overrideRecipe` describes the same optional exercise.
 
 Changing a type definition's source placeholders never changes member shape: paths, kinds and data types are fixed. Only permitted source fields and memory values accept declared parameters. Nested `Spindle` receives its own Device argument; `./` inside that type refers to its own members.
 
@@ -152,11 +152,11 @@ Import `uns-faceplates.sparkproj` from a workshop bundle as a new project. It co
 
 To build a starter yourself:
 
-1. In the Designer's **Tags** panel, switch **Raw tags → Model**.
-2. Browse to CNC01. Inspect its members, units, descriptions and quality.
-3. Choose **Create faceplate from type**. This creates an editable template with one ordinary value component per readable leaf. Each displays quality; units longer than the value widget's limit are preserved in its label.
+1. In the Designer's **Tags** panel, choose the **Model** tab.
+2. Expand the tree down to CNC01. Its fields show their live values and units; hover a field for its description and quality.
+3. Choose **Create faceplate** under the expanded machine. This creates an editable template with one ordinary value component per readable leaf. Each displays quality; units longer than the value widget's limit are preserved in its label.
 4. Place the template twice on a screen. In the first placement's parameters select CNC01; in the second select CNC02. The instance picker offers readable instances matching the required type/version range.
-5. Inspect a generated binding such as `{machine}/Spindle/Speed`. It resolves to an ordinary concrete tag path. Selecting a member directly in the Model browser or a binding's **Browse tags → Model** picker inserts its concrete path instead.
+5. Inspect a generated binding such as `{machine}/Spindle/Speed`. It resolves to an ordinary concrete tag path. Selecting a field directly in the Model tree or a binding's **Browse tags → Model** picker inserts its concrete path instead.
 
 The generated template is a starting layout, not an automatically maintained view. Restyle it normally. Generation accepts 1–500 leaf members, matching the existing 500-component template limit, and requires read access to every member. Larger or partially readable instances are rejected rather than generating an incomplete faceplate. For a larger model, author smaller templates around the member groups you need.
 
@@ -168,11 +168,11 @@ Try importing this project into a gateway without the CNC model. Import should s
 
 ## 6. Upgrade only CNC01 and diagnose the result
 
-In **Models → Build models**, select the saved `Spindle@1` chip and choose **Edit a new version**. The editor proposes the next version. Remove **Load**, retaining Speed, to draft **Spindle version 2**.
+In **Models**, open the saved Spindle model (version 1) from the **Models** list and choose **Edit a new version**. The editor proposes the next version. Remove **Load**, retaining Speed, to draft **Spindle version 2**.
 
 Use **Edit a new version** on `CNC@1` to create **CNC version 2**. Change its nested Spindle member to **Spindle version 2**, passing `Device` as before. Keep its other members unchanged. Alternatively, merge the authored `upgradeRecipe`, which adds both new versions, into the draft.
 
-Creating these definitions upgrades **no equipment**. With `CNC@2` open in **Build models**, select **only CNC01** in **Add equipment** and choose **Bulk actions → Update selected to v2**, then review and apply the model definitions and selected equipment together. This preserves CNC01's parameters and overrides. If an override references a field removed by the new version, review and remove or replace the stale override before the upgrade can apply.
+Creating these definitions upgrades **no equipment**. With `CNC@2` open, select **only CNC01** in its **Equipment** section and choose **Bulk actions → Update selected to v2**, then review and apply the model definitions and selected equipment together. This preserves CNC01's parameters and overrides. If an override references a field removed by the new version, review and remove or replace the stale override before the upgrade can apply.
 
 Expected results:
 
@@ -216,15 +216,15 @@ This optional exercise demonstrates the Models workspace without a source server
 
 For example, the first path is `[default]EquipmentDemo/Press01/Speed`. All six tags must have an explicitly declared Double data type. The folder similarity comparison uses member paths, not these example values.
 
-1. Open **Models → Build models**, choose **New model**, and name it **Press**. In **Choose data**, find **EquipmentDemo/Press01** and drag that folder into **Define fields**. Keyboard alternative: focus the folder and press **Enter**, or use its add action. Two fields appear: Speed and Load. Both read from the existing tags, so their data types are filled in for you.
+1. Open **Models**, choose **＋ New → Model from connected data**, and name it **Press**. In the data library beside the fields, find **EquipmentDemo/Press01** and drag that folder into **Fields**. Keyboard alternative: focus the folder and press **Enter**, or use its add action. Two fields appear: Speed and Load. Both read from the existing tags, so their data types are filled in for you.
 2. When **Use this model for similar machines?** appears, keep the proposed String parameter `Device` and choose **Make reusable & add equipment**. The targets become `[default]EquipmentDemo/{Device}/Speed` and `.../{Device}/Load`: each machine fills in its own name. Press01 supplies `Device=Press01`. **Keep these exact tags** leaves the original targets unchanged; the model's menu offers **Reuse with other machines…** to try again later.
-3. In **Add equipment**, inspect the Press02 and Press03 suggestions. Both should find Speed and Load. Add both, or choose **Add all matches**. All three machines remain editable draft rows. Confirm that every machine can find its data; nothing has been saved yet.
-4. Open **Organize**. In **Locations**, reuse the workshop's Line `[default]Acme/Dallas/Machining/Line1`, or choose **Add location** to create the four locations from step 3 of this guide. Drag the three equipment rows onto that Line, or select them and use the move action. Check the destination paths; two pieces of equipment cannot have the same path.
-5. Return to **Build models** and confirm that your model, parameter and equipment are still there. Choose **Review changes** once. Check which source tag supplies each field, then apply the changes together. Expect one Press model, three pieces of equipment and six reference tags. The six raw memory tags remain separate, for twelve tags total in this optional exercise.
+3. In the model's **Equipment** section, inspect the Press02 and Press03 suggestions. Both should find Speed and Load. Add both, or choose **Add all matches**. All three machines remain editable draft rows. Confirm that every machine can find its data; nothing has been saved yet.
+4. Switch the explorer to **Plant**. Reuse the workshop's Line `[default]Acme/Dallas/Machining/Line1`, or choose **＋ Add location** to create the four locations from step 3 of this guide. Drag each of the three machines onto that Line in the explorer, or open a machine and change its **Location**. Check the destination paths; two pieces of equipment cannot have the same path.
+5. Open Press from the **Models** list and confirm that your model, parameter and equipment are still there. Choose **Review & apply** in the draft bar once. Check which source tag supplies each field, then apply the changes together. Expect one Press model, three pieces of equipment and six reference tags. The six raw memory tags remain separate, for twelve tags total in this optional exercise.
 
 Try an error before Apply: change Press03's Device cell to `PressMissing`. Its resolution should report missing targets, and the server review must block Apply. Restore `Press03`, review again and then apply. Client resolution is immediate feedback; the server preview is authoritative.
 
-To check draft protection, make an unapplied description edit and choose **Tags** or another item in the left navigation. **Stay** must retain it. **Discard draft and leave** must discard that local edit before navigating. Switching **Build models**, **Organize** and **Settings** never discards the draft. Reloading keeps a user-scoped session draft and restores it with a banner; it does not apply it. The current view and model are bookmarkable using `?workspace=models&view=build&type=Press@1` on the current `/designer/<project-id>` route or on `/workspace` when no project is open.
+To check draft protection, make an unapplied description edit and choose **Tags** or another item in the left navigation. **Stay** must retain it. **Discard draft and leave** must discard that local edit before navigating. Moving between explorer items and pages never discards the draft. Reloading keeps a user-scoped session draft and restores it with a banner; it does not apply it. The current view and model are bookmarkable using `?workspace=models&view=build&type=Press@1` on the current `/designer/<project-id>` route or on `/workspace` when no project is open.
 
 Wait for a preview or Apply request to finish before editing or leaving the workspace. A failed request keeps the draft. If session recovery reports damaged saved content, export the recovered text before choosing **Discard recovered draft**; confirmed discard keeps any current edits and resumes normal recovery storage. A failed package import also keeps your pasted text and existing draft so you can correct it.
 

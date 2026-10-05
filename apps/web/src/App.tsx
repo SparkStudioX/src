@@ -101,7 +101,7 @@ import { LocalizationProvider, useLocaleSelection, LocaleSelector } from "./Loca
 import TranslationsEditor, { ComponentTranslationAssignment } from "./TranslationsEditor";
 import { applyLocalizationCatalog } from "./localization";
 import { DesignerDiagnostics } from "./DesignerDiagnosticsDialog";
-import { DesignerModelBrowser } from "./DesignerModelBrowser";
+import { DesignerModelBrowser, TagBrowserTabs } from "./DesignerModelBrowser";
 import VisualStylesEditor, { ComponentStyleAssignment } from "./VisualStylesEditor";
 import { applyStyleCatalog } from "./visualStyles";
 import { usePreviewCommunication } from "./usePreviewCommunication";
@@ -2206,7 +2206,7 @@ export default function App() {
           <strong>Tag browser</strong>
           <span className="count-pill">{tags.length}</span>
         </div>
-        <div className="designer-model-actions"><button type="button" className="button small" aria-pressed={tagBrowserView === "raw"} onClick={() => setTagBrowserView("raw")}>Raw tags</button><button type="button" className="button small" aria-pressed={tagBrowserView === "model"} onClick={() => setTagBrowserView("model")}>Model</button></div>
+        <TagBrowserTabs view={tagBrowserView} onView={setTagBrowserView} />
         {tagBrowserView === "model" ? <DesignerModelBrowser onSelect={path => {
           if (selected && acceptsInitialTag(selected.type)) updateProps(tagBindingPatch(selected, path)); else if (screen) addComponent("value", path);
         }} onCreateFaceplate={next => {

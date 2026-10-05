@@ -21,7 +21,7 @@ export const flush=()=>{const jobs=pending;pending=[];jobs.forEach(run=>run());}
 const apiUrl = file('export const api=(...args)=>globalThis.__modelApi(...args);export const displayValue=value=>JSON.stringify(value??null);export const apiUrl=path=>"/api"+path;export const authenticatedFetch=(...args)=>globalThis.__modelFetch(...args);export const assertAuthResponseCurrent=response=>globalThis.__modelResponseCurrent(response);export class ApiError extends Error {constructor(message,status){super(message);this.status=status;}}');
 modules.set('api', apiUrl);
 modules.set('askSparkContext', file('const registerContext=()=>()=>{};const refreshContext=()=>{};export const useAskSpark=()=>({registerContext,refreshContext});'));
-modules.set('modelBuilder', file('export default function ModelBuilder(){return null;}'));
+modules.set('modelBuilder', file('export default function ModelBuilder(){return null;}export const emptyBuilderModel=model=>({id:"Model"+(model.udtDefinitions.length+1),version:1,parameters:[],members:[]});'));
 function load(name) {
   if (modules.has(name)) return modules.get(name);
   if (name.endsWith('.json')) { const result = file(`export default ${fs.readFileSync(new URL(`src/${name}`, import.meta.url), 'utf8')};`); modules.set(name, result); return result; }
@@ -41,7 +41,7 @@ const {useModelWorkspace}=await import(load('useModelWorkspace'));
 const hooks=await import(hooksUrl);
 const events=[],storage=new Map();
 globalThis.sessionStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)};
-globalThis.window={location:{href:'http://localhost/designer?workspace=models',search:'?workspace=models'},history:{state:null,replaceState(_state,_unused,url){window.location.href=String(url);window.location.search=new URL(url).search;}},addEventListener(){},removeEventListener(){},dispatchEvent:event=>{events.push(event.type);return true;}};
+globalThis.window={location:{href:'http://localhost/designer?workspace=models&view=build',search:'?workspace=models&view=build'},history:{state:null,replaceState(_state,_unused,url){window.location.href=String(url);window.location.search=new URL(url).search;}},addEventListener(){},removeEventListener(){},dispatchEvent:event=>{events.push(event.type);return true;}};
 globalThis.CustomEvent=class extends Event {};
 let passed=0;const check=async(name,run)=>{await run();passed++;console.log(`PASS ${name}`);};
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
@@ -158,28 +158,30 @@ await check('invalid and oversized assistant drafts never enter the form',()=>{
   assert.throws(()=>model.openModelDraft({csv:'é'.repeat(600000)},'owner-a'),/1 MiB/);assert.throws(()=>model.openModelDraft({csv:'x'},''),/Sign in/);
   storage.set('sparkstudio.model-draft','broken');assert.equal(model.takeModelDraft('owner-a'),undefined);assert.equal(storage.size,0);
 });
-const content=node=>typeof node==='string'||typeof node==='number'?String(node):!node?'':React.Children.toArray(node.props?.children).map(content).join('');
-const nodes=node=>!node||typeof node!=='object'?[]:typeof node.type==='function'&&node.type.name==='WorkspaceSurface'?nodes(node.type(node.props)):[node,...React.Children.toArray(node.props?.children).flatMap(nodes)];
+const shellParts=new Set(['ModelHeader','ModelDetail','ModelDraftBar','ModelFirstRun']);
+const content=node=>typeof node==='string'||typeof node==='number'?String(node):!node?'':typeof node.type==='function'&&shellParts.has(node.type.name)?content(node.type(node.props)):React.Children.toArray(node.props?.children).map(content).join('');
+const nodes=node=>!node||typeof node!=='object'?[]:typeof node.type==='function'&&shellParts.has(node.type.name)?nodes(node.type(node.props)):[node,...React.Children.toArray(node.props?.children).flatMap(nodes)];
 async function workspace(handler=()=>undefined,initialDraft,tags) {
-  hooks.clear();storage.clear();window.location={href:'http://localhost/designer?workspace=models',search:'?workspace=models'};
+  hooks.clear();storage.clear();window.location={href:'http://localhost/designer?workspace=models&view=build',search:'?workspace=models&view=build'};
   const calls=[],applied=[];let tree;
   const defaults={'/tag-engineering/export':saved,'/tag-engineering/values':[],'/tag-engineering/definitions':[definition],'/tag-engineering/status':{state:'Running',configuredTags:1,goodTags:1,unavailableTags:0,disabledTags:0},'/connections':[]};
   globalThis.__modelApi=async(...args)=>{calls.push(args);const result=handler(...args);return result===undefined?structuredClone(defaults[args[0]]??preview):result;};
   const render=()=>{hooks.begin();tree=TagModels({ownerId:'model-test-user',initialDraft,tags,onApplied:()=>applied.push(true)});hooks.flush();};
   const find=predicate=>{const item=nodes(tree).find(predicate);assert.ok(item,'Requested model control exists');return item;};
   const button=label=>find(node=>node.type==='button'&&(node.props['aria-label']||content(node))===label);
-  const click=label=>{const item=button(label);assert.ok(!item.props.disabled,label);item.props.onClick();render();};
+  const click=label=>{const item=button(label);assert.ok(!item.props.disabled,label);item.props.onClick({currentTarget:{closest:()=>null},preventDefault(){}});render();};
   const component=name=>find(node=>typeof node.type==='function'&&node.type.name===name);
   const change=model=>{component('ModelBuilder').props.onChange(model);render();};
   const changeType=type=>change({...component('ModelBuilder').props.model,udtDefinitions:[...saved.udtDefinitions,type]});
   const review=()=>component('ModelWorkspaceReviewPanel');
-  const previewChanges=()=>{find(node=>node.type==='button'&&content(node).startsWith('Review changes (')).props.onClick();render();};
-  render();await settle();render();await settle();render();return{render,find,button,click,component,change,changeType,review,previewChanges,calls,applied,setTags:next=>{tags=next;render();},text:()=>content(tree)};
+  const previewChanges=()=>{find(node=>node.type==='button'&&content(node)==='Review & apply').props.onClick();render();};
+  const explore=focus=>{component('ModelExplorer').props.onFocus(focus);render();};
+  render();await settle();render();await settle();render();return{render,find,button,click,explore,component,change,changeType,review,previewChanges,calls,applied,setTags:next=>{tags=next;render();},text:()=>content(tree)};
 }
 await check('Models workspace keeps its own heading and one combined header review',async()=>{
   const view=await workspace();assert.ok(view.calls.some(([url])=>url==='/tag-engineering/values'));assert.ok(!view.calls.some(([url])=>url==='/tags'||url==='/tag-definitions'));
   assert.equal(content(view.find(node=>node.type==='h1')),'Models');assert.equal(new URL(window.location.href).searchParams.get('workspace'),'models');
-  assert.equal(view.button('Review changes (0)').props.disabled,true);assert.equal(view.button('Build models').props['aria-pressed'],true);assert.equal(view.button('Organize').props['aria-pressed'],false);
+  assert.ok(!view.text().includes('Review & apply'));assert.equal(new URL(window.location.href).searchParams.get('view'),'models');assert.equal(view.component('ModelExplorer').props.lens,'models');
   view.changeType({...cnc,version:2});view.previewChanges();await settle();view.render();assert.equal(view.review().props.review.preview.canApply,true);
   assert.equal(view.review().props.review.preview.expandedTags[0].modelPath,'Spindle/Speed');
   view.changeType({...cnc,version:3});assert.equal(view.review().props.review,null);
@@ -196,7 +198,7 @@ await check('live gateway snapshots update the Models header and an empty snapsh
 await check('one draft includes type, instances, namespace and provider across view switches',async()=>{
   const view=await workspace(),base=view.component('ModelBuilder').props.model;
   const next={...base,udtDefinitions:[...base.udtDefinitions,{...cnc,version:2}],instances:[...base.instances,...[1,2,3].map(i=>({path:'[default]Line/Press'+i,definitionId:'CNC',version:2,parameters:{},overrides:{}}))],hierarchy:[...base.hierarchy,{path:'[default]Line',level:'Line'}]};
-  view.change(next);view.click('Settings');view.component('ModelWorkspaceSettings').props.onChange({...next,provider:{...next.provider,requireDeclaredHierarchy:true}});view.render();view.click('Organize');view.click('Build models');
+  view.change(next);view.click('Data update settings');view.component('ModelWorkspaceSettings').props.onChange({...next,provider:{...next.provider,requireDeclaredHierarchy:true}});view.render();view.explore({kind:'home'});view.explore({kind:'model',key:''});
   assert.equal(view.component('ModelBuilder').props.model.instances.length,4);view.previewChanges();await settle();view.render();
   const package_=view.calls.filter(([url])=>url==='/tag-engineering/preview').at(-1)[2];assert.equal(package_.udtDefinitions.length,1);assert.equal(package_.instances.length,3);assert.equal(package_.hierarchy.length,1);assert.equal(package_.provider.requireDeclaredHierarchy,true);
 });
@@ -205,13 +207,13 @@ await check('atomic apply sends the reviewed immutable snapshot/token once and r
   view.changeType({...cnc,version:2});view.previewChanges();await settle();view.render();
   const apply=view.review().props.onApply;apply();apply();await settle();
   const calls=view.calls.filter(([url])=>url==='/tag-engineering/apply');assert.equal(calls.length,1);assert.equal(calls[0][2].revision,'config-4');assert.equal(calls[0][2].previewToken,'review-5');assert.equal(calls[0][2].package.udtDefinitions[0].version,2);
-  pending.resolve({});await settle();view.render();assert.equal(view.applied.length,1);assert.equal(events.at(-1),'sparkstudio:model-changed');assert.equal(view.button('Review changes (0)').props.disabled,true);
+  pending.resolve({});await settle();view.render();assert.equal(view.applied.length,1);assert.equal(events.at(-1),'sparkstudio:model-changed');assert.ok(!view.text().includes('Not live until you apply'));
 });
 await check('successful apply notice clears when changing views and on the next draft edit',async()=>{
   const view=await workspace();view.changeType({...cnc,version:2});view.previewChanges();await settle();view.render();
   view.review().props.onApply();await settle();view.render();assert.match(view.text(),/All reviewed model changes were applied together/);
-  view.click('Organize');assert.ok(!view.text().includes('All reviewed model changes were applied together'));
-  view.click('Build models');view.changeType({...cnc,version:3});view.previewChanges();await settle();view.render();
+  view.explore({kind:'home'});assert.ok(!view.text().includes('All reviewed model changes were applied together'));
+  view.explore({kind:'model',key:''});view.changeType({...cnc,version:3});view.previewChanges();await settle();view.render();
   view.review().props.onApply();await settle();view.render();assert.match(view.text(),/All reviewed model changes were applied together/);
   view.changeType({...cnc,version:4});assert.ok(!view.text().includes('All reviewed model changes were applied together'));
 });
@@ -223,8 +225,8 @@ await check('apply refresh failure stays visible across view changes without res
   });
   view.changeType({...cnc,version:2});view.previewChanges();await settle();view.render();view.review().props.onApply();await settle();view.render();
   assert.match(view.text(),/Changes applied, but the model library and data status could not refresh/);
-  assert.equal(view.button('Review changes (0)').props.disabled,true);
-  view.click('Organize');assert.match(view.text(),/could not refresh/);
+  assert.ok(!view.text().includes('Not live until you apply'));
+  view.explore({kind:'home'});assert.match(view.text(),/could not refresh/);
   assert.equal(view.calls.filter(([url])=>url==='/tag-engineering/apply').length,1);
 });
 await check('pending review rejects non-form edits and subsequent edits invalidate the completed preview',async()=>{
@@ -268,7 +270,7 @@ await check('malformed imported shapes reject before replacing or persisting the
 await check('failed apply retains draft, invalidates review and never retries automatically',async()=>{
   const view=await workspace(url=>url==='/tag-engineering/apply'?Promise.reject(new Error('Configuration changed; preview again')):undefined,{definition:{...cnc,version:2}});
   view.previewChanges();await settle();view.render();view.review().props.onApply();await settle();view.render();assert.match(view.review().props.error,/Configuration changed/);assert.ok(view.component('ModelBuilder').props.model.udtDefinitions.some(type=>type.id==='CNC'&&type.version===2));assert.equal(view.review().props.review,null);assert.equal(view.calls.filter(([url])=>url==='/tag-engineering/apply').length,1);
-  view.review().props.onClose();view.render();view.click('Organize');assert.match(view.text(),/Configuration changed/);
+  view.review().props.onClose();view.render();view.explore({kind:'home'});assert.match(view.text(),/Configuration changed/);
 });
 await check('moving multiple instances preserves parameters and stages one combined namespace edit',()=>{
   const first=saved.instances[0],second={...first,path:'[default]Other/CNC02'};const package_={...saved,instances:[first,second]};

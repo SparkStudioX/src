@@ -698,13 +698,6 @@
     },
     {
       "language": "typescript",
-      "file": "apps/web/src/TagModels.tsx",
-      "name": "TagModels",
-      "occurrence": 1,
-      "ceiling": 26
-    },
-    {
-      "language": "typescript",
       "file": "apps/web/src/Tags.tsx",
       "name": "Tags",
       "occurrence": 1,

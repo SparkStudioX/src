@@ -17,7 +17,7 @@ const rootFiles = new Set([
 ]);
 const webFiles = new Set([
   'apps/web/check-model-readiness.mjs', 'apps/web/check-model-operations-ui.mjs',
-  'apps/web/check-designer-model.mjs', 'apps/web/check-model-workspace.mjs', 'apps/web/check-model-builder.mjs', 'apps/web/check-model-builder-ui.mjs', 'apps/web/check-model-navigation.mjs',
+  'apps/web/check-designer-model.mjs', 'apps/web/check-model-workspace.mjs', 'apps/web/check-model-builder.mjs', 'apps/web/check-model-builder-ui.mjs', 'apps/web/check-model-navigation.mjs', 'apps/web/check-model-explorer.mjs', 'apps/web/check-designer-model-browser.mjs',
   'apps/web/check-source-connections.mjs',
   'apps/web/src/bindingDiagnostics.tsx',
   'apps/web/check-visitor-checkin.mjs',

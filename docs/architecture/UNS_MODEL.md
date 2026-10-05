@@ -181,9 +181,9 @@ The operator tag event stream is unchanged; object views are assembled in the br
 
 **Models** is its own item in the workspace's left navigation, alongside **Tags** and **Designer**. Modeling is not nested under Tags, and Gateway Settings has no duplicate tag or model editor. The [workspace contract](UNS_MODEL_WORKSPACE.md) describes its layout and behavior:
 
-1. **Build models.** Three guided panels—**Choose data**, **Build a model** and **Add equipment**—combine the source library, reusable definition and equipment rows in one draft. A model is a recipe (a type); a field is a member; equipment is an instance. Drag tags, folders or existing models into the builder. Parameters let each machine use its own data. Details expose metadata, source settings and individual overrides.
-2. **Organize.** A **Locations** tree shows the hierarchy. **Add location** creates a site, area, line or other declared node. Move equipment with drag and drop or the equivalent selection action; **Open in builder** returns to its model.
-3. **Settings.** Shared scan groups and provider controls use the same draft as the other views.
+1. **Models lens.** Each model page combines its fields, an optional data library (**＋ Add fields from data**) and the machines that use it, in one draft. A model is a recipe (a type); a field is a member; equipment is an instance. Drag tags, folders or existing models into the builder. Parameters let each machine use its own data. Details expose metadata, source settings and individual overrides.
+2. **Plant lens.** The explorer shows locations and machines with status dots. **＋ Add location** creates a site, area, line or other declared node. Drag machines onto a location, or change a machine's location on its page. A machine page shows live data, this machine's settings and each field's data rules, and links to its model.
+3. **Data update settings.** Shared scan groups and provider controls, opened from **⋯**, use the same draft as every other page.
 4. **One review.** **Bulk actions → Paste spreadsheet rows** accepts CSV with `path,definitionId,version,<parameter...>` for up to 2,000 instances. Types, equipment, locations and settings can be reviewed and applied together. Review reports collisions, missing targets, type mismatches and capacity; Apply commits atomically. Selective upgrades use the same review.
 
 ### Model from source

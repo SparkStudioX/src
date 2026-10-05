@@ -1,6 +1,6 @@
 # Models workspace: choose data, build a model, add equipment
 
-**Status: workspace implementation and acceptance contract.** Updated October 4, 2026. **Models** is a top-level workspace destination in the left navigation. **Build models**, **Organize**, **Inspect & share** and **Settings** use the same model selection and protect one unapplied draft over the [UNS model](UNS_MODEL.md). Modeling is no longer nested under Tags or Gateway Settings. [Model operations](UNS_MODEL_OPERATIONS.md) specifies quality rules, alarms, source profiles, version impact and publishing. Validation evidence and any remaining qualification limits belong in the [verification ledger](PARITY.md); this page does not itself certify a build or a deployment.
+**Status: workspace implementation and acceptance contract.** Updated October 4, 2026. **Models** is a top-level workspace destination in the left navigation. A **Plant | Models** explorer beside one detail page replaces the earlier view tabs and setup guide. Every page shares one model selection and protects one unapplied draft over the [UNS model](UNS_MODEL.md). Modeling is no longer nested under Tags or Gateway Settings. [Model operations](UNS_MODEL_OPERATIONS.md) specifies quality rules, alarms, source profiles, version impact and publishing. Validation evidence and any remaining qualification limits belong in the [verification ledger](PARITY.md); this page does not itself certify a build or a deployment.
 
 ## Earlier UI limitations
 
@@ -18,7 +18,7 @@ That earlier page also broke the layout used by Raw tags and Connections. The re
 ## Goals
 
 - Build a reusable **model** by dragging in existing data. Explain a model as a recipe, a **field** as one value in that recipe and **equipment** as a machine that uses it. The technical schema continues to call these a type, member and instance.
-- Start with **Use a starter** or **Use my data**, then guide the user through **Define fields → Connect machines → Review changes → Verify live values**.
+- Start from connected data, a template or a blank model. Then add machines, place them in locations, review and apply. Each page says what to do next; there is no separate guide.
 - Create many pieces of equipment at once. Show whether each can find every value it needs, and explain any missing or incompatible data beside the affected row.
 - Make one combined draft (types, instances and hierarchy) with one review and one apply.
 - Match the navigation, layout and action placement of Raw tags and Connections.
@@ -32,39 +32,38 @@ That earlier page also broke the layout used by Raw tags and Connections. The re
 
 ## Information architecture
 
-**Models** has its own top-level icon and label in the workspace's left navigation, alongside **Designer** and **Tags**. **Tags** contains the individual tag editor; it has no Model section tab. Gateway Settings does not contain a duplicate tag or model editor. Models has four views under its page header:
+**Models** has its own top-level icon and label in the workspace's left navigation, alongside **Designer** and **Tags**. **Tags** contains the individual tag editor; it has no Model section tab. Gateway Settings does not contain a duplicate tag or model editor.
 
-| View | Purpose |
+Models is an explorer beside a detail page. The explorer has two lenses:
+
+| Lens | Lists | Selecting an item opens |
+|---|---|---|
+| **Plant** | **All equipment**, then locations and folders, then machines, each machine with a status dot | A **location page** or a **machine page** |
+| **Models** | Each model once with its usage count, draft marker and version chips | The **model page** for that version |
+
+| Page | Contents |
 |---|---|
-| **Build models** (default) | Choose a model in the toolbar, then **Define fields** and **Connect machines**. Wide layouts also offer **Combined view**. |
-| **Organize** | A **Locations** tree, with **Add location** and drag-to-place for equipment. This is the hierarchy editor. |
-| **Inspect & share** | **Check:** Live object and Data issues. **Manage:** Versions, Source mappings and Dependencies. **Share:** Publish MQTT and Export selection. Starters have a separate action. |
-| **Settings** | Shared scan groups and provider settings. |
+| **Location** | Breadcrumb, level badge, child-location chips and machine cards with up to three live values (60 per page). **＋ Location inside**, **＋ Add machine here** and collapsed **Location details** (name, level, metadata, remove). An undeclared folder offers **Make this a location**. |
+| **Machine** | Readiness pill and model chip; **Live data** (Field, Value, Quality, Comes from); **This machine's settings** (name, location, model version, source mapping, enabled, fill-in values, advanced per-field changes); a **field inspector** showing the selected field's data rules with **Edit field and data rules**, which opens the model page at that field. |
+| **Model** | Version select, **＋ Add fields from data** (opens the data library beside the fields), **＋ Add a model inside**, the field list with a one-line rules summary per field, **Asks each machine for** (fill-in values) and the machines that use it. |
+| **Check & share tools** | **Check:** Live object and Data issues. **Manage:** Versions, Source mappings and Dependencies. **Share:** Publish MQTT and Export selection. Templates also open here. |
+| **Data update settings** | Shared scan groups and provider settings. |
 
-The earlier **Types**, **Instances** and **Bulk instances** tabs are combined in **Build models**. **Bulk actions → Paste spreadsheet rows** brings CSV or tab-separated values into the equipment grid. Model versions such as `CNC@2` describe the user's immutable type definitions, not selectable tag-file formats. Advanced terms and source paths remain available in details and review, where they help a user make a decision.
+Plain words come first: a model's parameters are **fill-in values**, an instance's overrides are **this machine's settings**, and a reference target is where a value **comes from**. **Bulk actions → Paste spreadsheet rows** still brings CSV or tab-separated values into the machines grid on the model page. Model versions such as `CNC@2` describe the user's immutable type definitions, not selectable tag-file formats.
 
-Each view has a URL so it can be bookmarked and restored after reload: `?workspace=models&view=build&type=CNC@2`. The internal view values are `build`, `namespace`, `operate` and `settings`; `tool=live` selects the live inspector. With a project open, the route stays `/designer/<project-id>` so its Designer state is retained. `/workspace?workspace=models` opens Models without selecting a project. Tags uses `workspace=tags` separately.
+Each page has a URL so it can be bookmarked and restored after reload: `view=models&type=CNC@2` for a model, `view=plant&item=<path>&kind=machine|location` for plant pages, and `view=tools` or `view=settings`. Earlier links keep working: `view=build` opens the Models lens, `view=namespace` opens the plant overview and `view=operate` opens the tools. With a project open, the route stays `/designer/<project-id>` so its Designer state is retained. `/workspace?workspace=models` opens Models without selecting a project. Tags uses `workspace=tags` separately.
 
 ## Page layout
 
-The page uses the same frame as Raw tags:
-
-- **Page header.** Title **Models**, with the description "Turn your data into reusable models. Build once, then use it for every machine." On the right: **Import / export** (menu), then the primary action **Review changes (n)**. The button is disabled when the draft is empty. The count includes changed types, instances, hierarchy nodes, tags, scan groups and provider settings.
-- **Status pill** beside the title: `[default] Running · 32 tags` or `Degraded · 1 unavailable`, styled like the Connections summary. It replaces the current plain text status line.
-- **Breadcrumb** shows `Workspace › Models › Build models`.
-
-### Build models: selection first, then two working steps
-
-The toolbar above the builder contains a searchable **Your models** picker, a **Version** selector showing only the selected model's versions, **New model** and **Use a starter**. The picker limits visible results to 100 and searches the entire catalog. Nested models can still be dragged or added from that picker. A growing model catalog no longer consumes the data library.
-
-An empty workspace offers **Use a starter** and **Use my data**. Choosing data creates a blank draft and opens **Define fields**. After choosing a model, an actionable setup guide links to fields, equipment, sources, review and saved live values. **Hide guide** dismisses it, and **Show setup guide** restores it; the preference persists in this browser.
-
-**Define fields** shows the data library beside the model. **Connect machines** gives the equipment grid the available width. **Combined view** is offered when the builder container is wider than 1100 px, with library, fields and equipment side by side. Smaller layouts default to Define fields. Switching steps preserves search text, selection and the combined draft. Default combined widths are 280 px for the library and 420 px for equipment; pane sizes and visibility are available under **Layout options**.
+- **Page header.** Title **Models** with a status pill such as `Data running` or `1 waiting for data`. On the right: a search box that filters the explorer, **Import / export**, the primary **＋ New** menu and a **⋯** menu (Undo, Redo, Check & share tools, Data update settings, Discard draft).
+- **＋ New** offers **Model from connected data** (creates a model and opens the data library), **Model from a template**, **Blank model**, **Machine** (choose model, location and name) and **Location** (next level under the current location).
+- **First run.** With no models, machines or locations, the page shows three start cards (connected data, recommended; template; blank), a short explanation of models, machines and locations, and **Import a model file**.
+- **Draft bar.** While the draft has changes, a bar pinned to the bottom reads "N changes · Not live until you apply" with **Undo**, **Discard** and the primary **Review & apply**. It hides while the review panel is open.
 
 ### Library pane
 
 - **Tags section.** The same folder tree and search as Raw tags, with each tag row showing name, data type icon, live value and quality dot. Rows and folders are draggable. Tags already used by the open model are marked with a small "added" badge.
-- Model selection lives in the toolbar above this pane. Saved versions are read-only; **Edit a new version** creates an editable draft while equipment stays pinned until explicitly upgraded.
+- The library is hidden until **＋ Add fields from data** opens it; the choice persists in this browser and the pane width is resizable. Model selection lives in the explorer. Saved versions are read-only; **Edit a new version** creates an editable draft while equipment stays pinned until explicitly upgraded.
 - Large catalogs: the tree must be virtualized and lazy-loaded by folder. It must stay responsive at the 10,000-tag ceiling.
 
 ### Type shell
@@ -118,7 +117,7 @@ Use native HTML5 drag and drop, as the Designer canvas already does. Tag drags u
 | Folder | Shell | One reference member per tag under the folder, keeping relative paths (`Axis/X/Load`), then the **parameterize offer** below. More than 128 tags shows a selection dialog instead. |
 | Folder | Instance grid | New instance from that folder, if the shell has a parameter inferred from the same position; see [Satisfying instances](#satisfying-instances) |
 | Type | Shell | New **nested type** member pinned to the dragged version. Rejected with a message if it would create a cycle or exceed 4 levels. |
-| Equipment row | Location node | Moves the instance path under that node (Organize view) |
+| Equipment row | Location node | Moves the instance path under that node (Plant explorer) |
 | Member row | Shell, between rows | Reorders members |
 
 Drop targets show a highlighted insertion line or outline while a valid drag is over them. Invalid targets show a not-allowed cursor and a short reason in the status line. Every drop is an undoable draft edit (Ctrl+Z / Ctrl+Shift+Z within the workspace).
@@ -150,7 +149,7 @@ If the dropped targets have no sibling structure, no offer is made. Users can st
 The instance pane answers one question: does each machine have everything this type needs?
 
 - **Similar equipment** come from the parameterize offer, or from **Find matching folders**. That action scans siblings of a chosen folder and ranks them by how many member targets they resolve. Each suggestion shows its match ("12 of 12" or "10 of 12") and is added with **+**, or all at once with **Add all matches**.
-- **New instance paths** default to the model location of the first instance with the parameter value substituted (`…/Line1/{Device}` → `…/Line1/Press02`). They are editable, and **Organize** can move them later.
+- **New instance paths** default to the model location of the first instance with the parameter value substituted (`…/Line1/{Device}` → `…/Line1/Press02`). They are editable, and dragging them in the **Plant** explorer moves them later.
 - **Partial matches** can still be added. They show missing data and the server preview reports the missing targets as conflicts, so Apply stays blocked until they are fixed. Fix one by editing the parameter value, adding an override under **Details & settings → Advanced: customize fields for this equipment**, or changing the model.
 
 ## Resolution
@@ -158,12 +157,12 @@ The instance pane answers one question: does each machine have everything this t
 The client computes resolution for immediate feedback; the server preview remains authoritative.
 
 - **Client.** Substitute each instance's parameters into each reference target, using the same placeholder rules as `TagModelParameters`. Check the result against the loaded tag definitions: does the path exist and is its data type equal to the member's? Also check required parameters and parameter types. Recompute on every edit; debounce at 150 ms for grids over 200 rows.
-- **Server.** **Review changes** sends the combined draft to `POST /tag-engineering/preview`. The review lists conflicts by instance and member, using `expandedTags` and `fieldProvenance` from the existing response. If the client and server disagree, the server's result is shown and the client check is treated as a hint.
+- **Server.** **Review & apply** sends the combined draft to `POST /tag-engineering/preview`. The review lists conflicts by instance and member, using `expandedTags` and `fieldProvenance` from the existing response. If the client and server disagree, the server's result is shown and the client check is treated as a hint.
 - A target tag with no declared data type (possible for imported OPC UA tags) shows "type unknown". Dropping it creates a member with the tag's live data type, if present, and a warning that the target should declare one. See [open questions](#open-questions).
 
 ## Organize locations safely
 
-**Add location** adds a child under the selected location. A new root starts as **Enterprise**. Child kinds are suggested in this order: Enterprise → Site → Area → Line → Cell → WorkCenter → Custom. If the selected location is Custom, use its nearest declared ancestor with a standard kind to choose the next suggestion. Suggestions remain editable; the server validates hierarchy ordering at review.
+**＋ Location inside**, **＋ Add location** in the explorer and **＋ New → Location** add a child under the current location. A new root starts as **Enterprise**. Child kinds are suggested in this order: Enterprise → Site → Area → Line → Cell → WorkCenter → Custom. If the selected location is Custom, use its nearest declared ancestor with a standard kind to choose the next suggestion. Suggestions remain editable; the server validates hierarchy ordering at review.
 
 The detail editor shows **Location name**, with the full path available for context. Typing changes a local name buffer, not the draft's path or selection. **Rename** or **Enter** commits the name once, retaining its parent and provider. Reject empty names, path separators and conflicting destination paths before changing the draft. A rename updates that location, descendant hierarchy nodes and descendant instance paths atomically as one undoable edit. It preserves each node's kind and metadata. Source tag paths and reference targets are not rewritten; explain that changed model paths can require screen-binding or other reference updates before Apply.
 
@@ -171,7 +170,7 @@ The detail editor shows **Location name**, with the full path available for cont
 
 - The workspace holds **one draft package** containing every changed type version, instance, hierarchy node, scan group and provider setting. Switching views or types never drops draft content.
 - A draft type can be used by draft instances in the same package, because the server merges and expands the whole package together. The current "apply the type first" order disappears.
-- **Review changes (n)** opens a review panel on the right. It does not replace the page.
+- **Review & apply** in the draft bar opens a review panel on the right. It does not replace the page.
   - **Grouping:** changes are listed by type, then instance, then member: added, updated, unchanged and conflicts.
   - **Conflicts first:** they are listed at the top, each linking to the offending row or member.
   - **Apply:** **Apply n changes** sits in the panel header and is enabled only when the preview has no conflicts and the draft has not changed since it was taken.
@@ -183,7 +182,7 @@ The detail editor shows **Location name**, with the full path available for cont
 
 While the draft is non-empty:
 
-- Left navigation bar, breadcrumb, **Tags**, gateway settings navigation, browser Back and project switching all use the same model-draft decision: **Stay** or **Discard draft and leave**. Stay preserves the draft and current workspace. Discard clears the draft before completing the requested navigation. **Build models**, **Organize** and **Settings** switches keep the draft without prompting.
+- Left navigation bar, breadcrumb, **Tags**, gateway settings navigation, browser Back and project switching all use the same model-draft decision: **Stay** or **Discard draft and leave**. Stay preserves the draft and current workspace. Discard clears the draft before completing the requested navigation. Moving between explorer items and pages keeps the draft without prompting.
 - Browser reload and close use `beforeunload`.
 - The draft is also kept in session storage per signed-in user, as Ask Spark drafts are today. A reload restores it with a banner: "Restored an unapplied model draft from this session."
 - If the saved draft cannot be restored, its original text is preserved. **Export recovered draft** downloads that text; **Discard recovered draft** requires confirmation and resumes persistence of current edits. A failed import keeps both the existing draft and the pasted package available for correction.
@@ -198,14 +197,14 @@ These rules apply to Models, and the same checklist should be used for future wo
 4. **Status as a pill or stat card**, never a sentence of counts.
 5. **Master–detail layout.** A list or tree on the left, the work surface in the centre, details in a card or drawer. No full-page forms for collections.
 6. **Compact two-column fields** in drawers, with the same spacing, label style and input height as the Raw tags detail card and the Connections editor.
-7. **Breadcrumb and URL** reflect the current workspace and view.
+7. **Breadcrumb and URL** reflect the current workspace and page.
 8. **Destructive actions** use the danger button style and confirm in-page, never with a browser dialog.
 9. **Explain before requiring jargon.** Start with model, field, equipment and location. Explain a parameter as a fill-in value, and an override as a change for one machine. Keep exact source paths, type versions and validation details available without making them the first thing a beginner must understand.
 
 ## Ask Spark
 
-- Ask Spark model drafts (`model_draft`) open **Models → Build models** and merge into the current draft, each with a "from Ask Spark" badge. The existing rule stays: Ask Spark never applies model changes.
-- Models registers its view, selected type, selection, draft summary and resolution messages as Ask Spark context, so questions like "why can't CNC03 find its data?" include the relevant diagnostics. Context text and arrays are bounded; credentials and editable connection settings are excluded. Pinning chat context does not bypass the live unsaved-draft guard.
+- Ask Spark model drafts (`model_draft`) open the model page in **Models** and merge into the current draft, each with a "from Ask Spark" badge. The existing rule stays: Ask Spark never applies model changes.
+- Models registers its current page kind, selected type, selection, draft summary and resolution messages as Ask Spark context, so questions like "why can't CNC03 find its data?" include the relevant diagnostics. Context text and arrays are bounded; credentials and editable connection settings are excluded. Pinning chat context does not bypass the live unsaved-draft guard.
 - Source **Create type from selection** enters the same owner-scoped draft workflow and is identified as a source draft. It is not labeled as an Ask Spark proposal. Neither entry point applies changes.
 
 ## Implementation notes
@@ -247,8 +246,8 @@ The authored offline checks and browser walkthrough should cover:
     - Models has its own icon and label beside Tags in the left navigation;
     - Tags has no Model subtab, and Gateway Settings has no duplicate tag or model editor;
     - there is exactly one page heading;
-    - the primary action is in the header.
-11. **Approachable workflow:** first-use choices, model toolbar, dismissible guide and two working steps explain what to do next; switching steps preserves work at desktop and narrow widths. Check/Manage/Share and field disclosures remain keyboard accessible.
+    - the primary create action is in the header and the apply action is in the draft bar.
+11. **Approachable workflow:** first-run choices, the explorer, the ＋ New menu and the draft bar explain what to do next without a guide; opening and closing the data library preserves its search and selection at desktop and narrow widths. Check/Manage/Share and field disclosures remain keyboard accessible.
 12. **Routing:** open Models with and without a project, restore `workspace=models` bookmarks, and return to an open Designer without losing its document state. Source and Ask Spark drafts open the same Models workspace.
 
 Extend the setup-required [UNS walkthrough](UNS_MODEL_SETUP.md) with a drag-and-drop variant:
@@ -256,7 +255,7 @@ Extend the setup-required [UNS walkthrough](UNS_MODEL_SETUP.md) with a drag-and-
 1. Build `Press` from `EquipmentDemo/Press01` by dropping the folder.
 2. Accept `{Device}`.
 3. Add Press02 and Press03 from suggestions.
-4. Place all three under a Line in **Organize → Locations**.
+4. Place all three under a Line by dragging them onto it in the **Plant** explorer.
 5. Review and apply once.
 
 Record the browser walkthrough in the [verification ledger](PARITY.md).
@@ -265,4 +264,4 @@ Record the browser walkthrough in the [verification ledger](PARITY.md).
 
 1. **Untyped OPC UA targets.** Should dropping an OPC UA tag that has no declared data type offer to set it on the source tag, or should the server infer reference types from the live value? The server currently requires a declared type and rejects the reference.
 2. **Parameterize offer thresholds.** Is "at least half of the same relative leaf paths" the right sibling threshold, or should the user always choose the varying segment from the path?
-3. **Instance location defaults.** Should new instances default under a chosen hierarchy node (for example the selected Line in Namespace) instead of mirroring the source folder structure?
+3. **Instance location defaults.** Should new instances default under a chosen hierarchy node (for example the selected Line in the Plant explorer) instead of mirroring the source folder structure?

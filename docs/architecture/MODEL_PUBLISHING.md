@@ -1,13 +1,13 @@
 # Publish modeled equipment over MQTT
 
-Model publishing sends saved equipment values from the gateway to an MQTT broker. It does not read a controller a second time: it reads the same modeled values, quality and timestamps shown in the live model object. Configure it from **Models > Inspect & share > Share > Publish MQTT**. You need Engineering **Configuration** permission; operator sessions cannot configure, test, preview or discard publisher queues.
+Model publishing sends saved equipment values from the gateway to an MQTT broker. It does not read a controller a second time: it reads the same modeled values, quality and timestamps shown in the live model object. Configure it from **Models → ⋯ → Check & share tools → Share → Publish MQTT**. You need Engineering **Configuration** permission; operator sessions cannot configure, test, preview or discard publisher queues.
 
 This requires a build containing Model operations and outbound model publishing. Earlier preview.13 installers and Docker images do not include these features. Publishing uses MQTT 3.1.1 over TCP or TLS with QoS 0 or 1. QoS 2, WebSocket transport, custom certificate upload and automatic unit conversion are not offered here.
 
 ## First publisher
 
 1. Save the model and equipment through **Review and apply**. Unsaved equipment cannot be published. Open its live object and resolve unexpected quality or mapping issues first.
-2. Open **Inspect & share > Share > Publish MQTT** and create a publisher. The panel guides you through **Choose equipment**, **Connect to a broker**, **Preview the messages**, **Test the connection** and **Enable delivery**. Leave **Enable publishing when saved** off while setting it up.
+2. In **Models**, open **⋯ → Check & share tools → Share → Publish MQTT** and create a publisher. The panel guides you through **Choose equipment**, **Connect to a broker**, **Preview the messages**, **Test the connection** and **Enable delivery**. Leave **Enable publishing when saved** off while setting it up.
 3. Enter `mqtt://broker:1883` or `mqtts://broker:8883`. Put credentials in their separate fields, never in the endpoint. TLS checks the server hostname and certificate against the gateway's trusted certificate authorities. A self-signed broker needs its authority installed in that trust store.
 4. Select the saved equipment and a topic prefix, such as `plant/models`. Choose **One object per equipment** or **Leaf topics**.
 5. Choose **On change** or **Interval**. **Delivery options** contains the interval, QoS, retained-message and queue controls; broker credentials are under **Broker login (optional)**. Preview the resulting topics and payloads. **Save and test broker** explicitly saves a disabled configuration before connecting and authenticating; **Test saved broker** tests an already saved configuration. Testing sends no model messages. An enabled unsaved configuration requires a separate explicit save before testing. An accepted connection alone does not prove that the account can publish to the selected topics.

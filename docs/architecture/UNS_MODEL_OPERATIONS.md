@@ -17,7 +17,7 @@ This specification extends the [model contract](UNS_MODEL.md) and [Models worksp
 
 All model edits share the existing draft, undo/redo, review and Apply. A saved model version remains immutable. Publisher configuration is a separate gateway service with its own revision check, save and explicit enable control. Saving a publisher does not apply a model draft.
 
-In **Models > Inspect & share**, tools are grouped by purpose: **Check** contains Live object and Data issues; **Manage** contains Versions, Source mappings and Dependencies; **Share** contains Publish MQTT and Export selection. The builder toolbar and first-use welcome offer **Use a starter**. The dismissible builder checklist opens the actual fields, equipment, source details, review and live inspector rather than a separate slideshow.
+In **Models → ⋯ → Check & share tools**, tools are grouped by purpose: **Check** contains Live object and Data issues; **Manage** contains Versions, Source mappings and Dependencies; **Share** contains Publish MQTT and Export selection. **＋ New → Model from a template** and the first-run screen open the templates. There is no separate setup guide; machine pages link directly to live values, data issues and the model's fields.
 
 Equipment status distinguishes **Needs setup**, **Waiting for data**, **Data issue** and **Ready**. Unapplied or disabled equipment cannot be Ready; matching saved equipment needs Good samples for every enabled field. An issue row opens the inspector filtered to that equipment. Human issue names, original values and expected values are visible first; full paths and quality codes remain under **Technical details**.
 
