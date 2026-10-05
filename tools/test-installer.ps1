@@ -155,11 +155,11 @@ try {
     NodeCheck 'query-cancellation' @('--import', $preloader, (Join-Path $PSScriptRoot 'test-query-cancellation.mjs'), '--api')
     if ($WorkshopDirectory) { NodeCheck 'workshop-roundtrip' @('--import', $preloader, (Join-Path $PSScriptRoot 'test-workshop-packages.mjs'), $WorkshopDirectory) }
 
-    $indexHtml = (Invoke-WebRequest -Uri "http://127.0.0.1:$Port/").Content
+    $indexHtml = (Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$Port/").Content
     $asset = [regex]::Match($indexHtml, '/assets/index-[^" ]+\.js').Value
     if (!$asset -or $asset -ne $build.browser.entry) { throw 'Served browser entry differs from installer provenance.' }
     $download = Join-Path $testRoot 'served-browser.js'
-    Invoke-WebRequest -Uri "http://127.0.0.1:$Port$asset" -OutFile $download
+    Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$Port$asset" -OutFile $download
     $assetHash = (Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash.ToLowerInvariant()
     $expected = @($manifest.files | Where-Object path -eq ('wwwroot' + $asset))
     if ($expected.Count -ne 1 -or $assetHash -ne $expected[0].sha256 -or $assetHash -ne $build.browser.sha256) { throw 'Served browser bytes do not match the installer manifest.' }

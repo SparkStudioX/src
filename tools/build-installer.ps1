@@ -117,7 +117,7 @@ function Get-ReviewedNoticeFiles($Spec) {
         if (!(Test-Path -LiteralPath $file)) {
             $temporary = "$file.$([guid]::NewGuid().ToString('N')).tmp"
             try {
-                Invoke-WebRequest -Uri $url -OutFile $temporary -TimeoutSec 60
+                Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $temporary -TimeoutSec 60
                 if ((Get-Item -LiteralPath $temporary).Length -gt 131072 -or (Get-FileHash -LiteralPath $temporary -Algorithm SHA256).Hash -ne $entry.sha256) {
                     throw "Official upstream notice checksum mismatch: $($Spec.repository)/$($entry.name)"
                 }
@@ -159,7 +159,7 @@ if (!$CompilerPath) {
         New-Item -ItemType Directory -Force -Path $downloadDirectory | Out-Null
         $download = Join-Path $downloadDirectory "innosetup-$compilerVersion-x64.exe"
         if (!(Test-Path -LiteralPath $download)) {
-            Invoke-WebRequest -Uri "https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-$compilerVersion-x64.exe" -OutFile $download
+            Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-$compilerVersion-x64.exe" -OutFile $download
         }
         if ((Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash -ne $compilerSha256) { throw 'Official Inno Setup compiler checksum mismatch.' }
         $signature = Get-AuthenticodeSignature -LiteralPath $download
