@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { DragEvent } from "react";
 import type { Tag } from "./types";
+import Icon from "./Icon";
 import { definitionKey, type ModelDefinition, type ModelPackage } from "./modelWorkspace";
 import { writeBuilderDrag } from "./modelBuilderLibrary";
 
@@ -87,10 +88,12 @@ type ExplorerProps = { model: ModelPackage; savedModel: ModelPackage; health: Ma
   onLens: (lens: ModelLens) => void; onFocus: (focus: ModelFocus) => void; onMove: (paths: string[], destination: string) => void; onAddLocation: () => void; onNewModel: () => void };
 export default function ModelExplorer(props: ExplorerProps) {
   return <aside className="model-explorer" aria-label="Model explorer">
+    <h2 className="model-explorer-heading">Browse</h2>
     <div className="model-lens" role="tablist" aria-label="Explorer view">
       <button type="button" role="tab" aria-selected={props.lens === "plant"} disabled={props.disabled} onClick={() => props.onLens("plant")}>Plant</button>
       <button type="button" role="tab" aria-selected={props.lens === "models"} disabled={props.disabled} onClick={() => props.onLens("models")}>Models</button>
     </div>
+    <p className="model-help model-explorer-hint">{props.lens === "plant" ? "Locations and the machines inside them." : "Reusable definitions for your machines."}</p>
     {props.lens === "plant" ? <PlantTree {...props} /> : <ModelList {...props} />}
   </aside>;
 }
@@ -109,7 +112,7 @@ function PlantTree(props: ExplorerProps) {
   const drop = (event: DragEvent, path: string) => { event.preventDefault(); setOver(""); const machine = event.dataTransfer.getData(instanceDrag); if (machine && declared.has(path)) props.onMove([machine], path); };
   const selected = focusedPath(props.focus);
   return <>
-    <button type="button" className={`model-tree-row model-tree-root${props.focus.kind === "location" && selected === modelRoot ? " selected" : ""}`} disabled={props.disabled} onClick={() => props.onFocus({ kind: "location", path: modelRoot })}><span className="model-tree-icon" aria-hidden="true">⌂</span><span className="model-tree-name">All equipment</span><small>{props.model.instances.length}</small></button>
+    <button type="button" className={`model-tree-row model-tree-root${props.focus.kind === "location" && selected === modelRoot ? " selected" : ""}`} disabled={props.disabled} onClick={() => props.onFocus({ kind: "location", path: modelRoot })}><Icon className="model-tree-icon" name="tree" size={16} /><span className="model-tree-name">All equipment</span><small>{props.model.instances.length}</small></button>
     <div className="model-plant-tree" role="tree" aria-label="Locations and machines">
       {rows.slice(0, 500).map(row => <PlantRowItem key={row.path} row={row} selected={selected === row.path} expanded={expanded.has(row.path) || Boolean(props.query)} health={props.health.get(row.path)} over={over === row.path} disabled={props.disabled}
         onToggle={() => toggle(row.path)} onSelect={() => props.onFocus(row.kind === "machine" ? { kind: "machine", path: row.path } : { kind: "location", path: row.path })}
@@ -117,7 +120,7 @@ function PlantTree(props: ExplorerProps) {
       {rows.length > 500 && <p className="model-help">Showing 500 of {rows.length}. Search to narrow the list.</p>}
       {!rows.length && <p className="model-help">{props.query ? "Nothing matches your search." : "No locations or machines yet."}</p>}
     </div>
-    <button type="button" className="button small model-explorer-add" disabled={props.disabled} onClick={props.onAddLocation}>＋ Add location</button>
+    <button type="button" className="button small model-explorer-add" disabled={props.disabled} onClick={props.onAddLocation}><Icon name="plus" size={16} />Add location</button>
   </>;
 }
 type RowProps = { row: ModelPlantRow; selected: boolean; expanded: boolean; health?: ModelHealth; over: boolean; disabled?: boolean; onToggle: () => void; onSelect: () => void; onDragOver: (event: DragEvent) => void; onDragLeave: () => void; onDrop: (event: DragEvent) => void };
@@ -125,9 +128,9 @@ function PlantRowItem({ row, selected, expanded, health, over, disabled, onToggl
   const machine = row.kind === "machine";
   return <div role="treeitem" aria-level={row.depth + 1} aria-selected={selected} aria-expanded={row.hasChildren ? expanded : undefined} className={`model-tree-row${selected ? " selected" : ""}${over ? " drop-active" : ""}`} style={{ paddingLeft: 6 + Math.min(row.depth, 8) * 14 }}
     draggable={machine && !disabled} onDragStart={event => { if (!machine) return; event.dataTransfer.setData(instanceDrag, row.path); event.dataTransfer.effectAllowed = "move"; }} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
-    {row.hasChildren ? <button type="button" className="model-tree-toggle" tabIndex={-1} disabled={disabled} aria-label={`${expanded ? "Collapse" : "Expand"} ${row.name}`} onClick={onToggle}>{expanded ? "▾" : "▸"}</button> : <span className="model-tree-toggle" aria-hidden="true" />}
+    {row.hasChildren ? <button type="button" className="model-tree-toggle" tabIndex={-1} disabled={disabled} aria-label={`${expanded ? "Collapse" : "Expand"} ${row.name}`} onClick={onToggle}><Icon name={expanded ? "down" : "arrow"} size={14} /></button> : <span className="model-tree-toggle" aria-hidden="true" />}
     <button type="button" className="model-tree-label" disabled={disabled} onClick={onSelect} title={row.path}>
-      {machine ? <span className={`model-dot ${health || "waiting"}`} title={modelHealthLabel[health || "waiting"]} /> : <span className="model-tree-icon" aria-hidden="true">▢</span>}
+      {machine ? <span className={`model-dot ${health || "waiting"}`} title={modelHealthLabel[health || "waiting"]} /> : <Icon className="model-tree-icon" name="folder" size={16} />}
       <span className="model-tree-name">{row.name}</span><small>{machine ? `${row.type} v${row.version}` : row.level || "Folder"}</small>
     </button>
   </div>;
@@ -145,6 +148,6 @@ function ModelList(props: ExplorerProps) {
       </div>)}
       {!entries.length && <p className="model-help">{props.query ? "No models match your search." : "No models yet."}</p>}
     </div>
-    <button type="button" className="button small model-explorer-add" disabled={props.disabled} onClick={props.onNewModel}>＋ New model</button>
+    <button type="button" className="button small model-explorer-add" disabled={props.disabled} onClick={props.onNewModel}><Icon name="plus" size={16} />New model</button>
   </>;
 }

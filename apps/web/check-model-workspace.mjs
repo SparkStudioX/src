@@ -176,7 +176,8 @@ async function workspace(handler=()=>undefined,initialDraft,tags) {
   const review=()=>component('ModelWorkspaceReviewPanel');
   const previewChanges=()=>{find(node=>node.type==='button'&&content(node)==='Review & apply').props.onClick();render();};
   const explore=focus=>{component('ModelExplorer').props.onFocus(focus);render();};
-  render();await settle();render();await settle();render();return{render,find,button,click,explore,component,change,changeType,review,previewChanges,calls,applied,setTags:next=>{tags=next;render();},text:()=>content(tree)};
+  const menu=label=>{const item=nodes(tree).filter(node=>typeof node.type==='function'&&node.type.name==='ModelMenu').flatMap(node=>node.props.items).find(entry=>entry.label===label);assert.ok(item&&!item.disabled,label);item.onSelect();render();};
+  render();await settle();render();await settle();render();return{render,find,button,click,explore,menu,component,change,changeType,review,previewChanges,calls,applied,setTags:next=>{tags=next;render();},text:()=>content(tree)};
 }
 await check('Models workspace keeps its own heading and one combined header review',async()=>{
   const view=await workspace();assert.ok(view.calls.some(([url])=>url==='/tag-engineering/values'));assert.ok(!view.calls.some(([url])=>url==='/tags'||url==='/tag-definitions'));
@@ -198,7 +199,7 @@ await check('live gateway snapshots update the Models header and an empty snapsh
 await check('one draft includes type, instances, namespace and provider across view switches',async()=>{
   const view=await workspace(),base=view.component('ModelBuilder').props.model;
   const next={...base,udtDefinitions:[...base.udtDefinitions,{...cnc,version:2}],instances:[...base.instances,...[1,2,3].map(i=>({path:'[default]Line/Press'+i,definitionId:'CNC',version:2,parameters:{},overrides:{}}))],hierarchy:[...base.hierarchy,{path:'[default]Line',level:'Line'}]};
-  view.change(next);view.click('Data update settings');view.component('ModelWorkspaceSettings').props.onChange({...next,provider:{...next.provider,requireDeclaredHierarchy:true}});view.render();view.explore({kind:'home'});view.explore({kind:'model',key:''});
+  view.change(next);view.menu('Data update settings');view.component('ModelWorkspaceSettings').props.onChange({...next,provider:{...next.provider,requireDeclaredHierarchy:true}});view.render();view.explore({kind:'home'});view.explore({kind:'model',key:''});
   assert.equal(view.component('ModelBuilder').props.model.instances.length,4);view.previewChanges();await settle();view.render();
   const package_=view.calls.filter(([url])=>url==='/tag-engineering/preview').at(-1)[2];assert.equal(package_.udtDefinitions.length,1);assert.equal(package_.instances.length,3);assert.equal(package_.hierarchy.length,1);assert.equal(package_.provider.requireDeclaredHierarchy,true);
 });

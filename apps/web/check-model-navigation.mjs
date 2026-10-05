@@ -61,12 +61,12 @@ check('Leaving Model clears only its URL fields', () => {
 check('Opening Models keeps the selected Designer project and uses a top-level workspace', () => {
   location.href = 'http://localhost/designer/lab?workspace=tags#old';
   navigation.openModelsWorkspace();
-  assert.equal(location.href, 'http://localhost/designer/lab?workspace=models&view=build');
+  assert.equal(location.href, 'http://localhost/designer/lab?workspace=models&view=plant');
 });
 check('Source handoffs from gateway settings can open Models without selecting a project', () => {
   location.href = 'http://localhost/gateway#data';
   navigation.openModelsWorkspace();
-  assert.equal(location.href, 'http://localhost/workspace?workspace=models&view=build');
+  assert.equal(location.href, 'http://localhost/workspace?workspace=models&view=plant');
 });
 check('An in-flight apply blocks navigation even after its draft clears', () => {
   blocked = true; dirty = false;

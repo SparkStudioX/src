@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { displayValue } from "./api";
 import type { Tag } from "./types";
+import Icon from "./Icon";
 import { definitionKey, type ModelDefinition, type ModelInstance, type ModelPackage } from "./modelWorkspace";
 import { resolveModelInstance, type ModelResolvedMember } from "./modelResolution";
 import { modelEquipmentReadiness, modelQualityLabel, modelReadinessContext } from "./modelReadiness";
@@ -40,7 +41,7 @@ export default function ModelMachineView(props: Props) {
   if (!instance) return <section className="model-page-card"><h2>Machine not found</h2><p className="model-help">This machine is no longer in your draft.</p><button type="button" className="button" onClick={() => props.onFocus({ kind: "location", path: modelRoot })}>Show all equipment</button></section>;
   const pinned = props.model.udtDefinitions.find(item => item.id === instance.definitionId && item.version === instance.version);
   const change = (next: ModelInstance) => props.onChange({ ...props.model, instances: props.model.instances.map((item, at) => at === index ? next : item) });
-  return <div className="model-detail-split">
+  return <div className={`model-detail-split${field ? " has-inspector" : ""}`}>
     <div className="model-detail-main">
       <MachineHeader {...props} instance={instance} pinned={pinned} onRemove={() => setRemoving(true)} />
       <LiveData {...props} instance={instance} selected={field} onSelect={setField} />
@@ -80,7 +81,7 @@ function LiveData(props: Props & { instance: ModelInstance; selected: string; on
   const live = useMemo(() => new Map(props.liveTags.map(tag => [tag.path, tag])), [props.liveTags]);
   const rows = useMemo(() => resolution.members.map(member => liveRow(member, live, saved)), [resolution, live, saved]);
   return <section className="model-page-card model-page-table" aria-label="Live data">
-    <header><h3>Live data</h3><small>{saved ? "Select a field for its details and data rules." : "Values appear after you review and apply this machine."}</small></header>
+    <header><h3>Live data</h3><p className="model-help">{saved ? "Select a field for its details and data rules." : "Values appear after you review and apply this machine."}</p></header>
     <div className="model-table-scroll"><table className="model-data-table"><thead><tr><th>Field</th><th>Value</th><th>Quality</th><th>Comes from</th></tr></thead>
       <tbody>{rows.map(row => <tr key={row.member.path} className={props.selected === row.member.path ? "selected" : undefined}>
         <td><button type="button" className="model-row-button" onClick={() => props.onSelect(row.member.path)}>{row.member.path}</button></td>
@@ -108,7 +109,8 @@ function MachineSettings(props: Props & { instance: ModelInstance; pinned?: Mode
     catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
   }
   return <section className="model-page-card" aria-label="Machine settings">
-    <header><h3>This machine’s settings</h3><small>The model asks each machine for these values.</small></header>
+    <header><h3>This machine’s settings</h3><p className="model-help">Choose its location, model version and data source.</p></header>
+    <div className="model-form-section">
     <div className="model-grid">
       <label>Name<input value={name} onChange={event => setName(event.target.value)} onBlur={() => { if (name.trim() !== modelPathName(instance.path)) rename(); }} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); rename(); } }} /></label>
       <label>Location<select value={locations.includes(location) ? location : ""} onChange={event => { if (event.target.value) move(event.target.value); }}>{!locations.includes(location) && <option value="">{location.replace(/^\[default\]\/?/, "") || "Top level"} (folder)</option>}{locations.map(path => <option key={path} value={path}>{path.replace(/^\[default\]\/?/, "")}</option>)}</select></label>
@@ -117,8 +119,9 @@ function MachineSettings(props: Props & { instance: ModelInstance; pinned?: Mode
     </div>
     {error && <p className="model-warning" role="alert">{error}</p>}
     <label className="model-checkbox"><input type="checkbox" checked={instance.enabled !== false} onChange={event => onChangeInstance({ ...instance, enabled: event.target.checked })} />Collect data for this machine</label>
-    {pinned && (pinned.parameters?.length ? <ModelParameterValues parameters={pinned.parameters} values={instance.parameters} onChange={parameters => onChangeInstance({ ...instance, parameters })} /> : <p className="model-help">This model doesn’t ask for any machine-specific values.</p>)}
-    {pinned && <details className="model-advanced"><summary>Advanced: change individual fields for this machine</summary><p className="model-help">Override a source or setting when this machine differs from the model.</p><ModelOverrides value={instance} onChange={onChangeInstance} definition={pinned} definitions={props.model.udtDefinitions} /></details>}
+    {pinned && (pinned.parameters?.length ? <section className="model-form-section model-machine-parameters" aria-label="Values for this machine"><div><h4>Values for this machine</h4><p className="model-help">These values customize the model for this machine, such as its device name.</p></div><ModelParameterValues parameters={pinned.parameters} values={instance.parameters} onChange={parameters => onChangeInstance({ ...instance, parameters })} /></section> : <p className="model-help">This model doesn’t ask for any machine-specific values.</p>)}
+    {pinned && <details className="model-advanced model-disclosure"><summary>Advanced: change individual fields for this machine</summary><div className="model-form-section"><p className="model-help">Override a source or setting when this machine differs from the model.</p><ModelOverrides value={instance} onChange={onChangeInstance} definition={pinned} definitions={props.model.udtDefinitions} /></div></details>}
+    </div>
   </section>;
 }
 
@@ -128,9 +131,9 @@ function FieldInspector(props: Props & { instance: ModelInstance; path: string; 
   if (!member) return null;
   const rules = ruleSummary(member), top = member.path.split("/")[0];
   return <aside className="model-page-card model-field-inspector" aria-label={`${member.path} details`}>
-    <header><h3>{member.path}</h3><button type="button" className="button small" aria-label="Close field details" onClick={props.onClose}>×</button></header>
+    <header><h3>{member.path}</h3><button type="button" className="button small" aria-label="Close field details" onClick={props.onClose}><Icon name="close" size={16} /></button></header>
     <dl><dt>Kind</dt><dd>{kindLabel[member.kind] || member.kind}</dd><dt>Comes from</dt><dd className="model-source-cell">{memberSummary(member) || "—"}</dd><dt>Type</dt><dd>{member.dataType || "—"}</dd><dt>Unit</dt><dd>{member.unit || "—"}</dd>{member.description && <><dt>Meaning</dt><dd>{member.description}</dd></>}</dl>
     <section><h4>Data rules</h4>{rules.length ? <ul>{rules.map(rule => <li key={rule}>{rule}</li>)}</ul> : <p className="model-help">No range, staleness or alarm rules yet.</p>}<p className="model-help">Out-of-range or stale values stay visible but are marked uncertain. Rules and alarms apply to every machine using this model.</p></section>
-    <button type="button" className="button small" onClick={() => props.onOpenModel(`${props.instance.definitionId}@${props.instance.version}`, top)}>Edit field and data rules</button>
+    <button type="button" className="button small" onClick={() => props.onOpenModel(`${props.instance.definitionId}@${props.instance.version}`, top)}>Open field in model</button>
   </aside>;
 }

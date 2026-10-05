@@ -14,6 +14,7 @@ import { addModelLocation, moveModelInstances } from "./modelWorkspaceNamespace"
 import { BuilderDialog } from "./modelBuilderPanels";
 import { ModelDiscardConfirmation, ModelImportPanel, ModelWorkspaceReviewPanel } from "./modelWorkspacePanels";
 import { useModelWorkspace } from "./useModelWorkspace";
+import ModelMenu from "./ModelMenu";
 import { definitionKey, modelProviderStatus, type ModelDraft, type ModelPackage } from "./modelWorkspace";
 import "./accountSettings.css";
 import "./modelWorkspace.css";
@@ -35,6 +36,7 @@ function initialRoute(): Route {
 function routeUrl(focus: ModelFocus): URL {
   const url = new URL(window.location.href);
   for (const key of ["section", "type", "item", "kind"]) url.searchParams.delete(key);
+  if (focus.kind !== "tools") url.searchParams.delete("tool");
   url.searchParams.set("workspace", "models");
   url.searchParams.set("view", focus.kind === "model" ? "models" : focus.kind === "tools" || focus.kind === "settings" ? focus.kind : "plant");
   if (focus.kind === "model" && focus.key) url.searchParams.set("type", focus.key);
@@ -67,7 +69,6 @@ function downloadDraft(text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
   try { const link = document.createElement("a"); link.href = url; link.download = "sparkstudio-model-draft.json"; link.click(); } finally { URL.revokeObjectURL(url); }
 }
-const menuAction = (event: React.MouseEvent<HTMLButtonElement>, action: () => void) => { event.currentTarget.closest("details")?.removeAttribute("open"); action(); };
 
 function ModelRecoveryNotice({ workspace }: { workspace: Workspace }) {
   const [confirming, setConfirming] = useState(false);
@@ -79,19 +80,29 @@ type NewActions = { fromData: () => void; fromTemplate: () => void; blank: () =>
 function ModelHeader({ id, workspace, status, query, onQuery, locked, actions, onImport, onDiscard, onSettings, onTools }: { id: string; workspace: Workspace; status: { label: string; degraded: boolean }; query: string; onQuery: (value: string) => void; locked: boolean; actions: NewActions; onImport: () => void; onDiscard: () => void; onSettings: () => void; onTools: () => void }) {
   const { state, busy, changes } = workspace;
   async function exportSaved() { try { await downloadModelExport(); } catch (reason) { workspace.setError(reason instanceof Error ? reason.message : String(reason)); } }
-  return <header className="model-ws-header">
-    <div className="model-title-line"><h1 id={`${id}-title`}>Models</h1><span className={`model-status-pill ${status.degraded ? "degraded" : ""}`}>{status.label}</span></div>
-    <label className="model-ws-search"><span className="visually-hidden">Search machines, models and locations</span><input type="search" value={query} placeholder="Search machines, models, locations" onChange={event => onQuery(event.target.value)} /></label>
+  return <header className="model-ws-header page-heading">
+    <div className="model-title-line"><h1 id={`${id}-title`}>Models</h1><span className={`model-status-pill ${status.degraded ? "degraded" : ""}`} title="Gateway tag status, including tags outside these models" aria-label={`Gateway tag status: ${status.label}. Includes tags outside these models.`}>{status.label}</span></div>
+    <label className="model-ws-search"><input type="search" aria-label="Search machines, models and locations" value={query} placeholder="Search machines, models, locations" onChange={event => onQuery(event.target.value)} /></label>
     <div className="model-ws-actions">
-      <details className="model-transfer-menu"><summary className="button" aria-label="Import / export model">Import / export ▾</summary><div><button type="button" className="button" disabled={!state || busy} onClick={event => menuAction(event, onImport)}>Import into draft</button><button type="button" className="button" disabled={!state || busy} onClick={event => menuAction(event, () => void exportSaved())}>Export saved model</button><button type="button" className="button" disabled={!changes.length || busy} onClick={event => menuAction(event, () => downloadDraft(JSON.stringify(modelDraftPackage(state!.base, state!.present), null, 2)))}>Export draft</button></div></details>
-      <details className="model-transfer-menu model-new-menu"><summary className="button primary" aria-label="New" aria-disabled={locked || !state} onClick={event => { if (locked || !state) event.preventDefault(); }}>＋ New ▾</summary><div role="menu">
-        <button type="button" role="menuitem" className="button" onClick={event => menuAction(event, actions.fromData)}><strong>Model from connected data</strong><small>Pick tags from a machine; the model is built from them</small></button>
-        <button type="button" role="menuitem" className="button" onClick={event => menuAction(event, actions.fromTemplate)}><strong>Model from a template</strong><small>Motor, pump, press, OEE and more</small></button>
-        <button type="button" role="menuitem" className="button" onClick={event => menuAction(event, actions.blank)}><strong>Blank model</strong></button>
-        <button type="button" role="menuitem" className="button" onClick={event => menuAction(event, actions.machine)}><strong>Machine</strong><small>Use a model for a real machine</small></button>
-        <button type="button" role="menuitem" className="button" onClick={event => menuAction(event, actions.location)}><strong>Location</strong><small>Site, area, line or cell</small></button>
-      </div></details>
-      <details className="model-transfer-menu"><summary className="button" aria-label="Model workspace actions">⋯</summary><div><button type="button" className="button" disabled={busy || !state?.past.length} onClick={event => menuAction(event, workspace.undo)}>Undo</button><button type="button" className="button" disabled={busy || !state?.future.length} onClick={event => menuAction(event, workspace.redo)}>Redo</button><button type="button" className="button" disabled={locked} onClick={event => menuAction(event, onTools)}>Check &amp; share tools</button><button type="button" className="button" disabled={locked} onClick={event => menuAction(event, onSettings)}>Data update settings</button><button type="button" className="button danger" disabled={busy || !changes.length} onClick={event => menuAction(event, onDiscard)}>Discard draft</button></div></details>
+      <ModelMenu label="Import / export" items={[
+        { label: "Import into draft", icon: "upload", disabled: !state || busy, onSelect: onImport },
+        { label: "Export saved model", icon: "download", disabled: !state || busy, onSelect: () => void exportSaved() },
+        { label: "Export draft", icon: "download", disabled: !changes.length || busy, onSelect: () => { if (state) downloadDraft(JSON.stringify(modelDraftPackage(state.base, state.present), null, 2)); } }
+      ]} />
+      <ModelMenu label="New" icon="plus" primary disabled={locked || !state} items={[
+        { label: "Model from connected data", description: "Pick tags from a machine; the model is built from them", icon: "plug", onSelect: actions.fromData },
+        { label: "Model from a template", description: "Motor, pump, press, OEE and more", icon: "layers", onSelect: actions.fromTemplate },
+        { label: "Blank model", description: "Name your model and add fields one at a time", icon: "plus", onSelect: actions.blank },
+        { label: "Machine", description: "Use a model for a real machine", icon: "equipment-symbol", onSelect: actions.machine },
+        { label: "Location", description: "Site, area, line or cell", icon: "folder", onSelect: actions.location }
+      ]} />
+      <ModelMenu label="Model workspace actions" icon="more" iconOnly items={[
+        { label: "Undo", icon: "undo", disabled: busy || !state?.past.length, onSelect: workspace.undo },
+        { label: "Redo", icon: "redo", disabled: busy || !state?.future.length, onSelect: workspace.redo },
+        { label: "Check & share tools", icon: "activity", disabled: locked, onSelect: onTools },
+        { label: "Data update settings", icon: "settings", disabled: locked, onSelect: onSettings },
+        { label: "Discard draft", icon: "trash", danger: true, disabled: busy || !changes.length, onSelect: onDiscard }
+      ]} />
     </div>
   </header>;
 }

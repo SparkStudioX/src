@@ -38,7 +38,7 @@ export function clearModelNavigation(): void { active = undefined; pending = und
 
 export function clearModelLocation(): void {
   const url = new URL(window.location.href);
-  for (const key of ["workspace", "view", "type"]) url.searchParams.delete(key);
+  for (const key of ["workspace", "view", "type", "tool", "item", "kind"]) url.searchParams.delete(key);
   window.history.replaceState(window.history.state, "", url); recordModelNavigationLocation();
 }
 function remainsInModel(destination: URL): boolean {
@@ -52,7 +52,7 @@ export function openModelsWorkspace(): void {
   requestModelNavigation(() => {
     const url = new URL(window.location.href);
     if (!/^\/designer\/[^/]+\/?$/.test(url.pathname) && url.pathname !== "/workspace") url.pathname = "/workspace";
-    url.hash = ""; url.search = ""; url.searchParams.set("workspace", "models"); url.searchParams.set("view", "build");
+    url.hash = ""; url.search = ""; url.searchParams.set("workspace", "models"); url.searchParams.set("view", "plant");
     if (url.href !== window.location.href) window.history.pushState(window.history.state, "", url);
     recordModelNavigationLocation(); window.dispatchEvent(new Event(workspaceNavigationEvent));
   });

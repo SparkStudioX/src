@@ -21,6 +21,10 @@ For example: a connection reaches Press01, a source point reads its speed, and t
 
 Start from the first-run screen or **＋ New**: **Model from connected data**, **Model from a template** or **Blank model**. A model page shows its fields, the optional data library (**＋ Add fields from data**) and the equipment that uses it. Use the **Plant** side to add locations and drag machines into them. Every page shares one draft, so you can move around without saving half-finished work; the bar at the bottom shows how many changes are waiting and offers **Review & apply**. If this is your first model, the [three-press exercise](#8-drag-a-folder-to-build-three-press-instances) uses ordinary memory tags and needs no source server.
 
+The version picker, data-library toggle and **Add a model inside** controls sit with the model heading. Open a saved field to view its details; choose **Edit a new version** before changing fields or their order. On a machine page, selecting a live field opens its details beside the table. Close those details to give the machine settings the full available width.
+
+Use the workspace actions menu (**⋯**) for **Check & share tools**. Tools are grouped above the content: **Check** for live values and data issues, **Manage** for versions and source mappings, and **Share** for publishing and export. Menus close when you click elsewhere or press **Escape**; use arrow keys to move through their enabled choices. Changing the Plant/Models explorer view does not discard your draft or close the current detail page.
+
 This guide requires a build containing the current UNS tag model and Model instance template parameters. Windows `v0.2.0-preview.14` and Docker `v0.2.0-preview.14-docker.1` include it; Windows `v0.2.0-preview.13` and Docker `v0.2.0-preview.13-docker.1` predate this feature. Use the recipes from the same source build as the gateway; older tag package formats are not supported. The workflow below describes the authored exercise, not evidence of qualification against physical controllers.
 
 ## What you will create
