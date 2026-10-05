@@ -6,6 +6,8 @@ param(
     [string]$WorkshopDirectory
 )
 $ErrorActionPreference = 'Stop'
+# Identical bytes on Windows PowerShell 5.1 and PowerShell 7: UTF-8 without a byte-order mark.
+function Write-Utf8Text([string]$Path, [string[]]$Lines) { [IO.File]::WriteAllText($Path, (($Lines -join [Environment]::NewLine) + [Environment]::NewLine), [Text.UTF8Encoding]::new($false)) }
 $root = [IO.Path]::GetFullPath((Split-Path $PSScriptRoot -Parent))
 if (!$BuildResultPath) { $BuildResultPath = Join-Path $root 'artifacts\installer\build-result.json' }
 $BuildResultPath = [IO.Path]::GetFullPath($BuildResultPath)
@@ -56,7 +58,9 @@ function WindowsIntegrationSnapshot {
 function NodeCheck([string]$Name, [string[]]$Arguments) {
     $started = [DateTime]::UtcNow
     $log = Join-Path $testRoot "$Name.log"
-    & $node @Arguments 2>&1 | Tee-Object -FilePath $log | Out-Host
+    # Windows PowerShell 5.1 turns native stderr into terminating errors under Stop; the exit code decides the result.
+    $previousPreference = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try { & $node @Arguments 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $log | Out-Host } finally { $ErrorActionPreference = $previousPreference }
     if ($LASTEXITCODE -ne 0) { throw "Installer verification '$Name' failed. See its isolated log: $log" }
     $checks.Add([ordered]@{ name = $Name; passed = $true; seconds = [Math]::Round(([DateTime]::UtcNow - $started).TotalSeconds, 2); log = $log })
 }
@@ -164,8 +168,10 @@ try {
     if ($currentSharedAuthHash -ne $sharedAuthHash) { throw 'Installer tests modified the existing isolated test credentials file.' }
     $python = Get-Content -LiteralPath (Join-Path $testRoot 'auth-python-verification.json') -Raw | ConvertFrom-Json
     $report = [ordered]@{ version = $ExpectedVersion; sourceCommit = $build.sourceCommit; installerSha256 = $build.sha256; extractedFileHashes = $manifest.files.Count; checks = $checks.ToArray(); bundledDotnetModulesVerified = $true; python = $python; browser = @{ entry = $asset; sha256 = $assetHash }; workshopRoundtripTested = [bool]$WorkshopDirectory; noWindowsIntegration = $true; serviceInstallationTested = $false; upgradeUninstallTested = $false; sharedTestCredentialsUnchanged = $true; fixture = $testRoot; verifiedAtUtc = [DateTime]::UtcNow.ToString('o') }
-    $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $testRoot 'verification-result.json') -Encoding utf8
-    $report | ConvertTo-Json -Depth 8 | Tee-Object -FilePath (Join-Path (Split-Path $BuildResultPath -Parent) 'verification-result.json')
+    $reportJson = $report | ConvertTo-Json -Depth 8
+    Write-Utf8Text (Join-Path $testRoot 'verification-result.json') $reportJson
+    Write-Utf8Text (Join-Path (Split-Path $BuildResultPath -Parent) 'verification-result.json') $reportJson
+    $reportJson
 } finally {
     if ($process -and !$process.HasExited) { $process.Kill(); $process.WaitForExit(10000) | Out-Null }
     foreach ($key in $savedEnvironment.Keys) {

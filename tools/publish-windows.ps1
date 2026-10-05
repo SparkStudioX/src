@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param([switch]$SkipBuild, [string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
+# Identical bytes on Windows PowerShell 5.1 and PowerShell 7: UTF-8 without a byte-order mark.
+function Write-Utf8Text([string]$Path, [string[]]$Lines) { [IO.File]::WriteAllText($Path, (($Lines -join [Environment]::NewLine) + [Environment]::NewLine), [Text.UTF8Encoding]::new($false)) }
 $root = [IO.Path]::GetFullPath((Split-Path $PSScriptRoot -Parent))
 $gitRoot = $root.Replace('\', '/')
 & node (Join-Path $PSScriptRoot 'version.mjs')
@@ -105,7 +107,7 @@ try {
         [ordered]@{ path = $relative; size = $_.Length; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
     })
     $manifest = [ordered]@{ formatVersion = 1; product = 'SparkStudio'; version = $version; fileVersion = $fileVersion; platform = 'windows-x64'; sourceCommit = $sourceCommit; sourceDirty = $false; browser = $browser; generatedAtUtc = [DateTime]::UtcNow.ToString('o'); files = $files }
-    $manifest | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $output 'publish-manifest.json') -Encoding utf8
+    Write-Utf8Text (Join-Path $output 'publish-manifest.json') ($manifest | ConvertTo-Json -Depth 7)
     Write-Host "Self-contained gateway ready: $output\SparkStudio.Gateway.exe"
     Write-Host "Source $sourceCommit; browser $browserEntry; version $version"
 } finally { Pop-Location }

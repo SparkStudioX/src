@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param([switch]$SkipHelperBuild, [string]$CompilerPath, [string]$PublishedDirectory)
 $ErrorActionPreference = 'Stop'
+# Identical bytes on Windows PowerShell 5.1 and PowerShell 7: UTF-8 without a byte-order mark.
+function Write-Utf8Text([string]$Path, [string[]]$Lines) { [IO.File]::WriteAllText($Path, (($Lines -join [Environment]::NewLine) + [Environment]::NewLine), [Text.UTF8Encoding]::new($false)) }
 $root = [IO.Path]::GetFullPath((Split-Path $PSScriptRoot -Parent))
 $gitRoot = $root.Replace('\', '/')
 & node (Join-Path $PSScriptRoot 'version.mjs')
@@ -245,7 +247,7 @@ try {
         $browserPackages += [ordered]@{ name = $metadata.name; version = $metadata.version; license = $metadata.license; integrity = $lockedPackage.integrity; notices = $copiedNotices }
     }
     if (!$browserPackages.Count) { throw 'The browser production dependency inventory is empty.' }
-    $browserPackages | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $notices 'browser-package-inventory.json') -Encoding utf8
+    Write-Utf8Text (Join-Path $notices 'browser-package-inventory.json') ($browserPackages | ConvertTo-Json -Depth 6)
     Copy-Item -LiteralPath (Join-Path $root 'installer\INSTALL-NOTES.txt') -Destination $stage
     if (Test-Path -LiteralPath (Join-Path $root 'docs\architecture\WINDOWS_INSTALLER.md')) {
         Copy-Item -LiteralPath (Join-Path $root 'docs\architecture\WINDOWS_INSTALLER.md') -Destination $stage
@@ -306,7 +308,7 @@ try {
                     $relative = Join-Path $property.Name.Replace('/', '\') 'SOURCE-AVAILABILITY.txt'
                     $destination = Join-Path $notices $relative
                     New-Item -ItemType Directory -Force -Path (Split-Path $destination -Parent) | Out-Null
-                    @("Source code for the unmodified libraries distributed in $($property.Name) is available under $($noticeSpec.license) at:") + $noticeSpec.sourceAvailability | Set-Content -LiteralPath $destination -Encoding utf8
+                    Write-Utf8Text $destination (@("Source code for the unmodified libraries distributed in $($property.Name) is available under $($noticeSpec.license) at:") + $noticeSpec.sourceAvailability)
                     $inventoryEntry.sourceAvailability = $noticeSpec.sourceAvailability
                     $inventoryEntry.noticeFiles += $relative.Replace('\', '/')
                 }
@@ -325,7 +327,7 @@ try {
         }
         $packages += $inventoryEntry
     }
-    $packages | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $notices 'package-inventory.json') -Encoding utf8
+    Write-Utf8Text (Join-Path $notices 'package-inventory.json') ($packages | ConvertTo-Json -Depth 6)
     & node (Join-Path $PSScriptRoot 'write-sbom.mjs') $stage $sourceCommit
     if ($LASTEXITCODE -ne 0) { throw 'Cannot inventory the exact installer dependencies.' }
     $manifestFiles = @(Get-ChildItem -LiteralPath $stage -File -Recurse | Sort-Object FullName | ForEach-Object {
@@ -334,7 +336,7 @@ try {
     if ((Get-CleanSourceCommit) -ne $sourceCommit) { throw 'Source changed during installer preparation; publish a fresh payload from the final source commit.' }
     $manifest = [ordered]@{ formatVersion = 1; product = 'SparkStudio'; version = $version; fileVersion = $fileVersion; platform = 'windows-x64'; sourceCommit = $sourceCommit; sourceDirty = $false; browser = $provenance.browser; unsigned = $true; generatedAtUtc = [DateTime]::UtcNow.ToString('o'); files = $manifestFiles }
     $manifestPath = Join-Path $stage 'package-manifest.json'
-    $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding utf8
+    Write-Utf8Text $manifestPath ($manifest | ConvertTo-Json -Depth 6)
     Copy-Item -LiteralPath $manifestPath -Destination (Join-Path $output 'package-manifest.json') -Force
     & $CompilerPath '/Qp' ('/DPayloadDir=' + $stage) ('/DOutputFolder=' + $output) ('/DAppVersion=' + $version) ('/DNumericVersion=' + $fileVersion) (Join-Path $root 'installer\SparkStudio.iss')
     if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed.' }
@@ -347,5 +349,7 @@ try {
     if ((@($installerVersion.FileMajorPart, $installerVersion.FileMinorPart, $installerVersion.FileBuildPart, $installerVersion.FilePrivatePart) -join '.') -ne $fileVersion) { throw 'Compiled installer numeric file version does not match the release version.' }
     $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
     "$hash  $([IO.Path]::GetFileName($installer))" | Set-Content -LiteralPath "$installer.sha256" -Encoding ascii
-    [ordered]@{ installer = $installer; size = (Get-Item -LiteralPath $installer).Length; sha256 = $hash; payloadFileCount = $manifestFiles.Count; version = $version; fileVersion = $fileVersion; sourceCommit = $sourceCommit; sourceDirty = $false; browser = $provenance.browser; stage = $stage; compiler = $CompilerPath; unsigned = $true } | ConvertTo-Json -Depth 6 | Tee-Object -FilePath (Join-Path $output 'build-result.json')
+    $buildResult = [ordered]@{ installer = $installer; size = (Get-Item -LiteralPath $installer).Length; sha256 = $hash; payloadFileCount = $manifestFiles.Count; version = $version; fileVersion = $fileVersion; sourceCommit = $sourceCommit; sourceDirty = $false; browser = $provenance.browser; stage = $stage; compiler = $CompilerPath; unsigned = $true } | ConvertTo-Json -Depth 6
+    Write-Utf8Text (Join-Path $output 'build-result.json') $buildResult
+    $buildResult
 } finally { Pop-Location }
