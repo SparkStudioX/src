@@ -2,7 +2,7 @@
 # Build tools execute on the builder architecture. Only the runtime/Python stages
 # execute on each target architecture, avoiding an emulated .NET SDK build.
 FROM --platform=$BUILDPLATFORM node:22.17.1-bookworm-slim@sha256:2fa754a9ba4d7adbd2a51d182eaabbe355c82b673624035a38c0d42b08724854 AS web
-ARG VERSION=0.2.0-preview.14
+ARG VERSION=0.2.0-preview.15
 WORKDIR /web
 COPY apps/web/package*.json ./
 RUN node -e "if(require('./package.json').version!==process.argv[1])process.exit(1)" "$VERSION" && npm ci --no-audit --no-fund
@@ -21,7 +21,7 @@ FROM --platform=$BUILDPLATFORM python:3.14.7-slim-bookworm@sha256:82bc3c539b8813
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0.401-noble@sha256:35d40304542c8689331f8cab17c65926cdf48fe711e289321d71924b230a7d29 AS build
 ARG TARGETARCH
 ARG SOURCE_REVISION
-ARG VERSION=0.2.0-preview.14
+ARG VERSION=0.2.0-preview.15
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 SPARKSTUDIO_PYTHON=/usr/local/bin/python3
 WORKDIR /source
 # Run quality checks on the builder architecture with the exact pinned tools.
@@ -66,8 +66,8 @@ RUN /usr/local/bin/python3 -I /tmp/collect-docker-runtime.py /base-notices && rm
 FROM web AS notices
 ARG TARGETARCH
 ARG SOURCE_REVISION
-ARG VERSION=0.2.0-preview.14
-ARG CONTAINER_EDITION=0.2.0-preview.14-docker.1
+ARG VERSION=0.2.0-preview.15
+ARG CONTAINER_EDITION=0.2.0-preview.15-docker.1
 COPY --from=build /out /out
 COPY --from=build /root/.nuget/packages /nuget
 COPY --from=runtime-prep /base-notices /base-notices
@@ -82,8 +82,8 @@ RUN node /tools/write-docker-notices.mjs --payload /out --web /web --nuget /nuge
 
 FROM runtime-prep AS runtime
 ARG SOURCE_REVISION
-ARG VERSION=0.2.0-preview.14
-ARG CONTAINER_EDITION=0.2.0-preview.14-docker.1
+ARG VERSION=0.2.0-preview.15
+ARG CONTAINER_EDITION=0.2.0-preview.15-docker.1
 LABEL org.opencontainers.image.title="sparkstudio" \
       org.opencontainers.image.description="Industrial software. Built your way." \
       org.opencontainers.image.source="https://github.com/SparkStudioX/src" \

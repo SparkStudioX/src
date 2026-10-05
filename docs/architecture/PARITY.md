@@ -6,6 +6,10 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Preview.15 release candidate, 2026-10-05
+
+The candidate packages the Ask Spark model tools, Show a message action, Files API image uploads, larger limits and safer fresh AI defaults below, plus the Models menu and toolbar refinements. Windows version is `0.2.0-preview.15`; Docker edition is `0.2.0-preview.15-docker.1`. The workshop catalog contains **38 portable** and **23 setup-required** examples. Release packaging, exact-artifact acceptance, source CI and public publication are recorded separately once complete.
+
 ## Ask Spark model tools and provider limits, 2026-10-05
 
 Development after preview.14 closes the Ask Spark model and tooling gaps found in review. [Ask Spark](ASK_SPARK.md#models) now reads model data issues, dependencies, version comparisons, templates, units and selective exports, and the user's unapplied Models draft in the current tab. `model_draft` combines several model versions, machines, locations, mappings and data update groups with location renames and machine moves, merges and previews them through the same code as the Models page, refuses to overwrite or remove a model version, and links to the exact page. MQTT model publishers can be read, previewed, saved with their revision, tested, discarded and deleted with confirmation; broker passwords use the secure dialog. `navigate_workspace` links to exact model, machine, location, tool and settings pages, and `spark_designer_create_model_faceplate` builds the Model-tree faceplate from a saved machine.

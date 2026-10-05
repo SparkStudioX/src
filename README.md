@@ -2,7 +2,7 @@
 
 SparkStudio is an early-preview industrial application builder with a browser designer, a published operator runtime and a self-hosted gateway. The application uses ASP.NET Core/.NET 10, React/TypeScript and CPython 3; it does not require Java or Jython.
 
-[Website](https://sparkstudiox.com/) · [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.14) · [Product scope](docs/architecture/PRODUCT.md) · [Verification and roadmap](docs/architecture/PARITY.md)
+[Website](https://sparkstudiox.com/) · [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.15) · [Product scope](docs/architecture/PRODUCT.md) · [Verification and roadmap](docs/architecture/PARITY.md)
 
 The current source includes **local accounts, separate engineering/operator sessions, server-enforced project permissions and a bounded audit trail**. First run requires administrator setup on the gateway computer. Remote account/API access requires HTTPS; network deployment and service lifecycle acceptance remain separate gates. Python scripts run with the gateway account's operating-system access; worker processes are not a security sandbox. See the [security guide](docs/architecture/SECURITY.md).
 
@@ -57,7 +57,7 @@ Preview.14 uses the current tag-model format only. Older tag configuration and b
 
 ## Run on Windows
 
-Download the preview.14 installer, checksum and matching 38-project workshop collection from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.14). The installer bundles .NET, Python, the source-expression worker and browser assets; setup-required examples, including Ask Spark and read-only data sources, are documented separately. It retains unified publication, local alarms/history and the 10,000-expanded-tag configuration limit while adding the features above. Consult the release notes and [release ledger](docs/architecture/PARITY.md) for exact-package verification, and [load measurements](docs/architecture/LOAD_TESTING.md) for throughput limits. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md). Ask Spark needs a user-supplied Gemini API key and provider access; offline fixtures do not establish live model availability. Physical industrial controllers, real-source interoperability and Linux execution of the new drivers remain separate acceptance work. Elevated preview.14 service/network installation, remote browser trust, rollback, uninstall, complete real-data preservation, broader service-account/ACL behavior, actual domain SMB, trusted external FTPS and real S3 account-policy/delivery acceptance remain pending.
+Download the preview.15 installer, checksum and matching 38-project workshop collection from the [Windows preview release](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.15). The installer bundles .NET, Python, the source-expression worker and browser assets; setup-required examples, including Ask Spark and read-only data sources, are documented separately. It retains unified publication, local alarms/history and the 10,000-expanded-tag configuration limit while adding the features above. Consult the release notes and [release ledger](docs/architecture/PARITY.md) for exact-package verification, and [load measurements](docs/architecture/LOAD_TESTING.md) for throughput limits. Read the [installer guide](docs/architecture/WINDOWS_INSTALLER.md). Ask Spark needs a user-supplied Gemini API key and provider access; offline fixtures do not establish live model availability. Physical industrial controllers, real-source interoperability and Linux execution of the new drivers remain separate acceptance work. Elevated preview.15 service/network installation, remote browser trust, rollback, uninstall, complete real-data preservation, broader service-account/ACL behavior, actual domain SMB, trusted external FTPS and real S3 account-policy/delivery acceptance remain pending.
 
 For development, use Windows x64 with Node/npm available. Node 22.17.1 was used for the recorded checks. Run from the repository root in PowerShell:
 
@@ -208,7 +208,7 @@ The self-contained folder is generated under `artifacts/windows-x64`; the instal
 
 For Linux x86-64 and ARM64, use the [Docker deployment guide](docs/architecture/DOCKER_RELEASE.md) and [example Compose file](compose.yaml):
 
-The current Docker edition is **0.2.0-preview.14-docker.1**, with application version **0.2.0-preview.14**. Consult the [Docker guide](docs/architecture/DOCKER_RELEASE.md) and [release ledger](docs/architecture/PARITY.md) for its exact build, registry digest and per-platform acceptance. This container release does not replace the Windows preview.14 installer or its workshop assets.
+The current Docker edition is **0.2.0-preview.15-docker.1**, with application version **0.2.0-preview.15**. Consult the [Docker guide](docs/architecture/DOCKER_RELEASE.md) and [release ledger](docs/architecture/PARITY.md) for its exact build, registry digest and per-platform acceptance. This container release does not replace the Windows preview.15 installer or its workshop assets.
 
 ```powershell
 docker compose pull

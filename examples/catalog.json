@@ -6,7 +6,7 @@
       "kind": "source-commit",
       "value": "4e58e436ef3817458427e23a81d14a65ff1d190a"
     },
-    "note": "Use 0.2.0-preview.14 or a later compatible release for the complete collection. The Models, model operations and model-bound faceplate workshops require preview.14. Each workshop lists its own prerequisites; the frozen bundle identifies its exact clean source revision. Older tag configuration and backup formats are not migrated automatically. Exact artifact evidence is recorded separately in docs/architecture/PARITY.md."
+    "note": "Use 0.2.0-preview.15 or a later compatible release for the complete collection. The component workshop's Save order button requires preview.15; the Models, model operations and model-bound faceplate workshops require preview.14. Each workshop lists its own prerequisites; the frozen bundle identifies its exact clean source revision. Older tag configuration and backup formats are not migrated automatically. Exact artifact evidence is recorded separately in docs/architecture/PARITY.md."
   },
   "workshops": [
     {
@@ -42,7 +42,7 @@
       "prerequisites": [
         "Requires a build containing Ask Spark; older preview.12 release assets do not include it.",
         "Configure a Gemini API key in Gateway Settings > AI. Use a development project and engineering Design permission. No equipment or gateway tags are needed.",
-        "Model drafting, data-issue, publishing and machine-faceplate tools, and Show a message buttons, require a build after 0.2.0-preview.14."
+        "Model drafting, data-issue, publishing and machine-faceplate tools, and Show a message buttons, require 0.2.0-preview.15 or a later compatible build."
       ],
       "gatewayWrites": "none",
       "entryScreenId": "ask-spark-workshop",
@@ -1090,7 +1090,7 @@
       ],
       "prerequisites": [
         "No gateway tags, database, external equipment or Python action is required.",
-        "The Save order button uses the Show a message action, available in builds after 0.2.0-preview.14. Earlier gateways reject this project."
+        "The Save order button uses the Show a message action, available in 0.2.0-preview.15 and later. Earlier gateways reject this project."
       ],
       "gatewayWrites": "none",
       "entryScreenId": "component-workshop",
