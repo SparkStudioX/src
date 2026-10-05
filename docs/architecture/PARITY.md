@@ -6,6 +6,30 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Preview.14 release publication, 2026-10-05
+
+Windows [`v0.2.0-preview.14`](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.14) and Docker [`v0.2.0-preview.14-docker.1`](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.14-docker.1) were published from build source `fb98c20067cbe7ef85669bd0028d758f1c8846c1`. Source boundary and Windows/Linux product validation passed for that commit. Candidate `a129403` was superseded before publication: a Windows PowerShell 5.1 installer build wrote its package manifest with a byte-order mark that the verifier rejected, and `fb98c20` writes release metadata as BOM-less UTF-8 on both PowerShell editions.
+
+| Windows evidence | Result |
+| --- | --- |
+| Release build gates | Three invocations; each passed lint, **136 suites** with zero failures and complexity with zero violations |
+| Installer | 114,811,028 bytes, SHA-256 `d3492aac614c42473c3dadb2ab1bff1dcc178049847581725457884f2809bf93` |
+| Workshops | 38 portable projects, ZIP SHA-256 `0678f14056397b6b61d92bcdac6c8e31c3c1af2c7571e9caaf8220ab8ffc1d10` |
+| Exact extraction | 870 payload hashes, provenance, runtimes, served browser assets and all 38 workshop round trips passed. The verifier ran from tooling commit `4c06ebd`, which adds basic web parsing for Windows PowerShell 5.1 only |
+| Packaged browser review | Models first run, **＋ New** model/location/machine, machine page, draft bar, server review conflict, unsaved-draft guard and Designer Model tree passed on the extracted gateway |
+| Publication | 18 assets verified from the draft and again as anonymous public downloads |
+
+| Docker evidence | Result |
+| --- | --- |
+| Image build gates | Four invocations passed with **136 suites** each |
+| Registry | Index `sha256:6881f578bd49e3d254f0713ea2d3fb83ec185463cb72ef95ccada32c893700ca`; AMD64 `sha256:a1aa03ecb7029bf5337b3f6dfee55f9ab360d0b7cc4817aea38737d53df6b017`; ARM64 `sha256:3d96921acc0947607a860d3cad5798ee277e89190877971f618204fb76a16b5e`; `preview` alias verified |
+| Payload audit | 433 files, 324 original notice hashes and 272 SBOM components per platform; native libraries loaded on both |
+| Deployment | Local and public-digest images passed 8 groups and 38 workshops on AMD64 (native) and ARM64 (emulated) |
+| Corresponding sources | 73 Ubuntu source versions and CPython 3.14.7; archive 381,467,456 bytes, SHA-256 `068009bdcc138d2aa513888cb0c582a324d47b1f8099e9a7911a688bb51ef171` |
+| Publication | 11 assets verified from the draft and again as anonymous public downloads |
+
+Elevated installation, service upgrade/uninstall, rollback, physical ARM64 hardware, live Gemini, real source servers and industrial controllers remain unverified, as listed in both release notes. Website and hosted-docs publication is recorded by the website deployment.
+
 ## Preview.14 release candidate, 2026-10-04
 
 The candidate includes the Models workspace and its explorer redesign, model contracts and mappings, dependency and version review, optional MQTT publishing, model-bound Designer faceplates, Ask Spark model tools and the Gateway Data navigation changes below. Windows version is `0.2.0-preview.14`; Docker edition is `0.2.0-preview.14-docker.1`. The workshop catalog contains **38 portable** and **23 setup-required** examples. Earlier tag configuration and backup formats have no automatic migration path; preserve old data and use a current-format or fresh gateway directory.

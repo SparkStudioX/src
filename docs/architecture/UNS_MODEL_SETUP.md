@@ -21,7 +21,7 @@ For example: a connection reaches Press01, a source point reads its speed, and t
 
 Start from the first-run screen or **＋ New**: **Model from connected data**, **Model from a template** or **Blank model**. A model page shows its fields, the optional data library (**＋ Add fields from data**) and the equipment that uses it. Use the **Plant** side to add locations and drag machines into them. Every page shares one draft, so you can move around without saving half-finished work; the bar at the bottom shows how many changes are waiting and offers **Review & apply**. If this is your first model, the [three-press exercise](#8-drag-a-folder-to-build-three-press-instances) uses ordinary memory tags and needs no source server.
 
-This guide requires a build containing the current UNS tag model and Model instance template parameters. Windows `v0.2.0-preview.13` and Docker `v0.2.0-preview.13-docker.1` predate this feature. Use the recipes from the same source build as the gateway; older tag package formats are not supported. The workflow below describes the authored exercise, not evidence of qualification against physical controllers.
+This guide requires a build containing the current UNS tag model and Model instance template parameters. Windows `v0.2.0-preview.14` and Docker `v0.2.0-preview.14-docker.1` include it; Windows `v0.2.0-preview.13` and Docker `v0.2.0-preview.13-docker.1` predate this feature. Use the recipes from the same source build as the gateway; older tag package formats are not supported. The workflow below describes the authored exercise, not evidence of qualification against physical controllers.
 
 ## What you will create
 
