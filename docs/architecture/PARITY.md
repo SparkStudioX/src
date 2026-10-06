@@ -6,6 +6,30 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Preview.15 release publication, 2026-10-05
+
+Windows [`v0.2.0-preview.15`](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.15) and Docker [`v0.2.0-preview.15-docker.1`](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.15-docker.1) were published from build source `53df0d0fcb5c302010756991a4332899d6867cd4`. Source boundary and Windows/Linux product validation passed for that commit.
+
+| Windows evidence | Result |
+| --- | --- |
+| Release build gates | Three invocations; each passed lint, **136 suites** with zero failures and complexity with zero violations |
+| Installer | 114,842,698 bytes, SHA-256 `517d7439ae18178ea603d4e99ae02ca2301dc875a2f09add352b109cb702bd07` |
+| Workshops | 38 portable projects, ZIP SHA-256 `fc126a9f09dc849b84e4d58124b928cc76d24d7b67298acbcc3f75eea882e9e3` |
+| Exact extraction | 873 payload hashes, provenance, runtimes, served browser assets and all 38 workshop round trips passed, including the Show a message button |
+| Packaged browser review | The published Save order button showed its fixed message in the operator runtime |
+| Publication | 18 assets verified from the draft and again as anonymous public downloads |
+
+| Docker evidence | Result |
+| --- | --- |
+| Image build gates | Four invocations passed with **136 suites** each |
+| Registry | Index `sha256:8d859302b5f0f7bea92e7a9dc00708d95e7acbd54a4e9494f527dba825f12573`; AMD64 `sha256:a7be4996db94a7e196f38571e4d5d5058ff3bf51e2f6e580c79dad7a425b2c02`; ARM64 `sha256:d82e4e83c9de8e6f008d40efeafb534941180f8fdaf83ae4811b84885fd426ab`; `preview` alias verified |
+| Payload audit | 436 files, 324 original notice hashes and 272 SBOM components per platform; native libraries loaded on both |
+| Deployment | Local and public-digest images passed 8 groups and 38 workshops on AMD64 (native) and ARM64 (emulated) |
+| Corresponding sources | 73 Ubuntu source versions and CPython 3.14.7; archive 381,467,448 bytes, SHA-256 `b7ebed1e4caf2dae6b372a2ea671fc11d2f5067ab9092158a2d1c50fa0da77fc` |
+| Publication | 11 assets verified from the draft and again as anonymous public downloads |
+
+Designer Preview could not be entered in the packaged browser review, so the Show a message button was checked in the operator runtime only. Live Gemini use of the new model tools and Files API uploads, elevated installation, service upgrade/uninstall, rollback, physical ARM64 hardware, real source servers and industrial controllers remain unverified, as listed in both release notes. Website and hosted-docs publication is recorded by the website deployment.
+
 ## Preview.15 release candidate, 2026-10-05
 
 The candidate packages the Ask Spark model tools, Show a message action, Files API image uploads, larger limits and safer fresh AI defaults below, plus the Models menu and toolbar refinements. Windows version is `0.2.0-preview.15`; Docker edition is `0.2.0-preview.15-docker.1`. The workshop catalog contains **38 portable** and **23 setup-required** examples. Release packaging, exact-artifact acceptance, source CI and public publication are recorded separately once complete.
