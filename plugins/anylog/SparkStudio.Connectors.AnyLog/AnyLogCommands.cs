@@ -46,11 +46,19 @@ public static class AnyLogCommands
         var statement = SqlQueryGuard.Validate(sql).Trim();
         if (statement.EndsWith(';')) statement = statement[..^1].TrimEnd();
         statement = Bind(statement, parameters);
-        return $"run client () sql {dbms} format=json and {statement}";
+        return $"sql {dbms} format=json {statement}";
     }
 
     public static bool FitsCommandHeader(string command)
         => command.Length <= 3500 && !command.Contains('\r') && !command.Contains('\n');
+
+    /// <summary>The query node reads the command from one HTTP header. Line breaks become spaces so the SELECT still fits.</summary>
+    public static string ForHeader(string command)
+    {
+        var header = command.Replace("\r\n", " ", StringComparison.Ordinal).Replace('\n', ' ').Replace('\r', ' ');
+        if (!FitsCommandHeader(header)) throw new ArgumentException("The AnyLog command is limited to one line of 3,500 characters.");
+        return header;
+    }
 
     public static QueryResult Parse(string body, double durationMs)
     {
@@ -208,9 +216,9 @@ public static class AnyLogCommands
     {
         if (node is JsonArray array) return array;
         if (node is not JsonObject obj) return null;
-        foreach (var name in new[] { "Query", "query", "result", "data" })
-            if (obj[name] is JsonArray preferred) return preferred;
-        return obj.Select(pair => pair.Value).OfType<JsonArray>().FirstOrDefault();
+        // AnyLog returns { "Query": [ rows ], "Statistics": [ ... ] }. Statistics is not the result.
+        if (obj["Query"] is JsonArray query) return query;
+        return obj["query"] as JsonArray;
     }
 
     private static QueryResult ReadRows(JsonArray rows, double durationMs)

@@ -3,7 +3,10 @@
        The gateway project references this file when it exists, so a SparkStudio tree without the plugin still builds. -->
   <Target Name="BuildAnyLogQueryConnector" AfterTargets="Build"
           Condition="'$(MSBuildProjectName)' == 'SparkStudio.Gateway' and Exists('$(MSBuildThisFileDirectory)SparkStudio.Connectors.AnyLog/SparkStudio.Connectors.AnyLog.csproj')">
-    <MSBuild Projects="$(MSBuildThisFileDirectory)SparkStudio.Connectors.AnyLog/SparkStudio.Connectors.AnyLog.csproj" Targets="GetTargetPath"
+    <!-- The plugin is not a gateway ProjectReference. Build it here, including Restore, so an artifacts-path lint build has project.assets.json. GetTargetPath only names the DLL and does not compile it. -->
+    <MSBuild Projects="$(MSBuildThisFileDirectory)SparkStudio.Connectors.AnyLog/SparkStudio.Connectors.AnyLog.csproj" Targets="Restore"
+             Properties="Configuration=$(Configuration);_QualityContextPath=$(_QualityContextPath);_QualityContextToken=$(_QualityContextToken)" />
+    <MSBuild Projects="$(MSBuildThisFileDirectory)SparkStudio.Connectors.AnyLog/SparkStudio.Connectors.AnyLog.csproj" Targets="Build"
              Properties="Configuration=$(Configuration);_QualityContextPath=$(_QualityContextPath);_QualityContextToken=$(_QualityContextToken)">
       <Output TaskParameter="TargetOutputs" ItemName="_AnyLogConnectorAssembly" />
     </MSBuild>
@@ -11,7 +14,9 @@
   </Target>
   <Target Name="PublishAnyLogQueryConnector" AfterTargets="Publish"
           Condition="'$(MSBuildProjectName)' == 'SparkStudio.Gateway' and Exists('$(MSBuildThisFileDirectory)SparkStudio.Connectors.AnyLog/SparkStudio.Connectors.AnyLog.csproj')">
-    <MSBuild Projects="$(MSBuildThisFileDirectory)SparkStudio.Connectors.AnyLog/SparkStudio.Connectors.AnyLog.csproj" Targets="GetTargetPath"
+    <MSBuild Projects="$(MSBuildThisFileDirectory)SparkStudio.Connectors.AnyLog/SparkStudio.Connectors.AnyLog.csproj" Targets="Restore"
+             Properties="Configuration=$(Configuration);_QualityContextPath=$(_QualityContextPath);_QualityContextToken=$(_QualityContextToken)" />
+    <MSBuild Projects="$(MSBuildThisFileDirectory)SparkStudio.Connectors.AnyLog/SparkStudio.Connectors.AnyLog.csproj" Targets="Build"
              Properties="Configuration=$(Configuration);_QualityContextPath=$(_QualityContextPath);_QualityContextToken=$(_QualityContextToken)">
       <Output TaskParameter="TargetOutputs" ItemName="_AnyLogConnectorPublishAssembly" />
     </MSBuild>

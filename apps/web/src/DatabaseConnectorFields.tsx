@@ -22,7 +22,7 @@ export function DatabaseConnectionFields({
     </div>;
   }
   return <div hidden={section !== "connection"}>
-    <p className="connection-panel-notice">Write a normal SELECT on the named query. SparkStudio sends it to this query node as run client () sql &lt;dbms&gt; format=json and &lt;select&gt;.</p>
+    <p className="connection-panel-notice">Write a normal SELECT on the named query. SparkStudio sends it to this query node as sql &lt;dbms&gt; format=json &lt;select&gt;, with destination network.</p>
     {plugin.fields.map(field => <Field key={field.name} label={field.label} hint={field.help}>
       <input
         value={current.connector?.[field.name] ?? ""}

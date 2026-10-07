@@ -3,7 +3,7 @@
 This plugin lets SparkStudio named queries read an AnyLog query node. Operators enter the node address, REST port and DBMS, then write a `SELECT`. The plugin sends:
 
 ```text
-run client () sql <dbms> format=json and <select>
+sql <dbms> format=json <select>
 ```
 
 Usage, limits and the build command are in [the AnyLog connector guide](../../docs/architecture/ANYLOG_CONNECTOR.md).

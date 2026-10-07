@@ -60,7 +60,7 @@ Limits are 128 parameters, 65,536 characters of query text, a 10-second connecti
 
 ## AnyLog query node
 
-The AnyLog client is not compiled into this library. `DatabaseConnectors` is the host seam: a plugin registers a connection type, validates its settings, tests the endpoint and runs a read query. The shipped plugin is `plugins/anylog/`. It wraps a SELECT as `run client () sql <dbms> format=json and <select>` and posts that command to the query node's REST port. Setup, SQL limits and the SparkStudio upgrade steps are in the [AnyLog connector guide](../../docs/architecture/ANYLOG_CONNECTOR.md).
+The AnyLog client is not compiled into this library. `DatabaseConnectors` is the host seam: a plugin registers a connection type, validates its settings, tests the endpoint and runs a read query. The shipped plugin is `plugins/anylog/`. It sends a SELECT as the REST command `sql <dbms> format=json <select>` with `destination: network`. Setup, SQL limits and the SparkStudio upgrade steps are in the [AnyLog connector guide](../../docs/architecture/ANYLOG_CONNECTOR.md).
 
 ## Managed SQLite
 

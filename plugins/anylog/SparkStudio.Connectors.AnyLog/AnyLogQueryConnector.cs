@@ -6,7 +6,7 @@ using SparkStudio.Connectors;
 
 namespace SparkStudio.Connectors.AnyLog;
 
-/// <summary>Reads an AnyLog query node. Users write a SELECT; this connector wraps it as <c>run client () sql &lt;dbms&gt; …</c>.</summary>
+/// <summary>Reads an AnyLog query node. Users write a SELECT; the REST call sends <c>sql &lt;dbms&gt; format=json …</c> with <c>destination: network</c>.</summary>
 public sealed class AnyLogQueryConnector : IDatabaseQueryConnector
 {
     private readonly Func<HttpMessageHandler> _handlers;
@@ -25,7 +25,7 @@ public sealed class AnyLogQueryConnector : IDatabaseQueryConnector
     [
         new("host", "Query node address", "text", true, "192.168.1.20", Help: "Hostname or IP address. Do not include the port."),
         new("port", "REST port", "port", true, "32349", "32349", "REST port of the query node. 32349 is a common default; use the port configured on the node."),
-        new("dbms", "DBMS", "text", true, "aloperator", Help: "Logical database name inserted into run client () sql <dbms>.")
+        new("dbms", "DBMS", "text", true, "aloperator", Help: "Logical database name inserted into sql <dbms>.")
     ];
 
     public JsonObject Normalize(JsonObject connection) => AnyLogCommands.Normalize(connection);
@@ -35,7 +35,7 @@ public sealed class AnyLogQueryConnector : IDatabaseQueryConnector
         try
         {
             var (host, port, _) = AnyLogCommands.ReadSettings(settings);
-            var body = await PostAsync(host, port, "run client () get status", cancellationToken);
+            var body = await SendAsync(host, port, "get status", network: false, cancellationToken);
             return string.IsNullOrWhiteSpace(body)
                 ? new ConnectionTestResult(false, AnyLogCommands.UnreachableMessage)
                 : new ConnectionTestResult(true, "Connection and read check succeeded.");
@@ -52,20 +52,20 @@ public sealed class AnyLogQueryConnector : IDatabaseQueryConnector
         var (host, port, dbms) = AnyLogCommands.ReadSettings(settings);
         var command = AnyLogCommands.Prepare(dbms, sql, parameters);
         var clock = Stopwatch.StartNew();
-        var body = await PostAsync(host, port, command, cancellationToken);
+        var body = await SendAsync(host, port, command, network: true, cancellationToken);
         return AnyLogCommands.Parse(body, clock.Elapsed.TotalMilliseconds);
     }
 
-    private async Task<string> PostAsync(string host, int port, string command, CancellationToken cancellationToken)
+    private async Task<string> SendAsync(string host, int port, string command, bool network, CancellationToken cancellationToken)
     {
         using var client = new HttpClient(_handlers(), disposeHandler: true) { Timeout = TimeSpan.FromSeconds(30) };
         var address = new UriBuilder(Uri.UriSchemeHttp, host, port) { Path = "/" }.Uri;
-        using var request = new HttpRequestMessage(HttpMethod.Post, address);
+        using var request = new HttpRequestMessage(HttpMethod.Get, address);
         request.Headers.TryAddWithoutValidation("User-Agent", "AnyLog/1.23");
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));
-        if (AnyLogCommands.FitsCommandHeader(command)) request.Headers.TryAddWithoutValidation("command", command);
-        request.Content = new StringContent(command, Encoding.UTF8, "text/plain");
+        request.Headers.TryAddWithoutValidation("command", AnyLogCommands.ForHeader(command));
+        if (network) request.Headers.TryAddWithoutValidation("destination", "network");
         try
         {
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);

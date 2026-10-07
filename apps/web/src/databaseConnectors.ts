@@ -32,7 +32,7 @@ const anylogFallback: DatabaseConnectorDescriptor = {
   fields: [
     { name: "host", label: "Query node address", kind: "text", required: true, placeholder: "192.168.1.20", help: "Hostname or IP address. Do not include the port." },
     { name: "port", label: "REST port", kind: "port", required: true, placeholder: "32349", defaultValue: "32349", help: "REST port of the query node. 32349 is a common default; use the port configured on the node." },
-    { name: "dbms", label: "DBMS", kind: "text", required: true, placeholder: "aloperator", help: "Logical database name inserted into run client () sql <dbms>." },
+    { name: "dbms", label: "DBMS", kind: "text", required: true, placeholder: "aloperator", help: "Logical database name inserted into sql <dbms>." },
   ],
 };
 
@@ -122,5 +122,5 @@ export function queryConnectorNote(connectionId: string, connections: Connection
   const plugin = describeConnector(connection, catalog);
   if (!plugin || !connection?.connector) return "";
   const dbms = connection.connector.dbms || "<dbms>";
-  return `${plugin.displayName} keeps your SELECT unchanged and sends run client () sql ${dbms} format=json and <select>. Use @name parameters the same way as SQL Server. AnyLog reads rows; it does not run INSERT, UPDATE or DELETE from this connection.`;
+  return `${plugin.displayName} keeps your SELECT unchanged and sends sql ${dbms} format=json <select> with destination network. Use @name parameters the same way as SQL Server. AnyLog reads rows; it does not run INSERT, UPDATE or DELETE from this connection.`;
 }

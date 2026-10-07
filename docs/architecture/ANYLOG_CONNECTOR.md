@@ -1,12 +1,12 @@
 # AnyLog query node
 
-SparkStudio can use an AnyLog query node as a named-query connection. You write the same kind of `SELECT` used for SQL Server. The connector sends that statement to the query node's REST port as:
+SparkStudio can use an AnyLog query node as a named-query connection. You write the same kind of `SELECT` used for SQL Server. The connector sends that statement as an HTTP GET. The `command` header is:
 
 ```text
-run client () sql <dbms> format=json and <select>
+sql <dbms> format=json <select>
 ```
 
-`format=json` is added so screens receive columns and rows. The `SELECT` text itself is not rewritten. `@name` parameters are still declared on the named query; before the command is sent, each one is replaced with a typed literal. AnyLog's REST command does not accept a separate parameter list.
+The header `destination: network` is the REST form of `run client ()`. Putting `run client ()` in a POST body makes this node return HTTP 400, `Unrecognized Command`. `format=json` is added so screens receive columns and rows. The `SELECT` text itself is not rewritten. `@name` parameters are still declared on the named query; before the command is sent, each one is replaced with a typed literal. AnyLog's REST command does not accept a separate parameter list.
 
 This connector is a plugin under `plugins/anylog/`. SparkStudio core only has a small registration seam, so an upstream SparkStudio update does not have to merge the AnyLog client. The upgrade steps are in [plugins/anylog/UPGRADE.md](../../plugins/anylog/UPGRADE.md).
 
@@ -20,7 +20,7 @@ Open **Gateway Settings → Data → Connections → New Connection** and choose
 | REST port | Port of the node's REST interface. `32349` is filled in as a common default; use the port configured on that node. |
 | DBMS | Logical database name. It must be letters, digits and underscores, and it is inserted as `<dbms>` in the command above. |
 
-Save, then **Test connection**. The test posts `run client () get status`. A successful test means the node accepted a command. It does not prove that the DBMS contains a particular table; run a named query for that.
+Save, then **Test connection**. The test sends `get status` in the command header. A successful test means the node accepted a command. It does not prove that the DBMS contains a particular table; run a named query for that.
 
 The connection is read-only. Named queries on it stay **Rows (SELECT)**. INSERT, UPDATE and DELETE, including atomic table batches, stay on SQLite and SQL Server.
 
@@ -37,16 +37,16 @@ WHERE sensor = @sensor AND timestamp >= NOW() - 1 hour
 With DBMS `aloperator` and `@sensor` set to `BCT`, the node receives:
 
 ```text
-run client () sql aloperator format=json and SELECT sensor, value FROM temperature WHERE sensor = 'BCT' AND timestamp >= NOW() - 1 hour
+sql aloperator format=json SELECT sensor, value FROM temperature WHERE sensor = 'BCT' AND timestamp >= NOW() - 1 hour
 ```
 
 Parameter rules match the SQL Server named-query types: string, integer, long, floating point, decimal, boolean, date and GUID. Strings are single-quoted and embedded quotes are doubled. Numbers stay numeric literals. Missing values become `NULL`. Placeholders inside quotes or comments are left as written.
 
 AnyLog's own SQL limits still apply. A query is one statement, normally one table. Joins, nested queries and T-SQL `TOP` are outside what a query node typically accepts; use `LIMIT` and AnyLog's `NOW() - N hours/days/minutes` form. The connector still refuses a statement that is not a single `SELECT` or `WITH … SELECT`, and it refuses stacked statements.
 
-Results are capped at 1,000 rows, about 16 MiB and 1 MiB per cell, with a 30-second limit. A larger result fails instead of returning a partial table. Screens, dropdowns, lists and query tables bind to the named query the same way they bind to a SQL Server query.
+The node returns a JSON object. Table rows are the objects in `Query`. `Statistics` is not shown as table data. Results are capped at 1,000 rows, about 16 MiB and 1 MiB per cell, with a 30-second limit. A larger result fails instead of returning a partial table. Screens, dropdowns, lists and query tables bind to the named query the same way they bind to a SQL Server query.
 
-The gateway posts the command to `http://<address>:<port>/` with `User-Agent: AnyLog/1.23` and `Content-Type: text/plain`. When the command is a single line of at most 3,500 characters, the same text is also sent in the `command` header. Multiline SQL is sent in the body only, so a `--` comment cannot comment out the rest of the command.
+The gateway calls `http://<address>:<port>/` with `User-Agent: AnyLog/1.23`. The command travels in the `command` header, and a query also sends `destination: network`. A line break in the SELECT becomes a space in that header. A `--` comment therefore runs to the end of the command. The command is limited to 3,500 characters.
 
 ## Build and test
 
