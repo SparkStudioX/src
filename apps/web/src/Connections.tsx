@@ -5,9 +5,11 @@ import Icon from "./Icon";
 import type { BrowseNode, Connection, ConnectionEditorSection, SourceMigrationPreview } from "./types";
 import ConnectionDiagnostics from "./ConnectionDiagnostics";
 import CreationMenu, { type CreationChoice } from "./CreationMenu";
-import { connectionTypeName, defaultDeviceSettings, engineeringPointTypes, isDeviceType, isEquipmentType, mappedDevicePoint, nativeDevicePoint, supportsNativeDeviceBrowse, validateAllenBradleySettings, validateDevicePoints } from "./deviceConnections";
+import { defaultDeviceSettings, engineeringPointTypes, isDeviceType, isEquipmentType, mappedDevicePoint, nativeDevicePoint, supportsNativeDeviceBrowse, validateAllenBradleySettings, validateDevicePoints } from "./deviceConnections";
+import { connectionHeading, connectionListDetail, connectionMenuChoices, createConnectionDraft, isSummarizedDatabase, loadDatabaseConnectors, type DatabaseConnectorDescriptor } from "./databaseConnectors";
+import { DatabaseConnectionFields } from "./DatabaseConnectorFields";
 import { DeviceConnectionFields, DeviceRegisterMap } from "./DeviceConnectionEditor";
-import { defaultSourceSettings, isSourceType, validateSourcePoints } from "./sourceConnections";
+import { isSourceType, validateSourcePoints } from "./sourceConnections";
 import { SourceConnectionFields, SourceConnectionTools } from "./SourceConnectionEditor";
 import { useAskSpark } from "./askSparkContext";
 import { connectionAskSparkContext } from "./askSparkClient";
@@ -62,6 +64,12 @@ export default function Connections({
   onTagsChanged: () => void;
   notify: (message: string, error?: boolean) => void;
 }) {
+  const [catalog, setCatalog] = useState<DatabaseConnectorDescriptor[]>([]);
+  useEffect(() => {
+    let active = true;
+    loadDatabaseConnectors().then(items => { if (active) setCatalog(items); });
+    return () => { active = false; };
+  }, []);
   const [selectedId, setSelectedId] = useState(
     connections.find((item) => item.id !== "sample")?.id ||
       connections[0]?.id ||
@@ -198,20 +206,7 @@ export default function Connections({
     if (deleting) return;
     generation.current++;
     setBusy(false); setBrowseBusy(false); setDiscovering(false); setMapBusy(false);
-    setDraft({
-      id: id(type),
-      name: `New ${connectionTypeName(type)} connection`,
-      type,
-      enabled: true,
-      ...(type === "opcua"
-        ? {
-            endpoint: "opc.tcp://localhost:4840",
-            securityMode: "SignAndEncrypt",
-          }
-        : isDeviceType(type) ? { device: defaultDeviceSettings(type) }
-        : isSourceType(type) ? { source: defaultSourceSettings(type) }
-        : type === "sqlite" ? {database:"application.db"} : { server: "localhost", database: "", trustServerCertificate: false }),
-    });
+    setDraft(createConnectionDraft(type, catalog, id));
     setSelectedId("");
     setSourceMigration(null);
     setTestResult(null);
@@ -406,7 +401,7 @@ export default function Connections({
         </Field>
         <Field label="Connection type">
           <input
-            value={connectionTypeName(current.type)}
+            value={connectionHeading(current.type, catalog)}
             disabled
           />
         </Field>
@@ -460,29 +455,7 @@ export default function Connections({
           <input value={current.database || ""} onChange={event => edit({ database: event.target.value })} />
         </Field></div>
       ) : (
-        <div className="form-two-col" hidden={displayedSection !== "connection"}>
-          <Field
-            label="Server"
-            hint="Hostname, IP address, or server\instance."
-          >
-            <input
-              placeholder="localhost"
-              value={current.server || ""}
-              onChange={(event) =>
-                edit({ server: event.target.value })
-              }
-            />
-          </Field>
-          <Field label="Database">
-            <input
-              placeholder="Production"
-              value={current.database || ""}
-              onChange={(event) =>
-                edit({ database: event.target.value })
-              }
-            />
-          </Field>
-        </div>
+        <DatabaseConnectionFields current={current} catalog={catalog} section={displayedSection} edit={edit} />
       )}
       {(current.type === "opcua" || current.type === "sqlserver") && <div hidden={displayedSection !== "security"}><h3 className="form-section-title">Authentication</h3>
         <div className="form-two-col">
@@ -544,7 +517,7 @@ export default function Connections({
         <div className="large-empty">
           <Icon name="plug" size={42} />
           <h2>Connect to your plant</h2>
-          <p>Choose New Connection to add a PLC, industrial read source, OPC UA server or database.</p>
+          <p>Choose New Connection to add a PLC, industrial read source, OPC UA server, database or AnyLog query node.</p>
         </div>
       ) : (
         <>
@@ -557,7 +530,7 @@ export default function Connections({
               <div>
                 <h2>{current.name}</h2>
                 <span>
-                  {connectionTypeName(current.type)}{" "}
+                  {connectionHeading(current.type, catalog)}{" "}
                   configuration
                 </span>
               </div>
@@ -869,7 +842,7 @@ export default function Connections({
           <p>Bring industrial and business data into your applications.</p>
         </div>
         <div className="page-heading-actions" inert={deleting}>
-          <CreationMenu label="New Connection" menuLabel="New connection type" choices={newConnectionChoices} onSelect={add} />
+          <CreationMenu label="New Connection" menuLabel="New connection type" choices={connectionMenuChoices(newConnectionChoices, catalog)} onSelect={add} />
         </div>
       </div>
       <div className="connection-summary">
@@ -890,7 +863,7 @@ export default function Connections({
           </span>
           <span>
             <strong>
-              {connections.filter((item) => item.type === "sqlserver" || item.type === "sqlite").length}
+              {connections.filter(isSummarizedDatabase).length}
             </strong>
             <small>Database connections</small>
           </span>
@@ -925,12 +898,7 @@ export default function Connections({
               <span>
                 <strong>{connection.name}</strong>
                 <small>
-                  {connection.id === "sample"
-                    ? "Simulated sample data"
-                    : connection.type === "opcua"
-                      ? connection.endpoint
-                      : isDeviceType(connection.type) ? `${connectionTypeName(connection.type)} · ${connection.device?.host || "No host"}`
-                      : connection.type === "sqlite" ? connection.database : connection.server}
+                  {connectionListDetail(connection)}
                 </small>
               </span>
               <span

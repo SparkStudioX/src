@@ -534,7 +534,9 @@ export interface DeviceSettings {
 export interface Connection {
   id: string;
   name: string;
-  type: "opcua" | "sqlserver" | "sqlite" | DeviceConnectionType | SourceConnectionType;
+  type: "opcua" | "sqlserver" | "sqlite" | "anylog" | DeviceConnectionType | SourceConnectionType;
+  connector?: Record<string, string>;
+  queryable?: boolean;
   device?: DeviceSettings;
   source?: SourceSettings;
   sourceMigrationToken?: string;

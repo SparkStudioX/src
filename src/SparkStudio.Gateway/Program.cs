@@ -68,6 +68,7 @@ builder.Services.AddScoped(sp => sp.GetRequiredService<ProjectRuntime>().Workspa
 builder.Services.AddScoped(sp => sp.GetRequiredService<ProjectRuntime>().Queries);
 builder.Services.AddScoped(sp => sp.GetRequiredService<ProjectRuntime>().Python);
 builder.Services.AddScoped(sp => sp.GetRequiredService<ProjectRuntime>().Actions);
+DatabaseConnectorLoader.Load(Path.Combine(AppContext.BaseDirectory, "plugins")); // database connector plugin
 var app = builder.Build();
 
 if (containerHttpsRedirect is not null) app.Use(containerHttpsRedirect.InvokeAsync);
@@ -258,6 +259,7 @@ routes.MapPost("/tags", (JsonObject value, TagEngine tags) => tags.SaveDefinitio
 routes.MapDelete("/tag-definitions", (string path, TagEngine tags) => tags.DeleteDefinition(path) ? Results.NoContent() : Results.NotFound(new { error = "Tag definition not found." })).Access("configuration", audit: true);
 routes.MapGet("/connections", (ProjectStore store) => store.GetConnections()).Access("configuration");
 routes.MapGet("/device-drivers", () => DeviceConfiguration.Drivers).Access("configuration");
+routes.MapGet("/database-connectors", () => DatabaseConnectors.Describe()).Access("configuration"); // database connector plugin
 routes.MapGet("/opcua/endpoints", (string endpoint, ConnectorService connector, CancellationToken cancellation) => connector.DiscoverEndpointsAsync(endpoint, cancellation)).Access("configuration");
 routes.MapPost("/connections", (JsonObject connection, TagEngine tags) => tags.SaveConnection(connection)).Access("configuration", audit: true);
 routes.MapGatewayConnectionEndpoints();

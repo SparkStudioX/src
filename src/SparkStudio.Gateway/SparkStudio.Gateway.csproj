@@ -7,6 +7,8 @@
     <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
+  <!-- database connector plugin: absent on a plain SparkStudio tree, so the condition keeps that tree building. -->
+  <Import Project="../../plugins/anylog/integrate.targets" Condition="Exists('../../plugins/anylog/integrate.targets')" />
   <ItemGroup>
     <EmbeddedResource Include="../../apps/web/src/runtimeProperties.json" LogicalName="SparkStudio.RuntimeProperties.json" />
     <EmbeddedResource Include="../../apps/web/src/modelParameterContract.json" LogicalName="SparkStudio.ModelParameterContract.json" />

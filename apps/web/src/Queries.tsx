@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, displayValue, id } from "./api";
 import { Field } from "./App";
 import Icon from "./Icon";
+import { QueryConnectorNotice } from "./DatabaseConnectorFields";
+import { loadDatabaseConnectors, namedQuerySeed, queryUpdatesSupported, selectQueryConnection, isNamedQueryConnection, type DatabaseConnectorDescriptor } from "./databaseConnectors";
 import { prepareQueryTestParameters } from "./queryTestParameters";
 import type { Connection, NamedQuery, QueryResult, RuntimeParameters } from "./types";
 
@@ -30,6 +32,12 @@ export default function Queries({
   canRunUpdates?: boolean;
   externalRefresh?: NamedQuery[] | null;
 }) {
+  const [catalog, setCatalog] = useState<DatabaseConnectorDescriptor[]>([]);
+  useEffect(() => {
+    let active = true;
+    loadDatabaseConnectors().then(items => { if (active) setCatalog(items); });
+    return () => { active = false; };
+  }, []);
   const [selectedId, setSelectedId] = useState(queries[0]?.id || "");
   const [draft, setDraft] = useState<NamedQuery | null>(null);
   const draftBase = useRef<NamedQuery | null>(null);
@@ -90,10 +98,7 @@ export default function Queries({
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty, onDirtyChange]);
-  const sqlConnections = connections.filter(
-    (connection) =>
-      connection.type === "sqlserver" || connection.type === "sqlite" || connection.id === "sample",
-  );
+  const sqlConnections = connections.filter(connection => isNamedQueryConnection(connection, catalog));
   const edit = (patch: Partial<NamedQuery>) => {
     if (current && !busy) {
       if (!draft) draftBase.current = selected ?? null;
@@ -165,15 +170,7 @@ export default function Queries({
           onClick={() => {
             if (dirty) { notify("Save or discard the current query's changes before creating another query.", true); return; }
             draftBase.current = null;
-            setDraft({
-              id: id("query"),
-              name: "New query",
-              connectionId: sqlConnections[0]?.id || "",
-              sql: sqlConnections[0]?.type === "sqlite" ? "SELECT * FROM production_records LIMIT 100" : "SELECT TOP (100) *\nFROM dbo.YourTable\nWHERE Line = @line",
-              parameters: sqlConnections[0]?.type === "sqlite" ? [] : [
-                { name: "line", type: "string", defaultValue: "Line1" },
-              ],
-            });
+            setDraft({ id: id("query"), name: "New query", ...namedQuerySeed(connections, catalog) });
             setSelectedId("");
             setResult(null);
             setError("");
@@ -265,9 +262,7 @@ export default function Queries({
                 <Field label="Connection">
                   <select
                     value={current.connectionId}
-                    onChange={(event) =>
-                      edit({ connectionId: event.target.value })
-                    }
+                    onChange={event => edit(selectQueryConnection(current, event.target.value, connections, catalog))}
                   >
                     <option value="">Choose connection…</option>
                     {sqlConnections.map((connection) => (
@@ -278,12 +273,13 @@ export default function Queries({
                   </select>
                 </Field>
               </div>
+              <QueryConnectorNotice connectionId={current.connectionId} connections={connections} catalog={catalog} />
               <div className="code-editor-heading">
                 <span>
                   <Icon name="code" size={14} />
                   QUERY
                 </span>
-                <label>Result type <select aria-label="Query result type" value={current.kind || "query"} onChange={event => edit({ kind: event.target.value as "query" | "update" })}><option value="query">Rows (SELECT)</option><option value="update">Affected rows (INSERT / UPDATE / DELETE)</option></select></label>
+                <label>Result type <select aria-label="Query result type" value={current.kind || "query"} onChange={event => edit({ kind: event.target.value as "query" | "update" })}><option value="query">Rows (SELECT)</option><option value="update" disabled={!queryUpdatesSupported(current.connectionId, connections, catalog)}>Affected rows (INSERT / UPDATE / DELETE)</option></select></label>
               </div>
               <div className="code-editor">
                 <div className="line-numbers">

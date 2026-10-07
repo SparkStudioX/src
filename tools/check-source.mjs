@@ -208,6 +208,7 @@ const architectureDocs = new Set([
   'DEPLOYMENT_SETTINGS.md', 'CONNECTION_OPERATIONS.md', 'QUERY_TESTING.md',
   'INDUSTRIAL_PROTOCOLS.md', 'INDUSTRIAL_CONNECTOR_SPECIFICATION.md',
   'INDUSTRIAL_DEVICE_CONNECTIONS.md',
+  'ANYLOG_CONNECTOR.md',
   'GATEWAY_RECOVERY.md', 'SCHEDULED_BACKUPS.md',
   'TAG_ENGINEERING.md', 'NETWORK_ACCESS.md',
 ]);
@@ -335,6 +336,8 @@ function allowedPath(file) {
   if (/^installer\/ServiceHelper\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+\.(?:cs|csproj)$/.test(file)) return true;
   if (file.startsWith('tools/') && toolFiles.has(file.slice(6))) return true;
   if (file.startsWith('docs/architecture/') && architectureDocs.has(file.slice(18))) return true;
+  // AnyLog's query-node client stays outside src/ so SparkStudio upgrades do not have to merge it.
+  if (/^plugins\/anylog\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:cs|csproj|md|targets)$/.test(file)) return true;
   return false;
 }
 function contentIssues(file, buffer) {

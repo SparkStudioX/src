@@ -2,7 +2,7 @@
 namespace SparkStudio.Connectors;
 
 /// <summary>Conservative query screen, not a SQL authorization boundary. Use a SELECT-only database principal.</summary>
-internal static class SqlQueryGuard
+public static class SqlQueryGuard
 {
     private static readonly HashSet<string> Forbidden = new(StringComparer.OrdinalIgnoreCase)
     {

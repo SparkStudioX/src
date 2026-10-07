@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>SparkStudio.Connectors.AnyLog</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../src/SparkStudio.Connectors/SparkStudio.Connectors.csproj" />
+    <InternalsVisibleTo Include="SparkStudio.Connectors.AnyLog.Tests" />
+  </ItemGroup>
+</Project>

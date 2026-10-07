@@ -108,6 +108,7 @@ public sealed partial class ProjectStore
         item.Remove("protectedPassword");
         item.Remove("password");
         RedactSourceSecrets(item);
+        DatabaseConnectors.MarkQueryable(item); // database connector plugin
         if (item["source"] is JsonObject source) {
             var points = source["points"] as JsonArray ?? [];
             foreach (var point in SourceOwnedPoints(Required(item, "id"))) {
@@ -127,7 +128,7 @@ public sealed partial class ProjectStore
             if (removedConnectionIds.Contains(id))
                 throw new InvalidOperationException("This connection identity was removed. Create a new connection with a fresh ID.");
             var type = Required(value, "type");
-            if (type is not ("opcua" or "sqlserver" or "sqlite") && !DeviceConfiguration.IsDevice(type) && !SourceConfiguration.IsSource(type)) throw new ArgumentException("Choose a supported industrial or database connection.");
+            if (!DatabaseConnectors.IsKnownType(type)) throw new ArgumentException("Choose a supported industrial or database connection.");
             var old = connections.OfType<JsonObject>().FirstOrDefault(x => Optional(x, "id") == id);
             var revision = old?["revision"]?.GetValue<int>() ?? 0;
             if (value.ContainsKey("revision") && (value["revision"] is not JsonValue supplied || !supplied.TryGetValue<int>(out var suppliedRevision) || suppliedRevision < 0))
@@ -162,6 +163,7 @@ public sealed partial class ProjectStore
                 updatedSourceState = PrepareSourceMappingChange(id, settings, Optional(value, "sourceMigrationToken"));
                 node["source"] = ProtectSourceSettings(settings);
             }
+            DatabaseConnectors.CopySettings(type, value, node); // database connector plugin
             var password = Optional(value, "password");
             if (password is not null && password.Length > 0) node["protectedPassword"] = protector.Protect(password);
             else if (password is null && old?["protectedPassword"] is { } secret) node["protectedPassword"] = secret.DeepClone();
@@ -208,7 +210,7 @@ public sealed partial class ProjectStore
             var encrypted = Optional(value, "protectedPassword");
             var source = UnprotectSourceSettings(value);
             if (source is not null) source = source with { Points = source.SavedPoints.Concat(SourceOwnedPoints(id)).DistinctBy(point => point.Id).ToArray() };
-            var result = new ConnectionDefinition(id, Required(value, "name"), Required(value, "type"), Optional(value, "endpoint"), Optional(value, "server"), Optional(value, "database"), Optional(value, "username"), encrypted is null ? null : protector.Unprotect(encrypted), Optional(value, "securityMode"), value["trustServerCertificate"]?.GetValue<bool>() ?? false, Optional(value, "serverCertificateSha256"), value["device"]?.Deserialize<DeviceSettings>(Json), source, value["revision"]?.GetValue<int>() ?? 0);
+            var result = new ConnectionDefinition(id, Required(value, "name"), Required(value, "type"), Optional(value, "endpoint"), Optional(value, "server"), Optional(value, "database"), Optional(value, "username"), encrypted is null ? null : protector.Unprotect(encrypted), Optional(value, "securityMode"), value["trustServerCertificate"]?.GetValue<bool>() ?? false, Optional(value, "serverCertificateSha256"), value["device"]?.Deserialize<DeviceSettings>(Json), source, value["revision"]?.GetValue<int>() ?? 0, DatabaseConnectors.ReadSettings(value));
             if (sourceType) sourceConnectionCache[id] = (value, sourcePointCatalogGeneration, result);
             return result;
         }
@@ -328,7 +330,7 @@ public sealed partial class ProjectStore
         if (OpcAuthenticationFailures
             .Any(status => message?.StartsWith($"OPC UA failed ({status}, ", StringComparison.Ordinal) == true))
             return "OPC UA authentication failed. Check the account credentials and server permissions.";
-        return "Connection check failed. Verify the address, authentication and certificate settings.";
+        return DatabaseConnectors.ConnectionTestFailure(message);
     }
     public JsonArray GetQueries() { lock (gate) return (JsonArray)queries.DeepClone(); }
     public JsonObject GetQuery(string id) { lock (gate) return (JsonObject)(queries.OfType<JsonObject>().FirstOrDefault(q => Optional(q, "id") == id)?.DeepClone() ?? throw new KeyNotFoundException("Named query not found.")); }
@@ -338,6 +340,7 @@ public sealed partial class ProjectStore
         {
             Required(query, "name"); Required(query, "connectionId"); Required(query, "sql");
             if ((Optional(query, "kind") ?? "query") is not ("query" or "update")) throw new ArgumentException("Named query kind must be query or update.");
+            RejectPluginUpdate(query);
             var node = (JsonObject)query.DeepClone();
             node["id"] = id;
             var next = (JsonArray)queries.DeepClone();

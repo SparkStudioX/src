@@ -23,7 +23,7 @@ export function validateAllenBradleySettings(settings: DeviceSettings): string[]
 }
 export const isDeviceType = (type: string): type is DeviceConnectionType => deviceTypes.includes(type as DeviceConnectionType);
 export const isEquipmentType = (type: string) => type === "opcua" || isDeviceType(type) || ["mtconnect", "i3x", "mqtt"].includes(type);
-export const connectionTypeName = (type: Connection["type"]) => ({ opcua: "OPC UA client", sqlite: "SQLite", sqlserver: "SQL Server", "modbus-tcp": "Modbus TCP", "ab-eip": "Allen Bradley EtherNet/IP", "siemens-s7": "Siemens S7", "beckhoff-ads": "Beckhoff ADS", mtconnect: "MTConnect agent", i3x: "i3X source", mqtt: "MQTT subscriber" })[type];
+export const connectionTypeName = (type: Connection["type"]) => ({ opcua: "OPC UA client", sqlite: "SQLite", sqlserver: "SQL Server", anylog: "AnyLog query node", "modbus-tcp": "Modbus TCP", "ab-eip": "Allen Bradley EtherNet/IP", "siemens-s7": "Siemens S7", "beckhoff-ads": "Beckhoff ADS", mtconnect: "MTConnect agent", i3x: "i3X source", mqtt: "MQTT subscriber" })[type];
 export const defaultDeviceSettings = (type: DeviceConnectionType): DeviceSettings => ({ host: "192.168.1.10", port: type === "modbus-tcp" ? 502 : type === "ab-eip" ? 44818 : type === "siemens-s7" ? 102 : 851, points: [],
   ...(type === "modbus-tcp" ? { unitId: 1 } : type === "ab-eip" ? { controllerFamily: "ControlLogix", route: "1,0" } : type === "siemens-s7" ? { controllerFamily: "S71200", rack: 0, slot: 0 } : { localAmsNetId: "", targetAmsNetId: "" }) });
 export const pointAddressHint = (type: DeviceConnectionType, family?: string) => type === "modbus-tcp" ? "Zero-based address: holdingRegister:0, inputRegister:0, coil:0 or discreteInput:0."

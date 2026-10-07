@@ -55,6 +55,9 @@ public sealed partial class ConnectorService : IDisposable
         _ensureOperationsAllowed?.Invoke();
         try
         {
+            // database connector plugin
+            var pluginTest = await DatabaseConnectors.TestAsync(connection, cancellationToken);
+            if (pluginTest is not null) return pluginTest;
             if (SourceConfiguration.IsSource(connection))
             {
                 var source = await TestSourceAsync(connection, cancellationToken);
@@ -191,6 +194,9 @@ public sealed partial class ConnectorService : IDisposable
         _ensureOperationsAllowed?.Invoke();
         cancellationToken.ThrowIfCancellationRequested();
         ValidateReadParameters(parameters);
+        // database connector plugin
+        var pluginResult = await DatabaseConnectors.QueryAsync(connection, sql, parameters, cancellationToken);
+        if (pluginResult is not null) return pluginResult;
         if (IsSqlite(connection)) return await QuerySqliteAsync(connection, sql, parameters, cancellationToken);
         RequireSql(connection);
         SqlQueryGuard.Validate(sql);

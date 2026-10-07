@@ -78,6 +78,7 @@ Windows preview.15 and Docker preview.15-docker.1 add [Ask Spark model tools](AS
 - [MQTT setup walkthrough](MQTT_SETUP.md)
 - [MTConnect setup walkthrough](MTCONNECT_SETUP.md)
 - [i3X setup walkthrough](I3X_SETUP.md)
+- [AnyLog query node](ANYLOG_CONNECTOR.md)
 
 ## Gateway and operations
 

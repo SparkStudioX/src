@@ -58,6 +58,10 @@ Pass values as `QueryParameter` records and use `@name` placeholders. Values are
 
 Limits are 128 parameters, 65,536 characters of query text, a 10-second connection timeout, a 15-second command timeout, a 30-second total deadline, 1,000 rows, and approximately 16 MiB of returned values. A row/size limit raises an error rather than silently returning partial results. Individual string/binary cells and string parameters are limited to 1 MiB. Narrow queries with TOP and WHERE. SQL errors exposed by this library contain numeric error codes and guidance, without logging query text, credentials, or server error details.
 
+## AnyLog query node
+
+The AnyLog client is not compiled into this library. `DatabaseConnectors` is the host seam: a plugin registers a connection type, validates its settings, tests the endpoint and runs a read query. The shipped plugin is `plugins/anylog/`. It wraps a SELECT as `run client () sql <dbms> format=json and <select>` and posts that command to the query node's REST port. Setup, SQL limits and the SparkStudio upgrade steps are in the [AnyLog connector guide](../../docs/architecture/ANYLOG_CONNECTOR.md).
+
 ## Managed SQLite
 
 Set `Type` to `sqlite` and `Database` to a flat filename such as `production.db`. Names have a 1–64 character ASCII alphanumeric/underscore/hyphen stem starting with a letter or digit, followed by `.db`, `.sqlite` or `.sqlite3`. Windows device names, directories, URI filenames, connection strings and terminal whitespace are rejected. Files live exclusively under `<gateway data directory>/databases`; file paths and SQLite journal/WAL/shared-memory sidecars are checked for symbolic links and reparse points. This service-owned directory must not be writable by untrusted local users; these checks do not provide isolation against an administrator changing paths concurrently.

@@ -4,7 +4,8 @@ public sealed record ConnectionDefinition(string Id, string Name, string Type,
     string? Endpoint = null, string? Server = null, string? Database = null,
     string? Username = null, string? Password = null, string? SecurityMode = null,
     bool TrustServerCertificate = false, string? ServerCertificateSha256 = null, DeviceSettings? Device = null,
-    SourceSettings? Source = null, int? ConfigurationRevision = null);
+    SourceSettings? Source = null, int? ConfigurationRevision = null,
+    IReadOnlyDictionary<string, string>? ConnectorSettings = null);
 
 public sealed record ConnectionTestResult(bool Success, string Message);
 public sealed record BrowseNode(string NodeId, string DisplayName, bool IsVariable,
