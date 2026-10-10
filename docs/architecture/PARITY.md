@@ -6,6 +6,30 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Preview.16 release publication, 2026-10-10
+
+Windows [`v0.2.0-preview.16`](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.16) was published from build source `05b3dff62e674e75d9f1c821f83f4242162817fc`. Docker [`v0.2.0-preview.16-docker.1`](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.16-docker.1) was published from `af280991177a30bfd137f78a7a1afebd6d4f8859`, which adds only the plugin allowlist in `.dockerignore` and its test. Source boundary and Windows/Linux product validation passed for both commits.
+
+| Windows evidence | Result |
+| --- | --- |
+| Release gates | Lint, **139 suites** with zero failures, including the AnyLog plugin suite, and complexity with zero violations |
+| Installer | 114,863,425 bytes, SHA-256 `6f1c60f9f1eb2abd62c0296e005a8a606af9437a770aec7a5245f5154d340055` |
+| Workshops | 38 portable projects, ZIP SHA-256 `60dfacef3b1b22a4dc31b7eb0b55ad2375e1cf4c2a5b4ceb15a8ff73303f877d` |
+| Exact extraction | 874 payload hashes, including `plugins/SparkStudio.Connectors.AnyLog.dll`, provenance, runtimes, served browser assets and all 38 workshop round trips passed |
+| Packaged AnyLog check | The extracted gateway loaded the plugin, listed AnyLog query node under New Connection, saved a connection and reported the fixed unreachable-node message |
+| Publication | 19 assets verified from the draft and again as anonymous public downloads |
+
+| Docker evidence | Result |
+| --- | --- |
+| Image build gates | Four invocations passed with **140 suites** each |
+| Registry | Index `sha256:9892a6aa3618ea03b7d8b9dd1e254e6fc1e5b86942ba99a00dfae4ff3ba3cee0`; AMD64 `sha256:925a3b01a2a7fb43c6b01fec9a892c2dc5a21309dda409e8d5b43bda6ef20b96`; ARM64 `sha256:fbd10dcf304ff4bafe68c456f37082bd75dd65a1c9cc6f849b425f1525612fcc`; `preview` alias verified |
+| Payload audit | 437 manifest files including the AnyLog plugin, 324 original notice hashes and 272 SBOM components per platform |
+| Deployment | Local and public-digest images passed 8 groups and 38 workshops on AMD64 (native) and ARM64 (emulated) |
+| Corresponding sources | The same 73 Ubuntu source versions and CPython 3.14.7 as preview.15-docker.1, reused after checksum verification; archive 381,401,363 bytes, SHA-256 `534ed79834f9a7514cee2619c99548a13cdfb80e80fcf112072671f6ee61aff9` |
+| Publication | 11 assets verified from the draft and again as anonymous public downloads |
+
+The AnyLog connection was not exercised against a live AnyLog node. Live Gemini use, elevated installation, service upgrade/uninstall, rollback, physical ARM64 hardware, real source servers and industrial controllers remain unverified, as listed in both release notes. Website and hosted-docs publication is recorded by the website deployment.
+
 ## Preview.16 release candidate, 2026-10-10
 
 The candidate adds the read-only AnyLog query node connection contributed from the community fork `royshadmon/SparkStudioX` (commits `7a03fda` and `4a9feb5`), merged without conflicts. The plugin loads through a new read-only database-connector seam and its own offline test suite is now part of the aggregate tests. Review fixes drop SQL comments before the SELECT is flattened into the single-line `command` header and reject non-ASCII header text with a clear message. The default-deny Docker context did not include `plugins/`, so a container built from the first candidate would have lacked the plugin; `.dockerignore` now allows plugin sources and `tools/test-docker-context.mjs` guards that allowlist. A live AnyLog node was not available for acceptance; the tests use a recorded HTTP handler. Windows version is `0.2.0-preview.16`; Docker edition is `0.2.0-preview.16-docker.1`. The workshop catalog contains **38 portable** and **24 setup-required** examples, including the new AnyLog query workshop. Release packaging, exact-artifact acceptance, source CI and public publication are recorded separately once complete.
