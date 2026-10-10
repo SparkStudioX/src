@@ -6,7 +6,7 @@
       "kind": "source-commit",
       "value": "4e58e436ef3817458427e23a81d14a65ff1d190a"
     },
-    "note": "Use 0.2.0-preview.15 or a later compatible release for the complete collection. The component workshop's Save order button requires preview.15; the Models, model operations and model-bound faceplate workshops require preview.14. Each workshop lists its own prerequisites; the frozen bundle identifies its exact clean source revision. Older tag configuration and backup formats are not migrated automatically. Exact artifact evidence is recorded separately in docs/architecture/PARITY.md."
+    "note": "Use 0.2.0-preview.16 or a later compatible release for the complete collection. The setup-required AnyLog workshop requires preview.16; the component workshop's Save order button requires preview.15; the Models, model operations and model-bound faceplate workshops require preview.14. Each workshop lists its own prerequisites; the frozen bundle identifies its exact clean source revision. Older tag configuration and backup formats are not migrated automatically. Exact artifact evidence is recorded separately in docs/architecture/PARITY.md."
   },
   "workshops": [
     {
@@ -1435,6 +1435,35 @@
         "Run Typed quantity with minimum 45, then invalid text; verify invalid typed values fail before database execution.",
         "Run Slow read with a 1-second deadline, then with 30 seconds and Cancel read query. No cancelled result should appear.",
         "Run Production records again and open the operator screen. The three synthetic records remain available; no update query was executed."
+      ]
+    },
+    {
+      "id": "anylog-query",
+      "title": "AnyLog query node",
+      "summary": "Read an AnyLog network through named SELECT queries with typed parameters, then bind the rows to an operator table.",
+      "source": "examples/anylog-query.json",
+      "distribution": "setup-required",
+      "features": [
+        "AnyLog query node connections",
+        "Named SELECT queries over the AnyLog network",
+        "Typed @name parameters",
+        "Read-only enforcement",
+        "Query tables bound to AnyLog rows"
+      ],
+      "prerequisites": [
+        "Requires 0.2.0-preview.16 or a later compatible build containing the AnyLog plugin.",
+        "A reachable AnyLog query node, its REST port and a DBMS with a table of timestamped readings. Adjust the table, column and sensor names in both queries to match your node.",
+        "Engineering Configuration permission to create the connection and Design permission to edit the named queries."
+      ],
+      "gatewayWrites": "none",
+      "entryScreenId": "anylog-workshop",
+      "guide": "docs/architecture/ANYLOG_CONNECTOR.md",
+      "walkthrough": [
+        "In Gateway Settings → Data → Connections choose New Connection → AnyLog query node. Enter the node address, REST port and DBMS from the example connection, Save and Test connection.",
+        "Import the workshop as a development project and open Named queries. Edit the table, column and sensor names to match your node.",
+        "Run Latest readings. Check that the comment line does not cut off the rest of the statement and that the sensor value is sent as a quoted literal.",
+        "Run Last hour count. Then try the Affected rows result type; it is unavailable because the connection is read-only.",
+        "Explicitly publish and open the operator screen. The table shows the latest readings from the AnyLog network."
       ]
     },
     {

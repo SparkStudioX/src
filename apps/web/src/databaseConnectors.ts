@@ -37,7 +37,7 @@ const anylogFallback: DatabaseConnectorDescriptor = {
 };
 
 export function loadDatabaseConnectors() {
-  return api<DatabaseConnectorDescriptor[]>("/database-connectors").catch(() => [] as DatabaseConnectorDescriptor[]);
+  return api<DatabaseConnectorDescriptor[]>("/database-connectors").then(items => Array.isArray(items) ? items : [], () => [] as DatabaseConnectorDescriptor[]);
 }
 
 export function describeConnector(connection: { type: string; connector?: Record<string, string> } | undefined, catalog: DatabaseConnectorDescriptor[]) {

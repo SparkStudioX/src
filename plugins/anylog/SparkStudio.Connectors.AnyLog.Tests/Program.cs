@@ -28,6 +28,10 @@ static Task<int> Protocol()
     var multiline = AnyLogCommands.Prepare("aloperator", "SELECT *\nFROM temperature", []);
     Check(multiline.Contains("SELECT *\nFROM temperature", StringComparison.Ordinal) && AnyLogCommands.ForHeader(multiline) == "sql aloperator format=json SELECT * FROM temperature", "line breaks stay in the statement and the header is one line");
     Check(AnyLogCommands.FitsCommandHeader(command), "a single-line command can travel in the AnyLog command header");
+    var commented = AnyLogCommands.Prepare("aloperator", "SELECT value -- latest @line\nFROM t /* note @line */ WHERE line = @line", [new QueryParameter("line", "string", "A")]);
+    Check(AnyLogCommands.ForHeader(commented) == "sql aloperator format=json SELECT value  FROM t   WHERE line = 'A'", "comments are dropped so a flattened header keeps the rest of the SELECT");
+    Check(AnyLogCommands.Prepare("aloperator", "SELECT '--keep' AS a, '/*keep*/' AS b FROM t", []).EndsWith("SELECT '--keep' AS a, '/*keep*/' AS b FROM t", StringComparison.Ordinal), "comment markers inside quotes stay");
+    ExpectThrow("non-ASCII header text is rejected before sending", () => AnyLogCommands.ForHeader(AnyLogCommands.Prepare("aloperator", "SELECT * FROM t WHERE unit = @unit", [new QueryParameter("unit", "string", "°C")])));
 
     ExpectThrow("DBMS names cannot carry extra commands", () => AnyLogCommands.Prepare("aloperator format=json and get status", "SELECT 1", []));
     ExpectThrow("host and port stay in separate fields", () => AnyLogCommands.ValidateEndpoint("10.0.0.5:32349", 32349));

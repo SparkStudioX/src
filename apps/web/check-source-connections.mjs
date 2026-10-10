@@ -53,7 +53,7 @@ const visibleNodes = node => !node || typeof node !== 'object' || node.props?.hi
 const expand = node => !node || typeof node !== 'object' ? node : typeof node.type === 'function' ? expand(node.type(node.props)) : { ...node, props: { ...node.props, children: React.Children.toArray(node.props.children).map(expand) } };
 function ui(Component, initial, handler = async () => ({}), expanded = true) {
   hooks.clear(); const props = { ...initial }, calls = []; let tree;
-  globalThis.__sourceApi = (...args) => { calls.push(args); return handler(...args); };
+  globalThis.__sourceApi = (...args) => { if (args[0] === '/database-connectors') return Promise.resolve([]); calls.push(args); return handler(...args); };
   const render = () => { hooks.begin(); const result = Component(props); tree = expanded ? expand(result) : result; hooks.flush(); };
   const find = predicate => { const result = nodes(tree).find(predicate); assert.ok(result, 'Requested control was present'); return result; };
   const button = label => find(node => node.type === 'button' && text(node) === label);

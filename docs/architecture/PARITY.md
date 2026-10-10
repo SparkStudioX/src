@@ -6,6 +6,10 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Preview.16 release candidate, 2026-10-10
+
+The candidate adds the read-only AnyLog query node connection contributed from the community fork `royshadmon/SparkStudioX` (commits `7a03fda` and `4a9feb5`), merged without conflicts. The plugin loads through a new read-only database-connector seam and its own offline test suite is now part of the aggregate tests. Review fixes drop SQL comments before the SELECT is flattened into the single-line `command` header and reject non-ASCII header text with a clear message. A live AnyLog node was not available for acceptance; the tests use a recorded HTTP handler. Windows version is `0.2.0-preview.16`; Docker edition is `0.2.0-preview.16-docker.1`. The workshop catalog contains **38 portable** and **24 setup-required** examples, including the new AnyLog query workshop. Release packaging, exact-artifact acceptance, source CI and public publication are recorded separately once complete.
+
 ## Preview.15 release publication, 2026-10-05
 
 Windows [`v0.2.0-preview.15`](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.15) and Docker [`v0.2.0-preview.15-docker.1`](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.15-docker.1) were published from build source `53df0d0fcb5c302010756991a4332899d6867cd4`. Source boundary and Windows/Linux product validation passed for that commit.

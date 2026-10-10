@@ -45,11 +45,14 @@ if (!process.argv.includes('--node-only')) {
   // Gateway's project reference builds the extraction worker into the isolated
   // artifacts tree. Connector tests do not run beside the packaged gateway.
   env.SPARKSTUDIO_SOURCE_WORKER = path.join(artifacts, 'bin', 'SparkStudio.SourceWorker', 'release', 'SparkStudio.SourceWorker.dll');
-  for (const name of ['Gateway', 'Connectors']) {
-    const project = `src/SparkStudio.${name}.Tests`;
+  for (const [name, project, assembly, report] of [
+    ['Gateway', 'src/SparkStudio.Gateway.Tests', 'SparkStudio.Gateway.Tests', 'gateway'],
+    ['Connectors', 'src/SparkStudio.Connectors.Tests', 'SparkStudio.Connectors.Tests', 'connectors'],
+    ['AnyLog plugin', 'plugins/anylog/SparkStudio.Connectors.AnyLog.Tests', 'SparkStudio.Connectors.AnyLog.Tests', 'anylog'],
+  ]) {
     if (!run(`${name} locked restore`, dotnet, ['restore', project, '--artifacts-path', artifacts, ...buildContextProperties(), '--locked-mode', '--configfile', path.join(root, 'NuGet.Config')])) continue;
     if (run(`${name} build`, dotnet, ['build', project, '-c', 'Release', '--artifacts-path', artifacts, ...buildContextProperties(), '--no-restore'])) {
-      run(`${name} tests`, dotnet, [path.join(artifacts, 'bin', `SparkStudio.${name}.Tests`, 'release', `SparkStudio.${name}.Tests.dll`), '--results', path.join(reportDir, `${name.toLowerCase()}.json`), ...(name === 'Connectors' ? ['--sqlite-integration'] : [])], reportDir);
+      run(`${name} tests`, dotnet, [path.join(artifacts, 'bin', assembly, 'release', `${assembly}.dll`), '--results', path.join(reportDir, `${report}.json`), ...(name === 'Connectors' ? ['--sqlite-integration'] : [])], reportDir);
     }
   }
   run('Python worker compilation', python, ['-m', 'py_compile', path.join(root, 'runtimes/python/worker.py')]);

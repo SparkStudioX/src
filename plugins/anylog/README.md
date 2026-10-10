@@ -8,4 +8,4 @@ sql <dbms> format=json <select>
 
 Usage, limits and the build command are in [the AnyLog connector guide](../../docs/architecture/ANYLOG_CONNECTOR.md).
 
-The client is isolated here so a SparkStudio upgrade is a merge of upstream source plus the small host seam, not a re-merge of the AnyLog HTTP code. Follow [UPGRADE.md](UPGRADE.md) when taking a SparkStudio update.
+The client is isolated here behind a small host seam. [PLUGIN_SEAM.md](PLUGIN_SEAM.md) lists that seam, which a fork maintaining its own connectors must keep when it takes a SparkStudio update.

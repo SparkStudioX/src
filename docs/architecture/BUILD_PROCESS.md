@@ -147,7 +147,7 @@ The product workflow in `.github/workflows/product.yml` runs on pushes, pull req
 | `.data/quality/summary.json` | Gate status, exit code and duration for the latest coordinator run. |
 | `.data/quality/*.log` | Captured diagnostics for each coordinator stage. |
 | `.data/test-results/summary.json` and `junit.xml` | Offline aggregate status and per-suite log references. |
-| `.data/test-results/gateway.json` and `connectors.json` | Detailed .NET console suite/check results. |
+| `.data/test-results/gateway.json`, `connectors.json` and `anylog.json` | Detailed .NET console suite/check results. |
 | `.data/quality/complexity/application.json` and `application.md` | Coverage, source hashes, measured units, ceiling violations and reductions. |
 
 These are ignored local outputs. Preserve a run's reports with its command, source revision and platform when comparing results; later runs can replace shared report files. Keep runtime data, fixture evidence, caches and generated binaries out of source commits. The [source-boundary policy](../SOURCE_BOUNDARY.md) governs source review and commit checks.

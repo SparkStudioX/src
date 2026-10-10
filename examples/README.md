@@ -2,7 +2,7 @@
 
 Each major user-facing feature should ship with an independently authored workshop project, a short exercise guide, compatibility information and a verified import/publish/runtime check. Workshops serve as both learning material and reproducible acceptance examples. Use synthetic data and make any gateway setup or writes explicit.
 
-[catalog.json](catalog.json) is the machine-readable inventory of all 61 source examples. 38 are portable project workshops; 23 require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
+[catalog.json](catalog.json) is the machine-readable inventory of all 62 source examples. 38 are portable project workshops; 24 require additional gateway setup. The package builder uses this catalog to produce the portable `.sparkproj` files and their exercise guides. Generated files belong in the ignored `artifacts/` directory, not in the source repository.
 
 The [Ask Spark workshop](../docs/architecture/ASK_SPARK.md) uses a synthetic canvas to exercise voice transcription, pasted screenshots, context-aware edits and Undo. It needs AI configuration on a development gateway; no equipment, database or gateway tags are involved.
 
@@ -88,6 +88,7 @@ These remain useful authored source fixtures, but are excluded from the standalo
 | [Read-only data sources](data-sources.json) | Independently authored loopback MTConnect/i3X agents and MQTT broker, source setup in **Gateway Settings → Data → Connections** and reviewed imports; see the [source guide](../docs/architecture/DATA_SOURCES.md). | None. Script tests evaluate supplied payloads; automatic tag ownership is an explicit engineering opt-in. |
 | [SQLite data controls](data-controls.json) | Separate managed SQLite connection and synthetic database initialized by its dedicated loader. | None during the exercise; setup creates and seeds the database. |
 | [Read query operations](query-testing.json) | Managed SQLite connection and synthetic database; follow the [setup and cancellation guide](../docs/architecture/QUERY_TESTING.md). | None during reads; setup creates and seeds the database. |
+| [AnyLog query node](anylog-query.json) | A reachable AnyLog query node and a table of readings; create the connection as described in the [AnyLog connector guide](../docs/architecture/ANYLOG_CONNECTOR.md) and adjust the table and sensor names. | None; the connection is read-only. |
 
 The dedicated `tools/load-backup-example.mjs` creates a new Scheduled backup workshop project on an authenticated local gateway; it leaves the checkpoint unpublished unless `--publish` is explicit. It never configures backup credentials or schedules. Its read-only screen helps compare published checkpoint A with an unpublished draft B after an isolated configuration restore. Follow the guide before using any real destination.
 

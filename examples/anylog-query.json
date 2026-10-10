@@ -1,0 +1,19 @@
+{
+  "name": "AnyLog query workshop",
+  "connection": { "id": "anylog-query-workshop", "name": "AnyLog query workshop node", "type": "anylog", "connector": { "host": "192.168.1.20", "port": "32349", "dbms": "workshop" } },
+  "queries": [
+    { "id": "anylog-workshop-latest", "name": "AnyLog workshop / Latest readings", "kind": "query", "connectionId": "anylog-query-workshop", "sql": "SELECT timestamp, sensor, value\nFROM readings\nWHERE sensor = @sensor -- one sensor per run\nORDER BY timestamp DESC\nLIMIT 20", "parameters": [{ "name": "sensor", "type": "string", "defaultValue": "Line1" }] },
+    { "id": "anylog-workshop-hour", "name": "AnyLog workshop / Last hour count", "kind": "query", "connectionId": "anylog-query-workshop", "sql": "SELECT COUNT(*) AS readings FROM readings WHERE timestamp >= NOW() - 1 hour", "parameters": [] }
+  ],
+  "screens": [{
+    "id": "anylog-workshop", "name": "AnyLog query workshop", "width": 1100, "height": 700,
+    "components": [
+      { "id": "heading", "type": "label", "x": 32, "y": 24, "width": 1020, "height": 54, "props": { "text": "AnyLog query workshop", "fontSize": 28 } },
+      { "id": "instructions", "type": "label", "x": 32, "y": 92, "width": 1020, "height": 130, "props": { "text": "Create the AnyLog query node connection, test it, then open Named queries. Run Latest readings with a sensor name from your node and Last hour count. Try the Affected rows result type: it stays unavailable because this connection is read-only.", "fontSize": 17 } },
+      { "id": "readings", "type": "table", "x": 32, "y": 248, "width": 1020, "height": 320, "props": { "text": "Latest readings from the AnyLog network", "queryId": "anylog-workshop-latest", "rowKey": "timestamp", "pageSize": 10 } },
+      { "id": "scope", "type": "label", "x": 32, "y": 592, "width": 1020, "height": 72, "props": { "text": "AnyLog QUERY NODE · Reads only. Replace the readings table, sensor and DBMS with names from your own node; nothing here writes to AnyLog.", "fontSize": 14 } }
+    ]
+  }],
+  "templates": [],
+  "navigation": { "mode": "none", "startupScreenId": "anylog-workshop", "items": [] }
+}

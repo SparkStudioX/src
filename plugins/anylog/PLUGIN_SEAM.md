@@ -1,6 +1,6 @@
-# Upgrading SparkStudio without losing AnyLog
+# Database connector plugin seam
 
-AnyLog's query-node client lives in this directory. SparkStudio's SQL Server, SQLite, OPC UA and industrial drivers stay in `src/`. When you take a new SparkStudio drop, merge that drop into this branch. Files under `plugins/anylog/` are not in upstream SparkStudio, so they should not conflict.
+AnyLog's query-node client lives in this directory. SparkStudio's SQL Server, SQLite, OPC UA and industrial drivers stay in `src/`. A fork that keeps its own connector beside `anylog` can merge new SparkStudio releases without conflicts in its plugin directory.
 
 The gateway still needs a thin seam so it can discover the plugin. Those edits are marked `database connector plugin` in source. After a merge, search for that phrase. If a conflict dropped one of the lines below, put it back. Do not copy the AnyLog HTTP client into `ConnectorService` or the React connection form.
 

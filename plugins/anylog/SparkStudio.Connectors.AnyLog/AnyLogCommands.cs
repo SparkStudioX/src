@@ -55,8 +55,11 @@ public static class AnyLogCommands
     /// <summary>The query node reads the command from one HTTP header. Line breaks become spaces so the SELECT still fits.</summary>
     public static string ForHeader(string command)
     {
-        var header = command.Replace("\r\n", " ", StringComparison.Ordinal).Replace('\n', ' ').Replace('\r', ' ');
+        var header = command.Replace("\r\n", " ", StringComparison.Ordinal).Replace('\n', ' ').Replace('\r', ' ').Replace('\t', ' ');
         if (!FitsCommandHeader(header)) throw new ArgumentException("The AnyLog command is limited to one line of 3,500 characters.");
+        // HTTP header values are sent as ASCII; anything else would fail as an unreachable node.
+        if (header.Any(character => character is < ' ' or > '~'))
+            throw new ArgumentException("The AnyLog command header accepts printable ASCII text only. Remove accented or special characters from the SELECT and its parameter values.");
         return header;
     }
 
@@ -114,8 +117,9 @@ public static class AnyLogCommands
             var current = sql[i];
             if (current == '\'') { i = CopyQuote(sql, i, result, '\''); continue; }
             if (current == '"') { i = CopyQuote(sql, i, result, '"'); continue; }
-            if (current == '-' && i + 1 < sql.Length && sql[i + 1] == '-') { i = CopyUntil(sql, i, result, '\n'); continue; }
-            if (current == '/' && i + 1 < sql.Length && sql[i + 1] == '*') { i = CopyBlock(sql, i, result); continue; }
+            // Comments are dropped: the header is one line, so a kept -- comment would swallow the rest of the SELECT.
+            if (current == '-' && i + 1 < sql.Length && sql[i + 1] == '-') { i = SkipUntil(sql, i, "\n"); result.Append(' '); continue; }
+            if (current == '/' && i + 1 < sql.Length && sql[i + 1] == '*') { i = SkipUntil(sql, i + 2, "*/") + 1; result.Append(' '); continue; }
             if (current != '@') { result.Append(current); continue; }
             var start = i;
             var name = ReadName(sql, ref i);
@@ -138,20 +142,11 @@ public static class AnyLogCommands
         return sql.Length - 1;
     }
 
-    private static int CopyUntil(string sql, int start, StringBuilder result, char end)
+    /// <summary>Returns the index of the first character of <paramref name="end"/>, or the last index when it is absent.</summary>
+    private static int SkipUntil(string sql, int start, string end)
     {
-        var stop = sql.IndexOf(end, start);
-        if (stop < 0) stop = sql.Length - 1;
-        result.Append(sql, start, stop - start + 1);
-        return stop;
-    }
-
-    private static int CopyBlock(string sql, int start, StringBuilder result)
-    {
-        var stop = sql.IndexOf("*/", start + 2, StringComparison.Ordinal);
-        stop = stop < 0 ? sql.Length - 1 : stop + 1;
-        result.Append(sql, start, stop - start + 1);
-        return stop;
+        var stop = sql.IndexOf(end, start, StringComparison.Ordinal);
+        return stop < 0 ? sql.Length - 1 : stop;
     }
 
     private static string ReadName(string sql, ref int index)

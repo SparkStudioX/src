@@ -259,7 +259,7 @@ const explicitFiles = new Set([
   'examples/state-controls.json',
   'examples/process-displays.json', 'examples/process-graphics.json',
   'examples/data-controls.json',
-  'examples/query-testing.json',
+  'examples/query-testing.json', 'examples/anylog-query.json',
   'examples/gateway-recovery.json', 'examples/scheduled-backups.json',
   'examples/tag-engineering.json', 'examples/gateway-network.json',
   'examples/gateway-events.json', 'examples/component-messaging.json',
