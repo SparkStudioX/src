@@ -91,14 +91,14 @@ await check('Workspace navigation returns only fixed local links and never fetch
   const data = await run('navigate_workspace', { destination: 'data' }); assert.equal(data.data.url, '/gateway#data'); assert.equal(data.data.label, 'Gateway data');
   const connections = await run('navigate_workspace', { destination: 'connections' }); assert.equal(connections.data.url, '/gateway#data/connections'); assert.equal(connections.data.nextStep, undefined);
   const certificates = await run('navigate_workspace', { destination: 'certificates' }); assert.equal(certificates.data.url, '/gateway#data/certificates'); assert.equal(certificates.data.nextStep, undefined);
-  const models = await run('navigate_workspace', { destination: 'models' }); assert.equal(models.data.url, '/workspace?workspace=models&view=plant');
-  const model = await run('navigate_workspace', { destination: 'model', modelKey: 'Press@2' }); assert.equal(model.data.url, '/workspace?workspace=models&view=models&type=Press%402');
-  const machine = await run('navigate_workspace', { destination: 'machine', path: '[default]Acme/Line1/Press01' }); assert.equal(machine.data.url, '/workspace?workspace=models&view=plant&item=%5Bdefault%5DAcme%2FLine1%2FPress01&kind=machine');
-  const location = await run('navigate_workspace', { destination: 'location', path: '[default]Acme' }); assert.equal(location.data.url, '/workspace?workspace=models&view=plant&item=%5Bdefault%5DAcme&kind=location');
-  const tools = await run('navigate_workspace', { destination: 'model-tools', tool: 'publish' }); assert.equal(tools.data.url, '/workspace?workspace=models&view=tools&tool=publish');
+  const models = await run('navigate_workspace', { destination: 'models' }); assert.equal(models.data.url, '/designer?workspace=models&view=plant');
+  const model = await run('navigate_workspace', { destination: 'model', modelKey: 'Press@2' }); assert.equal(model.data.url, '/designer?workspace=models&view=models&type=Press%402');
+  const machine = await run('navigate_workspace', { destination: 'machine', path: '[default]Acme/Line1/Press01' }); assert.equal(machine.data.url, '/designer?workspace=models&view=plant&item=%5Bdefault%5DAcme%2FLine1%2FPress01&kind=machine');
+  const location = await run('navigate_workspace', { destination: 'location', path: '[default]Acme' }); assert.equal(location.data.url, '/designer?workspace=models&view=plant&item=%5Bdefault%5DAcme&kind=location');
+  const tools = await run('navigate_workspace', { destination: 'model-tools', tool: 'publish' }); assert.equal(tools.data.url, '/designer?workspace=models&view=tools&tool=publish');
   await assert.rejects(run('navigate_workspace', { destination: 'model', modelKey: 'Press' }), /format|ModelId@version/);
   await assert.rejects(run('navigate_workspace', { destination: 'machine', path: 'no-provider' }), /format|full machine path/);
-  const tags = await run('navigate_workspace', { destination: 'tags' }); assert.equal(tags.data.url, '/workspace?workspace=tags');
+  const tags = await run('navigate_workspace', { destination: 'tags' }); assert.equal(tags.data.url, '/designer?workspace=tags');
   await assert.rejects(run('navigate_workspace', { destination: 'https://example.test' }), /not a supported value/);
   await assert.rejects(run('navigate_workspace', { destination: 'configuration' }), /not a supported value/);
   await assert.rejects(run('navigate_workspace', { destination: 'designer' }, {}), /explicit project/);
@@ -381,7 +381,7 @@ await check('Model drafts only preview and preserve a user-owned browser handoff
   modelFixture(() => ({ canApply: true, revision: 'model-r1', previewToken: 'preview-only' }));
   const result = await run('model_draft', args, signed);
   assert.equal(result.data.applied, false); assert.equal(result.data.status, 'draft_prepared');
-  assert.equal(result.data.url, '/workspace?workspace=models&view=models&type=CNC%401');
+  assert.equal(result.data.url, '/designer?workspace=models&view=models&type=CNC%401');
   assert.deepEqual(handoff(), { ownerId: 'fixture-user', draft: { origin: 'ask-spark', definition } });
   assert.deepEqual(calls.map(call => call.url), ['/api/tag-engineering/export', '/api/tag-engineering/preview']);
   assert.equal(calls[1].body.version, 3); assert.deepEqual(calls[1].body.udtDefinitions, [definition]);
@@ -406,7 +406,7 @@ await check('Model drafts combine types, machines, locations, renames and moves 
   assert.deepEqual(sent.instances.map(item => item.path).sort(), ['[default]Acme/Line3/Lathe01', '[default]Acme/Line3/Press01']);
   assert.deepEqual(sent.removeInstances, ['[default]Acme/Line1/Press01']);
   assert.match(result.data.summary, /2 models/); assert.ok(result.data.changeCount >= 6);
-  assert.equal(result.data.url, '/workspace?workspace=models&view=models&type=Spindle%401');
+  assert.equal(result.data.url, '/designer?workspace=models&view=models&type=Spindle%401');
   assert.equal(handoff().draft.moves[0].destination, '[default]Acme/Line3');
   modelFixture(() => ({ canApply: true }));
   await assert.rejects(run('model_draft', { packageJson: JSON.stringify({ udtDefinitions: [savedModel.udtDefinitions[0]] }) }, signed), /already exist.*immutable/);

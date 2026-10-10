@@ -7,6 +7,8 @@ export interface CreationChoice<T extends string> {
   label: string;
   description: string;
   icon: string;
+  /** Choices with a group render as headed sections in a two-column menu. */
+  group?: string;
 }
 
 export default function CreationMenu<T extends string>({ label, menuLabel, choices, onSelect }: {
@@ -31,6 +33,11 @@ export default function CreationMenu<T extends string>({ label, menuLabel, choic
     document.addEventListener("pointerdown", dismiss);
     return () => document.removeEventListener("pointerdown", dismiss);
   }, [open]);
+  const item = (choice: CreationChoice<T>) => <button key={choice.value} type="button" role="menuitem" tabIndex={-1}
+    onPointerMove={event => { if (event.pointerType !== "touch" && document.activeElement !== event.currentTarget) event.currentTarget.focus({ preventScroll: true }); }}
+    onClick={() => { setOpen(false); trigger.current?.focus(); onSelect(choice.value); }}>
+    <Icon name={choice.icon} size={18} /><span><strong>{choice.label}</strong><small>{choice.description}</small></span>
+  </button>;
   return <div className="creation-dropdown" ref={container} onBlur={event => {
     if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
   }}>
@@ -50,18 +57,23 @@ export default function CreationMenu<T extends string>({ label, menuLabel, choic
       }}>
       <Icon name="plus" size={16} />{label}<Icon name="down" size={14} />
     </button>
-    {open && <div className="creation-menu" ref={menu} id={menuId} role="menu" aria-label={menuLabel} onKeyDown={event => {
+    {open && <div className={choices.some(choice => choice.group) ? "creation-menu grouped" : "creation-menu"} ref={menu} id={menuId} role="menu" aria-label={menuLabel} onKeyDown={event => {
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); trigger.current?.focus(); return; }
       const items = Array.from(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []);
       const current = items.indexOf(document.activeElement as HTMLButtonElement);
       const next = event.key === "ArrowDown" ? (current + 1) % items.length : event.key === "ArrowUp" ? (current - 1 + items.length) % items.length : event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : -1;
       if (next >= 0) { event.preventDefault(); items[next]?.focus(); }
     }}>
-      {choices.map(choice => <button key={choice.value} type="button" role="menuitem" tabIndex={-1}
-        onPointerMove={event => { if (event.pointerType !== "touch" && document.activeElement !== event.currentTarget) event.currentTarget.focus({ preventScroll: true }); }}
-        onClick={() => { setOpen(false); trigger.current?.focus(); onSelect(choice.value); }}>
-        <Icon name={choice.icon} size={18} /><span><strong>{choice.label}</strong><small>{choice.description}</small></span>
-      </button>)}
+      {groups(choices).map(([group, items]) => group
+        ? <div key={group} className="creation-menu-group" role="group" aria-label={group}><h3 aria-hidden="true">{group}</h3>{items.map(item)}</div>
+        : items.map(item))}
     </div>}
   </div>;
+}
+
+/** Keeps first-seen group order; ungrouped choices form one unheaded section. */
+function groups<T extends string>(choices: CreationChoice<T>[]): [string, CreationChoice<T>[]][] {
+  const sections = new Map<string, CreationChoice<T>[]>();
+  for (const choice of choices) sections.set(choice.group ?? "", [...(sections.get(choice.group ?? "") ?? []), choice]);
+  return [...sections];
 }

@@ -72,7 +72,7 @@ export function connectionListDetail(connection: Connection) {
 
 export function connectionMenuChoices(builtIn: CreationChoice<Connection["type"]>[], catalog: DatabaseConnectorDescriptor[]) {
   const extra = catalog.filter(item => !builtIn.some(choice => choice.value === item.type)).map(item => ({
-    value: item.type as Connection["type"], label: item.displayName, description: item.description, icon: "database",
+    value: item.type as Connection["type"], label: item.displayName, description: item.description, icon: "database", group: "Databases",
   }));
   return [...builtIn, ...extra];
 }

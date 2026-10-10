@@ -52,7 +52,7 @@ function load(name) {
     .replace(/(from\s+)(["'])([^"']+)\2/g, (_all, prefix, _quote, dependency) => prefix + JSON.stringify(dependency === 'react' ? hooks : dependency === './api' ? api : dependency.startsWith('./') ? load(dependency.slice(2)) : pathToFileURL(require.resolve(dependency)).href));
   const result = uri(source); modules.set(name, result); return result;
 }
-const components = Object.fromEntries(await Promise.all(['GatewayConfiguration', 'Tags', 'ModelsWorkspace', 'DataWorkspace', 'Connections', 'ConnectionDiagnostics', 'OpcCertificates'].map(async name => [name, (await import(load(name))).default])));
+const components = Object.fromEntries(await Promise.all(['GatewayConfiguration', 'Tags', 'ModelsWorkspace', 'Connections', 'ConnectionDiagnostics', 'OpcCertificates'].map(async name => [name, (await import(load(name))).default])));
 const { ApiError } = await import(api);
 const draftWorkspace = await import(load('modelWorkspace'));
 const navigation = await import(load('modelNavigation'));
@@ -183,13 +183,6 @@ try {
     navigation.resolveModelNavigation(false);ui.render();assert.equal(ui.field('Publishing interval').props.value,2500);
     navigation.openModelsWorkspace();navigation.resolveModelNavigation(true);ui.render();assert.equal(new URL(window.location.href).searchParams.get('workspace'),'models');
     assert.equal(navigation.modelNavigationDirty(),false);
-  });
-  await check('The project-independent Models workspace refreshes live values without overlapping or stale updates', async () => {
-    let value=1, reply;const ui=await start('DataWorkspace',route=>route==='/tag-engineering/values'?(reply?.promise??[{path:'[default]Speed',value,quality:'Good'}]):undefined);
-    assert.equal(globalThis.__configurationModelProps.tags[0].value,1);value=2;await ui.tick();assert.equal(globalThis.__configurationModelProps.tags[0].value,2);
-    const before=reads(ui,'/tag-engineering/values');ui.hide(true);await ui.tick();assert.equal(reads(ui,'/tag-engineering/values'),before);ui.hide(false);
-    reply=deferred();ui.poll();ui.poll();assert.equal(reads(ui,'/tag-engineering/values'),before+1);
-    ui.unmount();reply.resolve([{path:'[default]Speed',value:3,quality:'Good'}]);await settle();await settle();assert.equal(lifecycle.updatesAfterUnmount(),0);assert.equal(ui.timers(),0);
   });
   await check('Tags transfer dialogs require a decision and a pending save cannot be discarded by navigation', async () => {
     const result=deferred();const ui=await start('Tags',(route,method)=>route==='/tags'&&method==='POST'?result.promise:undefined);

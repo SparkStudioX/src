@@ -28,7 +28,7 @@ await check('security has a dedicated gateway route without a project ID', () =>
   assert.deepEqual(parseProjectRoute('/security/line-a'), { kind: 'invalid' });
 });
 await check('shared data workspace is available without a selected project', () => {
-  for (const path of ['/workspace', '/workspace/']) assert.deepEqual(parseProjectRoute(path), { kind: 'workspace' });
+  for (const path of ['/workspace', '/workspace/']) assert.deepEqual(parseProjectRoute(path), { kind: 'designer', projectId: null });
   assert.deepEqual(parseProjectRoute('/workspace/project'), { kind: 'invalid' });
 });
 await check('malformed or non-catalog path fragments cannot select projects', () => {

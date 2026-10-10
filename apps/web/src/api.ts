@@ -26,7 +26,7 @@ function readAiProviderError(value: unknown): AiProviderError | undefined {
   };
 }
 
-export type ProjectRoute = { kind: "home" } | { kind: "security" } | { kind: "gateway" } | { kind: "workspace" } | { kind: "designer" | "runtime"; projectId: string | null } | { kind: "invalid" };
+export type ProjectRoute = { kind: "home" } | { kind: "security" } | { kind: "gateway" } | { kind: "designer" | "runtime"; projectId: string | null } | { kind: "invalid" };
 const projectIdPattern = /^[a-z][a-z0-9-]{0,63}$/;
 
 /** Route IDs are opaque catalog keys, never arbitrary path fragments. */
@@ -34,7 +34,8 @@ export function parseProjectRoute(pathname: string): ProjectRoute {
   if (pathname === "/" || pathname === "/projects" || pathname === "/projects/") return { kind: "home" };
   if (pathname === "/security" || pathname === "/security/") return { kind: "security" };
   if (pathname === "/gateway" || pathname === "/gateway/") return { kind: "gateway" };
-  if (pathname === "/workspace" || pathname === "/workspace/") return { kind: "workspace" };
+  // Tags and Models live in a project Designer; earlier /workspace links open the default project.
+  if (pathname === "/workspace" || pathname === "/workspace/") return { kind: "designer", projectId: null };
   const match = /^\/(designer|runtime)(?:\/([^/]+))?\/?$/.exec(pathname);
   if (!match) return { kind: "invalid" };
   if (!match[2]) return { kind: match[1] as "designer" | "runtime", projectId: null };

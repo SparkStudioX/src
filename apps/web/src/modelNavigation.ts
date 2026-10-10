@@ -51,8 +51,9 @@ export const workspaceNavigationEvent = "sparkstudio:workspace-navigation";
 export function openModelsWorkspace(): void {
   requestModelNavigation(() => {
     const url = new URL(window.location.href);
-    if (!/^\/designer\/[^/]+\/?$/.test(url.pathname) && url.pathname !== "/workspace") url.pathname = "/workspace";
     url.hash = ""; url.search = ""; url.searchParams.set("workspace", "models"); url.searchParams.set("view", "plant");
+    // Models opens inside a project Designer; elsewhere the default-project redirect loads it.
+    if (!/^\/designer\/[^/]+\/?$/.test(url.pathname)) { url.pathname = "/designer"; window.location.href = url.href; return; }
     if (url.href !== window.location.href) window.history.pushState(window.history.state, "", url);
     recordModelNavigationLocation(); window.dispatchEvent(new Event(workspaceNavigationEvent));
   });

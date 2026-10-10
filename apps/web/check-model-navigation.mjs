@@ -63,10 +63,10 @@ check('Opening Models keeps the selected Designer project and uses a top-level w
   navigation.openModelsWorkspace();
   assert.equal(location.href, 'http://localhost/designer/lab?workspace=models&view=plant');
 });
-check('Source handoffs from gateway settings can open Models without selecting a project', () => {
+check('Source handoffs from gateway settings open Models in the default project', () => {
   location.href = 'http://localhost/gateway#data';
   navigation.openModelsWorkspace();
-  assert.equal(location.href, 'http://localhost/workspace?workspace=models&view=plant');
+  assert.equal(location.href, 'http://localhost/designer?workspace=models&view=plant');
 });
 check('An in-flight apply blocks navigation even after its draft clears', () => {
   blocked = true; dirty = false;

@@ -365,7 +365,7 @@ function requireDirectTagImport(package_: Values): void {
 
 type ModelWorkspaceModule = typeof import("./modelWorkspace");
 type ModelDraftInput = import("./modelWorkspace").ModelDraft;
-const modelsLink = (params: Record<string, string>) => "/workspace?" + new URLSearchParams({ workspace: "models", ...params }).toString();
+const modelsLink = (params: Record<string, string>) => "/designer?" + new URLSearchParams({ workspace: "models", ...params }).toString();
 function parseDraftJson(text: unknown, label: string): unknown {
   if (typeof text !== "string") return undefined;
   try { return JSON.parse(text); } catch { throw new Error(label + " is not valid JSON."); }

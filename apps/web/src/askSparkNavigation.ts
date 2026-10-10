@@ -3,9 +3,9 @@ const destinations: Record<string, { label: string; url: string; nextStep?: stri
   overview: { label: "Gateway overview", url: "/gateway#overview" },
   data: { label: "Gateway data", url: "/gateway#data" },
   connections: { label: "Gateway connections", url: "/gateway#data/connections" },
-  tags: { label: "Tags", url: "/workspace?workspace=tags" },
-  models: { label: "Models", url: "/workspace?workspace=models&view=plant" },
-  "model-settings": { label: "Models data update settings", url: "/workspace?workspace=models&view=settings" },
+  tags: { label: "Tags", url: "/designer?workspace=tags" },
+  models: { label: "Models", url: "/designer?workspace=models&view=plant" },
+  "model-settings": { label: "Models data update settings", url: "/designer?workspace=models&view=settings" },
   certificates: { label: "Public OPC certificates", url: "/gateway#data/certificates" },
   ai: { label: "AI settings", url: "/gateway#ai" },
   alarms: { label: "Gateway alarms", url: "/gateway#alarms" },
@@ -19,7 +19,7 @@ const destinations: Record<string, { label: string; url: string; nextStep?: stri
 };
 const projectDestinations: Record<string, string> = { designer: "Designer", queries: "Queries", scripts: "Scripts" };
 const modelTools = ["live", "issues", "versions", "mappings", "dependencies", "publish", "export", "start"];
-const models = (params: Record<string, string>) => "/workspace?" + new URLSearchParams({ workspace: "models", ...params }).toString();
+const models = (params: Record<string, string>) => "/designer?" + new URLSearchParams({ workspace: "models", ...params }).toString();
 const providerPrefix = /^\[[A-Za-z0-9_-]{1,64}\]/;
 const validPath = (value: unknown): value is string => typeof value === "string" && value.length <= 1100 && providerPrefix.test(value) && [...value].every(character => character.charCodeAt(0) >= 32);
 

@@ -6,6 +6,10 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
+## Preview.17 release candidate, 2026-10-10
+
+Preview.17 removes the separate Tags and Models page that opened from Projects: Tags and Models now open only inside a project Designer, and earlier `/workspace` links open the default project. The New Connection menu is grouped into Industrial devices, Read sources and Databases in two columns. Configuration-only accounts no longer reach Tags and Models without Design access to a project. Windows version is `0.2.0-preview.17`; Docker edition is `0.2.0-preview.17-docker.1`. At the owner's request this candidate skips the separate full-gate run, installer verification and container deployment tests; the mandatory build gates inside the release builds still run. Publication evidence is recorded separately once complete.
+
 ## Preview.16 release publication, 2026-10-10
 
 Windows [`v0.2.0-preview.16`](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.16) was published from build source `05b3dff62e674e75d9f1c821f83f4242162817fc`. Docker [`v0.2.0-preview.16-docker.1`](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.16-docker.1) was published from `af280991177a30bfd137f78a7a1afebd6d4f8859`, which adds only the plugin allowlist in `.dockerignore` and its test. Source boundary and Windows/Linux product validation passed for both commits.

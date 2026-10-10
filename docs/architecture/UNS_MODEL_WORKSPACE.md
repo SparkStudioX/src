@@ -248,7 +248,7 @@ The authored offline checks and browser walkthrough should cover:
     - there is exactly one page heading;
     - the primary create action is in the header and the apply action is in the draft bar.
 11. **Approachable workflow:** first-run choices, the explorer, the ＋ New menu and the draft bar explain what to do next without a guide; opening and closing the data library preserves its search and selection at desktop and narrow widths. Check/Manage/Share and field disclosures remain keyboard accessible.
-12. **Routing:** open Models with and without a project, restore `workspace=models` bookmarks, and return to an open Designer without losing its document state. Source and Ask Spark drafts open the same Models workspace.
+12. **Routing:** open Models from a project Designer and from an earlier `/workspace` link, which opens the default project; restore `workspace=models` bookmarks, and return to an open Designer without losing its document state. Source and Ask Spark drafts open the same Models workspace.
 
 Extend the setup-required [UNS walkthrough](UNS_MODEL_SETUP.md) with a drag-and-drop variant:
 

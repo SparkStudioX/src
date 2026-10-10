@@ -15,16 +15,16 @@ import { useAskSpark } from "./askSparkContext";
 import { connectionAskSparkContext } from "./askSparkClient";
 
 const newConnectionChoices: CreationChoice<Connection["type"]>[] = [
-  { value: "sqlite", label: "SQLite", description: "Use a local gateway database", icon: "database" },
-  { value: "sqlserver", label: "SQL Server", description: "Connect to Microsoft SQL Server", icon: "database" },
-  { value: "opcua", label: "OPC UA client", description: "Connect to an industrial data server", icon: "plug" },
-  { value: "modbus-tcp", label: "Modbus TCP", description: "Read mapped coils and registers", icon: "plug" },
-  { value: "ab-eip", label: "Allen Bradley EtherNet/IP", description: "Read controller symbols or legacy file elements", icon: "plug" },
-  { value: "siemens-s7", label: "Siemens S7", description: "Read mapped DB and memory addresses", icon: "plug" },
-  { value: "beckhoff-ads", label: "Beckhoff ADS", description: "Connect to TwinCAT PLC symbols", icon: "plug" },
-  { value: "mtconnect", label: "MTConnect agent", description: "Read CNC observations and reduced conditions", icon: "plug" },
-  { value: "i3x", label: "i3X source", description: "Browse and read industrial objects", icon: "plug" },
-  { value: "mqtt", label: "MQTT subscriber", description: "Map broker topics to read-only tags", icon: "plug" },
+  { value: "opcua", label: "OPC UA client", description: "Connect to an industrial data server", icon: "plug", group: "Industrial devices" },
+  { value: "modbus-tcp", label: "Modbus TCP", description: "Read mapped coils and registers", icon: "plug", group: "Industrial devices" },
+  { value: "ab-eip", label: "Allen Bradley EtherNet/IP", description: "Read controller symbols or legacy file elements", icon: "plug", group: "Industrial devices" },
+  { value: "siemens-s7", label: "Siemens S7", description: "Read mapped DB and memory addresses", icon: "plug", group: "Industrial devices" },
+  { value: "beckhoff-ads", label: "Beckhoff ADS", description: "Connect to TwinCAT PLC symbols", icon: "plug", group: "Industrial devices" },
+  { value: "mtconnect", label: "MTConnect agent", description: "Read CNC observations and reduced conditions", icon: "plug", group: "Read sources" },
+  { value: "i3x", label: "i3X source", description: "Browse and read industrial objects", icon: "plug", group: "Read sources" },
+  { value: "mqtt", label: "MQTT subscriber", description: "Map broker topics to read-only tags", icon: "plug", group: "Read sources" },
+  { value: "sqlite", label: "SQLite", description: "Use a local gateway database", icon: "database", group: "Databases" },
+  { value: "sqlserver", label: "SQL Server", description: "Connect to Microsoft SQL Server", icon: "database", group: "Databases" },
 ];
 
 interface DiscoveredEndpoint {
