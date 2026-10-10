@@ -33,7 +33,7 @@ function run(name, command, args, cwd = root) {
 }
 const web = path.join(root, 'apps/web');
 const toolSuites = [
-  'test-docker-notices',
+  'test-docker-notices', 'test-docker-context',
   'test-web-complexity',
   'test-computer-camera',
   'test-source-boundary', 'test-workshop-build', 'test-project-search', 'test-resource-changes',

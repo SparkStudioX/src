@@ -99,6 +99,13 @@
 !tools/complexity/
 !tools/complexity/*.cs
 !tools/complexity/*.csproj
+!plugins/
+!plugins/*/
+!plugins/*/*.targets
+!plugins/*/*.md
+!plugins/*/*/
+!plugins/*/*/*.cs
+!plugins/*/*/*.csproj
 # Even inside allowed source trees, never transfer local artifacts or secrets.
 .git
 .git/**

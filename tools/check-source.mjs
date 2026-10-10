@@ -101,7 +101,7 @@ const toolFiles = new Set([
   'uns-model-fixture.mjs', 'test-uns-model-workshop.mjs',
   // Authored Linux container packaging, local administration and release checks.
   'docker-entrypoint.py', 'test-docker-entrypoint.py', 'container-admin.py', 'test-container-admin.py',
-  'package-notice-supplements.mjs', 'collect-docker-runtime.py', 'write-docker-notices.mjs', 'test-docker-notices.mjs',
+  'package-notice-supplements.mjs', 'collect-docker-runtime.py', 'write-docker-notices.mjs', 'test-docker-notices.mjs', 'test-docker-context.mjs',
   'test-docker-deployment.mjs',
   'analyze-web-complexity.mjs', 'test-web-complexity.mjs',
   'test-computer-camera.mjs',
