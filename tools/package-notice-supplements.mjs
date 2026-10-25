@@ -53,6 +53,6 @@ export const reviewedBundledLicenses = new Map([
   ['BitFaster.Caching/2.6.0', { license: 'MIT', file: 'LICENSE', sha256: 'f3bf474c62109fbe7b81345419eff56bfd6e5b539accc877a9b840e2e7a5176b' }],
   ['Newtonsoft.Json/13.0.4', { license: 'MIT', file: 'LICENSE.md', sha256: 'b98a397897ff55f76cddc380041507a95a896b2946e0188703bf0496793d6516' }],
   ['Microsoft.Data.SqlClient.SNI.runtime/6.0.3', { license: 'LicenseRef-Microsoft-SqlClient-SNI', file: 'LICENSE.txt', sha256: '9335e8bad875dd7be4eebd55d2335eb6433d1cea61aadb3817af7807bef8932a' }],
-  ...['Microsoft.Bcl.Cryptography/9.0.13', 'System.Configuration.ConfigurationManager/9.0.13', 'System.Security.Cryptography.Pkcs/9.0.13', 'System.Security.Cryptography.ProtectedData/9.0.13'].map(name => [name, { license: 'MIT', file: netLicense[0], sha256: netLicense[1] }]),
+  ...['Microsoft.Bcl.Cryptography/9.0.13', 'System.Configuration.ConfigurationManager/9.0.13', 'System.Security.Cryptography.Pkcs/9.0.21', 'System.Security.Cryptography.ProtectedData/9.0.13'].map(name => [name, { license: 'MIT', file: netLicense[0], sha256: netLicense[1] }]),
   ...['Client', 'Configuration', 'Core', 'Security.Certificates', 'Types'].map(name => [`OPCFoundation.NetStandard.Opc.Ua.${name}/1.5.378.176`, { license: 'MIT', file: 'LICENSE.txt', sha256: '3927c73bc0abbd9327364bcfdcbb7d8a7be50c05c2948fcfb49a45b165bda737' }]),
 ]);

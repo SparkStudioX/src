@@ -10,13 +10,13 @@ import {
   type ReactNode,
 } from "react";
 
-export type ThemePreference = "light" | "dark" | "system";
-type ResolvedTheme = "light" | "dark";
+export type ThemePreference = "light" | "dark" | "primary" | "system";
+type ResolvedTheme = "light" | "dark" | "primary";
 const storageKey = "sparkstudio.theme.v1";
 const mediaQuery = "(prefers-color-scheme: dark)";
 
 function normalizePreference(value: unknown): ThemePreference {
-  return value === "dark" || value === "system" ? value : "light";
+  return value === "dark" || value === "primary" || value === "system" ? value : "light";
 }
 
 function readPreference(): ThemePreference {
@@ -39,7 +39,8 @@ function applyTheme(preference: ThemePreference): ResolvedTheme {
   const resolved = resolveTheme(preference);
   document.documentElement.dataset.theme = resolved;
   document.documentElement.dataset.themePreference = preference;
-  document.documentElement.style.colorScheme = resolved;
+  // Primary is a light theme with its own palette; browser controls stay light.
+  document.documentElement.style.colorScheme = resolved === "dark" ? "dark" : "light";
   return resolved;
 }
 
@@ -123,6 +124,7 @@ export function ThemePicker({ className = "" }: { className?: string }) {
       >
         <option value="light">Light</option>
         <option value="dark">Dark</option>
+        <option value="primary">Primary</option>
         <option value="system">System</option>
       </select>
     </label>

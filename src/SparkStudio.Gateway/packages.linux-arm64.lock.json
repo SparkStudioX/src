@@ -306,8 +306,8 @@
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
-        "resolved": "9.0.13",
-        "contentHash": "dxJhkuoaelvWy588wPXjShNks+ZMiSgXnN75/u+DPbER5PqKrLPDftE0BvGM7nDK/scQAVlD+gRXlCAAjWi58Q=="
+        "resolved": "9.0.21",
+        "contentHash": "KD+oHoYIxwNCajjVe58WVwq9cRpum+Pg3tRveDRtkcaw6w3oc7sNBoMRtb5P5OehI3bgv1ucMpgjf8lpj5J96A=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
@@ -329,6 +329,7 @@
           "OPCFoundation.NetStandard.Opc.Ua.Client": "[1.5.378.176, )",
           "OPCFoundation.NetStandard.Opc.Ua.Configuration": "[1.5.378.176, )",
           "S7netplus": "[0.20.0, )",
+          "System.Security.Cryptography.Pkcs": "[9.0.21, )",
           "libplctag": "[1.5.2, )"
         }
       }
@@ -362,8 +363,8 @@
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
-        "resolved": "9.0.13",
-        "contentHash": "dxJhkuoaelvWy588wPXjShNks+ZMiSgXnN75/u+DPbER5PqKrLPDftE0BvGM7nDK/scQAVlD+gRXlCAAjWi58Q=="
+        "resolved": "9.0.21",
+        "contentHash": "KD+oHoYIxwNCajjVe58WVwq9cRpum+Pg3tRveDRtkcaw6w3oc7sNBoMRtb5P5OehI3bgv1ucMpgjf8lpj5J96A=="
       },
       "System.ServiceProcess.ServiceController": {
         "type": "Transitive",

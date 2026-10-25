@@ -16,7 +16,7 @@ This page describes the current source tree as reviewed on September 30, 2026, i
 | Scripting | CPython libraries and seven gateway event families; browser startup/screen JavaScript; JavaScript or Python on supported input/lifecycle/property/message events; a shared component Actions & Events editor; bounded gateway notifications to connected same-project operator tabs. |
 | Reuse | Typed template parameters and parent-context fx, private instance state, nested templates/saved repeaters through four levels, nested query repeaters and contextual popups. |
 | Data | Memory, OPC UA and expression tags; OPC UA client; parameterized SQL Server and managed SQLite queries; scalar query-property bindings. |
-| Presentation | Local images/icons, drawing/process controls, reusable visual styles and offline caption translations; Light, Dark and System preferences. |
+| Presentation | Local images/icons, drawing/process controls, reusable visual styles and offline caption translations; Light, Dark, Primary and System preferences. |
 | Operations | Local alarm conditions, acknowledgement/journal and bounded raw tag history/trends; gateway overview/sessions/diagnostics, connection operations, deployment settings, offline full-data recovery and online/scheduled configuration backups. |
 
 The gateway owns saved projects, connection secrets, live tags, query execution and Python workers. The browser owns transient form and session/screen/instance state. Python UI actions can return validated presentation effects to the calling browser; they do not create a shared server-side component tree. Shared process data belongs in tags or databases.

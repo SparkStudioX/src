@@ -111,7 +111,7 @@ const toolFiles = new Set([
   'test-equipment-commands.mjs', 'test-tag-parameter-workshop.mjs', 'test-fine-grained-access.mjs', 'load-access-permissions-example.mjs', 'test-charts.mjs', 'test-tag-model.mjs', 'test-unified-publication-workshop.mjs',
   'load-unit-model-example.mjs', 'load-equipment-commands-example.mjs',
   'load-industrial-devices-example.mjs',
-  'bootstrap.ps1', 'build.ps1', 'dev.ps1', 'publish-windows.ps1', 'install-service.ps1',
+  'bootstrap.ps1', 'build.ps1', 'dev.ps1', 'publish-windows.ps1', 'write-shortcut-icons.ps1', 'install-service.ps1',
   'build-installer.ps1', 'test-installer.ps1', 'test-installer-auth.mjs', 'test-gateway-readiness.mjs', 'generate-example-assets.ps1',
   'load-example.mjs', 'test-assets-popups.mjs', 'test-gateway.mjs', 'test-runtime-actions.mjs',
   'workshop-packages.mjs', 'build-workshops.mjs', 'test-workshop-build.mjs', 'test-workshop-packages.mjs',

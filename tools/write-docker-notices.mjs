@@ -163,9 +163,10 @@ async function nugetInventory(payload, nuget, notices, cache) {
   return packages;
 }
 
-// The Markdown dependency is the only reviewed non-MIT browser package.
-// Pin its original license bytes; another package/version must be reviewed.
+// Reviewed non-MIT browser packages: the Markdown dependency and the Primary theme font.
+// Pin their original license bytes; another package/version must be reviewed.
 const reviewedBrowserLicenses = new Map([
+  ['@fontsource-variable/nunito/5.3.0', { license: 'OFL-1.1', file: 'LICENSE', sha256: '40991bfa02ac620aae16dc527f3c47765a25e43f270d4c301ee6ab663a8d9015' }],
   ['@ungap/structured-clone/1.4.0', { license: 'ISC', file: 'LICENSE', sha256: 'dc6d4961d8b6ee747231582ae9c53ce1d66bf76bc9f5a28f554c0e97210953bf' }],
 ]);
 

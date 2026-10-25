@@ -45,7 +45,8 @@ CloseApplications=no
 RestartApplications=no
 RestartIfNeededByRun=no
 SetupLogging=yes
-UninstallDisplayIcon={app}\SparkStudio.Gateway.exe
+SetupIconFile={#PayloadDir}\icons\SparkStudio-Runtime.ico
+UninstallDisplayIcon={app}\icons\SparkStudio-Runtime.ico
 InfoBeforeFile=INSTALL-NOTES.txt
 UninstallDisplayName=SparkStudio {#AppVersion}
 
@@ -57,11 +58,11 @@ Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 Source: "{#PayloadDir}\SparkStudio.ServiceHelper.exe"; Flags: dontcopy
 
 [Icons]
-Name: "{group}\SparkStudio Designer"; Filename: "{code:DesignerUrl}"; Check: not PortableMode
-Name: "{group}\SparkStudio Runtime"; Filename: "{code:RuntimeUrl}"; Check: not PortableMode
+Name: "{group}\SparkStudio Designer"; Filename: "{code:DesignerUrl}"; IconFilename: "{app}\icons\SparkStudio-Designer.ico"; Check: not PortableMode
+Name: "{group}\SparkStudio Runtime"; Filename: "{code:RuntimeUrl}"; IconFilename: "{app}\icons\SparkStudio-Runtime.ico"; Check: not PortableMode
 Name: "{group}\Uninstall SparkStudio"; Filename: "{uninstallexe}"; Check: not PortableMode
-Name: "{autodesktop}\SparkStudio Designer"; Filename: "{code:DesignerUrl}"; Tasks: desktopicon; Check: not PortableMode
-Name: "{autodesktop}\SparkStudio Runtime"; Filename: "{code:RuntimeUrl}"; Tasks: desktopicon; Check: not PortableMode
+Name: "{autodesktop}\SparkStudio Designer"; Filename: "{code:DesignerUrl}"; IconFilename: "{app}\icons\SparkStudio-Designer.ico"; Tasks: desktopicon; Check: not PortableMode
+Name: "{autodesktop}\SparkStudio Runtime"; Filename: "{code:RuntimeUrl}"; IconFilename: "{app}\icons\SparkStudio-Runtime.ico"; Tasks: desktopicon; Check: not PortableMode
 
 [Run]
 Filename: "{code:DesignerUrl}"; Description: "Open SparkStudio Designer"; Flags: shellexec postinstall skipifsilent runasoriginaluser; Check: not PortableMode

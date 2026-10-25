@@ -96,6 +96,7 @@ try {
     Copy-Item -Path (Join-Path $pythonSource '*') -Destination $runtime -Recurse
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'install-service.ps1') -Destination $output
     Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $output 'SparkStudio-LICENSE.txt')
+    & (Join-Path $PSScriptRoot 'write-shortcut-icons.ps1') -OutputDirectory (Join-Path $output 'icons')
     if ((Get-CleanSourceCommit) -ne $sourceCommit) { throw 'Source changed during publishing; this package cannot be released.' }
     $assembly = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $output 'SparkStudio.Gateway.dll'))
     if ($assembly.FileVersion -ne $fileVersion -or !$assembly.ProductVersion.StartsWith($version + '+') -or !$assembly.ProductVersion.Contains($sourceCommit)) { throw 'Gateway assembly version/provenance does not match this source build.' }

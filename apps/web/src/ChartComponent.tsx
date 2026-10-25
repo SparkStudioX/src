@@ -3,17 +3,18 @@ import type { ComponentProps, ReactNode } from "react";
 import type { ComponentView } from "./Components";
 import { useApplicationStateContext } from "./applicationState";
 import { useDatasetBinding } from "./useDatasetBinding";
-import { buildChart, chartColors, chartSegments } from "./chartModel";
+import { activeChartColors, buildChart, chartSegments } from "./chartModel";
 import type { ChartData, ChartDefinition, ChartModel, ChartPoint } from "./chartModel";
 import "./charts.css";
 
 export function ChartGraphic({ config, model, compact = false }: { config: ChartDefinition; model: ChartModel; compact?: boolean }) {
   const clipId = useId().replaceAll(":", "");
+  const palette = activeChartColors();
   const width = 640, height = 300, left = compact ? 8 : 58, top = 14, right = 622, bottom = compact ? 280 : 250;
   const { points, xMin, xMax, yMin, yMax } = model;
   const x = (point: ChartPoint) => left + (point.x - xMin) / (xMax - xMin) * (right - left);
   const y = (value: number) => bottom - (value - yMin) / (yMax - yMin) * (bottom - top);
-  const color = (series: number) => config.series[series].color ?? chartColors[series % chartColors.length];
+  const color = (series: number) => config.series[series].color ?? palette[series % palette.length];
   const plot: ReactNode[] = [];
   const captions: ReactNode[] = [];
   const format = (value: number) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 2, notation: Math.abs(value) >= 1e6 ? "compact" : "standard" }).format(value);
@@ -28,8 +29,8 @@ export function ChartGraphic({ config, model, compact = false }: { config: Chart
       const sweep = value / total * Math.PI * 2;
       const next = angle + sweep, cx = 320, cy = 140, radius = 116;
       const title = `${point.label}: ${format(value)} (${format(value / total * 100)}%)`;
-      if (sweep >= Math.PI * 2 - 1e-10) plot.push(<circle key={index} cx={cx} cy={cy} r={radius} fill={chartColors[index % chartColors.length]}><title>{title}</title></circle>);
-      else plot.push(<path key={index} d={`M${cx},${cy} L${cx + Math.cos(angle) * radius},${cy + Math.sin(angle) * radius} A${radius},${radius} 0 ${sweep > Math.PI ? 1 : 0},1 ${cx + Math.cos(next) * radius},${cy + Math.sin(next) * radius} Z`} fill={chartColors[index % chartColors.length]} stroke="var(--panel)" strokeWidth={1}><title>{title}</title></path>);
+      if (sweep >= Math.PI * 2 - 1e-10) plot.push(<circle key={index} cx={cx} cy={cy} r={radius} fill={palette[index % palette.length]}><title>{title}</title></circle>);
+      else plot.push(<path key={index} d={`M${cx},${cy} L${cx + Math.cos(angle) * radius},${cy + Math.sin(angle) * radius} A${radius},${radius} 0 ${sweep > Math.PI ? 1 : 0},1 ${cx + Math.cos(next) * radius},${cy + Math.sin(next) * radius} Z`} fill={palette[index % palette.length]} stroke="var(--panel)" strokeWidth={1}><title>{title}</title></path>);
       angle = next;
     });
   } else if (config.kind === "radar") {
@@ -92,6 +93,7 @@ export function ChartPresentation({ component, data, status = "ready", error, re
   component: ComponentProps<typeof ComponentView>["component"]; data?: ChartData; status?: string; error?: string; refreshing?: boolean;
 }) {
   const [range, setRange] = useState<[number, number]>([0, 100]);
+  const palette = activeChartColors();
   const config = component.props.chart;
   const compact = component.type === "sparkline";
   const model = config && data ? buildChart(config, data, config.rangeSelector ? range : undefined) : undefined;
@@ -100,8 +102,8 @@ export function ChartPresentation({ component, data, status = "ready", error, re
     {component.props.text && <figcaption>{component.props.text}</figcaption>}
     {problem ? <p role="status" className="chart-diagnostic">{problem}</p> : !config ? <p role="status">Configure chart axes and series.</p> : !data ? <p role="status">{status === "loading" ? "Loading chart data…" : "Choose a chart dataset."}</p> : !model?.points.length ? <p role="status">No observations in this range.</p> : <ChartGraphic config={config} model={model} compact={compact} />}
     {model && config && !problem && !compact && config.showLegend !== false && <ul className="chart-legend">{config.kind === "pie"
-      ? model.points.map((point, index) => point.values[0] !== null && point.values[0] > 0 && <li key={index}><i style={{ backgroundColor: chartColors[index % chartColors.length] }} />{point.label}</li>)
-      : config.series.map((series, index) => <li key={series.key}><i style={{ backgroundColor: series.color ?? chartColors[index % chartColors.length] }} />{series.label ?? series.key}</li>)}</ul>}
+      ? model.points.map((point, index) => point.values[0] !== null && point.values[0] > 0 && <li key={index}><i style={{ backgroundColor: palette[index % palette.length] }} />{point.label}</li>)
+      : config.series.map((series, index) => <li key={series.key}><i style={{ backgroundColor: series.color ?? palette[index % palette.length] }} />{series.label ?? series.key}</li>)}</ul>}
     {!!model?.gaps && <small role="status">{model.gaps} missing or bad-quality values; gaps are preserved.</small>}
     {refreshing && <small role="status">Refreshing…</small>}
     {config?.rangeSelector && <div className="chart-range"><label>From %<input type="range" min="0" max={range[1] - 1} value={range[0]} onChange={event => setRange([Number(event.target.value), range[1]])} /></label><label>To %<input type="range" min={range[0] + 1} max="100" value={range[1]} onChange={event => setRange([range[0], Number(event.target.value)])} /></label><span>{range[0]}–{range[1]}%</span></div>}

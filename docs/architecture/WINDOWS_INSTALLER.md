@@ -20,6 +20,8 @@ Get-FileHash .\SparkStudio-Setup-0.2.0-preview.17-windows-x64-unsigned.exe -Algo
 
 The published checksum identifies that executable; a rebuild can differ. Do not disable Windows security or organizational policy to run an unsigned package. Release notes record the tested source revision and package verification. The extracted `package-manifest.json` records bundled file hashes and build provenance.
 
+A normal installation adds Start-menu shortcuts for **SparkStudio Designer** and **SparkStudio Runtime**, plus desktop shortcuts when that option is selected. Runtime shortcuts carry the SparkStudio logo; Designer shortcuts carry a blueprint version of it, so the two are easy to tell apart. The icons are drawn at build time by `tools/write-shortcut-icons.ps1` and installed under `icons`.
+
 ## Extract and start without a service
 
 Run the downloaded installer with:

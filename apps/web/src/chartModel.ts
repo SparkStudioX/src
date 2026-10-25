@@ -173,6 +173,11 @@ export function chartSegments(points: ChartPoint[], series: number): ChartPoint[
   return segments;
 }
 export const chartColors = ["#6488dc", "#dd9862", "#5ca78c", "#ba80c5", "#d46e79", "#7f9eaa", "#b4a052", "#9f89df"];
+/** Primary theme series: the three primaries first, then darker and lighter variants plus ink. */
+export const primaryChartColors = ["#1a55e3", "#e0261c", "#e6b800", "#141414", "#0f3ba8", "#b81b13", "#8a6d00", "#6b8ff0"];
+export const themeChartColors = (theme: string) => theme === "primary" ? primaryChartColors : chartColors;
+/** Series colors for the theme on the page; Light outside a browser. */
+export const activeChartColors = () => themeChartColors(typeof document === "undefined" ? "light" : document.documentElement.dataset.theme ?? "light");
 export function defaultChartProps(sparkline = false): CanvasComponent["props"] {
   return {
     text: sparkline ? "Production sparkline" : "Production chart", chart: { kind: "line", xKey: "hour", series: [{ key: "produced", label: "Produced" }, { key: "target", label: "Target" }], showLegend: !sparkline },

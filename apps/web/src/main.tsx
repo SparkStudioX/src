@@ -9,6 +9,8 @@ import OperatorRuntime from "./OperatorRuntime";
 import Projects, { DefaultProjectRedirect } from "./Projects";
 import { parseProjectRoute } from "./api";
 import { initializeTheme, ThemeProvider } from "./Theme";
+// Bundled locally (OFL-1.1) so the Primary theme needs no font CDN; only the scripts in use are downloaded.
+import "@fontsource-variable/nunito/index.css";
 import { AuthGate, AuthProvider } from "./Auth";
 import { AskSparkProvider } from "./askSparkContext";
 import { AskSparkShell } from "./AskSparkShell";
