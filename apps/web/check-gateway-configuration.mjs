@@ -312,7 +312,10 @@ try {
   });
   await check('Certificate polls pause throughout upload preparation, staged file and trust review', async () => {
     const bytes = deferred(), ui = await start('OpcCertificates'); const initial = reads(ui, '/gateway/opcua/certificates'); ui.chooseFile(publicFile(() => bytes.promise)); await ui.tick(); assert.equal(reads(ui, '/gateway/opcua/certificates'), initial);
-    bytes.resolve(publicBytes.slice().buffer); await ui.flush(); await ui.tick(); assert.equal(reads(ui, '/gateway/opcua/certificates'), initial);
+    bytes.resolve(publicBytes.slice().buffer); await ui.flush();
+    // Hashing runs on WebCrypto; under heavy load it can need more than two event-loop turns.
+    for (let wait = 0; wait < 500 && !/Calculated SHA-256/.test(ui.text()); wait++) { await new Promise(resolve => setTimeout(resolve, 10)); await ui.flush(); }
+    await ui.tick(); assert.equal(reads(ui, '/gateway/opcua/certificates'), initial);
     const hash = await crypto.subtle.digest('SHA-256', publicBytes); const fingerprint = Buffer.from(hash).toString('hex').toUpperCase(); ui.change('Independently verified SHA-256', fingerprint); ui.change('I verified this fingerprint', true); ui.click('Review certificate trust'); await ui.tick(); assert.equal(reads(ui, '/gateway/opcua/certificates'), initial); assert.match(ui.text(), /Trust this public certificate/);
     ui.click('Cancel'); ui.chooseFile(undefined); await ui.tick(); assert.equal(reads(ui, '/gateway/opcua/certificates'), initial + 1);
   });
