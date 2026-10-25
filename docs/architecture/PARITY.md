@@ -6,7 +6,23 @@ The [gateway implementation track](#gateway-implementation-track-2026-09-29) cov
 
 The [Designer implementation track](#designer-implementation-track-2026-09-29) adds prioritized authoring, binding, event, layout and preview requirements. It complements the [component-family roadmap](COMPONENTS.md#full-component-family-roadmap); these requirements do not promote unverified work to implemented status.
 
-## Preview.18 release candidate, 2026-10-26
+## Preview.18 release publication, 2026-10-25
+
+Windows [`v0.2.0-preview.18`](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.18) was published from build source `910b851146940a30c5dfc3a2e3c2db6b2d692da8`. Docker [`v0.2.0-preview.18-docker.1`](https://github.com/SparkStudioX/releases/releases/tag/v0.2.0-preview.18-docker.1) was published from `818d494b2d8fd7192cd35e77999e1a8bfb0f5932`, which adds only a wait for certificate hashing in the gateway configuration test; that test had timed out under the load of the two-platform image build. Source boundary and Windows/Linux product validation passed for both commits.
+
+| Evidence | Result |
+| --- | --- |
+| Release gates | Windows build and image build each passed four gate invocations: lint, **140 suites** with zero failures, and complexity with zero violations |
+| Installer | 115,144,827 bytes, SHA-256 `03e6ba21d4be3c362a02524c6e3f021e91c00314ef5b8085e4d505b56a04bba7`; bundled .NET 10.0.13 |
+| Workshops | 38 portable projects, ZIP SHA-256 `3c6cb9f9f79d4e9f8b6adfdd6534252364b1c11d7099f34aad6a7d1c334c3f3b` |
+| Exact extraction | 879 payload hashes, including both shortcut icons, provenance, runtimes, served browser assets and all 38 workshop round trips passed |
+| Registry | Index `sha256:0e16faf49c504605297aa0c56b7c75159e657748050df831056d0949415a7871` (AMD64 `sha256:65829652b6b286214b9972443d4e1f43fc3d0f7b890b66fc78a9010aac80876c`, ARM64 `sha256:c2c61c0e2fbe67db7c48e8b4726f00d9d813b9c0a6dc84b8d9668fd9b22fbcdb`); `preview` selects it |
+| Container deployment | AMD64 passed all 8 groups against the local image and again against the public digest. ARM64 deployment was **not run**, at the owner's request |
+| Corresponding sources | 74 Ubuntu source versions (69 reused, 5 fetched for the refreshed base) and CPython 3.14.7; archive 368,901,553 bytes, SHA-256 `ec542ac83f54ba991077b52eab0ac617e4ab3583af4bf3c104b171965f5962cb` |
+
+Assets were verified from the drafts before publication and again by anonymous download. Start-menu and desktop shortcut icons were not checked on an elevated installation.
+
+## Preview.18 release candidate, 2026-10-25
 
 Preview.18 adds the **Primary** theme (bright red, yellow and blue with ink outlines, hard shadows and the bundled Nunito rounded font), applied to the workspace and to screen components; gives the Runtime shortcuts the SparkStudio logo and the Designer shortcuts a blueprint version of it; and moves the bundled .NET runtime to the 10.0.13 security update. It also pins System.Security.Cryptography.Pkcs 9.0.21 over the 9.0.13 brought in by Microsoft.Data.SqlClient 7.0.3 (GHSA-846f-f764-76mx, GHSA-2fmv-rv2c-59x7); the shared framework copy of that library is fixed by the 10.0.13 runtime (SDK 10.0.402; Docker base `aspnet:10.0.13-noble`). Windows version is `0.2.0-preview.18`; Docker edition is `0.2.0-preview.18-docker.1`. Release packaging, exact-artifact acceptance, source CI and public publication are recorded separately once complete.
 

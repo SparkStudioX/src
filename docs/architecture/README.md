@@ -1,6 +1,6 @@
 # Architecture and feature documentation
 
-These guides describe the current SparkStudio source, including development work that may be newer than the downloadable installer. The preview.18 release-guide and navigation review date is **October 26, 2026**; the broader source/documentation audit remains dated September 30. A documented implementation is not a claim that every browser, deployment, integration or failure condition has passed acceptance.
+These guides describe the current SparkStudio source, including development work that may be newer than the downloadable installer. The preview.18 release-guide and navigation review date is **October 25, 2026**; the broader source/documentation audit remains dated September 30. A documented implementation is not a claim that every browser, deployment, integration or failure condition has passed acceptance.
 
 Start with [Product and architecture](PRODUCT.md), then [Projects](PROJECTS.md). For installation, use the guide attached to your exact release; [Windows installation](WINDOWS_INSTALLER.md) describes preview.18. [Verification and roadmap](PARITY.md) records package verification and release status, separating dated observations from current capability summaries and remaining gates. Earlier ledger entries retain the facts and limitations of their original checks; they are not instructions to start an old development package or assertions about the currently running gateway.
 
