@@ -255,7 +255,7 @@ try {
     assert.equal((await exec(['uname', '-m'])).stdout.trim(), platform === 'linux/amd64' ? 'x86_64' : 'aarch64');
     assert.match((await exec(['sparkstudio-admin', 'health'])).stdout, /Python worker are ready/);
     await exec(['/usr/local/bin/python3', '-I', '-c', 'import sys,sqlite3,ssl,bz2,lzma,ctypes; assert sys.version_info[:3]==(3,14,7)']);
-    assert.match((await exec(['dotnet', '--list-runtimes'])).stdout, /Microsoft.AspNetCore.App 10.0.12/);
+    assert.match((await exec(['dotnet', '--list-runtimes'])).stdout, /Microsoft.AspNetCore.App 10.0.13/);
   });
   ca = (await exec(['cat', '/data/certificates/container/server.crt'])).stdout;
   assert.ok(ca.startsWith(['-----BEGIN', 'CERTIFICATE-----'].join(' ')));

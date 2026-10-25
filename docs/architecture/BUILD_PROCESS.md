@@ -6,7 +6,7 @@ Run application commands from the application repository root, which is `source/
 
 ## Prepare the toolchain
 
-Windows development uses Node/npm, Git and PowerShell. Node **22.17.1** is the version configured for product CI. The workspace bootstrap downloads the reviewed Windows x64 **.NET SDK 10.0.401** and **CPython 3.14.7** archives and verifies their checksums. The SDK is selected by `global.json`; NuGet and npm dependencies have committed lockfiles.
+Windows development uses Node/npm, Git and PowerShell. Node **22.17.1** is the version configured for product CI. The workspace bootstrap downloads the reviewed Windows x64 **.NET SDK 10.0.402** and **CPython 3.14.7** archives and verifies their checksums. The SDK is selected by `global.json`; NuGet and npm dependencies have committed lockfiles.
 
 ```powershell
 .\tools\bootstrap.ps1

@@ -2,7 +2,7 @@
 # Build tools execute on the builder architecture. Only the runtime/Python stages
 # execute on each target architecture, avoiding an emulated .NET SDK build.
 FROM --platform=$BUILDPLATFORM node:22.17.1-bookworm-slim@sha256:2fa754a9ba4d7adbd2a51d182eaabbe355c82b673624035a38c0d42b08724854 AS web
-ARG VERSION=0.2.0-preview.17
+ARG VERSION=0.2.0-preview.18
 WORKDIR /web
 COPY apps/web/package*.json ./
 RUN node -e "if(require('./package.json').version!==process.argv[1])process.exit(1)" "$VERSION" && npm ci --no-audit --no-fund
@@ -18,10 +18,10 @@ RUN rm -rf /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/ens
 # on TARGETPLATFORM. An ARM64 payload never supplies an interpreter to an x64 builder.
 FROM --platform=$BUILDPLATFORM python:3.14.7-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 AS python-tools
 
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0.401-noble@sha256:35d40304542c8689331f8cab17c65926cdf48fe711e289321d71924b230a7d29 AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0.402-noble@sha256:747cbade5bfd918a175ac32f8f1d931edec2c7d0d5397a3de72eaef1ac1f66d2 AS build
 ARG TARGETARCH
 ARG SOURCE_REVISION
-ARG VERSION=0.2.0-preview.17
+ARG VERSION=0.2.0-preview.18
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 SPARKSTUDIO_PYTHON=/usr/local/bin/python3
 WORKDIR /source
 # Run quality checks on the builder architecture with the exact pinned tools.
@@ -50,7 +50,7 @@ RUN case "$TARGETARCH" in amd64) rid=linux-x64 ;; arm64) rid=linux-arm64 ;; *) e
     && dotnet publish src/SparkStudio.Gateway -c Release --runtime "$rid" --no-restore --self-contained false \
        -o /out /p:UseAppHost=false /p:SourceRevisionId="$SOURCE_REVISION" /p:InformationalVersion="$VERSION+$SOURCE_REVISION"
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.12-noble@sha256:2d584d8147faddb0d678c5748d47953e5b8e18621ed4fb7049a91381d9d7746f AS runtime-prep
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.13-noble@sha256:8af87eba5e7cdafb1514d7388be287365da97c132509e84dfe252ffd552398ca AS runtime-prep
 USER root
 # Bookworm's older glibc ABI runs on Noble. The worker uses the standard library;
 # development package installers are removed from the shipped interpreter.
@@ -66,8 +66,8 @@ RUN /usr/local/bin/python3 -I /tmp/collect-docker-runtime.py /base-notices && rm
 FROM web AS notices
 ARG TARGETARCH
 ARG SOURCE_REVISION
-ARG VERSION=0.2.0-preview.17
-ARG CONTAINER_EDITION=0.2.0-preview.17-docker.1
+ARG VERSION=0.2.0-preview.18
+ARG CONTAINER_EDITION=0.2.0-preview.18-docker.1
 COPY --from=build /out /out
 COPY --from=build /root/.nuget/packages /nuget
 COPY --from=runtime-prep /base-notices /base-notices
@@ -75,15 +75,15 @@ COPY LICENSE /out/SparkStudio-LICENSE.txt
 COPY tools/write-docker-notices.mjs tools/package-notice-supplements.mjs /tools/
 RUN node /tools/write-docker-notices.mjs --payload /out --web /web --nuget /nuget --runtime /base-notices \
     --source-commit "$SOURCE_REVISION" --architecture "$TARGETARCH" --container-edition "$CONTAINER_EDITION" --version "$VERSION" \
-    --runtime-image mcr.microsoft.com/dotnet/aspnet:10.0.12-noble@sha256:2d584d8147faddb0d678c5748d47953e5b8e18621ed4fb7049a91381d9d7746f \
+    --runtime-image mcr.microsoft.com/dotnet/aspnet:10.0.13-noble@sha256:8af87eba5e7cdafb1514d7388be287365da97c132509e84dfe252ffd552398ca \
     --python-image python:3.14.7-slim-bookworm@sha256:82bc3c539b8813ada9d68c63b40158fa002f7f33de9bf3312a3dfdc0620dff56 \
-    --sdk-image mcr.microsoft.com/dotnet/sdk:10.0.401-noble@sha256:35d40304542c8689331f8cab17c65926cdf48fe711e289321d71924b230a7d29 \
+    --sdk-image mcr.microsoft.com/dotnet/sdk:10.0.402-noble@sha256:747cbade5bfd918a175ac32f8f1d931edec2c7d0d5397a3de72eaef1ac1f66d2 \
     --node-image node:22.17.1-bookworm-slim@sha256:2fa754a9ba4d7adbd2a51d182eaabbe355c82b673624035a38c0d42b08724854
 
 FROM runtime-prep AS runtime
 ARG SOURCE_REVISION
-ARG VERSION=0.2.0-preview.17
-ARG CONTAINER_EDITION=0.2.0-preview.17-docker.1
+ARG VERSION=0.2.0-preview.18
+ARG CONTAINER_EDITION=0.2.0-preview.18-docker.1
 LABEL org.opencontainers.image.title="sparkstudio" \
       org.opencontainers.image.description="Industrial software. Built your way." \
       org.opencontainers.image.source="https://github.com/SparkStudioX/src" \
